@@ -1,0 +1,26 @@
+; primitive types
+
+let v: @bool = @true
+let v: @u32 = 1
+
+; array
+let v: [@u32; _] = [1, 2, 3]
+; list
+let v: [@u32] = [1, 2, 3]
+
+; dict (anonymous struct)
+let v: { .. } = {
+  field1: @bool = @true,
+  field2: @u32 = 1,
+}
+
+; map
+
+; set
+
+; table (polars)
+
+; option
+let v: @opt[@u32] = @opt.some
+
+; result
