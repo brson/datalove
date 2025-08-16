@@ -1,5 +1,6 @@
 ; primitive types
 
+let v: @nil = @nil
 let v: @bool = @true
 let v: @u32 = 1
 
@@ -8,8 +9,14 @@ let v: [@u32; _] = [1, 2, 3]
 ; list
 let v: [@u32] = [1, 2, 3]
 
+; tuple
+let v: (@bool, @u32) = (@true, 1);
+
 ; dict (anonymous struct)
-let v: { .. } = {
+let v: {
+  field1: @bool,
+  field2: @u32,
+} = {
   field1: @bool = @true,
   field2: @u32 = 1,
 }
@@ -24,3 +31,11 @@ let v: { .. } = {
 let v: @opt[@u32] = @opt.some
 
 ; result
+
+
+
+
+; todo?
+; - range (python)?
+; - complex
+; - real
