@@ -1,41 +1,113 @@
+; this is an example of the data language.
+; there is also a code language.
+; ctor syntax needs to have unambiguous type.
+; values need to have specified binary runtime representation
+;
+; prefixes:
+; - `@` - built-in types
+; - `#` - built-in expressions
+; - `%` - statement
+
+; example, with type hint (":  /")
+: [
+  (@u32, @bool),
+] / [
+  (1, #true),
+  (2, #true),
+]
+
+
 ; primitive types
 
-let v: @nil = @nil
-let v: @bool = @true
-let v: @u32 = 1
+: @nil / #nil
+: @bool / #true
+: @bool / #false
+: @u32 / 1
+: @string / "abc"
 
-; array
-let v: [@u32; _] = [1, 2, 3]
+
 ; list
-let v: [@u32] = [1, 2, 3]
+: [@u32] / [1, 2, 3]
+; array
+;let v: [@u32 * _] = [1, 2, 3]
 
 ; tuple
-let v: (@bool, @u32) = (@true, 1);
+: (@bool, @u32) / (#true, 1)
+: (@u32) / (1)
+: () / ()
 
-; dict (anonymous struct)
-let v: {
+; anonymous struct
+; like js object, python dict
+: {
   field1: @bool,
   field2: @u32,
-} = {
-  field1: @bool = @true,
+  field3: @u32,
+} / {
+  field1 = #true,
   field2: @u32 = 1,
+  field3 = : @u32 / 2,
 }
+
+; named struct
+%struct Foo {
+  field1: @bool,
+}
+
+: @struct Foo / #struct Foo {
+  field1 = #true,
+}
+
+; named tuple
+%tuple Bar (@bool, @u32)
+
+: @tuple Bar / #tuple Bar (#true, 1)
+
+
+; anonymous enum
+: @enum {
+  Foo,
+  Bar @u32,
+  Baz (@bool, @u32),
+} / #enum | Foo
+
+: @enum {
+  Foo,
+  Bar @u32,
+  Baz (@bool, @u32),
+} / #enum | Bar 2
+
+: @enum {
+  Foo,
+  Bar @u32,
+  Baz (@bool, @u32),
+} / #enum | Bar (#true, 1)
+
+; named enum
+%enum Quux {
+  Foo,
+  Bar @u32,
+  Baz (@bool, @u32),
+}
+
+: @enum Quux / #enum Quux | Bar (#true, 1)
+
+: @enum Quux / #enum | Bar (#true, 1)
 
 ; map
 
 ; set
 
-; table (polars)
-
-; option
-let v: @opt[@u32] = @opt.some
-
-; result
-
-
+; optional
+: ?@u32 = 
 
 
 ; todo?
+;
+; - bitset
+; - table (polars)
+; - graph
+; - array
+; - multi-dimensional array
 ; - range (python)?
 ; - complex
 ; - real
