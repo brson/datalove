@@ -7,24 +7,28 @@
 ; - `@` - built-in types
 ; - `#` - built-in expressions
 ; - `%` - statement
-
-; example, with type hint (":  /")
+;
+; example, with type hint (": type / expr")
 : [
   (@u32, @bool),
 ] / [
-  (1, #true),
-  (2, #true),
+  (1 , #true),
+  (2 , #true),
 ]
 
 
 ; primitive types
 
 : @nil / #nil
-: @bool / #true
-: @bool / #false
-: @u32 / 1
-: @string / "abc"
 
+: @bool
+/ #true
+
+: @bool
+/ #false
+: @u32 / 1
+: @f32 / 1.0
+: @string / "abc"
 
 ; list
 : [@u32] / [1, 2, 3]
@@ -33,7 +37,7 @@
 
 ; tuple
 : (@bool, @u32) / (#true, 1)
-: (@u32) / (1)
+: (@u32 ) / (1)
 : () / ()
 
 ; anonymous struct
@@ -50,7 +54,7 @@
 
 ; named struct
 %struct Foo {
-  field1: @bool,
+  field1 : @bool,
 }
 
 : @struct Foo / #struct Foo {
@@ -62,23 +66,25 @@
 
 : @tuple Bar / #tuple Bar (#true, 1)
 
+; named token
+%token Nil
 
 ; anonymous enum
 : @enum {
   Foo,
-  Bar @u32,
-  Baz (@bool, @u32),
-} / #enum | Foo
+  Bar: @u32,
+  Baz: (@bool, @u32),
+} / #enum . Foo
 
 : @enum {
-  Foo,
-  Bar @u32,
-  Baz (@bool, @u32),
+  Bar: @u32,
 } / #enum | Bar 2
 
 : @enum {
-  Foo,
-  Bar @u32,
+  Bar: @u32,
+} / #enum | Bar : @u32 / 2
+
+: @enum {
   Baz (@bool, @u32),
 } / #enum | Bar (#true, 1)
 
@@ -91,14 +97,29 @@
 
 : @enum Quux / #enum Quux | Bar (#true, 1)
 
+; coerced from anonymous enum
 : @enum Quux / #enum | Bar (#true, 1)
 
 ; map
+: @map <u32, u32> / #map {
+  0 = 5,
+  2 = 2,
+}
 
 ; set
+: @set <u32> / # set {1, 2, 3}
 
-; optional
-: ?@u32 = 
+; option
+: ?@u32 / = 
+
+; result
+: !@u32 /
+
+; error
+: @error /
+
+; table
+
 
 
 ; todo?

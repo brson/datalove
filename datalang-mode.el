@@ -12,6 +12,8 @@
     "struct"
     "tuple"
     "enum"
+    "token"
+    "map"
     )
   '(
     ("@" . 'font-lock-variable-name-face)
