@@ -29,11 +29,9 @@
 
 : @nil / @nil
 
-: @bool
-/ @true
+: @bool / @true
 
-: @bool
-/ @false
+: @bool / @false
 : @u32 / 1
 : @f32 / 1.0
 : @string / "abc"
