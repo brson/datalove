@@ -1,20 +1,31 @@
 ; this is an example of the data language.
 ; there is also a code language.
-; ctor syntax needs to have unambiguous type.
 ; values need to have specified binary runtime representation
 ;
-; prefixes:
+; sigils:
 ; - `@` - built-in types
 ; - `#` - built-in expressions
 ; - `%` - statement
-;
-; example, with type hint (": type / expr")
-: [
-  (@u32, @bool),
-] / [
-  (1 , #true),
-  (2 , #true),
-]
+
+; This whole file is a single expression.
+; This is opening a tuple.
+; Each of the examples in this file is an element of this tuple.
+(
+
+  ; A basic example.
+  ;
+  ; The part between `: ... /` is on optional type hint,
+  ; with the `:` token generally for naming types.
+  ;
+  ; fixme better example
+  : [
+    (@u32, @bool),
+  ] / [
+    (1 , #true),
+    (2 , #true),
+  ]
+
+; fixme below is not part of the tuple established above
 
 
 ; primitive types
@@ -29,6 +40,9 @@
 : @u32 / 1
 : @f32 / 1.0
 : @string / "abc"
+
+; a dynamic any type for pod types.
+: @data / 1
 
 ; list
 : [@u32] / [1, 2, 3]
@@ -110,7 +124,8 @@
 : @set <u32> / # set {1, 2, 3}
 
 ; option
-: ?@u32 / = 
+: ?@u32 / 4
+: ?@u32 / #none
 
 ; result
 : !@u32 /

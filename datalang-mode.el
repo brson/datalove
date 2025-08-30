@@ -31,5 +31,5 @@
     ("[" . 'font-lock-constant-face)
     ("]" . 'font-lock-constant-face)
     )
-  '(".dl\\'")
+  '(".dle\\'")
   "datalang language")
