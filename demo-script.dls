@@ -1,4 +1,64 @@
-require std
+; # Datalove Script example
 
-let foo = : @u32 / 8
+require module std
+; include a dl expression file
+require data lookup_tables
 
+; type hints?
+require module std : module { }
+require data lookup_tables : { x: #u32, y: #bool }
+
+let foo = : #u32 / 8
+
+fun increment(
+  accum: u64, amount: u8,
+) !u64
+  accum +! amount
+end fun
+
+proc print(msg: @string)
+  std.io.print("hello {msg}")
+end proc
+
+print("whats up")
+
+
+; ## Non plain-data types
+
+
+
+; ## About the heap
+
+; every type includes a possibly-implicit heap type,
+; either local, global, none (`@ % #`)
+;
+; data types that contain allocations:
+;
+; list, string, map, set, data, error, option, result
+
+let local: @set<@data> = @set { 1, "2", 3.0 }
+let global: %set<%data> = %set { 1, "2", 3.0 }
+
+let none: #struct Foo { } = #struct Foo { }
+
+; they can not be intermixed:
+;
+;     let bogus: @set<%data> = ...
+
+; having the heap in the type opens possibilities
+; for lightweight arenas:
+
+var results: @vec<u32> = @[]
+
+arena
+  ; now `@` is a new arena, `@^` is previous
+
+  let buffer: @vec<u32> = @[1, 2, 3]
+  ; `std.warp` copies between heaps
+  let results_warp: @^vec<u32> = std.warp(buffer)
+  results = results_warp
+
+end arena
+
+
+; ## Math and logic

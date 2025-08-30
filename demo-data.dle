@@ -1,11 +1,8 @@
+; # Datalove Expressions example
+
 ; this is an example of the data language.
 ; there is also a code language.
 ; values need to have specified binary runtime representation
-;
-; sigils:
-; - `@` - built-in types
-; - `#` - built-in expressions
-; - `%` - statement
 
 ; This whole file is a single expression.
 ; This is opening a tuple.
@@ -21,8 +18,8 @@
   : [
     (@u32, @bool),
   ] / [
-    (1 , #true),
-    (2 , #true),
+    (1 , @true),
+    (2 , @true),
   ]
 
 ; fixme below is not part of the tuple established above
@@ -30,13 +27,13 @@
 
 ; primitive types
 
-: @nil / #nil
+: @nil / @nil
 
 : @bool
-/ #true
+/ @true
 
 : @bool
-/ #false
+/ @false
 : @u32 / 1
 : @f32 / 1.0
 : @string / "abc"
@@ -50,7 +47,7 @@
 ;let v: [@u32 * _] = [1, 2, 3]
 
 ; tuple
-: (@bool, @u32) / (#true, 1)
+: (@bool, @u32) / (@true, 1)
 : (@u32 ) / (1)
 : () / ()
 
@@ -61,76 +58,74 @@
   field2: @u32,
   field3: @u32,
 } / {
-  field1 = #true,
+  field1 = @true,
   field2: @u32 = 1,
   field3 = : @u32 / 2,
 }
 
 ; named struct
-%struct Foo {
+: @struct Foo {
   field1 : @bool,
-}
-
-: @struct Foo / #struct Foo {
-  field1 = #true,
+} / @struct Foo {
+  field1 = @true,
 }
 
 ; named tuple
-%tuple Bar (@bool, @u32)
-
-: @tuple Bar / #tuple Bar (#true, 1)
+: @tuple Bar (
+  @bool, @u32,
+) / @tuple Bar (@true, 1)
 
 ; named token
-%token Nil
+: @token Nil
 
 ; anonymous enum
 : @enum {
   Foo,
   Bar: @u32,
   Baz: (@bool, @u32),
-} / #enum . Foo
+} / @enum . Foo
 
 : @enum {
   Bar: @u32,
-} / #enum | Bar 2
+} / @enum | Bar 2
 
 : @enum {
   Bar: @u32,
-} / #enum | Bar : @u32 / 2
+} / @enum | Bar : @u32 / 2
 
 : @enum {
   Baz (@bool, @u32),
-} / #enum | Bar (#true, 1)
+} / @enum | Bar (@true, 1)
 
 ; named enum
-%enum Quux {
+@enum Quux {
   Foo,
   Bar @u32,
   Baz (@bool, @u32),
 }
 
-: @enum Quux / #enum Quux | Bar (#true, 1)
+: @enum Quux / @enum Quux | Bar (@true, 1)
 
 ; coerced from anonymous enum
-: @enum Quux / #enum | Bar (#true, 1)
+: @enum Quux / @enum | Bar (@true, 1)
 
 ; map
-: @map <u32, u32> / #map {
+: @map <u32, u32> / @map {
   0 = 5,
   2 = 2,
 }
 
 ; set
-: @set <u32> / # set {1, 2, 3}
+: @set <u32> / @set {1, 2, 3}
 
 ; option
 : ?@u32 / 4
-: ?@u32 / #none
+: ?@u32 / @none
 
 ; result
 : !@u32 /
 
-; error
+; similar to @data
 : @error /
 
 ; table

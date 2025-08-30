@@ -1,6 +1,11 @@
 # datalove - data|is·my·love|language
 
-There are currently three progressively-capable sublanguages.
+An expressive scripting language
+for rich and efficient data modeling
+and transformation,
+with a batteries included standard library.
+
+There are progressively-capable sublanguages.
 
 
 ## Datalove Expressions
@@ -8,7 +13,12 @@ There are currently three progressively-capable sublanguages.
 For storage and transmission of structured and optionally typed data ala JSON.
 It is a subset of the expression language in Datalove Script.
 
-The types are all plain old data without pointers.
+The types are all plain old data without cycles.
+
+Also known as "the data language",
+or "data expressions",
+since datalove script also has expressions
+with a superset syntax and types.
 
 Extension `.dle`.
 
@@ -17,6 +27,7 @@ Extension `.dle`.
 
 The scripting language,
 dynamically and incrementally interpreted or compiled.
+Read-eval-print loop.
 Strongly typed with lightweight coercions.
 Task oriented, non-async, local heaps.
 Global heap can transfer ownership of plain-old-data.
@@ -30,8 +41,6 @@ Extension `.dls`.
 
 
 ## Datalove Modules
-
-The scripting language
 
 The syntax is a strict superset of Datalove Expressions.
 Extension `.dlm`.
