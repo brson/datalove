@@ -35,6 +35,7 @@ Additional pointer, GC/RC, I/O, and interior-mutable types.
 Distinct functions (plain-data, comptime)
 and procedures (I/O, interior mutation).
 Fast incremental whole-program compilation, no eval.
+Introspection and reflection.
 
 The syntax is a strict superset of Datalove Modules.
 Extension `.dls`.

@@ -53,12 +53,21 @@ var results: @vec<u32> = @[]
 arena
   ; now `@` is a new arena, `@^` is previous
 
-  let buffer: @vec<u32> = @[1, 2, 3]
-  ; `std.warp` copies between heaps
-  let results_warp: @^vec<u32> = std.warp(buffer)
-  results = results_warp
+  var buffer: @vec<u32> = @[1, 2, 3]
+  ; ... do work here ...
+  ; `clone` does a deep copy, possibly between heaps
+  let results_clone: @^vec<u32> = clone buffer
+  results = results_clone
 
 end arena
 
 
 ; ## Math and logic
+
+
+
+; ## Introspection
+
+let ty: @type = @type @vec<u32>
+
+

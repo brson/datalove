@@ -20,37 +20,52 @@
   ] / [
     (1 , @true),
     (2 , @true),
-  ]
+  ],
 
-; fixme below is not part of the tuple established above
+)
+
+; fixme below is not strictly valid .dle syntax
+; since it contains multiple expressions.
+; Put them in the above tuple.
 
 
-; primitive types
 
-: @nil / @nil
+
+; ## Basic scalars
 
 : @bool / @true
-
 : @bool / @false
+
 : @u32 / 1
 : @f32 / 1.0
-: @string / "abc"
 
-; a dynamic any type for pod types.
-: @data / 1
 
-; list
-: [@u32] / [1, 2, 3]
-; array
-;let v: [@u32 * _] = [1, 2, 3]
 
-; tuple
+
+; ## Special types
+
+; placeholder, zero-sized
+: @nil / @nil
+
+; named token, zero-sized
+: @token Nil
+
+
+
+
+; ## Tuples, structs, and enums
+
+; anonymous tuple
 : (@bool, @u32) / (@true, 1)
 : (@u32 ) / (1)
 : () / ()
 
+; named tuple
+: @tuple Bar (
+  @bool, @u32,
+) / @tuple Bar (@true, 1)
+
 ; anonymous struct
-; like js object, python dict
 : {
   field1: @bool,
   field2: @u32,
@@ -67,14 +82,6 @@
 } / @struct Foo {
   field1 = @true,
 }
-
-; named tuple
-: @tuple Bar (
-  @bool, @u32,
-) / @tuple Bar (@true, 1)
-
-; named token
-: @token Nil
 
 ; anonymous enum
 : @enum {
@@ -107,6 +114,17 @@
 ; coerced from anonymous enum
 : @enum Quux / @enum | Bar (@true, 1)
 
+
+
+
+; ## Collection types
+
+; list
+: [@u32] / [1, 2, 3]
+
+; string
+: @string / "abc"
+
 ; map
 : @map <u32, u32> / @map {
   0 = 5,
@@ -114,29 +132,43 @@
 }
 
 ; set
-: @set <u32> / @set {1, 2, 3}
+: @set <u32> / @set { 1, 2, 3 }
+
+
+
+
+; ## Special generic containers
 
 ; option
 : ?@u32 / 4
 : ?@u32 / @none
 
 ; result
-: !@u32 /
+: !@u32 / 4
+: !@u32 / @error "oops"
+
+
+
+
+; ## Dynamic types
+
+; a dynamic any type for data types.
+: @data / 1
 
 ; similar to @data
 : @error /
 
-; table
 
 
 
-; todo?
+; ## TODO
 ;
 ; - bitset
-; - table (polars)
+; - table (polars, arrow)
 ; - graph
 ; - array
 ; - multi-dimensional array
 ; - range (python)?
+; - bigint
 ; - complex
 ; - real
