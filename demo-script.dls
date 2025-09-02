@@ -1,26 +1,41 @@
 ; # Datalove Script example
 
+
+; ## Imports
+
+; The compiler wants to see all source code up front.
+;
+; `require` statements tell the compiler what else a module
+; needs from the rest of the source code world.
+
+; module linkage is explicit
 require module std
-; include a dl expression file
+
+; include a datalove expression file
 require data lookup_tables
 
+; require statements bring a name into scope.
+; modules are first-class types.
 ; type hints?
 require module std : module { }
 require data lookup_tables : { x: #u32, y: #bool }
 
-let foo = : #u32 / 8
 
+; ## Functions and procedures
+
+; Functions operate on pure data
+; and are comptime-compatible.
 fun increment(
   accum: u64, amount: u8,
 ) !u64
   accum +! amount
 end fun
 
-proc print(msg: @string)
+; Procedures operate on types including
+; native pointers, may do I/O
+proc print_hello(msg: @string)
   std.io.print("hello {msg}")
 end proc
-
-print("whats up")
 
 
 ; ## Non plain-data types
@@ -29,26 +44,25 @@ print("whats up")
 
 ; ## About the heap
 
-; every type includes a possibly-implicit heap type,
-; either local, global, none (`@ % #`)
+; Every type includes a possibly-implicit heap type,
+; either local, global, none, infer (`@ % # $`)
 ;
-; data types that contain allocations:
-;
-; list, string, map, set, data, error, option, result
+; Data types that contain allocations:
+; list, string, map, set, data, error, option, result.
 
 let local: @set<@data> = @set { 1, "2", 3.0 }
 let global: %set<%data> = %set { 1, "2", 3.0 }
 
 let none: #struct Foo { } = #struct Foo { }
+let none: #struct Foo { } = $struct Foo { }
 
 ; clone is a deep copy across heaps
-let globalized = std.clone(local)
-; with type anotations
-let globalized: %set<%data> = std.clone(: @set<@data> / local)
+let globalized: %set<_> = std.clone(local)
 
 ; they can not be intermixed:
 ;
 ;     let bogus: @set<%data> = ...
+
 
 ; ### Heap idea - stack-oriented arenas
 
@@ -66,8 +80,6 @@ arena
 end arena
 
 
-
-
 ; ## Math and logic
 
 ; bigints can use overflowing math
@@ -81,7 +93,7 @@ let i: @u32 = (1 ++ 2) -- 3 ** 4 // 5
 var i = 0
 set i += 1;
 
-; math types - worth having?
+; overflow ops - worth having?
 let i = 1 +% 1 ; wrapping (from zig)
 let i = 1 +| 1 ; saturating (from zig)
 
