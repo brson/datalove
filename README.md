@@ -1,11 +1,15 @@
 # datalove - data|is·my·love|language
 
 An expressive scripting language
-for rich and efficient data modeling
+for efficient data modeling
 and transformation,
 with a batteries included standard library.
 
-There are progressively-capable sublanguages.
+## Features
+
+- Statically typed with ergonomic coercions and runtime introspection.
+- Fast incremental processing with in-place updates, REPL-first.
+- First class option and result types.
 
 
 ## Datalove Expressions

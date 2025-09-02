@@ -40,6 +40,10 @@
 : @f32 / 1.0
 
 
+; ## Bigints
+
+; unbounded unsigned, the default int type
+: @int / 1
 
 
 ; ## Special types

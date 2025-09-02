@@ -43,4 +43,4 @@
     (">" . 'font-lock-constant-face)
     )
   '(".dle\\'" ".dlm\\'" ".dls\\'")
-  "datalang language")
+  "datalove language")

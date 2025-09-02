@@ -15,6 +15,12 @@ pub struct U32(pub u32);
 pub struct F32(pub f32);
 
 
+// ## Bigints
+
+#[repr(C)]
+pub struct Int {
+    pub payload: usize,
+}
 
 
 // ## Special types
