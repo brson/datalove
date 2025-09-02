@@ -23,6 +23,11 @@
     "end proc"
     "require module"
     "require data"
+    "loop"
+    "break"
+    "continue"
+    "if"
+    "else"
     )
   '(
     ("@" . 'font-lock-variable-name-face)

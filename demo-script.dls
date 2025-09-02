@@ -111,9 +111,10 @@ let a = a or a eq 10 or a ne 1
 
 
 
-; ## Control flow
+; ## Basic control flow
 
 if a {
+} else if {
 } else {
 }
 
@@ -121,6 +122,15 @@ let x = if a {
 } else {
 }
 
+loop {
+  break
+  continue
+}
+
+
+; ## Match expressions
+
+; ## Optional types
 
 
 ; ## Introspection
