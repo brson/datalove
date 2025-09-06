@@ -14,7 +14,7 @@ members = [
 ]
 
 default-members = [
-  "crates/datalang-cli",
+  "crates/datalove-cli",
 ]
 
 [workspace.dependencies]

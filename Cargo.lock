@@ -682,7 +682,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "datalang"
+name = "datalove"
 version = "0.1.0"
 dependencies = [
  "bct",
@@ -691,10 +691,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "datalang-cli"
+name = "datalove-cli"
 version = "0.1.0"
 dependencies = [
- "datalang",
+ "datalove",
  "rustmax",
 ]
 

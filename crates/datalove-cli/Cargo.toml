@@ -1,5 +1,5 @@
 [package]
-name = "datalang-cli"
+name = "datalove-cli"
 version.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -7,8 +7,8 @@ edition.workspace = true
 
 [dependencies]
 rmx.workspace = true
-datalang.path = "../datalang"
+datalove.path = "../datalove"
 
 [[bin]]
-name = "datalang"
+name = "datalove"
 path = "src/main.rs"
