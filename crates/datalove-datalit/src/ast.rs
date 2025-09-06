@@ -9,7 +9,7 @@ pub struct ExprFull<'db> {
     pub expr: ExprAndHeap<'db>,
 }
 
-#[derive(Copy, Clone, Debug, Hash)]
+#[derive(Copy, Clone, Hash)]
 #[derive(salsa::Update)]
 pub enum Heap {
     Local,
@@ -24,7 +24,7 @@ pub struct TypeHintAndHeap<'db> {
     pub type_hint: TypeHint<'db>,
 }
 
-#[derive(Copy, Clone, Debug, Hash)]
+#[derive(Clone, Hash)]
 #[derive(salsa::Update)]
 pub enum TypeHint<'db> {
     Bool,
@@ -33,23 +33,21 @@ pub enum TypeHint<'db> {
     Int,
     Nil,
     Token(TypeHintToken<'db>),
-    AnonTuple(TypeHintAnonTuple),
+    AnonTuple(TypeHintAnonTuple<'db>),
     NamedTuple(TypeHintNamedTuple<'db>),
 }
 
-#[derive(Copy, Clone, Debug, Hash)]
-#[derive(salsa::Update)]
+#[salsa::tracked]
 pub struct TypeHintToken<'db> {
     pub name: InternedText<'db>,
 }
 
-#[derive(Copy, Clone, Debug, Hash)]
-#[derive(salsa::Update)]
-pub struct TypeHintAnonTuple {
+#[salsa::tracked]
+pub struct TypeHintAnonTuple<'db> {
+    pub fields: Vec<TypeHintAndHeap<'db>>,
 }
 
-#[derive(Copy, Clone, Debug, Hash)]
-#[derive(salsa::Update)]
+#[salsa::tracked]
 pub struct TypeHintNamedTuple<'db> {
     pub name: InternedText<'db>,
 }
@@ -60,7 +58,7 @@ pub struct ExprAndHeap<'db> {
     pub expr: Expr,
 }
 
-#[derive(Copy, Clone, Debug, Hash)]
+#[derive(Copy, Clone, Hash)]
 #[derive(salsa::Update)]
 pub enum Expr {
     True,
