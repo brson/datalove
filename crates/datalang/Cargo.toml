@@ -7,3 +7,5 @@ edition.workspace = true
 
 [dependencies]
 rmx.workspace = true
+bct.workspace = true
+salsa.workspace = true
