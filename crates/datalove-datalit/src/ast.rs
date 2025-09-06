@@ -35,6 +35,8 @@ pub enum TypeHint<'db> {
     Token(TypeHintToken<'db>),
     AnonTuple(TypeHintAnonTuple<'db>),
     NamedTuple(TypeHintNamedTuple<'db>),
+    AnonStruct(TypeHintAnonStruct<'db>),
+    NamedStruct(TypeHintNamedStruct<'db>),
 }
 
 #[salsa::tracked]
@@ -50,6 +52,24 @@ pub struct TypeHintAnonTuple<'db> {
 #[salsa::tracked]
 pub struct TypeHintNamedTuple<'db> {
     pub name: InternedText<'db>,
+    pub fields: Vec<TypeHintAndHeap<'db>>,
+}
+
+#[salsa::tracked]
+pub struct TypeHintAnonStruct<'db> {
+    pub fields: Vec<TypeHintNamedField<'db>>,
+}
+
+#[salsa::tracked]
+pub struct TypeHintNamedStruct<'db> {
+    pub name: InternedText<'db>,
+    pub fields: Vec<TypeHintNamedField<'db>>,
+}
+
+#[salsa::tracked]
+pub struct TypeHintNamedField<'db> {
+    pub name: InternedText<'db>,
+    pub type_hint: TypeHintAndHeap<'db>,
 }
 
 #[salsa::tracked]
