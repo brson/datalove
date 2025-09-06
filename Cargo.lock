@@ -686,6 +686,7 @@ name = "datalove"
 version = "0.1.0"
 dependencies = [
  "bct",
+ "datalove-datalit",
  "rustmax",
  "salsa",
 ]
@@ -695,6 +696,7 @@ name = "datalove-cli"
 version = "0.1.0"
 dependencies = [
  "datalove",
+ "datalove-datalit",
  "rustmax",
 ]
 

@@ -8,6 +8,7 @@ edition.workspace = true
 [dependencies]
 rmx.workspace = true
 datalove.path = "../datalove"
+datalove-datalit.path = "../datalove-datalit"
 
 [[bin]]
 name = "datalove"
