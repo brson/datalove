@@ -14,7 +14,6 @@ pub struct ExprFull<'db> {
 pub enum Heap {
     Local,
     Global,
-    None,
     Omitted,
 }
 
