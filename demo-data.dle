@@ -143,13 +143,13 @@
 
 ; ## Special generic containers
 
-; option
-: ?@u32 / 4
-: ?@u32 / @none
+; option - hm...
+: @?@u32 / 4
+: @?@u32 / @none
 
-; result
-: !@u32 / 4
-: !@u32 / @error "oops"
+; result - hm...
+: @!@u32 / 4
+: @!@u32 / @error "oops"
 
 
 
@@ -160,7 +160,7 @@
 : @data / 1
 
 ; similar to @data
-: @error /
+: @error / @error "oops"
 
 
 

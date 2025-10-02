@@ -12,7 +12,7 @@ with a batteries included standard library.
 - First class option and result types.
 
 
-## Datalove Expressions
+## Datalove Literals
 
 For storage and transmission of structured and optionally typed data ala JSON.
 It is a subset of the expression language in Datalove Script.
