@@ -4,6 +4,7 @@ use rmx::prelude::*;
 
 pub mod ast;
 pub mod rtdt;
+pub mod parser;
 
 use salsa::Database as Db;
 
