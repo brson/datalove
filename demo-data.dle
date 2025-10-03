@@ -52,7 +52,14 @@
 
 ; Every type has an associated heap - local, global, inferred,
 ; indicated by a sigil: @-, #-, or none for inferred.
+; having sigil-less types and expressions will introduce lots
+; of keywords.
 
+: @u32 / @1
+: #u32 / #1
+: #u32 / 1
+; infers to @
+: u32 / 1
 
 ; ## Bigints
 
@@ -179,6 +186,7 @@
 ; inferred heap
 : !@u32 / 4
 : !@u32 / @error "oops"
+
 
 
 
