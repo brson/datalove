@@ -124,23 +124,21 @@
 
 : @enum {
   Bar: @u32,
-} / @enum Bar : @u32 / 2
+} / @enum Bar : @u32 / 2 ; with type hint in expression
 
 : @enum {
-  Baz (@bool, @u32),
-} / @enum Bar (@true, 1)
+  Baz: (@bool, @u32),
+} / @enum Baz (@true, 1)
 
 ; named enum
-@enum Quux {
-  Foo,
-  Bar @u32,
-  Baz (@bool, @u32),
-}
+: @enum Quux {
+  Bar: @u32,
+} / @enum Quux.Bar (@true, 1)
 
-: @enum Quux / @enum Quux.Bar (@true, 1)
-
-; coerced from anonymous enum
-: @enum Quux / @enum Bar (@true, 1)
+; coerced from anonymous enum (no dot)
+: @enum Quux {
+  Bar: @u32,
+} / @enum Bar (@true, 1)
 
 
 
