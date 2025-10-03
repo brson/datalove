@@ -33,8 +33,14 @@ fn analyze_file(path: &Path) -> String {
     format!("OK: parsed successfully")
 }
 
-fn run_test_case(dle_path: &Path) {
-    let test_name = dle_path.file_stem().X().to_str().X();
+enum TestResult {
+    Passed,
+    Failed { expected: String, actual: String },
+    Blessed,
+    NoExpected,
+}
+
+fn run_test_case(dle_path: &Path) -> TestResult {
     let base_path = dle_path.with_extension("");
     let actual_path = PathBuf::from(format!("{}.out.actual", base_path.display()));
     let expected_path = PathBuf::from(format!("{}.out.expected", base_path.display()));
@@ -46,34 +52,66 @@ fn run_test_case(dle_path: &Path) {
 
     if bless {
         std::fs::copy(&actual_path, &expected_path).X();
-        eprintln!("BLESSED: {}", test_name);
+        TestResult::Blessed
     } else if expected_path.exists() {
         let expected = std::fs::read_to_string(&expected_path).X();
         if analysis != expected {
-            panic!(
-                "\nTest '{}' failed!\nExpected:\n{}\nActual:\n{}\n\nRun with BLESS=1 to update expected output.",
-                test_name, expected, analysis
-            );
+            TestResult::Failed { expected, actual: analysis }
+        } else {
+            TestResult::Passed
         }
     } else {
-        eprintln!(
-            "WARNING: No expected file for '{}'. Run with BLESS=1 to create it.",
-            test_name
-        );
+        TestResult::NoExpected
     }
 }
 
-#[test]
-fn parser_integration_tests() {
+fn main() {
     let fixtures = find_test_fixtures();
 
     if fixtures.is_empty() {
         eprintln!("No test fixtures found in tests/fixtures/parser/");
-        return;
+        std::process::exit(1);
     }
 
-    for fixture in fixtures {
-        eprintln!("Running test: {:?}", fixture.file_name().X());
-        run_test_case(&fixture);
+    let mut passed = 0;
+    let mut failed = 0;
+    let mut blessed = 0;
+    let mut no_expected = 0;
+
+    for fixture in &fixtures {
+        let test_name = fixture.file_stem().X().to_str().X();
+        match run_test_case(fixture) {
+            TestResult::Passed => {
+                println!("  PASS  {}", test_name);
+                passed += 1;
+            }
+            TestResult::Failed { expected, actual } => {
+                println!("  FAIL  {}", test_name);
+                eprintln!("\nExpected:\n{}\nActual:\n{}", expected, actual);
+                failed += 1;
+            }
+            TestResult::Blessed => {
+                println!("  BLESS {}", test_name);
+                blessed += 1;
+            }
+            TestResult::NoExpected => {
+                println!("  WARN  {} (no expected file)", test_name);
+                no_expected += 1;
+            }
+        }
+    }
+
+    println!();
+    println!("Results: {} passed, {} failed, {} blessed, {} no expected",
+             passed, failed, blessed, no_expected);
+
+    if failed > 0 {
+        eprintln!("\nRun with BLESS=1 to update expected output.");
+        std::process::exit(1);
+    }
+
+    if no_expected > 0 {
+        eprintln!("\nRun with BLESS=1 to create expected files.");
+        std::process::exit(1);
     }
 }

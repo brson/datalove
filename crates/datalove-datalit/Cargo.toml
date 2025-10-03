@@ -9,3 +9,8 @@ edition.workspace = true
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
+
+[[test]]
+name = "parser_tests"
+path = "tests/parser_tests.rs"
+harness = false
