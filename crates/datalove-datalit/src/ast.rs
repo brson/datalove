@@ -151,8 +151,6 @@ pub enum Expr<'db> {
     Map(ExprMap<'db>),
     Set(ExprSet<'db>),
     None,
-    Some(ExprSome<'db>),
-    Ok(ExprOk<'db>),
     Err(ExprErr<'db>),
 }
 
@@ -241,16 +239,6 @@ pub struct ExprMapEntry<'db> {
 #[salsa::tracked]
 pub struct ExprSet<'db> {
     pub elements: Vec<ExprFull<'db>>,
-}
-
-#[salsa::tracked]
-pub struct ExprSome<'db> {
-    pub value: ExprFull<'db>,
-}
-
-#[salsa::tracked]
-pub struct ExprOk<'db> {
-    pub value: ExprFull<'db>,
 }
 
 #[salsa::tracked]

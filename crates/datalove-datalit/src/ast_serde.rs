@@ -151,8 +151,6 @@ pub enum Expr {
     Map(ExprMap),
     Set(ExprSet),
     None,
-    Some(ExprSome),
-    Ok(ExprOk),
     Err(ExprErr),
 }
 
@@ -241,16 +239,6 @@ pub struct ExprMapEntry {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExprSet {
     pub elements: Vec<ExprFull>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ExprSome {
-    pub value: Box<ExprFull>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ExprOk {
-    pub value: Box<ExprFull>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -462,8 +450,6 @@ impl Expr {
             crate::ast::Expr::Map(e) => Expr::Map(ExprMap::from_ast(db, e)),
             crate::ast::Expr::Set(e) => Expr::Set(ExprSet::from_ast(db, e)),
             crate::ast::Expr::None => Expr::None,
-            crate::ast::Expr::Some(e) => Expr::Some(ExprSome::from_ast(db, e)),
-            crate::ast::Expr::Ok(e) => Expr::Ok(ExprOk::from_ast(db, e)),
             crate::ast::Expr::Err(e) => Expr::Err(ExprErr::from_ast(db, e)),
         }
     }
@@ -600,22 +586,6 @@ impl ExprSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSet<'db>) -> Self {
         ExprSet {
             elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
-        }
-    }
-}
-
-impl ExprSome {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSome<'db>) -> Self {
-        ExprSome {
-            value: Box::new(ExprFull::from_ast(db, ast.value(db))),
-        }
-    }
-}
-
-impl ExprOk {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprOk<'db>) -> Self {
-        ExprOk {
-            value: Box::new(ExprFull::from_ast(db, ast.value(db))),
         }
     }
 }
