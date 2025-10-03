@@ -1,5 +1,7 @@
 use rmx::prelude::*;
 use std::path::{Path, PathBuf};
+use std::io::Write;
+use rmx::termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 fn find_test_fixtures() -> Vec<PathBuf> {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -73,6 +75,9 @@ fn main() {
         std::process::exit(1);
     }
 
+    let mut stdout = StandardStream::stdout(ColorChoice::Auto);
+    let mut stderr = StandardStream::stderr(ColorChoice::Auto);
+
     let mut passed = 0;
     let mut failed = 0;
     let mut blessed = 0;
@@ -82,36 +87,79 @@ fn main() {
         let test_name = fixture.file_stem().X().to_str().X();
         match run_test_case(fixture) {
             TestResult::Passed => {
-                println!("  PASS  {}", test_name);
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true)).X();
+                write!(&mut stdout, "  PASS ").X();
+                stdout.reset().X();
+                writeln!(&mut stdout, " {}", test_name).X();
                 passed += 1;
             }
             TestResult::Failed { expected, actual } => {
-                println!("  FAIL  {}", test_name);
-                eprintln!("\nExpected:\n{}\nActual:\n{}", expected, actual);
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true)).X();
+                write!(&mut stdout, "  FAIL ").X();
+                stdout.reset().X();
+                writeln!(&mut stdout, " {}", test_name).X();
+
+                stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+                writeln!(&mut stderr, "\nExpected:").X();
+                stderr.reset().X();
+                writeln!(&mut stderr, "{}", expected).X();
+                stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+                writeln!(&mut stderr, "Actual:").X();
+                stderr.reset().X();
+                writeln!(&mut stderr, "{}", actual).X();
                 failed += 1;
             }
             TestResult::Blessed => {
-                println!("  BLESS {}", test_name);
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true)).X();
+                write!(&mut stdout, "  BLESS").X();
+                stdout.reset().X();
+                writeln!(&mut stdout, " {}", test_name).X();
                 blessed += 1;
             }
             TestResult::NoExpected => {
-                println!("  WARN  {} (no expected file)", test_name);
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true)).X();
+                write!(&mut stdout, "  WARN ").X();
+                stdout.reset().X();
+                writeln!(&mut stdout, " {} (no expected file)", test_name).X();
                 no_expected += 1;
             }
         }
     }
 
-    println!();
-    println!("Results: {} passed, {} failed, {} blessed, {} no expected",
-             passed, failed, blessed, no_expected);
+    writeln!(&mut stdout).X();
+    write!(&mut stdout, "Results: ").X();
+
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).X();
+    write!(&mut stdout, "{} passed", passed).X();
+    stdout.reset().X();
+    write!(&mut stdout, ", ").X();
+
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).X();
+    write!(&mut stdout, "{} failed", failed).X();
+    stdout.reset().X();
+    write!(&mut stdout, ", ").X();
+
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan))).X();
+    write!(&mut stdout, "{} blessed", blessed).X();
+    stdout.reset().X();
+    write!(&mut stdout, ", ").X();
+
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+    write!(&mut stdout, "{} no expected", no_expected).X();
+    stdout.reset().X();
+    writeln!(&mut stdout).X();
 
     if failed > 0 {
-        eprintln!("\nRun with BLESS=1 to update expected output.");
+        stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+        writeln!(&mut stderr, "\nRun with BLESS=1 to update expected output.").X();
+        stderr.reset().X();
         std::process::exit(1);
     }
 
     if no_expected > 0 {
-        eprintln!("\nRun with BLESS=1 to create expected files.");
+        stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+        writeln!(&mut stderr, "\nRun with BLESS=1 to create expected files.").X();
+        stderr.reset().X();
         std::process::exit(1);
     }
 }
