@@ -4,7 +4,7 @@
     "type_hint": "Data"
   },
   "expr": {
-    "heap": "Omitted",
+    "heap": "Local",
     "expr": "True"
   }
 }

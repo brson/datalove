@@ -82,14 +82,19 @@ where I: Iterator<Item = TreeToken<'db>>
     }
 
     fn parse_type_hint_and_heap(&mut self) -> ast::TypeHintAndHeap<'db> {
-        let heap = ast::Heap::Omitted;
+        // Heap sigils: @ for local. (# for global not yet supported by bct lexer.)
+        let heap = if self.peek_sigil(Sigil::At) {
+            self.eat_sigil(Sigil::At);
+            ast::Heap::Local
+        } else {
+            panic!("expected heap sigil @ before type");
+        };
         let type_hint = self.parse_type_hint();
         ast::TypeHintAndHeap::new(self.db, heap, type_hint)
     }
 
     fn parse_type_hint(&mut self) -> ast::TypeHint<'db> {
-        self.need_sigil(Sigil::At);
-
+        // Heap sigil already consumed, now parse the type name.
         match self.peek_word() {
             Some("bool") => {
                 self.eat_word("bool");
@@ -249,82 +254,175 @@ where I: Iterator<Item = TreeToken<'db>>
     }
 
     fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
-        let heap = ast::Heap::Omitted;
+        // Heap sigils: @ for local. (# for global not yet supported by bct lexer.)
+        let heap = if self.peek_sigil(Sigil::At) {
+            self.eat_sigil(Sigil::At);
+            ast::Heap::Local
+        } else {
+            panic!("expected heap sigil @ before expression");
+        };
         let expr = self.parse_expr();
         ast::ExprAndHeap::new(self.db, heap, expr)
     }
 
     fn parse_expr(&mut self) -> ast::Expr<'db> {
-        // Check for @ prefix (token, named types, etc).
-        if self.peek_sigil(Sigil::At) {
-            self.eat_sigil(Sigil::At);
-            return self.parse_at_prefixed_expr();
+        // Heap sigil already consumed. Now parse keywords, literals, and structures.
+        // Check for keywords first.
+        match self.peek_word() {
+            Some("true") => {
+                self.eat_word("true");
+                return ast::Expr::True;
+            }
+            Some("false") => {
+                self.eat_word("false");
+                return ast::Expr::False;
+            }
+            Some("nil") => {
+                self.eat_word("nil");
+                return ast::Expr::Nil;
+            }
+            Some("none") => {
+                self.eat_word("none");
+                return ast::Expr::None;
+            }
+            Some("error") => {
+                self.eat_word("error");
+                let value = self.parse_expr_full();
+                return ast::Expr::Err(ast::ExprErr::new(self.db, value));
+            }
+            Some("tuple") => {
+                self.eat_word("tuple");
+                let name = self.need_name();
+                let elements = self.parse_branch(Sigil::ParenOpen, &|p: &mut DynParser<'db>| {
+                    p.parse_comma_separated(|p| p.parse_expr_full())
+                });
+                return ast::Expr::NamedTuple(ast::ExprNamedTuple::new(
+                    self.db,
+                    name,
+                    elements,
+                ));
+            }
+            Some("struct") => {
+                self.eat_word("struct");
+                let name = self.need_name();
+                let fields = self.parse_branch(Sigil::BraceOpen, &|p: &mut DynParser<'db>| {
+                    p.parse_comma_separated(|p| p.parse_expr_struct_field())
+                });
+                return ast::Expr::NamedStruct(ast::ExprNamedStruct::new(
+                    self.db,
+                    name,
+                    fields,
+                ));
+            }
+            Some("enum") => {
+                self.eat_word("enum");
+                // Enum expression syntax:
+                // - enum Variant (anonymous, no payload)
+                // - enum Variant payload (anonymous, with payload)
+                // - enum EnumName.Variant (named, with dot separator)
+                // - enum EnumName.Variant payload (named, with payload)
+                let first_name = self.need_name();
+                if self.peek_sigil(Sigil::Dot) {
+                    // Named enum: enum EnumName.Variant [payload].
+                    self.eat_sigil(Sigil::Dot);
+                    let variant_name = self.need_name();
+                    let payload = if self.is_at_expr_start() {
+                        Some(self.parse_expr_full())
+                    } else {
+                        None
+                    };
+                    return ast::Expr::NamedEnum(ast::ExprNamedEnum::new(
+                        self.db,
+                        first_name,
+                        variant_name,
+                        payload,
+                    ));
+                } else {
+                    // Anonymous enum: enum Variant [payload].
+                    let variant_name = first_name;
+                    let payload = if self.is_at_expr_start() {
+                        Some(self.parse_expr_full())
+                    } else {
+                        None
+                    };
+                    return ast::Expr::AnonEnum(ast::ExprAnonEnum::new(
+                        self.db,
+                        variant_name,
+                        payload,
+                    ));
+                }
+            }
+            Some("map") => {
+                self.eat_word("map");
+                let entries = self.parse_branch(Sigil::BraceOpen, &|p: &mut DynParser<'db>| {
+                    p.parse_comma_separated(|p| {
+                        let key = p.parse_expr_full();
+                        p.need_sigil(Sigil::Equals);
+                        let value = p.parse_expr_full();
+                        ast::ExprMapEntry::new(p.db, key, value)
+                    })
+                });
+                return ast::Expr::Map(ast::ExprMap::new(self.db, entries));
+            }
+            Some("set") => {
+                self.eat_word("set");
+                let elements = self.parse_branch(Sigil::BraceOpen, &|p: &mut DynParser<'db>| {
+                    p.parse_comma_separated(|p| p.parse_expr_full())
+                });
+                return ast::Expr::Set(ast::ExprSet::new(self.db, elements));
+            }
+            _ => {}
         }
 
-        // Check for literals and structures.
+        // Not a keyword, check for literals and structures.
         match self.peek() {
             Some(TreeToken::Token(token)) => {
                 match token.kind(self.db) {
                     TokenKind::Word => {
                         let word = token.word_str(self.db).X();
-                        match word {
-                            "true" => {
+                        // Try parsing as number, check for float by looking ahead for dot.
+                        if word.chars().all(|c| c.is_ascii_digit()) {
+                            // Check if next tokens form a float pattern (dot then digits).
+                            let is_float = {
+                                // Consume the number first.
                                 self.next();
-                                ast::Expr::True
-                            }
-                            "false" => {
-                                self.next();
-                                ast::Expr::False
-                            }
-                            _ => {
-                                // Try parsing as number, check for float by looking ahead for dot.
-                                if word.chars().all(|c| c.is_ascii_digit()) {
-                                    // Check if next tokens form a float pattern (dot then digits).
-                                    let is_float = {
-                                        // Consume the number first.
-                                        self.next();
-                                        if !self.peek_sigil(Sigil::Dot) {
-                                            false
-                                        } else {
-                                            // Peek ahead past the dot using manual iteration.
-                                            // We need to check what comes after the dot without consuming it yet.
-                                            // Unfortunately we can't easily do this with Peekable.
-                                            // Instead, let's try to consume the dot and check.
-                                            self.eat_sigil(Sigil::Dot);
-                                            // Now check if we have digits.
-                                            if let Some(TreeToken::Token(next_token)) = self.peek() {
-                                                if let Some(decimal_part) = next_token.word_str(self.db) {
-                                                    decimal_part.chars().all(|c| c.is_ascii_digit())
-                                                } else {
-                                                    false
-                                                }
-                                            } else {
-                                                false
-                                            }
-                                        }
-                                    };
-
-                                    if is_float {
-                                        let decimal_word = self.need_name();
-                                        let float_str = format!("{}.{}", word, decimal_word.as_str(self.db));
-                                        let value = InternedText::new(self.db, float_str.S());
-                                        ast::Expr::F32(ast::ExprF32::new(self.db, value))
-                                    } else {
-                                        // Not a float, just a U32.
-                                        if let Ok(val) = word.parse::<u32>() {
-                                            ast::Expr::U32(ast::ExprU32::new(self.db, val))
-                                        } else {
-                                            let value = InternedText::new(self.db, word.S());
-                                            ast::Expr::Int(ast::ExprInt::new(self.db, value))
-                                        }
-                                    }
+                                if !self.peek_sigil(Sigil::Dot) {
+                                    false
                                 } else {
-                                    // Not a number.
-                                    self.next();
+                                    // Consume the dot and check.
+                                    self.eat_sigil(Sigil::Dot);
+                                    // Now check if we have digits.
+                                    if let Some(TreeToken::Token(next_token)) = self.peek() {
+                                        if let Some(decimal_part) = next_token.word_str(self.db) {
+                                            decimal_part.chars().all(|c| c.is_ascii_digit())
+                                        } else {
+                                            false
+                                        }
+                                    } else {
+                                        false
+                                    }
+                                }
+                            };
+
+                            if is_float {
+                                let decimal_word = self.need_name();
+                                let float_str = format!("{}.{}", word, decimal_word.as_str(self.db));
+                                let value = InternedText::new(self.db, float_str.S());
+                                ast::Expr::F32(ast::ExprF32::new(self.db, value))
+                            } else {
+                                // Not a float, just a U32.
+                                if let Ok(val) = word.parse::<u32>() {
+                                    ast::Expr::U32(ast::ExprU32::new(self.db, val))
+                                } else {
                                     let value = InternedText::new(self.db, word.S());
                                     ast::Expr::Int(ast::ExprInt::new(self.db, value))
                                 }
                             }
+                        } else {
+                            // Not a number, treat as a token.
+                            self.next();
+                            let name = InternedText::new(self.db, word.S());
+                            ast::Expr::Token(ast::ExprToken::new(self.db, name))
                         }
                     }
                     TokenKind::String => {
@@ -363,120 +461,6 @@ where I: Iterator<Item = TreeToken<'db>>
         }
     }
 
-    fn parse_at_prefixed_expr(&mut self) -> ast::Expr<'db> {
-        // After @, we can have various constructs.
-        match self.peek_word() {
-            Some("true") => {
-                self.eat_word("true");
-                ast::Expr::True
-            }
-            Some("false") => {
-                self.eat_word("false");
-                ast::Expr::False
-            }
-            Some("nil") => {
-                self.eat_word("nil");
-                ast::Expr::Nil
-            }
-            Some("none") => {
-                self.eat_word("none");
-                ast::Expr::None
-            }
-            Some("error") => {
-                self.eat_word("error");
-                let value = self.parse_expr_full();
-                ast::Expr::Err(ast::ExprErr::new(self.db, value))
-            }
-            Some("tuple") => {
-                self.eat_word("tuple");
-                let name = self.need_name();
-                let elements = self.parse_branch(Sigil::ParenOpen, &|p: &mut DynParser<'db>| {
-                    p.parse_comma_separated(|p| p.parse_expr_full())
-                });
-                ast::Expr::NamedTuple(ast::ExprNamedTuple::new(
-                    self.db,
-                    name,
-                    elements,
-                ))
-            }
-            Some("struct") => {
-                self.eat_word("struct");
-                let name = self.need_name();
-                let fields = self.parse_branch(Sigil::BraceOpen, &|p: &mut DynParser<'db>| {
-                    p.parse_comma_separated(|p| p.parse_expr_struct_field())
-                });
-                ast::Expr::NamedStruct(ast::ExprNamedStruct::new(
-                    self.db,
-                    name,
-                    fields,
-                ))
-            }
-            Some("enum") => {
-                self.eat_word("enum");
-                // Enum expression syntax:
-                // - @enum Variant (anonymous, no payload)
-                // - @enum Variant payload (anonymous, with payload)
-                // - @enum EnumName.Variant (named, with dot separator)
-                // - @enum EnumName.Variant payload (named, with payload)
-                let first_name = self.need_name();
-                if self.peek_sigil(Sigil::Dot) {
-                    // Named enum: @enum EnumName.Variant [payload].
-                    self.eat_sigil(Sigil::Dot);
-                    let variant_name = self.need_name();
-                    let payload = if self.is_at_expr_start() {
-                        Some(self.parse_expr_full())
-                    } else {
-                        None
-                    };
-                    ast::Expr::NamedEnum(ast::ExprNamedEnum::new(
-                        self.db,
-                        first_name,
-                        variant_name,
-                        payload,
-                    ))
-                } else {
-                    // Anonymous enum: @enum Variant [payload].
-                    let variant_name = first_name;
-                    let payload = if self.is_at_expr_start() {
-                        Some(self.parse_expr_full())
-                    } else {
-                        None
-                    };
-                    ast::Expr::AnonEnum(ast::ExprAnonEnum::new(
-                        self.db,
-                        variant_name,
-                        payload,
-                    ))
-                }
-            }
-            Some("map") => {
-                self.eat_word("map");
-                let entries = self.parse_branch(Sigil::BraceOpen, &|p: &mut DynParser<'db>| {
-                    p.parse_comma_separated(|p| {
-                        let key = p.parse_expr_full();
-                        p.need_sigil(Sigil::Equals);
-                        let value = p.parse_expr_full();
-                        ast::ExprMapEntry::new(p.db, key, value)
-                    })
-                });
-                ast::Expr::Map(ast::ExprMap::new(self.db, entries))
-            }
-            Some("set") => {
-                self.eat_word("set");
-                let elements = self.parse_branch(Sigil::BraceOpen, &|p: &mut DynParser<'db>| {
-                    p.parse_comma_separated(|p| p.parse_expr_full())
-                });
-                ast::Expr::Set(ast::ExprSet::new(self.db, elements))
-            }
-            Some(_) => {
-                // Could be @token Name.
-                let name = self.need_name();
-                ast::Expr::Token(ast::ExprToken::new(self.db, name))
-            }
-            None => todo!("unexpected end after @"),
-        }
-    }
-
     fn parse_expr_struct_field(&mut self) -> ast::ExprStructField<'db> {
         let name = self.need_name();
         self.need_sigil(Sigil::Equals);
@@ -485,10 +469,9 @@ where I: Iterator<Item = TreeToken<'db>>
     }
 
     fn is_at_expr_start(&mut self) -> bool {
-        matches!(
-            self.peek(),
-            Some(TreeToken::Token(_)) | Some(TreeToken::Branch(..))
-        )
+        // With heap sigils required, expressions start with @.
+        // (# for global heap not yet supported by bct lexer.)
+        self.peek_sigil(Sigil::At)
     }
 
     fn parse_comma_separated<T>(
@@ -496,7 +479,7 @@ where I: Iterator<Item = TreeToken<'db>>
         mut parse_fn: impl FnMut(&mut Self) -> T,
     ) -> Vec<T> {
         let mut items = vec![];
-        if !self.is_at_expr_start() && !self.peek_sigil(Sigil::At) {
+        if !self.is_at_expr_start() {
             return items;
         }
         loop {
@@ -595,13 +578,19 @@ where I: Iterator<Item = TreeToken<'db>>
 
 impl<'db> DynParser<'db> {
     fn parse_type_hint_and_heap(&mut self) -> ast::TypeHintAndHeap<'db> {
-        let heap = ast::Heap::Omitted;
+        // Heap sigils: @ for local. (# for global not yet supported by bct lexer.)
+        let heap = if self.peek_sigil(Sigil::At) {
+            self.eat_sigil(Sigil::At);
+            ast::Heap::Local
+        } else {
+            panic!("expected heap sigil @ before type");
+        };
         let type_hint = self.parse_type_hint();
         ast::TypeHintAndHeap::new(self.db, heap, type_hint)
     }
 
     fn parse_type_hint(&mut self) -> ast::TypeHint<'db> {
-        self.need_sigil(Sigil::At);
+        // Heap sigil already consumed, now parse the type name.
         match self.peek_word() {
             Some("bool") => { self.eat_word("bool"); ast::TypeHint::Bool }
             Some("u32") => { self.eat_word("u32"); ast::TypeHint::U32 }
@@ -642,24 +631,35 @@ impl<'db> DynParser<'db> {
     }
 
     fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
-        let heap = ast::Heap::Omitted;
+        // Heap sigils: @ for local. (# for global not yet supported by bct lexer.)
+        let heap = if self.peek_sigil(Sigil::At) {
+            self.eat_sigil(Sigil::At);
+            ast::Heap::Local
+        } else {
+            panic!("expected heap sigil @ before expression");
+        };
         let expr = self.parse_expr();
         ast::ExprAndHeap::new(self.db, heap, expr)
     }
 
     fn parse_expr(&mut self) -> ast::Expr<'db> {
-        if self.peek_sigil(Sigil::At) {
-            self.eat_sigil(Sigil::At);
-            return self.parse_at_prefixed_expr();
+        // Heap sigil already consumed. Now parse keywords, literals, and structures.
+        // Check for keywords first.
+        match self.peek_word() {
+            Some("true") => { self.eat_word("true"); return ast::Expr::True; }
+            Some("false") => { self.eat_word("false"); return ast::Expr::False; }
+            Some("nil") => { self.eat_word("nil"); return ast::Expr::Nil; }
+            Some("none") => { self.eat_word("none"); return ast::Expr::None; }
+            _ => {}
         }
+
+        // Not a keyword, check for numbers or tokens.
         match self.peek() {
             Some(TreeToken::Token(token)) => {
                 match token.kind(self.db) {
                     TokenKind::Word => {
                         let word = token.word_str(self.db).X();
-                        if word == "true" { self.next(); ast::Expr::True }
-                        else if word == "false" { self.next(); ast::Expr::False }
-                        else if word.chars().all(|c| c.is_ascii_digit()) {
+                        if word.chars().all(|c| c.is_ascii_digit()) {
                             self.next();
                             // Check for float pattern (number followed by dot and number).
                             if self.peek_sigil(Sigil::Dot) && self.pos + 1 < self.tokens.len() {
@@ -684,24 +684,16 @@ impl<'db> DynParser<'db> {
                                 ast::Expr::Int(ast::ExprInt::new(self.db, value))
                             }
                         } else {
+                            // Not a number, treat as a token.
                             self.next();
-                            let value = InternedText::new(self.db, word.S());
-                            ast::Expr::Int(ast::ExprInt::new(self.db, value))
+                            let name = InternedText::new(self.db, word.S());
+                            ast::Expr::Token(ast::ExprToken::new(self.db, name))
                         }
                     }
                     _ => todo!("dyn parser token"),
                 }
             }
             _ => todo!("dyn parser expr"),
-        }
-    }
-
-    fn parse_at_prefixed_expr(&mut self) -> ast::Expr<'db> {
-        match self.peek_word() {
-            Some("true") => { self.eat_word("true"); ast::Expr::True }
-            Some("false") => { self.eat_word("false"); ast::Expr::False }
-            Some("nil") => { self.eat_word("nil"); ast::Expr::Nil }
-            _ => todo!("dyn parser @ expr"),
         }
     }
 
@@ -823,7 +815,7 @@ fn test_parse_bool_with_type() {
 #[test]
 fn test_parse_int() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("42"));
+    let source = Source::new(db, S("@42"));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
@@ -835,7 +827,7 @@ fn test_parse_int() {
 #[test]
 fn test_parse_tuple() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("(@true, 1)"));
+    let source = Source::new(db, S("@(@true, @1)"));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
@@ -847,7 +839,7 @@ fn test_parse_tuple() {
 #[test]
 fn test_parse_list() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("[1, 2, 3]"));
+    let source = Source::new(db, S("@[@1, @2, @3]"));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
@@ -859,7 +851,7 @@ fn test_parse_list() {
 #[test]
 fn test_parse_float() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("1.0"));
+    let source = Source::new(db, S("@1.0"));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
@@ -873,7 +865,7 @@ fn test_parse_float() {
 #[test]
 fn test_parse_float_with_type() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @f32 / 1.0"));
+    let source = Source::new(db, S(": @f32 / @1.0"));
     let ast = parse(db, source);
     let type_hint = ast.type_hint(db).type_hint(db);
     assert!(matches!(type_hint, ast::TypeHint::F32));
@@ -902,7 +894,7 @@ fn test_parse_anon_enum_type() {
 #[test]
 fn test_parse_string() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(r#": @string / "hello world""#));
+    let source = Source::new(db, S(r#": @string / @"hello world""#));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
@@ -939,7 +931,7 @@ fn test_parse_struct() {
 #[test]
 fn test_parse_map() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @map <@u32, @u32> / @map { 0 = 5, 2 = 2 }"));
+    let source = Source::new(db, S(": @map <@u32, @u32> / @map { @0 = @5, @2 = @2 }"));
     let ast = parse(db, source);
     let type_hint = ast.type_hint(db).type_hint(db);
     match type_hint {
@@ -958,7 +950,7 @@ fn test_parse_map() {
 #[test]
 fn test_parse_set() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @set <@u32> / @set { 1, 2, 3 }"));
+    let source = Source::new(db, S(": @set <@u32> / @set { @1, @2, @3 }"));
     let ast = parse(db, source);
     let type_hint = ast.type_hint(db).type_hint(db);
     match type_hint {
@@ -977,7 +969,7 @@ fn test_parse_set() {
 #[test]
 fn test_parse_named_tuple() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @tuple Bar (@bool, @u32) / @tuple Bar (@true, 1)"));
+    let source = Source::new(db, S(": @tuple Bar (@bool, @u32) / @tuple Bar (@true, @1)"));
     let ast = parse(db, source);
     let type_hint = ast.type_hint(db).type_hint(db);
     match type_hint {
@@ -1015,7 +1007,7 @@ fn test_parse_enum_variant_no_payload() {
 #[test]
 fn test_parse_enum_variant_with_payload() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@enum Bar 2"));
+    let source = Source::new(db, S("@enum Bar @2"));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
@@ -1030,7 +1022,7 @@ fn test_parse_enum_variant_with_payload() {
 #[test]
 fn test_parse_enum_variant_with_tuple() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@enum Baz (@true, 1)"));
+    let source = Source::new(db, S("@enum Baz @(@true, @1)"));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
@@ -1045,7 +1037,7 @@ fn test_parse_enum_variant_with_tuple() {
 #[test]
 fn test_parse_named_enum_with_dot() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@enum Quux.Bar (@true, 1)"));
+    let source = Source::new(db, S("@enum Quux.Bar @(@true, @1)"));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {

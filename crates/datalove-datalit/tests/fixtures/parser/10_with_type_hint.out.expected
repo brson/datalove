@@ -1,10 +1,10 @@
 {
   "type_hint": {
-    "heap": "Omitted",
+    "heap": "Local",
     "type_hint": "U32"
   },
   "expr": {
-    "heap": "Omitted",
+    "heap": "Local",
     "expr": {
       "U32": {
         "value": 42
