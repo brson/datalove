@@ -1,1 +1,53 @@
-OK: parsed successfully
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": "Data"
+  },
+  "expr": {
+    "heap": "Omitted",
+    "expr": {
+      "AnonTuple": {
+        "elements": [
+          {
+            "type_hint": {
+              "heap": "Omitted",
+              "type_hint": "Data"
+            },
+            "expr": {
+              "heap": "Omitted",
+              "expr": "True"
+            }
+          },
+          {
+            "type_hint": {
+              "heap": "Omitted",
+              "type_hint": "Data"
+            },
+            "expr": {
+              "heap": "Omitted",
+              "expr": {
+                "U32": {
+                  "value": 42
+                }
+              }
+            }
+          },
+          {
+            "type_hint": {
+              "heap": "Omitted",
+              "type_hint": "Data"
+            },
+            "expr": {
+              "heap": "Omitted",
+              "expr": {
+                "F32": {
+                  "value": "3.14"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

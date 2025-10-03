@@ -31,8 +31,9 @@ fn analyze_file(path: &Path) -> String {
     let db = datalove_datalit::Database::default();
     let source = bct::input::Source::new(&db, source_text.S());
 
-    let _ast = datalove_datalit::parser::parse(&db, source);
-    format!("OK: parsed successfully")
+    let ast = datalove_datalit::parser::parse(&db, source);
+    let serde_ast = datalove_datalit::ast_serde::ExprFull::from_ast(&db, ast);
+    rmx::serde_json::to_string_pretty(&serde_ast).X()
 }
 
 enum TestResult {

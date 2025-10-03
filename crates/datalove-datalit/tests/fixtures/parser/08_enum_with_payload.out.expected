@@ -1,1 +1,28 @@
-OK: parsed successfully
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": "Data"
+  },
+  "expr": {
+    "heap": "Omitted",
+    "expr": {
+      "AnonEnum": {
+        "variant_name": "Bar",
+        "payload": {
+          "type_hint": {
+            "heap": "Omitted",
+            "type_hint": "Data"
+          },
+          "expr": {
+            "heap": "Omitted",
+            "expr": {
+              "U32": {
+                "value": 42
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

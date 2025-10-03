@@ -1,1 +1,14 @@
-OK: parsed successfully
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": "U32"
+  },
+  "expr": {
+    "heap": "Omitted",
+    "expr": {
+      "U32": {
+        "value": 42
+      }
+    }
+  }
+}

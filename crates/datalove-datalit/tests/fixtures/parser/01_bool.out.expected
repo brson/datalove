@@ -1,1 +1,10 @@
-OK: parsed successfully
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": "Data"
+  },
+  "expr": {
+    "heap": "Omitted",
+    "expr": "True"
+  }
+}

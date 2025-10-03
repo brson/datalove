@@ -9,6 +9,7 @@ edition.workspace = true
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
+serde = { version = "1", features = ["derive"] }
 
 [[test]]
 name = "parser_tests"
