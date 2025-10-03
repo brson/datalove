@@ -45,39 +45,27 @@ end proc
 ; ## About the heap
 
 ; Every type includes a possibly-implicit heap type,
-; either local, global, none, infer (`@ % # $`)
+; either local (`@`), global (`#`), infer (no sigil)
 ;
 ; Data types that contain allocations:
 ; list, string, map, set, data, error, option, result.
+;
+; some types require heap sigils to limit keywords in the grammar:
+; @map, @set, etc.
 
 let local: @set<@data> = @set { 1, "2", 3.0 }
-let global: %set<%data> = %set { 1, "2", 3.0 }
+let global: #set<#data> = #set { 1, "2", 3.0 }
 
 let none: #struct Foo { } = #struct Foo { }
-let none: #struct Foo { } = $struct Foo { }
 
-; clone is a deep copy across heaps
-let globalized: %set<_> = std.clone(local)
+; clone can deep copy across heaps
+let globalized: #set<_> = std.clone(local)
 
 ; they can not be intermixed:
 ;
-;     let bogus: @set<%data> = ...
+;     let bogus: @set<#data> = ...
 
 
-; ### Heap idea - stack-oriented arenas
-
-var results: @vec<u32> = @[]
-
-arena
-  ; now `@` is a new arena, `@^` is previous
-
-  var buffer: @vec<u32> = @[1, 2, 3]
-  ; ... do work here ...
-  ; `clone` does a deep copy, possibly between heaps
-  let results_clone: @^vec<u32> = clone buffer
-  results = results_clone
-
-end arena
 
 
 ; ## Math and logic
@@ -86,7 +74,7 @@ end arena
 let i = (1 + 2) - 3 * 4 / 5
 ; sized ints can't - the ! here indicates early-error-return
 let i: @u32 = (1 +! 2) -! 3 *! 4 /! 5
-; or doubl sigils for checked (assert/abort) math
+; or doubl sigils for checked (assert/panic) math
 let i: @u32 = (1 ++ 2) -- 3 ** 4 // 5
 
 ; compound assignment
@@ -106,8 +94,9 @@ let e : @int = d + d;
 
 ; logic and comparison uses words
 
-let a = 1 lt 2 and 2 gt 3 or not 4 lte
-let a = a or a eq 10 or a ne 1
+let a = 1 lt 2 and 2 gt 3 or not 4 lte 5 and 4 gte 6
+let a = a or a eq 10 or a not eq 1
+
 
 
 
@@ -126,6 +115,8 @@ loop {
   break
   continue
 }
+
+
 
 
 ; ## Match expressions
