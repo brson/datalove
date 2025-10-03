@@ -8,7 +8,7 @@ use rmx::serde as serde;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExprFull {
-    pub type_hint: TypeHintAndHeap,
+    pub type_hint: Option<TypeHintAndHeap>,
     pub expr: ExprAndHeap,
 }
 
@@ -250,7 +250,7 @@ pub struct ExprErr {
 impl ExprFull {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFull<'db>) -> Self {
         ExprFull {
-            type_hint: TypeHintAndHeap::from_ast(db, *ast.type_hint(db)),
+            type_hint: ast.type_hint(db).map(|th| TypeHintAndHeap::from_ast(db, th)),
             expr: ExprAndHeap::from_ast(db, *ast.expr(db)),
         }
     }

@@ -3,8 +3,7 @@ use bct::text::InternedText;
 
 #[salsa::tracked]
 pub struct ExprFull<'db> {
-    #[returns(ref)]
-    pub type_hint: TypeHintAndHeap<'db>,
+    pub type_hint: Option<TypeHintAndHeap<'db>>,
     #[returns(ref)]
     pub expr: ExprAndHeap<'db>,
 }

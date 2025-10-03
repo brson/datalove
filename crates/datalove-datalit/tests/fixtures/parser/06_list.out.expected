@@ -1,18 +1,12 @@
 {
-  "type_hint": {
-    "heap": "Omitted",
-    "type_hint": "Data"
-  },
+  "type_hint": null,
   "expr": {
     "heap": "Local",
     "expr": {
       "List": {
         "elements": [
           {
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "Data"
-            },
+            "type_hint": null,
             "expr": {
               "heap": "Local",
               "expr": {
@@ -23,10 +17,7 @@
             }
           },
           {
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "Data"
-            },
+            "type_hint": null,
             "expr": {
               "heap": "Local",
               "expr": {
@@ -37,10 +28,7 @@
             }
           },
           {
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "Data"
-            },
+            "type_hint": null,
             "expr": {
               "heap": "Local",
               "expr": {
@@ -51,10 +39,7 @@
             }
           },
           {
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "Data"
-            },
+            "type_hint": null,
             "expr": {
               "heap": "Local",
               "expr": {
@@ -65,10 +50,7 @@
             }
           },
           {
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "Data"
-            },
+            "type_hint": null,
             "expr": {
               "heap": "Local",
               "expr": {

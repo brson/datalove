@@ -68,16 +68,11 @@ where I: Iterator<Item = TreeToken<'db>>
             let type_hint = self.parse_type_hint_and_heap();
             self.need_sigil(Sigil::SlashForward);
             let expr = self.parse_expr_and_heap();
-            ast::ExprFull::new(self.db, type_hint, expr)
+            ast::ExprFull::new(self.db, Some(type_hint), expr)
         } else {
             // No type hint, just parse expression.
             let expr = self.parse_expr_and_heap();
-            let type_hint = ast::TypeHintAndHeap::new(
-                self.db,
-                ast::Heap::Omitted,
-                ast::TypeHint::Data,
-            );
-            ast::ExprFull::new(self.db, type_hint, expr)
+            ast::ExprFull::new(self.db, None, expr)
         }
     }
 
@@ -622,12 +617,7 @@ impl<'db> DynParser<'db> {
 
     fn parse_expr_full(&mut self) -> ast::ExprFull<'db> {
         let expr = self.parse_expr_and_heap();
-        let type_hint = ast::TypeHintAndHeap::new(
-            self.db,
-            ast::Heap::Omitted,
-            ast::TypeHint::Data,
-        );
-        ast::ExprFull::new(self.db, type_hint, expr)
+        ast::ExprFull::new(self.db, None, expr)
     }
 
     fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
@@ -806,7 +796,7 @@ fn test_parse_bool_with_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @bool / @true"));
     let ast = parse(db, source);
-    let type_hint = ast.type_hint(db).type_hint(db);
+    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     assert!(matches!(type_hint, ast::TypeHint::Bool));
     let expr = ast.expr(db).expr(db);
     assert!(matches!(expr, ast::Expr::True));
@@ -867,7 +857,7 @@ fn test_parse_float_with_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @f32 / @1.0"));
     let ast = parse(db, source);
-    let type_hint = ast.type_hint(db).type_hint(db);
+    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     assert!(matches!(type_hint, ast::TypeHint::F32));
     let expr = ast.expr(db).expr(db);
     match expr {
@@ -881,7 +871,7 @@ fn test_parse_anon_enum_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @enum { Foo, Bar: @u32 } / @enum Foo"));
     let ast = parse(db, source);
-    let type_hint = ast.type_hint(db).type_hint(db);
+    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::AnonEnum(e) => {
             let variants = e.variants(db);
@@ -910,7 +900,7 @@ fn test_parse_struct() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @struct Foo { field1: @bool } / @struct Foo { field1 = @true }"));
     let ast = parse(db, source);
-    let type_hint = ast.type_hint(db).type_hint(db);
+    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::NamedStruct(s) => {
             assert_eq!(s.name(db).as_str(db), "Foo");
@@ -933,7 +923,7 @@ fn test_parse_map() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @map <@u32, @u32> / @map { @0 = @5, @2 = @2 }"));
     let ast = parse(db, source);
-    let type_hint = ast.type_hint(db).type_hint(db);
+    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::Map(_) => {}
         _ => panic!("expected map type hint"),
@@ -952,7 +942,7 @@ fn test_parse_set() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @set <@u32> / @set { @1, @2, @3 }"));
     let ast = parse(db, source);
-    let type_hint = ast.type_hint(db).type_hint(db);
+    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::Set(_) => {}
         _ => panic!("expected set type hint"),
@@ -971,7 +961,7 @@ fn test_parse_named_tuple() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @tuple Bar (@bool, @u32) / @tuple Bar (@true, @1)"));
     let ast = parse(db, source);
-    let type_hint = ast.type_hint(db).type_hint(db);
+    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::NamedTuple(t) => {
             assert_eq!(t.name(db).as_str(db), "Bar");
