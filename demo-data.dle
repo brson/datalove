@@ -26,7 +26,9 @@
 
 ; fixme below is not strictly valid .dle syntax
 ; since it contains multiple expressions.
-; Put them in the above tuple.
+; Imagine them in the above tuple.
+
+
 
 
 
@@ -35,15 +37,29 @@
 
 : @bool / @true
 : @bool / @false
+; with no heap sigils - infered and defaulted.
+; unclear to what extent this will be supported.
+; the heap sigils allow us to avoid reserving lots of keywords in type
+; and expression namespaces.
+: bool / true
+: bool / false
 
 : @u32 / 1
 : @f32 / 1.0
+
+
+; ## Heap sigils
+
+; Every type has an associated heap - local, global, inferred,
+; indicated by a sigil: @-, #-, or none for inferred.
 
 
 ; ## Bigints
 
 ; unbounded unsigned, the default int type
 : @int / 1
+
+
 
 
 ; ## Special types
@@ -75,8 +91,11 @@
   field2: @u32,
   field3: @u32,
 } / {
+  ; asignment without type hint
   field1 = @true,
+  ; type hint in the field syntax
   field2: @u32 = 1,
+  ; type hint in expression
   field3 = : @u32 / 2,
 }
 
@@ -92,19 +111,19 @@
   Foo,
   Bar: @u32,
   Baz: (@bool, @u32),
-} / @enum . Foo
+} / @enum Foo
 
 : @enum {
   Bar: @u32,
-} / @enum | Bar 2
+} / @enum Bar 2
 
 : @enum {
   Bar: @u32,
-} / @enum | Bar : @u32 / 2
+} / @enum Bar : @u32 / 2
 
 : @enum {
   Baz (@bool, @u32),
-} / @enum | Bar (@true, 1)
+} / @enum Bar (@true, 1)
 
 ; named enum
 @enum Quux {
@@ -113,10 +132,10 @@
   Baz (@bool, @u32),
 }
 
-: @enum Quux / @enum Quux | Bar (@true, 1)
+: @enum Quux / @enum Quux.Bar (@true, 1)
 
 ; coerced from anonymous enum
-: @enum Quux / @enum | Bar (@true, 1)
+: @enum Quux / @enum Bar (@true, 1)
 
 
 
@@ -130,13 +149,17 @@
 : @string / "abc"
 
 ; map
-: @map <u32, u32> / @map {
+: @map <@u32, @u32> / @map {
   0 = 5,
   2 = 2,
+  ; type hint in the key syntax?
+  3: @u32 = 2,
+  ; type hint in the expression
+  3 = : @u32 / 2,
 }
 
 ; set
-: @set <u32> / @set { 1, 2, 3 }
+: @set <@u32> / @set { 1, 2, 3 }
 
 
 
@@ -146,11 +169,16 @@
 ; option - hm...
 : @?@u32 / 4
 : @?@u32 / @none
+; inferred heap
+: ?@u32 / 4
+: ?u32 / none
 
 ; result - hm...
 : @!@u32 / 4
 : @!@u32 / @error "oops"
-
+; inferred heap
+: !@u32 / 4
+: !@u32 / @error "oops"
 
 
 
@@ -163,16 +191,14 @@
 : @error / @error "oops"
 
 
-
-
 ; ## TODO
-;
+
+; - dates
 ; - bitset
 ; - table (polars, arrow)
 ; - graph
 ; - array
 ; - multi-dimensional array
 ; - range (python)?
-; - bigint
 ; - complex
 ; - real
