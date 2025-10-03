@@ -100,8 +100,6 @@
 } / {
   ; asignment without type hint
   field1 = @true,
-  ; type hint in the field syntax
-  field2: @u32 = 1,
   ; type hint in expression
   field3 = : @u32 / 2,
 }
@@ -159,8 +157,6 @@
 : @map <@u32, @u32> / @map {
   0 = 5,
   2 = 2,
-  ; type hint in the key syntax?
-  3: @u32 = 2,
   ; type hint in the expression
   3 = : @u32 / 2,
 }
