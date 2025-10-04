@@ -1,0 +1,5 @@
+: @struct Foo {
+  field1: @bool,
+} / @struct Foo {
+  field1 = @true,
+}
