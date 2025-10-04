@@ -1,0 +1,18 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": {
+      "Token": {
+        "name": "Nil"
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "Token": {
+        "name": "token"
+      }
+    }
+  }
+}

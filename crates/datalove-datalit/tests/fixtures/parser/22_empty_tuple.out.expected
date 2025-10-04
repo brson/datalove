@@ -1,0 +1,18 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": {
+      "AnonTuple": {
+        "fields": []
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "AnonTuple": {
+        "elements": []
+      }
+    }
+  }
+}

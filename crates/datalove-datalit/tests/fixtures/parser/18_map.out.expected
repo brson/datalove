@@ -1,0 +1,101 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": {
+      "Map": {
+        "key_type": {
+          "heap": "Local",
+          "type_hint": "U32"
+        },
+        "value_type": {
+          "heap": "Local",
+          "type_hint": "U32"
+        }
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "type_hint": null,
+              "expr": {
+                "heap": "Local",
+                "expr": {
+                  "U32": {
+                    "value": 0
+                  }
+                }
+              }
+            },
+            "value": {
+              "type_hint": null,
+              "expr": {
+                "heap": "Local",
+                "expr": {
+                  "U32": {
+                    "value": 5
+                  }
+                }
+              }
+            }
+          },
+          {
+            "key": {
+              "type_hint": null,
+              "expr": {
+                "heap": "Local",
+                "expr": {
+                  "U32": {
+                    "value": 2
+                  }
+                }
+              }
+            },
+            "value": {
+              "type_hint": null,
+              "expr": {
+                "heap": "Local",
+                "expr": {
+                  "U32": {
+                    "value": 2
+                  }
+                }
+              }
+            }
+          },
+          {
+            "key": {
+              "type_hint": null,
+              "expr": {
+                "heap": "Local",
+                "expr": {
+                  "U32": {
+                    "value": 3
+                  }
+                }
+              }
+            },
+            "value": {
+              "type_hint": {
+                "heap": "Local",
+                "type_hint": "U32"
+              },
+              "expr": {
+                "heap": "Local",
+                "expr": {
+                  "U32": {
+                    "value": 2
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
