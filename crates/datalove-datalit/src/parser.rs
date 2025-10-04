@@ -89,7 +89,18 @@ where I: Iterator<Item = TreeToken<'db>>
     }
 
     fn parse_type_hint(&mut self) -> ast::TypeHint<'db> {
-        // Heap sigil already consumed, now parse the type name.
+        // Heap sigil already consumed. Check for ? or ! prefix for Option/Result types.
+        if self.peek_sigil(Sigil::Question) {
+            self.eat_sigil(Sigil::Question);
+            let inner_type = self.parse_type_hint_and_heap();
+            return ast::TypeHint::Option(ast::TypeHintOption::new(self.db, inner_type));
+        } else if self.peek_sigil(Sigil::Exclamation) {
+            self.eat_sigil(Sigil::Exclamation);
+            let inner_type = self.parse_type_hint_and_heap();
+            return ast::TypeHint::Result(ast::TypeHintResult::new(self.db, inner_type));
+        }
+
+        // Parse base type.
         match self.peek_word() {
             Some("bool") => {
                 self.eat_word("bool");
@@ -585,7 +596,18 @@ impl<'db> DynParser<'db> {
     }
 
     fn parse_type_hint(&mut self) -> ast::TypeHint<'db> {
-        // Heap sigil already consumed, now parse the type name.
+        // Heap sigil already consumed. Check for ? or ! prefix for Option/Result types.
+        if self.peek_sigil(Sigil::Question) {
+            self.eat_sigil(Sigil::Question);
+            let inner_type = self.parse_type_hint_and_heap();
+            return ast::TypeHint::Option(ast::TypeHintOption::new(self.db, inner_type));
+        } else if self.peek_sigil(Sigil::Exclamation) {
+            self.eat_sigil(Sigil::Exclamation);
+            let inner_type = self.parse_type_hint_and_heap();
+            return ast::TypeHint::Result(ast::TypeHintResult::new(self.db, inner_type));
+        }
+
+        // Parse base type.
         match self.peek_word() {
             Some("bool") => { self.eat_word("bool"); ast::TypeHint::Bool }
             Some("u32") => { self.eat_word("u32"); ast::TypeHint::U32 }

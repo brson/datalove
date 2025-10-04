@@ -1,0 +1,21 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": {
+      "Result": {
+        "inner_type": {
+          "heap": "Local",
+          "type_hint": "String"
+        }
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "String": {
+        "value": "\"hello\""
+      }
+    }
+  }
+}
