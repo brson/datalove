@@ -47,6 +47,7 @@ pub enum TypeHint {
     Result(TypeHintResult),
     Data,
     Error,
+    ParseError(TypeHintParseError),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -152,6 +153,7 @@ pub enum Expr {
     Set(ExprSet),
     None,
     Err(ExprErr),
+    ParseError(ExprParseError),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -246,6 +248,16 @@ pub struct ExprErr {
     pub value: Box<ExprFull>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TypeHintParseError {
+    pub message: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExprParseError {
+    pub message: String,
+}
+
 /// Conversion from salsa AST to serializable AST.
 impl ExprFull {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFull<'db>) -> Self {
@@ -298,6 +310,7 @@ impl TypeHint {
             crate::ast::TypeHint::Result(t) => TypeHint::Result(TypeHintResult::from_ast(db, t)),
             crate::ast::TypeHint::Data => TypeHint::Data,
             crate::ast::TypeHint::Error => TypeHint::Error,
+            crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
         }
     }
 }
@@ -451,6 +464,7 @@ impl Expr {
             crate::ast::Expr::Set(e) => Expr::Set(ExprSet::from_ast(db, e)),
             crate::ast::Expr::None => Expr::None,
             crate::ast::Expr::Err(e) => Expr::Err(ExprErr::from_ast(db, e)),
+            crate::ast::Expr::ParseError(e) => Expr::ParseError(ExprParseError::from_ast(db, e)),
         }
     }
 }
@@ -594,6 +608,22 @@ impl ExprErr {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprErr<'db>) -> Self {
         ExprErr {
             value: Box::new(ExprFull::from_ast(db, ast.value(db))),
+        }
+    }
+}
+
+impl TypeHintParseError {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintParseError<'db>) -> Self {
+        TypeHintParseError {
+            message: ast.message(db).as_str(db).to_string(),
+        }
+    }
+}
+
+impl ExprParseError {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprParseError<'db>) -> Self {
+        ExprParseError {
+            message: ast.message(db).as_str(db).to_string(),
         }
     }
 }

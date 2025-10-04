@@ -85,7 +85,10 @@ where I: Iterator<Item = TreeToken<'db>>
             self.eat_sigil(Sigil::Hash);
             ast::Heap::Global
         } else {
-            panic!("expected heap sigil @ or # before type");
+            // Parse error: missing heap sigil. Use Omitted heap and create error node.
+            let message = InternedText::new(self.db, "expected heap sigil @ or # before type".S());
+            let error_node = ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message));
+            return ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_node);
         };
         let type_hint = self.parse_type_hint();
         ast::TypeHintAndHeap::new(self.db, heap, type_hint)
@@ -238,7 +241,8 @@ where I: Iterator<Item = TreeToken<'db>>
                         fields,
                     ))
                 } else {
-                    todo!("unknown type hint")
+                    let message = InternedText::new(self.db, "unknown type hint".S());
+                    ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
                 }
             }
         }
@@ -271,7 +275,10 @@ where I: Iterator<Item = TreeToken<'db>>
             self.eat_sigil(Sigil::Hash);
             ast::Heap::Global
         } else {
-            panic!("expected heap sigil @ or # before expression");
+            // Parse error: missing heap sigil. Use Omitted heap and create error node.
+            let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+            let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+            return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
         };
         let expr = self.parse_expr();
         ast::ExprAndHeap::new(self.db, heap, expr)
@@ -445,7 +452,10 @@ where I: Iterator<Item = TreeToken<'db>>
                         );
                         ast::Expr::String(ast::ExprString::new(self.db, value))
                     }
-                    _ => todo!("unexpected token in expr"),
+                    _ => {
+                        let message = InternedText::new(self.db, "unexpected token in expression".S());
+                        ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
+                    }
                 }
             }
             Some(TreeToken::Branch(Sigil::ParenOpen, _)) => {
@@ -469,7 +479,10 @@ where I: Iterator<Item = TreeToken<'db>>
                 });
                 ast::Expr::List(ast::ExprList::new(self.db, elements))
             }
-            _ => todo!("unexpected token in expr"),
+            _ => {
+                let message = InternedText::new(self.db, "unexpected token in expression".S());
+                ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
+            }
         }
     }
 
@@ -598,7 +611,10 @@ impl<'db> DynParser<'db> {
             self.eat_sigil(Sigil::Hash);
             ast::Heap::Global
         } else {
-            panic!("expected heap sigil @ or # before type");
+            // Parse error: missing heap sigil. Use Omitted heap and create error node.
+            let message = InternedText::new(self.db, "expected heap sigil @ or # before type".S());
+            let error_node = ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message));
+            return ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_node);
         };
         let type_hint = self.parse_type_hint();
         ast::TypeHintAndHeap::new(self.db, heap, type_hint)
@@ -624,7 +640,10 @@ impl<'db> DynParser<'db> {
             Some("int") => { self.eat_word("int"); ast::TypeHint::Int }
             Some("nil") => { self.eat_word("nil"); ast::TypeHint::Nil }
             Some("string") => { self.eat_word("string"); ast::TypeHint::String }
-            _ => todo!("parse type hint in dyn parser"),
+            _ => {
+                let message = InternedText::new(self.db, "unknown type hint in DynParser".S());
+                ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+            }
         }
     }
 
@@ -660,7 +679,10 @@ impl<'db> DynParser<'db> {
             self.eat_sigil(Sigil::Hash);
             ast::Heap::Global
         } else {
-            panic!("expected heap sigil @ or # before expression");
+            // Parse error: missing heap sigil. Use Omitted heap and create error node.
+            let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+            let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+            return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
         };
         let expr = self.parse_expr();
         ast::ExprAndHeap::new(self.db, heap, expr)
@@ -714,10 +736,16 @@ impl<'db> DynParser<'db> {
                             ast::Expr::Token(ast::ExprToken::new(self.db, name))
                         }
                     }
-                    _ => todo!("dyn parser token"),
+                    _ => {
+                        let message = InternedText::new(self.db, "unexpected token in DynParser expression".S());
+                        ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
+                    }
                 }
             }
-            _ => todo!("dyn parser expr"),
+            _ => {
+                let message = InternedText::new(self.db, "unexpected tree node in DynParser expression".S());
+                ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
+            }
         }
     }
 

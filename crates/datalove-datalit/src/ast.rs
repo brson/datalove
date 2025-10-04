@@ -45,6 +45,7 @@ pub enum TypeHint<'db> {
     Result(TypeHintResult<'db>),
     Data,
     Error,
+    ParseError(TypeHintParseError<'db>),
 }
 
 #[salsa::tracked]
@@ -151,6 +152,7 @@ pub enum Expr<'db> {
     Set(ExprSet<'db>),
     None,
     Err(ExprErr<'db>),
+    ParseError(ExprParseError<'db>),
 }
 
 #[salsa::tracked]
@@ -245,3 +247,12 @@ pub struct ExprErr<'db> {
     pub value: ExprFull<'db>,
 }
 
+#[salsa::tracked]
+pub struct TypeHintParseError<'db> {
+    pub message: InternedText<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprParseError<'db> {
+    pub message: InternedText<'db>,
+}
