@@ -112,36 +112,36 @@
 ; anonymous enum
 : @enum {
   Foo,
-  Bar: @u32,
-  Baz: (@bool, @u32),
+  Bar(@u32,
+  Baz(@bool, @u32),
 } / @enum Foo
 
 : @enum {
-  Bar: @u32,
-} / @enum Bar 2
+  Bar(@u32),
+} / @enum Bar(2)
 
 : @enum {
-  Bar: @u32,
-} / @enum Bar : @u32 / 2 ; with type hint in expression
+  Bar(@u32),
+} / @enum Bar(: @u32 / 2) ; with type hint in expression
 
 : @enum {
-  Baz: (@bool, @u32),
-} / @enum Baz (@true, 1)
+  Baz(@bool, @u32),
+} / @enum Baz(@true, 1)
 
 ; named enum
 : @enum Quux {
-  Bar: @u32,
-} / @enum Quux.Bar 1
+  Bar(@u32),
+} / @enum Quux.Bar(1) ; fully-qualified variant
 
 ; named enum
 : @enum Quux {
-  Bar: { a: @u32, b: @bool },
-} / @enum Quux.Bar { a = 1, b = @true }
+  Bar(@u32, @bool),
+} / @enum Quux.Bar(1, b = @true)
 
-; coerced from anonymous enum (no dot)
+; this is actually a coercion from anonymous enum (no dot)
 : @enum Quux {
-  Bar: @u32,
-} / @enum Bar (@true, 1)
+  Bar(@u32),
+} / @enum Bar(@true, 1)
 
 
 
