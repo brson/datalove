@@ -77,12 +77,15 @@ where I: Iterator<Item = TreeToken<'db>>
     }
 
     fn parse_type_hint_and_heap(&mut self) -> ast::TypeHintAndHeap<'db> {
-        // Heap sigils: @ for local. (# for global not yet supported by bct lexer.)
+        // Heap sigils: @ for local, # for global.
         let heap = if self.peek_sigil(Sigil::At) {
             self.eat_sigil(Sigil::At);
             ast::Heap::Local
+        } else if self.peek_sigil(Sigil::Hash) {
+            self.eat_sigil(Sigil::Hash);
+            ast::Heap::Global
         } else {
-            panic!("expected heap sigil @ before type");
+            panic!("expected heap sigil @ or # before type");
         };
         let type_hint = self.parse_type_hint();
         ast::TypeHintAndHeap::new(self.db, heap, type_hint)
@@ -260,12 +263,15 @@ where I: Iterator<Item = TreeToken<'db>>
     }
 
     fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
-        // Heap sigils: @ for local. (# for global not yet supported by bct lexer.)
+        // Heap sigils: @ for local, # for global.
         let heap = if self.peek_sigil(Sigil::At) {
             self.eat_sigil(Sigil::At);
             ast::Heap::Local
+        } else if self.peek_sigil(Sigil::Hash) {
+            self.eat_sigil(Sigil::Hash);
+            ast::Heap::Global
         } else {
-            panic!("expected heap sigil @ before expression");
+            panic!("expected heap sigil @ or # before expression");
         };
         let expr = self.parse_expr();
         ast::ExprAndHeap::new(self.db, heap, expr)
@@ -584,12 +590,15 @@ where I: Iterator<Item = TreeToken<'db>>
 
 impl<'db> DynParser<'db> {
     fn parse_type_hint_and_heap(&mut self) -> ast::TypeHintAndHeap<'db> {
-        // Heap sigils: @ for local. (# for global not yet supported by bct lexer.)
+        // Heap sigils: @ for local, # for global.
         let heap = if self.peek_sigil(Sigil::At) {
             self.eat_sigil(Sigil::At);
             ast::Heap::Local
+        } else if self.peek_sigil(Sigil::Hash) {
+            self.eat_sigil(Sigil::Hash);
+            ast::Heap::Global
         } else {
-            panic!("expected heap sigil @ before type");
+            panic!("expected heap sigil @ or # before type");
         };
         let type_hint = self.parse_type_hint();
         ast::TypeHintAndHeap::new(self.db, heap, type_hint)
@@ -643,12 +652,15 @@ impl<'db> DynParser<'db> {
     }
 
     fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
-        // Heap sigils: @ for local. (# for global not yet supported by bct lexer.)
+        // Heap sigils: @ for local, # for global.
         let heap = if self.peek_sigil(Sigil::At) {
             self.eat_sigil(Sigil::At);
             ast::Heap::Local
+        } else if self.peek_sigil(Sigil::Hash) {
+            self.eat_sigil(Sigil::Hash);
+            ast::Heap::Global
         } else {
-            panic!("expected heap sigil @ before expression");
+            panic!("expected heap sigil @ or # before expression");
         };
         let expr = self.parse_expr();
         ast::ExprAndHeap::new(self.db, heap, expr)
