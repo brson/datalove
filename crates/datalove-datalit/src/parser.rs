@@ -508,20 +508,11 @@ where I: Iterator<Item = TreeToken<'db>>
         ast::ExprStructField::new(self.db, name, value)
     }
 
-    fn is_at_expr_start(&mut self) -> bool {
-        // With heap sigils required, expressions start with @.
-        // (# for global heap not yet supported by bct lexer.)
-        self.peek_sigil(Sigil::At)
-    }
-
     fn parse_comma_separated<T>(
         &mut self,
         mut parse_fn: impl FnMut(&mut Self) -> T,
     ) -> Vec<T> {
         let mut items = vec![];
-        if !self.is_at_expr_start() {
-            return items;
-        }
         loop {
             items.push(parse_fn(self));
             if self.peek_sigil(Sigil::Comma) {
