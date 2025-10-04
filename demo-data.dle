@@ -136,7 +136,7 @@
 ; named enum
 : @enum Quux {
   Bar(@u32, @bool),
-} / @enum Quux.Bar(1, b = @true)
+} / @enum Quux.Bar(1, @true)
 
 ; this is actually a coercion from anonymous enum (no dot)
 : @enum Quux {
