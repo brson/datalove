@@ -131,7 +131,12 @@
 ; named enum
 : @enum Quux {
   Bar: @u32,
-} / @enum Quux.Bar (@true, 1)
+} / @enum Quux.Bar 1
+
+; named enum
+: @enum Quux {
+  Bar: { a: @u32, b: @bool },
+} / @enum Quux.Bar { a = 1, b = @true }
 
 ; coerced from anonymous enum (no dot)
 : @enum Quux {
