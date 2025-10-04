@@ -1,0 +1,82 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": {
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "field1",
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "Bool"
+            }
+          },
+          {
+            "name": "field2",
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "U32"
+            }
+          },
+          {
+            "name": "field3",
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "U32"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "field1",
+            "value": {
+              "type_hint": null,
+              "expr": {
+                "heap": "Local",
+                "expr": "True"
+              }
+            }
+          },
+          {
+            "name": "field2",
+            "value": {
+              "type_hint": null,
+              "expr": {
+                "heap": "Local",
+                "expr": {
+                  "U32": {
+                    "value": 42
+                  }
+                }
+              }
+            }
+          },
+          {
+            "name": "field3",
+            "value": {
+              "type_hint": {
+                "heap": "Local",
+                "type_hint": "U32"
+              },
+              "expr": {
+                "heap": "Local",
+                "expr": {
+                  "U32": {
+                    "value": 2
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

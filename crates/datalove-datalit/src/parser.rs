@@ -666,8 +666,18 @@ impl<'db> DynParser<'db> {
     }
 
     fn parse_expr_full(&mut self) -> ast::ExprFull<'db> {
-        let expr = self.parse_expr_and_heap();
-        ast::ExprFull::new(self.db, None, expr)
+        // Check for `: type / expr` pattern.
+        if self.peek_sigil(Sigil::Colon) {
+            self.eat_sigil(Sigil::Colon);
+            let type_hint = self.parse_type_hint_and_heap();
+            self.need_sigil(Sigil::SlashForward);
+            let expr = self.parse_expr_and_heap();
+            ast::ExprFull::new(self.db, Some(type_hint), expr)
+        } else {
+            // No type hint, just parse expression.
+            let expr = self.parse_expr_and_heap();
+            ast::ExprFull::new(self.db, None, expr)
+        }
     }
 
     fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
@@ -765,6 +775,10 @@ impl<'db> DynParser<'db> {
             items.push(parse_fn(self));
             if self.peek_sigil(Sigil::Comma) {
                 self.eat_sigil(Sigil::Comma);
+                // Handle trailing comma: if we're at the end, stop parsing.
+                if self.pos >= self.tokens.len() {
+                    break;
+                }
             } else {
                 break;
             }
