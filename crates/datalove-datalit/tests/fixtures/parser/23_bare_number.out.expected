@@ -1,5 +1,8 @@
 {
-  "type_hint": null,
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": "U32"
+  },
   "expr": {
     "heap": "Omitted",
     "expr": {
