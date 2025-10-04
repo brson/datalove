@@ -1,1 +1,1 @@
-@enum Bar @42
+@enum Bar(@42)

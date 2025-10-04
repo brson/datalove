@@ -6,7 +6,36 @@
       "NamedEnum": {
         "enum_name": "Quux",
         "variant_name": "Bar",
-        "payload": null
+        "payload": {
+          "type_hint": null,
+          "expr": {
+            "heap": "Omitted",
+            "expr": {
+              "AnonTuple": {
+                "elements": [
+                  {
+                    "type_hint": null,
+                    "expr": {
+                      "heap": "Local",
+                      "expr": "True"
+                    }
+                  },
+                  {
+                    "type_hint": null,
+                    "expr": {
+                      "heap": "Local",
+                      "expr": {
+                        "U32": {
+                          "value": 1
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
       }
     }
   }
