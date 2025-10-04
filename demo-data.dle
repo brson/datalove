@@ -53,13 +53,11 @@
 ; Every type has an associated heap - local, global, inferred,
 ; indicated by a sigil: @-, #-, or none for inferred.
 ; having sigil-less types and expressions will introduce lots
-; of keywords.
+; of keywords. At the moment all types require sigils and most literal expressions.
 
 : @u32 / @1
 : #u32 / #1
 : #u32 / 1
-; infers to @
-: u32 / 1
 
 ; ## Bigints
 
@@ -75,7 +73,7 @@
 : @nil / @nil
 
 ; named token, zero-sized
-: @token Nil
+: @token Nil / @token Nil
 
 
 
@@ -167,19 +165,13 @@
 
 ; ## Special generic containers
 
-; option - hm...
+; option - some of these heap sigils will be inferred eventually
 : @?@u32 / 4
 : @?@u32 / @none
-; inferred heap
-: ?@u32 / 4
-: ?u32 / none
 
 ; result - hm...
 : @!@u32 / 4
 : @!@u32 / @error "oops"
-; inferred heap
-: !@u32 / 4
-: !@u32 / @error "oops"
 
 
 
