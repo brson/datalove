@@ -280,22 +280,46 @@ where I: Iterator<Item = TreeToken<'db>>
             self.eat_sigil(Sigil::Hash);
             ast::Heap::Global
         } else {
-            // No heap sigil - check if it's a bare number (allowed for inference).
-            if let Some(word) = self.peek_word() {
-                if word.chars().all(|c| c.is_ascii_digit()) {
-                    // Bare number literal - use Omitted heap.
-                    ast::Heap::Omitted
-                } else {
-                    // Not a number - this is an error.
+            // No heap sigil - check if it's a bare literal (allowed for inference).
+            match self.peek() {
+                Some(TreeToken::Token(token)) => {
+                    match token.kind(self.db) {
+                        TokenKind::String => {
+                            // Bare string literal - use Omitted heap.
+                            ast::Heap::Omitted
+                        }
+                        TokenKind::Word => {
+                            if let Some(word) = token.word_str(self.db) {
+                                if word.chars().all(|c| c.is_ascii_digit()) {
+                                    // Bare number literal - use Omitted heap.
+                                    ast::Heap::Omitted
+                                } else {
+                                    // Not a number - this is an error.
+                                    let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+                                    let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                                    return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                                }
+                            } else {
+                                // No word string - error.
+                                let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+                                let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                                return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                            }
+                        }
+                        _ => {
+                            // Unknown token kind - error.
+                            let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+                            let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                            return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                        }
+                    }
+                }
+                _ => {
+                    // Not a token - error.
                     let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
                     let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
                     return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                 }
-            } else {
-                // Not a word token - error.
-                let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
-                let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
-                return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
             }
         };
         let expr = self.parse_expr();
@@ -720,22 +744,46 @@ impl<'db> DynParser<'db> {
             self.eat_sigil(Sigil::Hash);
             ast::Heap::Global
         } else {
-            // No heap sigil - check if it's a bare number (allowed for inference).
-            if let Some(word) = self.peek_word() {
-                if word.chars().all(|c| c.is_ascii_digit()) {
-                    // Bare number literal - use Omitted heap.
-                    ast::Heap::Omitted
-                } else {
-                    // Not a number - this is an error.
+            // No heap sigil - check if it's a bare literal (allowed for inference).
+            match self.peek() {
+                Some(TreeToken::Token(token)) => {
+                    match token.kind(self.db) {
+                        TokenKind::String => {
+                            // Bare string literal - use Omitted heap.
+                            ast::Heap::Omitted
+                        }
+                        TokenKind::Word => {
+                            if let Some(word) = token.word_str(self.db) {
+                                if word.chars().all(|c| c.is_ascii_digit()) {
+                                    // Bare number literal - use Omitted heap.
+                                    ast::Heap::Omitted
+                                } else {
+                                    // Not a number - this is an error.
+                                    let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+                                    let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                                    return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                                }
+                            } else {
+                                // No word string - error.
+                                let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+                                let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                                return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                            }
+                        }
+                        _ => {
+                            // Unknown token kind - error.
+                            let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+                            let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                            return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                        }
+                    }
+                }
+                _ => {
+                    // Not a token - error.
                     let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
                     let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
                     return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                 }
-            } else {
-                // Not a word token - error.
-                let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
-                let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
-                return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
             }
         };
         let expr = self.parse_expr();

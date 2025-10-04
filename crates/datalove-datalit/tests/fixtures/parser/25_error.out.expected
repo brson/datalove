@@ -1,0 +1,24 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": "Error"
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "Err": {
+        "value": {
+          "type_hint": null,
+          "expr": {
+            "heap": "Omitted",
+            "expr": {
+              "String": {
+                "value": "\"oops\""
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
