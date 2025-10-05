@@ -1,0 +1,7 @@
+: @struct Point {
+  x: @u32,
+  y: @u32,
+} / @struct Point {
+  x = @1,
+  y = @2,
+}

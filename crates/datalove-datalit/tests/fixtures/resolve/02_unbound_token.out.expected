@@ -1,0 +1,20 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Token": {
+          "name": "Foo"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [
+    {
+      "error": "UnboundName",
+      "name": "Foo"
+    }
+  ],
+  "resolutions": []
+}

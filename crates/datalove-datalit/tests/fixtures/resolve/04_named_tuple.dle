@@ -1,0 +1,1 @@
+: @tuple Pair (@u32, @u32) / @tuple Pair (@1, @2)

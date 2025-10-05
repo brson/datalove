@@ -15,3 +15,8 @@ serde = { version = "1", features = ["derive"] }
 name = "parser_tests"
 path = "tests/parser_tests.rs"
 harness = false
+
+[[test]]
+name = "resolve_tests"
+path = "tests/resolve_tests.rs"
+harness = false

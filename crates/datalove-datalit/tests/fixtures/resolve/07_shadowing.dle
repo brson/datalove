@@ -1,0 +1,5 @@
+: @struct Foo {
+  inner: @token Foo,
+} / @struct Foo {
+  inner = @Foo,
+}

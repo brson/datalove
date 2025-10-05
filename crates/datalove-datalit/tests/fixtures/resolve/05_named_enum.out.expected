@@ -1,0 +1,58 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "NamedEnum": {
+          "enum_name": "Result",
+          "payload": {
+            "expr": {
+              "expr": {
+                "AnonTuple": {
+                  "elements": [
+                    {
+                      "expr": {
+                        "expr": {
+                          "U32": {
+                            "value": 42
+                          }
+                        },
+                        "heap": "Local"
+                      },
+                      "type_hint": null
+                    }
+                  ]
+                }
+              },
+              "heap": "Omitted"
+            },
+            "type_hint": null
+          },
+          "variant_name": "Ok"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "NamedEnum": {
+          "name": "Result",
+          "variants": [
+            {
+              "name": "Ok",
+              "payload": null
+            }
+          ]
+        }
+      }
+    }
+  },
+  "errors": [],
+  "resolutions": [
+    {
+      "binding_id": 0,
+      "name": "Result",
+      "scope_depth": 0
+    }
+  ]
+}

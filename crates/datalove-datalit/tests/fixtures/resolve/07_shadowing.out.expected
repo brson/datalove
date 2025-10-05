@@ -1,0 +1,57 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "NamedStruct": {
+          "fields": [
+            {
+              "name": "inner",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Token": {
+                      "name": "Foo"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            }
+          ],
+          "name": "Foo"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "NamedStruct": {
+          "fields": [
+            {
+              "name": "inner",
+              "type_hint": {
+                "heap": "Local",
+                "type_hint": {
+                  "ParseError": {
+                    "message": "unknown type hint in DynParser"
+                  }
+                }
+              }
+            }
+          ],
+          "name": "Foo"
+        }
+      }
+    }
+  },
+  "errors": [],
+  "resolutions": [
+    {
+      "binding_id": 0,
+      "name": "Foo",
+      "scope_depth": 0
+    }
+  ]
+}

@@ -6,6 +6,7 @@ pub mod ast;
 pub mod ast_serde;
 pub mod rtdt;
 pub mod parser;
+pub mod resolve;
 
 use salsa::Database as Db;
 
