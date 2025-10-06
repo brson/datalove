@@ -279,8 +279,6 @@ Examples:
 @-1 ⇐ @int     ✓
 ```
 
-**Note**: Bare numerals without `@` are treated as `@int` for now.
-
 ### Rule: Check-AnonTuple
 ```
 (T1, T2, ..., Tn) is expected type
@@ -420,18 +418,17 @@ e has global heap
 T has global heap
 ─────────────────
 e : T is valid
-
-Open question: Can local flow to global? Global to local?
 ```
 
-**For now**: Require exact heap match. May relax later.
+Different heaps never unify. They are not compatible.
+
 
 Examples:
 ```
 : @u32 / @42   ✓ (both local heap)
 : #u32 / #42   ✓ (both global heap)
-: @u32 / #42   ✗ (heap mismatch - for now)
-: #u32 / @42   ✗ (heap mismatch - for now)
+: @u32 / #42   ✗ (heap mismatch)
+: #u32 / @42   ✗ (heap mismatch)
 ```
 
 ## Error Type
@@ -459,6 +456,17 @@ This is distinct from the `@!T` (result) type. The `@error` type is for errors w
 
 **Question**: Should empty collections require a type annotation?
 
+**Answer**: empty collections need type hints generally, with exception:
+in lists of lists etc, the inner list type can be inferred
+from neighbor elements:
+
+```
+[
+  [@true],
+  [] ; it's [@bool]
+]
+```
+
 ### 2. Nested type hints
 
 ```
@@ -467,7 +475,9 @@ This is distinct from the `@!T` (result) type. The `@error` type is for errors w
 
 **Current rule**: Inner type hint wins. The outer `@u32` is ignored, and the expression has type `@int`.
 
-**Alternative**: Require inner type to be subtype of outer type?
+**Answer**: If this is allowed in the grammer we should fix.
+
+
 
 ### 3. Field order in anonymous structs
 
@@ -478,6 +488,8 @@ This is distinct from the `@!T` (result) type. The `@error` type is for errors w
 ```
 
 **Alternative**: Allow unordered fields (more flexible, but complicates implementation).
+
+**Answer**: Field order must be correct, unlike many languages.
 
 ### 4. Anonymous enum to named enum coercion
 
@@ -493,6 +505,9 @@ From demo-data.dle:
 - Named enum must have a variant matching the anonymous constructor?
 - Payload types must match?
 
+**Answer**: Yes those are the rules. We are generally going
+to be relying a lot on anonymous->named coercions for structs and enums.
+
 ### 5. Bare numerals without @ or # sigil
 
 ```
@@ -506,6 +521,15 @@ From demo-data.dle:
 - Option B: Cannot synthesize (must be checked)
 - Option C: Synthesize based on value (small ints are u32, etc.)
 
+**Answer**: The lack of sigil is irrelevant to the numeric type synthesis,
+but the omitted sigil synthesis a local heap type.
+Like Rust we'll expect that for most integers type inference
+will force it into a concrete type, and otherwise we'll synthesize
+`u32`. In the future, this language will also have lightweight
+numeric widening, allowing that u32 to coerce later to a bigint (`int`).
+Don't forget that of course we'll have all the other typical int widths,
+not just `u32`.
+
 ### 6. Token types and structural equivalence
 
 Are token types purely nominal, or do they have structure?
@@ -515,6 +539,7 @@ Are token types purely nominal, or do they have structure?
 ```
 
 **Current**: Tokens are nominal zero-sized types. `@token Nil ≡ @token Nil` only.
+Tokens are nominal zero sized types, compare to Rust's unit structs.
 
 ### 7. Option sugar and implicit wrapping
 
@@ -528,6 +553,8 @@ Should these be allowed?
 **Current**: No implicit wrapping. Must be explicit.
 
 **Alternative**: Allow implicit wrapping when expected type is option/result.
+
+**Answer**: todo. I'm considering making some/ok explicit for now.
 
 ## Implementation Notes
 
