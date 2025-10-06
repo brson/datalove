@@ -132,10 +132,6 @@ where I: Iterator<Item = TreeToken<'db>>
                 self.eat_word("string");
                 ast::TypeHint::String
             }
-            Some("data") => {
-                self.eat_word("data");
-                ast::TypeHint::Data
-            }
             Some("error") => {
                 self.eat_word("error");
                 ast::TypeHint::Error
@@ -683,7 +679,6 @@ impl<'db> DynParser<'db> {
             Some("int") => { self.eat_word("int"); ast::TypeHint::Int }
             Some("nil") => { self.eat_word("nil"); ast::TypeHint::Nil }
             Some("string") => { self.eat_word("string"); ast::TypeHint::String }
-            Some("data") => { self.eat_word("data"); ast::TypeHint::Data }
             Some("error") => { self.eat_word("error"); ast::TypeHint::Error }
             _ => {
                 let message = InternedText::new(self.db, "unknown type hint in DynParser".S());

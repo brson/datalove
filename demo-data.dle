@@ -181,13 +181,9 @@
 
 
 
-; ## Dynamic types
+; ## Error type
 
-; a dynamic any type for data types.
-: @data / 1
-: @data / { a: 5, b: 6 }
-
-; similar to @data wrt dynamism
+; error type for representing failures
 : @error / @error "oops"
 
 

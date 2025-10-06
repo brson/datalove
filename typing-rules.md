@@ -75,8 +75,7 @@ Examples:
 - `@?T ≡ @?T'` iff T ≡ T'
 - `@!T ≡ @!T'` iff T ≡ T'
 
-### Dynamic types
-- `@data ≡ @data`
+### Error type
 - `@error ≡ @error`
 
 ## Subtyping
@@ -409,14 +408,6 @@ Example:
 @error "msg" ⇐ @error
 ```
 
-### Rule: Check-Dynamic-Data
-```
-────────────
-e ⇐ @data
-```
-
-Any expression checks against `@data` (runtime validation only).
-
 ## Heap Checking
 
 **Design decision**: Heaps are tracked separately from types for now.
@@ -454,38 +445,16 @@ Examples:
 : #u32 / @42   ✗ (heap mismatch - for now)
 ```
 
-## Dynamic Types
+## Error Type
 
-### @data type
-
-The `@data` type represents dynamically typed data. Any expression can be checked against `@data`:
-
-```
-────────────
-e ⇐ @data
-```
-
-Type checking is deferred to runtime. The typechecker simply accepts any expression.
-
-Example:
-```
-: @data / @42              ✓
-: @data / "hello"          ✓
-: @data / {x: @1, y: @2}   ✓
-```
-
-**Open question**: Can `@data` synthesize? Or only check?
-- If synthesis: `e : @data ⇒ @data` (loses precision)
-- If check only: Must have explicit type annotation
-
-### @error type
-
-Similar to `@data`, but for error values:
+The `@error` type represents error values:
 
 ```
 ────────────────────
 @error "msg" ⇐ @error
 ```
+
+This is distinct from the `@!T` (result) type. The `@error` type is for errors without associated success types.
 
 ## Edge Cases and Open Questions
 

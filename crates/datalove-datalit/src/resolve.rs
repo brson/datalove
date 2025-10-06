@@ -252,7 +252,6 @@ fn collect_type_hint_names_inner<'db>(
         | TypeHint::Int
         | TypeHint::Nil
         | TypeHint::String
-        | TypeHint::Data
         | TypeHint::Error
         | TypeHint::ParseError(_) => {
             // No names to collect.

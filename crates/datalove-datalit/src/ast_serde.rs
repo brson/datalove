@@ -45,7 +45,6 @@ pub enum TypeHint {
     Set(TypeHintSet),
     Option(TypeHintOption),
     Result(TypeHintResult),
-    Data,
     Error,
     ParseError(TypeHintParseError),
 }
@@ -308,7 +307,6 @@ impl TypeHint {
             crate::ast::TypeHint::Set(t) => TypeHint::Set(TypeHintSet::from_ast(db, t)),
             crate::ast::TypeHint::Option(t) => TypeHint::Option(TypeHintOption::from_ast(db, t)),
             crate::ast::TypeHint::Result(t) => TypeHint::Result(TypeHintResult::from_ast(db, t)),
-            crate::ast::TypeHint::Data => TypeHint::Data,
             crate::ast::TypeHint::Error => TypeHint::Error,
             crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
         }

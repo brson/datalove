@@ -43,7 +43,6 @@ pub enum TypeHint<'db> {
     Set(TypeHintSet<'db>),
     Option(TypeHintOption<'db>),
     Result(TypeHintResult<'db>),
-    Data,
     Error,
     ParseError(TypeHintParseError<'db>),
 }
