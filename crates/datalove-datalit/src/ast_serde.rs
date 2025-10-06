@@ -31,7 +31,6 @@ pub enum TypeHint {
     U32,
     F32,
     Int,
-    Nil,
     String,
     Token(TypeHintToken),
     AnonTuple(TypeHintAnonTuple),
@@ -135,7 +134,6 @@ pub struct ExprAndHeap {
 pub enum Expr {
     True,
     False,
-    Nil,
     Int(ExprInt),
     U32(ExprU32),
     F32(ExprF32),
@@ -293,7 +291,6 @@ impl TypeHint {
             crate::ast::TypeHint::U32 => TypeHint::U32,
             crate::ast::TypeHint::F32 => TypeHint::F32,
             crate::ast::TypeHint::Int => TypeHint::Int,
-            crate::ast::TypeHint::Nil => TypeHint::Nil,
             crate::ast::TypeHint::String => TypeHint::String,
             crate::ast::TypeHint::Token(t) => TypeHint::Token(TypeHintToken::from_ast(db, t)),
             crate::ast::TypeHint::AnonTuple(t) => TypeHint::AnonTuple(TypeHintAnonTuple::from_ast(db, t)),
@@ -445,7 +442,6 @@ impl Expr {
         match ast {
             crate::ast::Expr::True => Expr::True,
             crate::ast::Expr::False => Expr::False,
-            crate::ast::Expr::Nil => Expr::Nil,
             crate::ast::Expr::Int(e) => Expr::Int(ExprInt::from_ast(db, e)),
             crate::ast::Expr::U32(e) => Expr::U32(ExprU32::from_ast(db, e)),
             crate::ast::Expr::F32(e) => Expr::F32(ExprF32::from_ast(db, e)),

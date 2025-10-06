@@ -250,7 +250,6 @@ fn collect_type_hint_names_inner<'db>(
         | TypeHint::U32
         | TypeHint::F32
         | TypeHint::Int
-        | TypeHint::Nil
         | TypeHint::String
         | TypeHint::Error
         | TypeHint::ParseError(_) => {
@@ -366,7 +365,6 @@ fn resolve_expr_refs<'db>(
         }
         Expr::True
         | Expr::False
-        | Expr::Nil
         | Expr::Int(_)
         | Expr::U32(_)
         | Expr::F32(_)

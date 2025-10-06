@@ -29,7 +29,6 @@ pub enum TypeHint<'db> {
     U32,
     F32,
     Int,
-    Nil,
     String,
     Token(TypeHintToken<'db>),
     AnonTuple(TypeHintAnonTuple<'db>),
@@ -134,7 +133,6 @@ pub struct ExprAndHeap<'db> {
 pub enum Expr<'db> {
     True,
     False,
-    Nil,
     Int(ExprInt<'db>),
     U32(ExprU32<'db>),
     F32(ExprF32<'db>),

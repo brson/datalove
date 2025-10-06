@@ -21,7 +21,6 @@ Two types are equivalent (T ≡ T') when:
 - `@f32 ≡ @f32`
 - `@int ≡ @int`
 - `@string ≡ @string`
-- `@nil ≡ @nil`
 
 ### Tuples (structural)
 - `(T1, T2, ..., Tn) ≡ (T1', T2', ..., Tn')` iff Ti ≡ Ti' for all i
@@ -94,10 +93,6 @@ Examples:
 ```
 
 **Open question**: Should we allow `@int <: @u32` with runtime range check?
-
-### Nil subtyping
-- `@nil <: @nil`
-- No implicit nil-to-option conversion (must use `@none` explicitly)
 
 ### Option/Result subtyping
 - No implicit wrapping initially
@@ -182,12 +177,6 @@ s : string literal
 Example:
 ```
 "hello" ⇒ @string
-```
-
-### Rule: Syn-Nil
-```
-─────────────────
-@nil ⇒ @nil
 ```
 
 ### Rule: Syn-Token (resolved)
@@ -527,8 +516,6 @@ Are token types purely nominal, or do they have structure?
 
 **Current**: Tokens are nominal zero-sized types. `@token Nil ≡ @token Nil` only.
 
-**Question**: Should tokens be compatible with `@nil`? Or completely distinct?
-
 ### 7. Option sugar and implicit wrapping
 
 Should these be allowed?
@@ -541,17 +528,6 @@ Should these be allowed?
 **Current**: No implicit wrapping. Must be explicit.
 
 **Alternative**: Allow implicit wrapping when expected type is option/result.
-
-### 8. Nil vs None
-
-```
-@nil  : type constructor
-@none : value of option type
-```
-
-Are these related? Should `@nil ⇐ @?T` be allowed?
-
-**Current**: No. `@nil` has type `@nil`. `@none` has type `@?T` for any T.
 
 ## Implementation Notes
 

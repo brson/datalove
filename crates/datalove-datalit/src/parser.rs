@@ -124,10 +124,6 @@ where I: Iterator<Item = TreeToken<'db>>
                 self.eat_word("int");
                 ast::TypeHint::Int
             }
-            Some("nil") => {
-                self.eat_word("nil");
-                ast::TypeHint::Nil
-            }
             Some("string") => {
                 self.eat_word("string");
                 ast::TypeHint::String
@@ -333,10 +329,6 @@ where I: Iterator<Item = TreeToken<'db>>
             Some("false") => {
                 self.eat_word("false");
                 return ast::Expr::False;
-            }
-            Some("nil") => {
-                self.eat_word("nil");
-                return ast::Expr::Nil;
             }
             Some("none") => {
                 self.eat_word("none");
@@ -677,7 +669,6 @@ impl<'db> DynParser<'db> {
             Some("u32") => { self.eat_word("u32"); ast::TypeHint::U32 }
             Some("f32") => { self.eat_word("f32"); ast::TypeHint::F32 }
             Some("int") => { self.eat_word("int"); ast::TypeHint::Int }
-            Some("nil") => { self.eat_word("nil"); ast::TypeHint::Nil }
             Some("string") => { self.eat_word("string"); ast::TypeHint::String }
             Some("error") => { self.eat_word("error"); ast::TypeHint::Error }
             _ => {
@@ -791,7 +782,6 @@ impl<'db> DynParser<'db> {
         match self.peek_word() {
             Some("true") => { self.eat_word("true"); return ast::Expr::True; }
             Some("false") => { self.eat_word("false"); return ast::Expr::False; }
-            Some("nil") => { self.eat_word("nil"); return ast::Expr::Nil; }
             Some("none") => { self.eat_word("none"); return ast::Expr::None; }
             _ => {}
         }

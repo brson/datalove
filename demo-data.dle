@@ -69,9 +69,6 @@
 
 ; ## Special types
 
-; placeholder, zero-sized
-: @nil / @nil
-
 ; named token, zero-sized
 : @token Nil / @token Nil
 
