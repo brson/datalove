@@ -164,12 +164,6 @@ fn collect_type_hint_names_inner<'db>(
     next_id: &mut u32,
 ) {
     match type_hint {
-        TypeHint::Token(t) => {
-            let name = t.name(db);
-            let id = BindingId(*next_id);
-            *next_id += 1;
-            scope.insert(name, id, type_hint_and_heap);
-        }
         TypeHint::NamedTuple(t) => {
             let name = t.name(db);
             let id = BindingId(*next_id);
@@ -267,15 +261,6 @@ fn resolve_expr_refs<'db>(
     errors: &mut HashMap<InternedText<'db>, ResolutionError>,
 ) {
     match expr {
-        Expr::Token(t) => {
-            let name = t.name(db);
-            if let Some((binding_id, definition, scope_depth)) = scope.lookup(name) {
-                let resolution = Resolution::new(db, binding_id, scope_depth, definition);
-                resolutions.insert(name, resolution);
-            } else {
-                errors.insert(name, ResolutionError::UnboundName);
-            }
-        }
         Expr::NamedTuple(t) => {
             let name = t.name(db);
             if let Some((binding_id, definition, scope_depth)) = scope.lookup(name) {
@@ -383,40 +368,6 @@ mod tests {
     use bct::input::Source;
 
     #[test]
-    fn test_resolve_simple_token() {
-        let ref db = crate::Database::default();
-        // Use an ExprToken that references the type hint name.
-        let source = Source::new(db, S(": @token Nil / @Nil"));
-        let ast = parse(db, source);
-        let resolved = resolve_names(db, ast);
-
-        // Should have one resolution for "Nil".
-        assert_eq!(resolved.resolutions(db).len(), 1);
-        assert_eq!(resolved.errors(db).len(), 0);
-
-        let nil_name = InternedText::new(db, S("Nil"));
-        assert!(resolved.resolutions(db).iter().any(|entry| entry.name(db) == nil_name));
-    }
-
-    #[test]
-    fn test_resolve_unbound_token() {
-        let ref db = crate::Database::default();
-        // Use a simple token reference without a type hint.
-        let source = Source::new(db, S("@Foo"));
-        let ast = parse(db, source);
-        let resolved = resolve_names(db, ast);
-
-        // Should have one error for "Foo".
-        assert_eq!(resolved.resolutions(db).len(), 0);
-        assert_eq!(resolved.errors(db).len(), 1);
-
-        let foo_name = InternedText::new(db, S("Foo"));
-        assert!(resolved.errors(db).iter().any(|entry| entry.name(db) == foo_name));
-        let error = resolved.errors(db).iter().find(|entry| entry.name(db) == foo_name).map(|entry| entry.error(db));
-        assert_eq!(error, Some(ResolutionError::UnboundName));
-    }
-
-    #[test]
     fn test_resolve_named_struct() {
         let ref db = crate::Database::default();
         let source = Source::new(
@@ -441,18 +392,20 @@ mod tests {
     fn test_resolve_shadowing() {
         let ref db = crate::Database::default();
         // Create a nested structure where inner scope shadows outer scope.
-        // Outer: struct Foo, Inner field contains another type hint with token Foo.
+        // Outer: struct Outer, Inner field contains another struct Inner.
         let source = Source::new(
             db,
-            S(": @struct Foo { inner: @token Foo } / @struct Foo { inner = @Foo }")
+            S(": @struct Outer { inner: @struct Inner { x: @u32 } } / @struct Outer { inner = @struct Inner { x = @1 } }")
         );
         let ast = parse(db, source);
         let resolved = resolve_names(db, ast);
 
-        // Currently we only track one "Foo" reference (the struct name).
-        // TODO: Properly implement scope tracking for nested expressions to handle shadowing.
+        // Should have resolution for "Outer" (inner struct definition is in type hint, not referenced in expr).
         assert_eq!(resolved.resolutions(db).len(), 1);
         assert_eq!(resolved.errors(db).len(), 0);
+
+        let outer_name = InternedText::new(db, S("Outer"));
+        assert!(resolved.resolutions(db).iter().any(|entry| entry.name(db) == outer_name));
     }
 
     #[test]

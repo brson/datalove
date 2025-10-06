@@ -132,11 +132,6 @@ where I: Iterator<Item = TreeToken<'db>>
                 self.eat_word("error");
                 ast::TypeHint::Error
             }
-            Some("token") => {
-                self.eat_word("token");
-                let name = self.need_name();
-                ast::TypeHint::Token(ast::TypeHintToken::new(self.db, name))
-            }
             Some("tuple") => {
                 self.eat_word("tuple");
                 let name = self.need_name();
@@ -478,10 +473,13 @@ where I: Iterator<Item = TreeToken<'db>>
                                 }
                             }
                         } else {
-                            // Not a number, treat as a token.
+                            // Not a number, parse error for bare identifiers.
                             self.next();
-                            let name = InternedText::new(self.db, word.S());
-                            ast::Expr::Token(ast::ExprToken::new(self.db, name))
+                            let message = InternedText::new(
+                                self.db,
+                                format!("Unexpected identifier: {}", word).S()
+                            );
+                            ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
                         }
                     }
                     TokenKind::String => {
@@ -817,10 +815,13 @@ impl<'db> DynParser<'db> {
                                 ast::Expr::Int(ast::ExprInt::new(self.db, value))
                             }
                         } else {
-                            // Not a number, treat as a token.
+                            // Not a number, parse error for bare identifiers.
                             self.next();
-                            let name = InternedText::new(self.db, word.S());
-                            ast::Expr::Token(ast::ExprToken::new(self.db, name))
+                            let message = InternedText::new(
+                                self.db,
+                                format!("Unexpected identifier: {}", word).S()
+                            );
+                            ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
                         }
                     }
                     _ => {

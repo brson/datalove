@@ -30,7 +30,6 @@ pub enum TypeHint<'db> {
     F32,
     Int,
     String,
-    Token(TypeHintToken<'db>),
     AnonTuple(TypeHintAnonTuple<'db>),
     NamedTuple(TypeHintNamedTuple<'db>),
     AnonStruct(TypeHintAnonStruct<'db>),
@@ -44,11 +43,6 @@ pub enum TypeHint<'db> {
     Result(TypeHintResult<'db>),
     Error,
     ParseError(TypeHintParseError<'db>),
-}
-
-#[salsa::tracked]
-pub struct TypeHintToken<'db> {
-    pub name: InternedText<'db>,
 }
 
 #[salsa::tracked]
@@ -137,7 +131,6 @@ pub enum Expr<'db> {
     U32(ExprU32<'db>),
     F32(ExprF32<'db>),
     String(ExprString<'db>),
-    Token(ExprToken<'db>),
     AnonTuple(ExprAnonTuple<'db>),
     NamedTuple(ExprNamedTuple<'db>),
     AnonStruct(ExprAnonStruct<'db>),
@@ -170,11 +163,6 @@ pub struct ExprF32<'db> {
 #[salsa::tracked]
 pub struct ExprString<'db> {
     pub value: InternedText<'db>,
-}
-
-#[salsa::tracked]
-pub struct ExprToken<'db> {
-    pub name: InternedText<'db>,
 }
 
 #[salsa::tracked]

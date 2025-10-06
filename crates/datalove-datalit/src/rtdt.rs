@@ -113,7 +113,6 @@ pub enum TyTag {
     F32,
 
     Nil,
-    Token,
 
     Tuple,
     Struct,
@@ -133,7 +132,6 @@ pub enum TyTag {
 
 #[repr(C)]
 pub union TyInfo {
-    token: (),
     tuple: (),
     struct_: (),
     enum_: (),

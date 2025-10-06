@@ -32,7 +32,6 @@ pub enum TypeHint {
     F32,
     Int,
     String,
-    Token(TypeHintToken),
     AnonTuple(TypeHintAnonTuple),
     NamedTuple(TypeHintNamedTuple),
     AnonStruct(TypeHintAnonStruct),
@@ -46,11 +45,6 @@ pub enum TypeHint {
     Result(TypeHintResult),
     Error,
     ParseError(TypeHintParseError),
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct TypeHintToken {
-    pub name: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -138,7 +132,6 @@ pub enum Expr {
     U32(ExprU32),
     F32(ExprF32),
     String(ExprString),
-    Token(ExprToken),
     AnonTuple(ExprAnonTuple),
     NamedTuple(ExprNamedTuple),
     AnonStruct(ExprAnonStruct),
@@ -171,11 +164,6 @@ pub struct ExprF32 {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExprString {
     pub value: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ExprToken {
-    pub name: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -292,7 +280,6 @@ impl TypeHint {
             crate::ast::TypeHint::F32 => TypeHint::F32,
             crate::ast::TypeHint::Int => TypeHint::Int,
             crate::ast::TypeHint::String => TypeHint::String,
-            crate::ast::TypeHint::Token(t) => TypeHint::Token(TypeHintToken::from_ast(db, t)),
             crate::ast::TypeHint::AnonTuple(t) => TypeHint::AnonTuple(TypeHintAnonTuple::from_ast(db, t)),
             crate::ast::TypeHint::NamedTuple(t) => TypeHint::NamedTuple(TypeHintNamedTuple::from_ast(db, t)),
             crate::ast::TypeHint::AnonStruct(t) => TypeHint::AnonStruct(TypeHintAnonStruct::from_ast(db, t)),
@@ -306,14 +293,6 @@ impl TypeHint {
             crate::ast::TypeHint::Result(t) => TypeHint::Result(TypeHintResult::from_ast(db, t)),
             crate::ast::TypeHint::Error => TypeHint::Error,
             crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
-        }
-    }
-}
-
-impl TypeHintToken {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintToken<'db>) -> Self {
-        TypeHintToken {
-            name: ast.name(db).text(db).S(),
         }
     }
 }
@@ -446,7 +425,6 @@ impl Expr {
             crate::ast::Expr::U32(e) => Expr::U32(ExprU32::from_ast(db, e)),
             crate::ast::Expr::F32(e) => Expr::F32(ExprF32::from_ast(db, e)),
             crate::ast::Expr::String(e) => Expr::String(ExprString::from_ast(db, e)),
-            crate::ast::Expr::Token(e) => Expr::Token(ExprToken::from_ast(db, e)),
             crate::ast::Expr::AnonTuple(e) => Expr::AnonTuple(ExprAnonTuple::from_ast(db, e)),
             crate::ast::Expr::NamedTuple(e) => Expr::NamedTuple(ExprNamedTuple::from_ast(db, e)),
             crate::ast::Expr::AnonStruct(e) => Expr::AnonStruct(ExprAnonStruct::from_ast(db, e)),
@@ -491,14 +469,6 @@ impl ExprString {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprString<'db>) -> Self {
         ExprString {
             value: ast.value(db).text(db).S(),
-        }
-    }
-}
-
-impl ExprToken {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprToken<'db>) -> Self {
-        ExprToken {
-            name: ast.name(db).text(db).S(),
         }
     }
 }

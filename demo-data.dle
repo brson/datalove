@@ -67,14 +67,6 @@
 
 
 
-; ## Special types
-
-; named token, zero-sized
-: @token Nil / @token Nil
-
-
-
-
 ; ## Tuples, structs, and enums
 
 ; anonymous tuple

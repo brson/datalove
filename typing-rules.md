@@ -51,8 +51,6 @@ Examples:
 - `@struct Point{x: T1, y: T2} ≢ @struct Vec2{x: T1, y: T2}` even if fields match
 - `@tuple Pair(T1, T2) ≢ @tuple Point(T1, T2)` even if elements match
 - `@enum Result{...} ≢ @enum Option{...}` even if variants match
-- `@token Nil ≡ @token Nil` (only by name)
-- `@token Nil ≢ @token None` (different names)
 
 ### Anonymous Enums (structural)
 - Enum types are equivalent if they have the same set of variants (order-independent)
@@ -177,20 +175,6 @@ s : string literal
 Example:
 ```
 "hello" ⇒ @string
-```
-
-### Rule: Syn-Token (resolved)
-```
-@Foo resolves to type hint @token Foo
-──────────────────────────────────────
-@Foo ⇒ @token Foo
-```
-
-Example (after name resolution):
-```
-: @token Nil / @Nil
-                ↑
-             @Nil ⇒ @token Nil
 ```
 
 ### Rule: Syn-NamedTuple (resolved)
@@ -530,18 +514,7 @@ numeric widening, allowing that u32 to coerce later to a bigint (`int`).
 Don't forget that of course we'll have all the other typical int widths,
 not just `u32`.
 
-### 6. Token types and structural equivalence
-
-Are token types purely nominal, or do they have structure?
-
-```
-: @token Nil / @Nil
-```
-
-**Current**: Tokens are nominal zero-sized types. `@token Nil ≡ @token Nil` only.
-Tokens are nominal zero sized types, compare to Rust's unit structs.
-
-### 7. Option sugar and implicit wrapping
+### 6. Option sugar and implicit wrapping
 
 Should these be allowed?
 
