@@ -87,31 +87,34 @@ Examples:
 ```
 : @u32 / @1234  ✓ (explicit annotation)
 : @int / @1234  ✓ (explicit annotation)
-: @u32 / : @int / @1234  ✗ (no implicit int-to-u32 conversion)
 ```
 
 **Open question**: Should we allow `@int <: @u32` with runtime range check?
 
+**Answer**: No.
+
 ### Option/Result subtyping
-- No implicit wrapping initially
+
+Implicit wrapping
 
 Examples:
 ```
-: @?@u32 / @42    ✗ (no implicit Some wrapping - use explicit annotation if needed)
+: @?@u32 / @42    ✓ (implicit Some wrapping)
 : @?@u32 / @none  ✓ (explicit none)
-: @!@u32 / @42    ✗ (no implicit Ok wrapping)
+: @!@u32 / @42    ✓ (implicit Ok wrapping)
 ```
 
 ### Anonymous to named
-- No subtyping between anonymous and named types
+
+- named types are supertypes of anonymous types
 
 Examples:
 ```
-: @struct Point{x: @u32, y: @u32} / {x = @1, y = @2}  ✗ (anon struct ≮: named struct)
+: @struct Point{x: @u32, y: @u32} / {x = @1, y = @2}  ✓ (anon struct ≮: named struct)
 : (@u32, @u32) / @tuple Pair(@1, @2)                  ✗ (named tuple ≮: anon tuple)
 ```
 
-**Note**: These conversions might be allowed later with explicit syntax.
+
 
 ## Synthesis Rules (e ⇒ T)
 
@@ -527,7 +530,7 @@ Should these be allowed?
 
 **Alternative**: Allow implicit wrapping when expected type is option/result.
 
-**Answer**: todo. I'm considering making some/ok explicit for now.
+**Answer**: yes. this is the only way to construct some and ok types
 
 ## Implementation Notes
 
