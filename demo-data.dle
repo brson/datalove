@@ -61,7 +61,7 @@
 
 ; ## Bigints
 
-; unbounded unsigned, the default int type
+; unbounded signed, the default int type
 : @int / 1
 
 
