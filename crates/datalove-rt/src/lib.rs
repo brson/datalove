@@ -6,8 +6,6 @@ use rmx::prelude::*;
 
 pub use datalove_rtdt as rtdt;
 
-pub type RtHandle = *mut u8;
-
 /// For basic success-fail functions.
 #[repr(u8)]
 pub enum RtResult {
