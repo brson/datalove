@@ -144,8 +144,6 @@ pub enum TyTag {
     F32,
     Int,
 
-    Nil,
-
     Tuple,
     Struct,
     Enum,
@@ -164,25 +162,81 @@ pub enum TyTag {
 
 #[repr(C)]
 pub union TyInfo {
-    tuple: (),
-    struct_: (),
-    enum_: (),
-    list: (),
-    map: (),
-    set: (),
-    option: TyInfoOption,
-    result: TyInfoResult,
+    pub tuple: TyInfoTuple,
+    pub struct_: TyInfoStruct,
+    pub enum_: TyInfoEnum,
+    pub list: TyInfoList,
+    pub map: TyInfoMap,
+    pub set: TyInfoSet,
+    pub option: TyInfoOption,
+    pub result: TyInfoResult,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoTuple {
+    pub fields: *const TyDesc,
+    pub num_fields: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoStruct {
+    pub fields: *const TyInfoStructField,
+    pub num_fields: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoStructField {
+    pub name: *const u8,
+    pub name_len: u32,
+    pub tydesc: *const TyDesc,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoEnum {
+    pub variants: *const TyInfoEnumVariant,
+    pub num_variants: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoEnumVariant {
+    pub name: *const u8,
+    pub name_len: u32,
+    pub payload: *const TyDesc,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoList {
+    pub element_tydesc: *const TyDesc,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoMap {
+    pub key_tydesc: *const TyDesc,
+    pub value_tydesc: *const TyDesc,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoSet {
+    pub element_tydesc: *const TyDesc,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TyInfoOption {
-    tydesc: *const TyDesc,
+    pub inner_tydesc: *const TyDesc,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TyInfoResult {
-    tydesc: *const TyDesc,
+    pub ok_tydesc: *const TyDesc,
 }
 
