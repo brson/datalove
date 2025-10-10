@@ -10,6 +10,7 @@ rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
 serde = { version = "1", features = ["derive"] }
+datalove-rtdt.path = "../datalove-rtdt"
 
 [[test]]
 name = "parser_tests"

@@ -714,9 +714,17 @@ name = "datalove-datalit"
 version = "0.1.0"
 dependencies = [
  "bct",
+ "datalove-rtdt",
  "rustmax",
  "salsa",
  "serde",
+]
+
+[[package]]
+name = "datalove-rtdt"
+version = "0.1.0"
+dependencies = [
+ "rustmax",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 //! Layout computation for datalit runtime types.
 
-use super::rtdt::*;
+use crate::*;
 
 /// Align a value up to the given alignment.
 /// Alignment must be a power of 2.
