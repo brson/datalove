@@ -351,8 +351,7 @@ fn resolve_expr_refs<'db>(
         Expr::True
         | Expr::False
         | Expr::Int(_)
-        | Expr::U32(_)
-        | Expr::F32(_)
+        | Expr::Float(_)
         | Expr::String(_)
         | Expr::None
         | Expr::ParseError(_) => {

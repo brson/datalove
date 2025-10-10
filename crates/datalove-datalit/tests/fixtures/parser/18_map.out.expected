@@ -25,8 +25,8 @@
               "expr": {
                 "heap": "Local",
                 "expr": {
-                  "U32": {
-                    "value": 0
+                  "Int": {
+                    "value": "0"
                   }
                 }
               }
@@ -36,8 +36,8 @@
               "expr": {
                 "heap": "Local",
                 "expr": {
-                  "U32": {
-                    "value": 5
+                  "Int": {
+                    "value": "5"
                   }
                 }
               }
@@ -49,8 +49,8 @@
               "expr": {
                 "heap": "Local",
                 "expr": {
-                  "U32": {
-                    "value": 2
+                  "Int": {
+                    "value": "2"
                   }
                 }
               }
@@ -60,8 +60,8 @@
               "expr": {
                 "heap": "Local",
                 "expr": {
-                  "U32": {
-                    "value": 2
+                  "Int": {
+                    "value": "2"
                   }
                 }
               }
@@ -73,8 +73,8 @@
               "expr": {
                 "heap": "Local",
                 "expr": {
-                  "U32": {
-                    "value": 3
+                  "Int": {
+                    "value": "3"
                   }
                 }
               }
@@ -87,8 +87,8 @@
               "expr": {
                 "heap": "Local",
                 "expr": {
-                  "U32": {
-                    "value": 2
+                  "Int": {
+                    "value": "2"
                   }
                 }
               }

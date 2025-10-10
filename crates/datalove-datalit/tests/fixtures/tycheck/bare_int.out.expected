@@ -8,10 +8,7 @@
       },
       "heap": "Local"
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "U32"
-    }
+    "type_hint": null
   },
   "errors": [],
   "root_type": "@u32"

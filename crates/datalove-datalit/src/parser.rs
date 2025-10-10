@@ -462,15 +462,11 @@ where I: Iterator<Item = TreeToken<'db>>
                                 let decimal_word = self.need_name();
                                 let float_str = format!("{}.{}", word, decimal_word.as_str(self.db));
                                 let value = InternedText::new(self.db, float_str.S());
-                                ast::Expr::F32(ast::ExprF32::new(self.db, value))
+                                ast::Expr::Float(ast::ExprFloat::new(self.db, value))
                             } else {
-                                // Not a float, just a U32.
-                                if let Ok(val) = word.parse::<u32>() {
-                                    ast::Expr::U32(ast::ExprU32::new(self.db, val))
-                                } else {
-                                    let value = InternedText::new(self.db, word.S());
-                                    ast::Expr::Int(ast::ExprInt::new(self.db, value))
-                                }
+                                // Not a float, just an int.
+                                let value = InternedText::new(self.db, word.S());
+                                ast::Expr::Int(ast::ExprInt::new(self.db, value))
                             }
                         } else {
                             // Not a number, parse error for bare identifiers.
@@ -802,18 +798,14 @@ impl<'db> DynParser<'db> {
                                             let decimal_word = self.need_name();
                                             let float_str = format!("{}.{}", word, decimal_word.as_str(self.db));
                                             let value = InternedText::new(self.db, float_str.S());
-                                            return ast::Expr::F32(ast::ExprF32::new(self.db, value));
+                                            return ast::Expr::Float(ast::ExprFloat::new(self.db, value));
                                         }
                                     }
                                 }
                             }
-                            // Not a float.
-                            if let Ok(val) = word.parse::<u32>() {
-                                ast::Expr::U32(ast::ExprU32::new(self.db, val))
-                            } else {
-                                let value = InternedText::new(self.db, word.S());
-                                ast::Expr::Int(ast::ExprInt::new(self.db, value))
-                            }
+                            // Not a float - all numeric literals are Expr::Int.
+                            let value = InternedText::new(self.db, word.S());
+                            ast::Expr::Int(ast::ExprInt::new(self.db, value))
                         } else {
                             // Not a number, parse error for bare identifiers.
                             self.next();
@@ -963,8 +955,8 @@ fn test_parse_int() {
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
-        ast::Expr::U32(e) => assert_eq!(e.value(db), 42),
-        _ => panic!("expected u32"),
+        ast::Expr::Int(e) => assert_eq!(e.value(db).as_str(db), "42"),
+        _ => panic!("expected int"),
     }
 }
 
@@ -999,10 +991,9 @@ fn test_parse_float() {
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
-        ast::Expr::F32(e) => assert_eq!(e.value(db).as_str(db), "1.0"),
-        ast::Expr::U32(_) => panic!("expected f32, got U32"),
-        ast::Expr::Int(_) => panic!("expected f32, got Int"),
-        _ => panic!("expected f32, got something else"),
+        ast::Expr::Float(e) => assert_eq!(e.value(db).as_str(db), "1.0"),
+        ast::Expr::Int(_) => panic!("expected float, got Int"),
+        _ => panic!("expected float, got something else"),
     }
 }
 
@@ -1015,8 +1006,8 @@ fn test_parse_float_with_type() {
     assert!(matches!(type_hint, ast::TypeHint::F32));
     let expr = ast.expr(db).expr(db);
     match expr {
-        ast::Expr::F32(e) => assert_eq!(e.value(db).as_str(db), "1.0"),
-        _ => panic!("expected f32"),
+        ast::Expr::Float(e) => assert_eq!(e.value(db).as_str(db), "1.0"),
+        _ => panic!("expected float"),
     }
 }
 

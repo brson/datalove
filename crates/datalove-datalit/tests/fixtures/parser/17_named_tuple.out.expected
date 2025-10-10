@@ -35,8 +35,8 @@
             "expr": {
               "heap": "Local",
               "expr": {
-                "U32": {
-                  "value": 1
+                "Int": {
+                  "value": "1"
                 }
               }
             }

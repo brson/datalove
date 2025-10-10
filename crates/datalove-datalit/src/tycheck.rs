@@ -222,17 +222,21 @@ fn synthesize<'db>(
         // Rule: Syn-Bool
         Expr::True | Expr::False => Type::Bool,
 
-        // Rule: Syn-U32
-        Expr::U32(_) => Type::U32,
-
-        // Rule: Syn-F32
-        Expr::F32(_) => Type::F32,
-
         // Rule: Syn-String
         Expr::String(_) => Type::String,
 
-        // Int literals cannot synthesize without context.
-        Expr::Int(_) => return Err(TypeError::CannotSynthesize),
+        // Rule: Syn-Int - default to u32 with range check.
+        Expr::Int(i) => {
+            let value_str = i.value(db).as_str(db);
+            if value_str.parse::<u32>().is_ok() {
+                Type::U32
+            } else {
+                return Err(TypeError::IntOutOfRange);
+            }
+        }
+
+        // Rule: Syn-Float - default to f32.
+        Expr::Float(_) => Type::F32,
 
         // Rule: Syn-NamedTuple
         Expr::NamedTuple(t) => {
@@ -332,7 +336,7 @@ fn check_expr_against_expr<'db>(
     match (expr_inner, expected_type) {
         // Rule: Check-Subsume - try synthesis first.
         // IMPORTANT: Synthesize from the inner expression without type hint to avoid infinite recursion.
-        (Expr::True | Expr::False | Expr::U32(_) | Expr::F32(_) | Expr::String(_), _) => {
+        (Expr::True | Expr::False | Expr::String(_), _) => {
             let ty_without_hint = ExprFull::new(db, None, *expr_and_heap);
             let synthesized = synthesize(ctx, ty_without_hint)?;
             if !types_equivalent(db, synthesized.ty(db), expected_type) {
@@ -356,6 +360,9 @@ fn check_expr_against_expr<'db>(
         }
 
         (Expr::Int(_), Type::Int) => Ok(()),
+
+        // Rule: Check-Float
+        (Expr::Float(_), Type::F32) => Ok(()),
 
         // Rule: Check-AnonTuple
         (Expr::AnonTuple(t), Type::AnonTuple(expected_tuple)) => {

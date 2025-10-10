@@ -9,8 +9,8 @@
               "value": {
                 "expr": {
                   "expr": {
-                    "U32": {
-                      "value": 1
+                    "Int": {
+                      "value": "1"
                     }
                   },
                   "heap": "Local"
@@ -23,8 +23,8 @@
               "value": {
                 "expr": {
                   "expr": {
-                    "U32": {
-                      "value": 2
+                    "Int": {
+                      "value": "2"
                     }
                   },
                   "heap": "Local"

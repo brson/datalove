@@ -2,8 +2,8 @@
   "ast": {
     "expr": {
       "expr": {
-        "U32": {
-          "value": 1234
+        "Int": {
+          "value": "1234"
         }
       },
       "heap": "Local"

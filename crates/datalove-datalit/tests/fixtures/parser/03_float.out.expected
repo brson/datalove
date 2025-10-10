@@ -3,7 +3,7 @@
   "expr": {
     "heap": "Local",
     "expr": {
-      "F32": {
+      "Float": {
         "value": "3.14"
       }
     }

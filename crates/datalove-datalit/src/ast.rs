@@ -127,9 +127,10 @@ pub struct ExprAndHeap<'db> {
 pub enum Expr<'db> {
     True,
     False,
+    /// Some integer type. Tycheck will decide.
     Int(ExprInt<'db>),
-    U32(ExprU32<'db>),
-    F32(ExprF32<'db>),
+    /// Some float type. Tycheck will decide.
+    Float(ExprFloat<'db>),
     String(ExprString<'db>),
     AnonTuple(ExprAnonTuple<'db>),
     NamedTuple(ExprNamedTuple<'db>),
@@ -151,12 +152,7 @@ pub struct ExprInt<'db> {
 }
 
 #[salsa::tracked]
-pub struct ExprU32<'db> {
-    pub value: u32,
-}
-
-#[salsa::tracked]
-pub struct ExprF32<'db> {
+pub struct ExprFloat<'db> {
     pub value: InternedText<'db>,
 }
 

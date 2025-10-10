@@ -129,8 +129,7 @@ pub enum Expr {
     True,
     False,
     Int(ExprInt),
-    U32(ExprU32),
-    F32(ExprF32),
+    Float(ExprFloat),
     String(ExprString),
     AnonTuple(ExprAnonTuple),
     NamedTuple(ExprNamedTuple),
@@ -152,12 +151,7 @@ pub struct ExprInt {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ExprU32 {
-    pub value: u32,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ExprF32 {
+pub struct ExprFloat {
     pub value: String,
 }
 
@@ -422,8 +416,7 @@ impl Expr {
             crate::ast::Expr::True => Expr::True,
             crate::ast::Expr::False => Expr::False,
             crate::ast::Expr::Int(e) => Expr::Int(ExprInt::from_ast(db, e)),
-            crate::ast::Expr::U32(e) => Expr::U32(ExprU32::from_ast(db, e)),
-            crate::ast::Expr::F32(e) => Expr::F32(ExprF32::from_ast(db, e)),
+            crate::ast::Expr::Float(e) => Expr::Float(ExprFloat::from_ast(db, e)),
             crate::ast::Expr::String(e) => Expr::String(ExprString::from_ast(db, e)),
             crate::ast::Expr::AnonTuple(e) => Expr::AnonTuple(ExprAnonTuple::from_ast(db, e)),
             crate::ast::Expr::NamedTuple(e) => Expr::NamedTuple(ExprNamedTuple::from_ast(db, e)),
@@ -449,17 +442,9 @@ impl ExprInt {
     }
 }
 
-impl ExprU32 {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprU32<'db>) -> Self {
-        ExprU32 {
-            value: ast.value(db),
-        }
-    }
-}
-
-impl ExprF32 {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprF32<'db>) -> Self {
-        ExprF32 {
+impl ExprFloat {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFloat<'db>) -> Self {
+        ExprFloat {
             value: ast.value(db).text(db).S(),
         }
     }

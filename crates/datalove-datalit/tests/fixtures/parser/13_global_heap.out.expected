@@ -6,8 +6,8 @@
   "expr": {
     "heap": "Global",
     "expr": {
-      "U32": {
-        "value": 42
+      "Int": {
+        "value": "42"
       }
     }
   }
