@@ -167,3 +167,89 @@ pub unsafe fn compute_enum_layout(tydesc: *const TyDesc) -> EnumLayout {
         variant_offsets,
     }
 }
+
+/// Compute the memory layout for an Option<T> type.
+///
+/// Option layout consists of:
+/// 1. A tag (u8) indicating None or Some
+/// 2. Padding to align the payload
+/// 3. Space for the inner type T (if Some)
+///
+/// # Safety
+/// The tydesc must point to a valid TyDesc with type_tag = TyTag::Option.
+pub unsafe fn compute_option_layout(tydesc: *const TyDesc) -> OptionLayout {
+    debug_assert_eq!((*tydesc).type_tag, TyTag::Option);
+
+    let option_info = (*tydesc).type_info.option;
+    let inner_tydesc = &*option_info.inner_tydesc;
+
+    let tag_size = 1u32; // u8
+    let tag_align = 1u32;
+
+    let inner_size = inner_tydesc.size;
+    let inner_align = inner_tydesc.align;
+
+    // Payload starts after tag, aligned to inner type's alignment.
+    let payload_offset = align_up(tag_size, inner_align);
+
+    // Overall alignment is max of tag and inner alignment.
+    let overall_align = tag_align.max(inner_align);
+
+    // Total size is payload offset + inner size, aligned to overall alignment.
+    let total_size = align_up(payload_offset + inner_size, overall_align);
+
+    OptionLayout {
+        size: total_size,
+        align: overall_align,
+        tag_size,
+        payload_offset,
+    }
+}
+
+/// Compute the memory layout for a Result<T> type.
+///
+/// Result layout consists of:
+/// 1. A tag (u8) indicating Ok or Err
+/// 2. Padding to align the payload
+/// 3. Space for max(T, Error) - whichever is larger
+///
+/// The Ok variant contains T, the Err variant contains Error.
+///
+/// # Safety
+/// The tydesc must point to a valid TyDesc with type_tag = TyTag::Result.
+pub unsafe fn compute_result_layout(tydesc: *const TyDesc) -> ResultLayout {
+    debug_assert_eq!((*tydesc).type_tag, TyTag::Result);
+
+    let result_info = (*tydesc).type_info.result;
+    let ok_tydesc = &*result_info.ok_tydesc;
+
+    let tag_size = 1u32; // u8
+    let tag_align = 1u32;
+
+    let ok_size = ok_tydesc.size;
+    let ok_align = ok_tydesc.align;
+
+    // Error type layout: usize + pointer
+    let error_size = (std::mem::size_of::<usize>() + std::mem::size_of::<*const TyDesc>()) as u32;
+    let error_align = std::mem::align_of::<usize>().max(std::mem::align_of::<*const TyDesc>()) as u32;
+
+    // Payload must accommodate the larger of Ok and Err variants.
+    let max_payload_size = ok_size.max(error_size);
+    let max_payload_align = ok_align.max(error_align);
+
+    // Payload starts after tag, aligned to maximum payload alignment.
+    let payload_offset = align_up(tag_size, max_payload_align);
+
+    // Overall alignment is max of tag and payload alignment.
+    let overall_align = tag_align.max(max_payload_align);
+
+    // Total size is payload offset + max payload size, aligned to overall alignment.
+    let total_size = align_up(payload_offset + max_payload_size, overall_align);
+
+    ResultLayout {
+        size: total_size,
+        align: overall_align,
+        tag_size,
+        payload_offset,
+    }
+}

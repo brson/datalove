@@ -127,16 +127,55 @@ pub enum SetNodeTag {
 
 // ## Special generic containers
 
+// Option<T> has a tag (u8) followed by optional payload.
+// Memory layout: tag (u8) + padding + payload of type T.
+// - None (tag=1): no payload
+// - Some (tag=2): payload of type T at offset align_up(1, align(T))
 #[repr(C)]
 pub struct Option /* <T> */ {
     pub tag: OptionTag,
-    // todo
+    // Variable-sized data follows:
+    // Some: value of type T at computed offset
 }
 
 #[repr(u8)]
 pub enum OptionTag {
     None = 1,
     Some = 2,
+}
+
+// Result<T> has a tag (u8) followed by payload space for max(T, Error).
+// Memory layout: tag (u8) + padding + max(sizeof(T), sizeof(Error)) payload.
+// - Ok (tag=1): payload contains value of type T at offset align_up(1, max(align(T), align(Error)))
+// - Err (tag=2): payload contains Error at offset align_up(1, max(align(T), align(Error)))
+#[repr(C)]
+pub struct Result /* <T> */ {
+    pub tag: ResultTag,
+    // Variable-sized data follows:
+    // Ok: value of type T at computed offset
+    // Err: Error value at computed offset
+}
+
+#[repr(u8)]
+pub enum ResultTag {
+    Ok = 1,
+    Err = 2,
+}
+
+/// Computed layout information for ?T.
+pub struct OptionLayout {
+    pub size: u32,
+    pub align: u32,
+    pub tag_size: u32,
+    pub payload_offset: u32,
+}
+
+/// Computed layout information for a !T. 
+pub struct ResultLayout {
+    pub size: u32,
+    pub align: u32,
+    pub tag_size: u32,
+    pub payload_offset: u32,
 }
 
 
