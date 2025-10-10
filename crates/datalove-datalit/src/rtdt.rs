@@ -19,14 +19,12 @@ pub struct F32(pub f32);
 
 #[repr(C)]
 pub struct Int {
-    pub payload: usize,
+    // todo
 }
 
 
-// ## Special types
 
-#[repr(transparent)]
-pub struct Nil(());
+
 
 
 
@@ -82,12 +80,6 @@ pub enum OptionTag { None, Some }
 
 
 // ## Dynamic types
-
-#[repr(C)]
-pub struct AnyData {
-    pub data: usize,
-    pub tydesc: *const TyDesc,
-}
 
 #[repr(C)]
 pub struct Error {
