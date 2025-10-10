@@ -87,12 +87,16 @@ pub struct Map {
 }
 
 // B+tree node with variable-sized data following the fixed header.
+// Memory layout depends on node type:
+// - Internal nodes: n keys → n+1 child pointers
+// - Leaf nodes: n keys → n values (matching key-value pairs)
+// Arrays are not interleaved for cache locality and alignment efficiency.
 #[repr(C)]
 pub struct MapNode {
     pub tag: MapNodeTag,
-    // Variable-sized data follows:
-    // Internal: num_keys (u32), keys[], child_ptrs[]
-    // Leaf: num_pairs (u32), next_leaf (*const MapNode), keys[], values[]
+    // Variable-sized data follows (use compute_map_*_node_layout to determine offsets):
+    // Internal: num_keys (u32), padding, keys[num_keys], padding, child_ptrs[num_keys+1]
+    // Leaf: num_keys (u32), next_leaf (*const MapNode), padding, keys[num_keys], padding, values[num_keys]
 }
 
 #[repr(u8)]
@@ -108,12 +112,16 @@ pub struct Set {
 }
 
 // B+tree node with variable-sized data following the fixed header.
+// Memory layout depends on node type:
+// - Internal nodes: n keys → n+1 child pointers
+// - Leaf nodes: n keys (set elements stored as keys)
+// Arrays are not interleaved for cache locality and alignment efficiency.
 #[repr(C)]
 pub struct SetNode {
     pub tag: SetNodeTag,
-    // Variable-sized data follows:
-    // Internal: num_keys (u32), keys[], child_ptrs[]
-    // Leaf: num_keys (u32), next_leaf (*const SetNode), keys[]
+    // Variable-sized data follows (use compute_set_*_node_layout to determine offsets):
+    // Internal: num_keys (u32), padding, keys[num_keys], padding, child_ptrs[num_keys+1]
+    // Leaf: num_keys (u32), next_leaf (*const SetNode), padding, keys[num_keys]
 }
 
 #[repr(u8)]
@@ -187,6 +195,43 @@ pub struct ResultLayout {
 pub struct Error {
     pub data: usize,
     pub tydesc: *const TyDesc,
+}
+
+/// Computed layout information for a Map internal node.
+pub struct MapNodeInternalLayout {
+    pub size: u32,
+    pub align: u32,
+    pub num_keys_offset: u32,
+    pub keys_offset: u32,
+    pub child_ptrs_offset: u32,
+}
+
+/// Computed layout information for a Map leaf node.
+pub struct MapNodeLeafLayout {
+    pub size: u32,
+    pub align: u32,
+    pub num_keys_offset: u32,
+    pub next_leaf_offset: u32,
+    pub keys_offset: u32,
+    pub values_offset: u32,
+}
+
+/// Computed layout information for a Set internal node.
+pub struct SetNodeInternalLayout {
+    pub size: u32,
+    pub align: u32,
+    pub num_keys_offset: u32,
+    pub keys_offset: u32,
+    pub child_ptrs_offset: u32,
+}
+
+/// Computed layout information for a Set leaf node.
+pub struct SetNodeLeafLayout {
+    pub size: u32,
+    pub align: u32,
+    pub num_keys_offset: u32,
+    pub next_leaf_offset: u32,
+    pub keys_offset: u32,
 }
 
 
