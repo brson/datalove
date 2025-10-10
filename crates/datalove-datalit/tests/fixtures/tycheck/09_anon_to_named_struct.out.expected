@@ -1,0 +1,42 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "expected heap sigil @ or # before expression"
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "NamedStruct": {
+          "fields": [
+            {
+              "name": "x",
+              "type_hint": {
+                "heap": "Local",
+                "type_hint": "U32"
+              }
+            },
+            {
+              "name": "y",
+              "type_hint": {
+                "heap": "Local",
+                "type_hint": "U32"
+              }
+            }
+          ],
+          "name": "Point"
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

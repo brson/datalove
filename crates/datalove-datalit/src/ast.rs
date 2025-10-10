@@ -8,7 +8,7 @@ pub struct ExprFull<'db> {
     pub expr: ExprAndHeap<'db>,
 }
 
-#[derive(Copy, Clone, Hash)]
+#[derive(Copy, Clone, Hash, Debug)]
 #[derive(salsa::Update)]
 pub enum Heap {
     Local,

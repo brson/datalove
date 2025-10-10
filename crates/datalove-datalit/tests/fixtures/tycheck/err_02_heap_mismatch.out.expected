@@ -1,0 +1,24 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "U32": {
+          "value": 42
+        }
+      },
+      "heap": "Global"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "U32"
+    }
+  },
+  "errors": [
+    {
+      "actual_heap": "#",
+      "expected_heap": "@",
+      "kind": "HeapMismatch"
+    }
+  ],
+  "root_type": null
+}

@@ -20,3 +20,8 @@ harness = false
 name = "resolve_tests"
 path = "tests/resolve_tests.rs"
 harness = false
+
+[[test]]
+name = "tycheck_tests"
+path = "tests/tycheck_tests.rs"
+harness = false
