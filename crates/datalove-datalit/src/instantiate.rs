@@ -233,7 +233,7 @@ fn instantiate_expr<'db>(
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     value_arena: &mut ValueArena,
-) -> Result<*const u8, String> {
+) -> AnyResult<*const u8> {
     let expr_and_heap = expr.expr(db);
     let expr_inner = expr_and_heap.expr(db);
 
@@ -250,8 +250,7 @@ fn instantiate_expr<'db>(
         }
         (Expr::Int(int_expr), Type::U32) => {
             let value_str = int_expr.value(db).as_str(db);
-            let value: u32 = value_str.parse()
-                .map_err(|_| format!("Failed to parse u32: {}", value_str))?;
+            let value: u32 = value_str.parse()?;
 
             let ptr = value_arena.alloc(4, 4) as *mut u32;
             unsafe { *ptr = value };
@@ -259,8 +258,7 @@ fn instantiate_expr<'db>(
         }
         (Expr::Float(float_expr), Type::F32) => {
             let value_str = float_expr.value(db).as_str(db);
-            let value: f32 = value_str.parse()
-                .map_err(|_| format!("Failed to parse f32: {}", value_str))?;
+            let value: f32 = value_str.parse()?;
 
             let ptr = value_arena.alloc(4, 4) as *mut f32;
             unsafe { *ptr = value };
@@ -301,7 +299,7 @@ fn instantiate_expr<'db>(
         (Expr::AnonTuple(tuple_expr), Type::AnonTuple(tuple_ty)) => {
             instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_arena)
         }
-        _ => Err(format!("Unsupported expression/type combination for instantiation")),
+        _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
 
@@ -312,7 +310,7 @@ fn instantiate_tuple<'db>(
     field_types: &[TypeAndHeap<'db>],
     tydesc_table: &mut TyDescTable<'db>,
     value_arena: &mut ValueArena,
-) -> Result<*const u8, String> {
+) -> AnyResult<*const u8> {
     // Compute layout.
     let tuple_ty = Type::AnonTuple(TypeAnonTuple::new(db, field_types.to_vec()));
     let tydesc = tydesc_table.get_or_create(&tuple_ty);
@@ -344,9 +342,9 @@ fn instantiate_tuple<'db>(
 pub fn instantiate_value<'db>(
     db: &'db dyn crate::Db,
     typechecked: TypecheckResult<'db>,
-) -> Result<(TyDescTable<'db>, ValueArena, InstantiatedValue<'static>), String> {
+) -> AnyResult<(TyDescTable<'db>, ValueArena, InstantiatedValue<'static>)> {
     let root_type = typechecked.root_type(db)
-        .ok_or_else(|| "No root type".to_string())?;
+        .ok_or_else(|| anyhow!("No root type"))?;
     let root_expr = typechecked.root_expr(db);
 
     let mut tydesc_table = TyDescTable::new(db);
