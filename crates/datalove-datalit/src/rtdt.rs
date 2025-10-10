@@ -61,7 +61,23 @@ pub struct String {
 
 #[repr(C)]
 pub struct Map {
-    // todo
+    pub root: *const MapNode,
+    pub len: u32,
+}
+
+// B+tree node with variable-sized data following the fixed header.
+#[repr(C)]
+pub struct MapNode {
+    pub tag: MapNodeTag,
+    // Variable-sized data follows:
+    // Internal: num_keys (u32), keys[], child_ptrs[]
+    // Leaf: num_pairs (u32), next_leaf (*const MapNode), keys[], values[]
+}
+
+#[repr(u8)]
+pub enum MapNodeTag {
+    Internal,
+    Leaf,
 }
 
 #[repr(C)]
