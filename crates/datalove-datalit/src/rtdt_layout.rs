@@ -24,40 +24,42 @@ pub fn align_up(value: u32, align: u32) -> u32 {
 /// # Safety
 /// The tydesc must point to a valid TyDesc with type_tag = TyTag::Tuple.
 pub unsafe fn compute_tuple_layout(tydesc: *const TyDesc) -> TupleLayout {
-    debug_assert_eq!((*tydesc).type_tag, TyTag::Tuple);
+    unsafe {
+        debug_assert_eq!((*tydesc).type_tag, TyTag::Tuple);
 
-    let tuple_info = (*tydesc).type_info.tuple;
-    let num_fields = tuple_info.num_fields;
-    let fields = tuple_info.fields;
+        let tuple_info = (*tydesc).type_info.tuple;
+        let num_fields = tuple_info.num_fields;
+        let fields = tuple_info.fields;
 
-    let mut offset = 0u32;
-    let mut max_align = 1u32;
-    let mut field_offsets = Vec::with_capacity(num_fields as usize);
+        let mut offset = 0u32;
+        let mut max_align = 1u32;
+        let mut field_offsets = Vec::with_capacity(num_fields as usize);
 
-    for i in 0..num_fields {
-        let field = &*fields.add(i as usize);
-        let field_tydesc = &*field.tydesc;
-        let field_size = field_tydesc.size;
-        let field_align = field_tydesc.align;
+        for i in 0..num_fields {
+            let field = &*fields.add(i as usize);
+            let field_tydesc = &*field.tydesc;
+            let field_size = field_tydesc.size;
+            let field_align = field_tydesc.align;
 
-        // Align offset to field's alignment requirement.
-        offset = align_up(offset, field_align);
-        field_offsets.push(offset);
+            // Align offset to field's alignment requirement.
+            offset = align_up(offset, field_align);
+            field_offsets.push(offset);
 
-        // Advance offset by field size.
-        offset += field_size;
+            // Advance offset by field size.
+            offset += field_size;
 
-        // Track maximum alignment.
-        max_align = max_align.max(field_align);
-    }
+            // Track maximum alignment.
+            max_align = max_align.max(field_align);
+        }
 
-    // Total size must be aligned to the maximum alignment.
-    let total_size = align_up(offset, max_align);
+        // Total size must be aligned to the maximum alignment.
+        let total_size = align_up(offset, max_align);
 
-    TupleLayout {
-        size: total_size,
-        align: max_align,
-        field_offsets,
+        TupleLayout {
+            size: total_size,
+            align: max_align,
+            field_offsets,
+        }
     }
 }
 
@@ -70,40 +72,42 @@ pub unsafe fn compute_tuple_layout(tydesc: *const TyDesc) -> TupleLayout {
 /// # Safety
 /// The tydesc must point to a valid TyDesc with type_tag = TyTag::Struct.
 pub unsafe fn compute_struct_layout(tydesc: *const TyDesc) -> StructLayout {
-    debug_assert_eq!((*tydesc).type_tag, TyTag::Struct);
+    unsafe {
+        debug_assert_eq!((*tydesc).type_tag, TyTag::Struct);
 
-    let struct_info = (*tydesc).type_info.struct_;
-    let num_fields = struct_info.num_fields;
-    let fields = struct_info.fields;
+        let struct_info = (*tydesc).type_info.struct_;
+        let num_fields = struct_info.num_fields;
+        let fields = struct_info.fields;
 
-    let mut offset = 0u32;
-    let mut max_align = 1u32;
-    let mut field_offsets = Vec::with_capacity(num_fields as usize);
+        let mut offset = 0u32;
+        let mut max_align = 1u32;
+        let mut field_offsets = Vec::with_capacity(num_fields as usize);
 
-    for i in 0..num_fields {
-        let field = &*fields.add(i as usize);
-        let field_tydesc = &*field.tydesc;
-        let field_size = field_tydesc.size;
-        let field_align = field_tydesc.align;
+        for i in 0..num_fields {
+            let field = &*fields.add(i as usize);
+            let field_tydesc = &*field.tydesc;
+            let field_size = field_tydesc.size;
+            let field_align = field_tydesc.align;
 
-        // Align offset to field's alignment requirement.
-        offset = align_up(offset, field_align);
-        field_offsets.push(offset);
+            // Align offset to field's alignment requirement.
+            offset = align_up(offset, field_align);
+            field_offsets.push(offset);
 
-        // Advance offset by field size.
-        offset += field_size;
+            // Advance offset by field size.
+            offset += field_size;
 
-        // Track maximum alignment.
-        max_align = max_align.max(field_align);
-    }
+            // Track maximum alignment.
+            max_align = max_align.max(field_align);
+        }
 
-    // Total size must be aligned to the maximum alignment.
-    let total_size = align_up(offset, max_align);
+        // Total size must be aligned to the maximum alignment.
+        let total_size = align_up(offset, max_align);
 
-    StructLayout {
-        size: total_size,
-        align: max_align,
-        field_offsets,
+        StructLayout {
+            size: total_size,
+            align: max_align,
+            field_offsets,
+        }
     }
 }
 
@@ -120,51 +124,53 @@ pub unsafe fn compute_struct_layout(tydesc: *const TyDesc) -> StructLayout {
 /// # Safety
 /// The tydesc must point to a valid TyDesc with type_tag = TyTag::Enum.
 pub unsafe fn compute_enum_layout(tydesc: *const TyDesc) -> EnumLayout {
-    debug_assert_eq!((*tydesc).type_tag, TyTag::Enum);
+    unsafe {
+        debug_assert_eq!((*tydesc).type_tag, TyTag::Enum);
 
-    let enum_info = (*tydesc).type_info.enum_;
-    let num_variants = enum_info.num_variants;
-    let variants = enum_info.variants;
+        let enum_info = (*tydesc).type_info.enum_;
+        let num_variants = enum_info.num_variants;
+        let variants = enum_info.variants;
 
-    let discriminant_size = 4u32; // u32
-    let discriminant_align = 4u32;
+        let discriminant_size = 4u32; // u32
+        let discriminant_align = 4u32;
 
-    let mut max_variant_size = 0u32;
-    let mut max_variant_align = discriminant_align;
-    let mut variant_offsets = Vec::with_capacity(num_variants as usize);
+        let mut max_variant_size = 0u32;
+        let mut max_variant_align = discriminant_align;
+        let mut variant_offsets = Vec::with_capacity(num_variants as usize);
 
-    // Find the largest variant to determine payload space needed.
-    for i in 0..num_variants {
-        let variant = &*variants.add(i as usize);
+        // Find the largest variant to determine payload space needed.
+        for i in 0..num_variants {
+            let variant = &*variants.add(i as usize);
 
-        if let Some(payload_tydesc) = variant.payload.as_ref() {
-            let payload_size = payload_tydesc.size;
-            let payload_align = payload_tydesc.align;
+            if let Some(payload_tydesc) = variant.payload.as_ref() {
+                let payload_size = payload_tydesc.size;
+                let payload_align = payload_tydesc.align;
 
-            max_variant_size = max_variant_size.max(payload_size);
-            max_variant_align = max_variant_align.max(payload_align);
+                max_variant_size = max_variant_size.max(payload_size);
+                max_variant_align = max_variant_align.max(payload_align);
 
-            // Each variant's payload starts at the aligned offset after discriminant.
-            let payload_offset = align_up(discriminant_size, payload_align);
-            variant_offsets.push(payload_offset);
-        } else {
-            // No payload - variant has no offset.
-            variant_offsets.push(0);
+                // Each variant's payload starts at the aligned offset after discriminant.
+                let payload_offset = align_up(discriminant_size, payload_align);
+                variant_offsets.push(payload_offset);
+            } else {
+                // No payload - variant has no offset.
+                variant_offsets.push(0);
+            }
         }
-    }
 
-    // Payload starts after discriminant, aligned to max payload alignment.
-    let payload_offset = align_up(discriminant_size, max_variant_align);
+        // Payload starts after discriminant, aligned to max payload alignment.
+        let payload_offset = align_up(discriminant_size, max_variant_align);
 
-    // Total size is payload offset + max payload size, aligned to max alignment.
-    let total_size = align_up(payload_offset + max_variant_size, max_variant_align);
+        // Total size is payload offset + max payload size, aligned to max alignment.
+        let total_size = align_up(payload_offset + max_variant_size, max_variant_align);
 
-    EnumLayout {
-        size: total_size,
-        align: max_variant_align,
-        discriminant_size,
-        payload_offset,
-        variant_offsets,
+        EnumLayout {
+            size: total_size,
+            align: max_variant_align,
+            discriminant_size,
+            payload_offset,
+            variant_offsets,
+        }
     }
 }
 
@@ -178,31 +184,33 @@ pub unsafe fn compute_enum_layout(tydesc: *const TyDesc) -> EnumLayout {
 /// # Safety
 /// The tydesc must point to a valid TyDesc with type_tag = TyTag::Option.
 pub unsafe fn compute_option_layout(tydesc: *const TyDesc) -> OptionLayout {
-    debug_assert_eq!((*tydesc).type_tag, TyTag::Option);
+    unsafe {
+        debug_assert_eq!((*tydesc).type_tag, TyTag::Option);
 
-    let option_info = (*tydesc).type_info.option;
-    let inner_tydesc = &*option_info.inner_tydesc;
+        let option_info = (*tydesc).type_info.option;
+        let inner_tydesc = &*option_info.inner_tydesc;
 
-    let tag_size = 1u32; // u8
-    let tag_align = 1u32;
+        let tag_size = 1u32; // u8
+        let tag_align = 1u32;
 
-    let inner_size = inner_tydesc.size;
-    let inner_align = inner_tydesc.align;
+        let inner_size = inner_tydesc.size;
+        let inner_align = inner_tydesc.align;
 
-    // Payload starts after tag, aligned to inner type's alignment.
-    let payload_offset = align_up(tag_size, inner_align);
+        // Payload starts after tag, aligned to inner type's alignment.
+        let payload_offset = align_up(tag_size, inner_align);
 
-    // Overall alignment is max of tag and inner alignment.
-    let overall_align = tag_align.max(inner_align);
+        // Overall alignment is max of tag and inner alignment.
+        let overall_align = tag_align.max(inner_align);
 
-    // Total size is payload offset + inner size, aligned to overall alignment.
-    let total_size = align_up(payload_offset + inner_size, overall_align);
+        // Total size is payload offset + inner size, aligned to overall alignment.
+        let total_size = align_up(payload_offset + inner_size, overall_align);
 
-    OptionLayout {
-        size: total_size,
-        align: overall_align,
-        tag_size,
-        payload_offset,
+        OptionLayout {
+            size: total_size,
+            align: overall_align,
+            tag_size,
+            payload_offset,
+        }
     }
 }
 
@@ -218,38 +226,40 @@ pub unsafe fn compute_option_layout(tydesc: *const TyDesc) -> OptionLayout {
 /// # Safety
 /// The tydesc must point to a valid TyDesc with type_tag = TyTag::Result.
 pub unsafe fn compute_result_layout(tydesc: *const TyDesc) -> ResultLayout {
-    debug_assert_eq!((*tydesc).type_tag, TyTag::Result);
+    unsafe {
+        debug_assert_eq!((*tydesc).type_tag, TyTag::Result);
 
-    let result_info = (*tydesc).type_info.result;
-    let ok_tydesc = &*result_info.ok_tydesc;
+        let result_info = (*tydesc).type_info.result;
+        let ok_tydesc = &*result_info.ok_tydesc;
 
-    let tag_size = 1u32; // u8
-    let tag_align = 1u32;
+        let tag_size = 1u32; // u8
+        let tag_align = 1u32;
 
-    let ok_size = ok_tydesc.size;
-    let ok_align = ok_tydesc.align;
+        let ok_size = ok_tydesc.size;
+        let ok_align = ok_tydesc.align;
 
-    // Error type layout: usize + pointer
-    let error_size = (std::mem::size_of::<usize>() + std::mem::size_of::<*const TyDesc>()) as u32;
-    let error_align = std::mem::align_of::<usize>().max(std::mem::align_of::<*const TyDesc>()) as u32;
+        // Error type layout: usize + pointer
+        let error_size = (std::mem::size_of::<usize>() + std::mem::size_of::<*const TyDesc>()) as u32;
+        let error_align = std::mem::align_of::<usize>().max(std::mem::align_of::<*const TyDesc>()) as u32;
 
-    // Payload must accommodate the larger of Ok and Err variants.
-    let max_payload_size = ok_size.max(error_size);
-    let max_payload_align = ok_align.max(error_align);
+        // Payload must accommodate the larger of Ok and Err variants.
+        let max_payload_size = ok_size.max(error_size);
+        let max_payload_align = ok_align.max(error_align);
 
-    // Payload starts after tag, aligned to maximum payload alignment.
-    let payload_offset = align_up(tag_size, max_payload_align);
+        // Payload starts after tag, aligned to maximum payload alignment.
+        let payload_offset = align_up(tag_size, max_payload_align);
 
-    // Overall alignment is max of tag and payload alignment.
-    let overall_align = tag_align.max(max_payload_align);
+        // Overall alignment is max of tag and payload alignment.
+        let overall_align = tag_align.max(max_payload_align);
 
-    // Total size is payload offset + max payload size, aligned to overall alignment.
-    let total_size = align_up(payload_offset + max_payload_size, overall_align);
+        // Total size is payload offset + max payload size, aligned to overall alignment.
+        let total_size = align_up(payload_offset + max_payload_size, overall_align);
 
-    ResultLayout {
-        size: total_size,
-        align: overall_align,
-        tag_size,
-        payload_offset,
+        ResultLayout {
+            size: total_size,
+            align: overall_align,
+            tag_size,
+            payload_offset,
+        }
     }
 }
