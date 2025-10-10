@@ -17,9 +17,16 @@ pub struct F32(pub f32);
 
 // ## Bigints
 
+// Similar to GMP and others.
 #[repr(C)]
 pub struct Int {
-    // todo
+    // "limbs"
+    pub data: *const u32,
+    // abs(size_and_sign) == number of limbs;
+    // sign(size_and_sign) == sign of self
+    pub size_and_sign: i32,
+    // Limbs allocated.
+    pub capacity: u32,
 }
 
 
@@ -103,6 +110,7 @@ pub enum TyTag {
     Bool,
     U32,
     F32,
+    Int,
 
     Nil,
 
