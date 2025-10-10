@@ -7,6 +7,7 @@ pub mod ast_serde;
 pub mod parser;
 pub mod resolve;
 pub mod tycheck;
+pub mod instantiate;
 
 pub use datalove_rtdt as rtdt;
 
