@@ -721,6 +721,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-rt"
+version = "0.1.0"
+dependencies = [
+ "datalove-rtdt",
+ "rustmax",
+]
+
+[[package]]
 name = "datalove-rtdt"
 version = "0.1.0"
 dependencies = [
