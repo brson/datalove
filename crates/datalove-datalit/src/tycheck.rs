@@ -249,7 +249,7 @@ fn synthesize<'db>(
             let expected_type = convert_type_hint(db, definition)?;
 
             // Check elements against expected type.
-            check_expr_against_expr(ctx, expr, expected_type)?;
+            check(ctx, expr, expected_type)?;
 
             expected_type.ty(db).clone()
         }
@@ -265,7 +265,7 @@ fn synthesize<'db>(
             let expected_type = convert_type_hint(db, definition)?;
 
             // Check fields against expected type.
-            check_expr_against_expr(ctx, expr, expected_type)?;
+            check(ctx, expr, expected_type)?;
 
             expected_type.ty(db).clone()
         }
@@ -281,7 +281,7 @@ fn synthesize<'db>(
             let expected_type = convert_type_hint(db, definition)?;
 
             // Check variant and payload against expected type.
-            check_expr_against_expr(ctx, expr, expected_type)?;
+            check(ctx, expr, expected_type)?;
 
             expected_type.ty(db).clone()
         }
@@ -439,14 +439,6 @@ fn check<'db>(
     expr: ExprFull<'db>,
     expected: TypeAndHeap<'db>,
 ) -> Result<(), TypeError> {
-    check_expr_against_expr(ctx, expr, expected)
-}
-
-fn check_expr_against_expr<'db>(
-    ctx: &mut TypeContext<'db>,
-    expr: ExprFull<'db>,
-    expected: TypeAndHeap<'db>,
-) -> Result<(), TypeError> {
     let db = ctx.db;
 
     // First check heap compatibility.
@@ -508,7 +500,7 @@ fn check_expr_against_expr<'db>(
             }
 
             for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-                check_expr_against_expr(ctx, *elem, *expected_field)?;
+                check(ctx, *elem, *expected_field)?;
             }
 
             Ok(())
@@ -534,7 +526,7 @@ fn check_expr_against_expr<'db>(
                     return Err(TypeError::FieldOrderMismatch);
                 }
 
-                check_expr_against_expr(ctx, field.value(db), expected_field.ty(db))?;
+                check(ctx, field.value(db), expected_field.ty(db))?;
             }
 
             Ok(())
@@ -560,7 +552,7 @@ fn check_expr_against_expr<'db>(
                     return Err(TypeError::FieldOrderMismatch);
                 }
 
-                check_expr_against_expr(ctx, field.value(db), expected_field.ty(db))?;
+                check(ctx, field.value(db), expected_field.ty(db))?;
             }
 
             Ok(())
@@ -582,7 +574,7 @@ fn check_expr_against_expr<'db>(
             let expected_fields = expected_struct.fields(db);
 
             for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
-                check_expr_against_expr(ctx, field.value(db), expected_field.ty(db))?;
+                check(ctx, field.value(db), expected_field.ty(db))?;
             }
 
             Ok(())
@@ -602,7 +594,7 @@ fn check_expr_against_expr<'db>(
 
             match (e.payload(db), expected_variant.payload(db)) {
                 (Some(payload), Some(expected_payload)) => {
-                    check_expr_against_expr(ctx, payload, expected_payload)
+                    check(ctx, payload, expected_payload)
                 }
                 (None, None) => Ok(()),
                 (Some(_), None) => Err(TypeError::TypeMismatch {
@@ -630,7 +622,7 @@ fn check_expr_against_expr<'db>(
 
             match (e.payload(db), expected_variant.payload(db)) {
                 (Some(payload), Some(expected_payload)) => {
-                    check_expr_against_expr(ctx, payload, expected_payload)
+                    check(ctx, payload, expected_payload)
                 }
                 (None, None) => Ok(()),
                 (Some(_), None) => Err(TypeError::TypeMismatch {
@@ -668,7 +660,7 @@ fn check_expr_against_expr<'db>(
 
             match (e.payload(db), expected_variant.payload(db)) {
                 (Some(payload), Some(expected_payload)) => {
-                    check_expr_against_expr(ctx, payload, expected_payload)
+                    check(ctx, payload, expected_payload)
                 }
                 (None, None) => Ok(()),
                 (Some(_), None) => Err(TypeError::TypeMismatch {
@@ -688,7 +680,7 @@ fn check_expr_against_expr<'db>(
             let element_type = expected_list.element_type(db);
 
             for elem in elements {
-                check_expr_against_expr(ctx, elem, element_type)?;
+                check(ctx, elem, element_type)?;
             }
 
             Ok(())
@@ -701,8 +693,8 @@ fn check_expr_against_expr<'db>(
             let value_type = expected_map.value_type(db);
 
             for entry in entries {
-                check_expr_against_expr(ctx, entry.key(db), key_type)?;
-                check_expr_against_expr(ctx, entry.value(db), value_type)?;
+                check(ctx, entry.key(db), key_type)?;
+                check(ctx, entry.value(db), value_type)?;
             }
 
             Ok(())
@@ -714,7 +706,7 @@ fn check_expr_against_expr<'db>(
             let element_type = expected_set.element_type(db);
 
             for elem in elements {
-                check_expr_against_expr(ctx, elem, element_type)?;
+                check(ctx, elem, element_type)?;
             }
 
             Ok(())
@@ -726,13 +718,13 @@ fn check_expr_against_expr<'db>(
         // Rule: Check-Option (implicit wrapping)
         (_, Type::Option(opt)) => {
             // Try to check against inner type (implicit Some wrapping).
-            check_expr_against_expr(ctx, expr, opt.inner_type(db))
+            check(ctx, expr, opt.inner_type(db))
         }
 
         // Rule: Check-Result (implicit wrapping)
         (_, Type::Result(res)) => {
             // Try to check against inner type (implicit Ok wrapping).
-            check_expr_against_expr(ctx, expr, res.inner_type(db))
+            check(ctx, expr, res.inner_type(db))
         }
 
         // Rule: Check-Error
@@ -751,7 +743,7 @@ fn check_expr_against_expr<'db>(
             }
 
             for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-                check_expr_against_expr(ctx, *elem, *expected_field)?;
+                check(ctx, *elem, *expected_field)?;
             }
 
             Ok(())
@@ -773,7 +765,7 @@ fn check_expr_against_expr<'db>(
             let expected_fields = expected_tuple.fields(db);
 
             for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-                check_expr_against_expr(ctx, *elem, *expected_field)?;
+                check(ctx, *elem, *expected_field)?;
             }
 
             Ok(())
