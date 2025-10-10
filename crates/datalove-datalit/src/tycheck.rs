@@ -460,8 +460,8 @@ fn check<'db>(
         // Rule: Check-Subsume - try synthesis first.
         // IMPORTANT: Synthesize from the inner expression without type hint to avoid infinite recursion.
         (Expr::True | Expr::False | Expr::String(_), _) => {
-            let ty_without_hint = ExprFull::new(db, None, *expr_and_heap);
-            let synthesized = synthesize(ctx, ty_without_hint)?;
+            let expr_without_hint = ExprFull::new(db, None, *expr_and_heap);
+            let synthesized = synthesize(ctx, expr_without_hint)?;
             if !types_equivalent(db, synthesized.ty(db), expected_type) {
                 return Err(TypeError::TypeMismatch {
                     expected: type_to_string(db, expected_type),
