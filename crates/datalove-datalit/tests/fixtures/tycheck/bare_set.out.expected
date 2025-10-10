@@ -1,0 +1,34 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Set": {
+          "elements": [
+            {
+              "expr": {
+                "expr": "True",
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": "False",
+                "heap": "Local"
+              },
+              "type_hint": null
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [],
+  "root_type": {
+    "element_type": "@bool",
+    "heap": "@",
+    "kind": "Set"
+  }
+}

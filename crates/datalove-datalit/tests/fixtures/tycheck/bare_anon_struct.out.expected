@@ -1,0 +1,62 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "x",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "42"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "name": "y",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Float": {
+                      "value": "3.14"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "name": "z",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "ParseError": {
+                      "message": "unexpected token in DynParser expression"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

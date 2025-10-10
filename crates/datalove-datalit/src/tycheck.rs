@@ -286,13 +286,142 @@ fn synthesize<'db>(
             expected_type.ty(db).clone()
         }
 
+        // Rule: Syn-AnonTuple - synthesize tuple by synthesizing each element.
+        Expr::AnonTuple(t) => {
+            let elements = t.elements(db);
+            let mut element_types = Vec::new();
+            for elem in elements {
+                let elem_type = synthesize(ctx, elem)?;
+                element_types.push(elem_type);
+            }
+            Type::AnonTuple(TypeAnonTuple::new(db, element_types))
+        }
+
+        // Rule: Syn-AnonStruct - synthesize struct by synthesizing each field.
+        Expr::AnonStruct(s) => {
+            let fields = s.fields(db);
+            let mut field_types = Vec::new();
+            for field in fields {
+                let field_name = field.name(db);
+                let field_value = field.value(db);
+                let field_type = synthesize(ctx, field_value)?;
+                field_types.push(TypeNamedField::new(db, field_name, field_type));
+            }
+            Type::AnonStruct(TypeAnonStruct::new(db, field_types))
+        }
+
+        // Rule: Syn-List - synthesize list by synthesizing all elements (must have same type).
+        Expr::List(l) => {
+            let elements = l.elements(db);
+            if elements.is_empty() {
+                // Cannot synthesize type for empty list.
+                return Err(TypeError::CannotSynthesize);
+            }
+
+            // Synthesize first element to get the expected type.
+            let first_type = synthesize(ctx, elements[0])?;
+
+            // Check remaining elements against first type.
+            for elem in &elements[1..] {
+                let elem_type = synthesize(ctx, *elem)?;
+                if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
+                    return Err(TypeError::TypeMismatch {
+                        expected: type_to_string(db, first_type.ty(db)),
+                        actual: type_to_string(db, elem_type.ty(db)),
+                    });
+                }
+                if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
+                    return Err(TypeError::HeapMismatch {
+                        expected_heap: heap_to_string(first_type.heap(db)),
+                        actual_heap: heap_to_string(elem_type.heap(db)),
+                    });
+                }
+            }
+
+            Type::List(TypeList::new(db, first_type))
+        }
+
+        // Rule: Syn-Set - synthesize set by synthesizing all elements (must have same type).
+        Expr::Set(s) => {
+            let elements = s.elements(db);
+            if elements.is_empty() {
+                // Cannot synthesize type for empty set.
+                return Err(TypeError::CannotSynthesize);
+            }
+
+            // Synthesize first element to get the expected type.
+            let first_type = synthesize(ctx, elements[0])?;
+
+            // Check remaining elements against first type.
+            for elem in &elements[1..] {
+                let elem_type = synthesize(ctx, *elem)?;
+                if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
+                    return Err(TypeError::TypeMismatch {
+                        expected: type_to_string(db, first_type.ty(db)),
+                        actual: type_to_string(db, elem_type.ty(db)),
+                    });
+                }
+                if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
+                    return Err(TypeError::HeapMismatch {
+                        expected_heap: heap_to_string(first_type.heap(db)),
+                        actual_heap: heap_to_string(elem_type.heap(db)),
+                    });
+                }
+            }
+
+            Type::Set(TypeSet::new(db, first_type))
+        }
+
+        // Rule: Syn-Map - synthesize map by synthesizing all keys and values (must have same types).
+        Expr::Map(m) => {
+            let entries = m.entries(db);
+            if entries.is_empty() {
+                // Cannot synthesize type for empty map.
+                return Err(TypeError::CannotSynthesize);
+            }
+
+            // Synthesize first entry to get the expected key and value types.
+            let first_entry = entries[0];
+            let first_key_type = synthesize(ctx, first_entry.key(db))?;
+            let first_value_type = synthesize(ctx, first_entry.value(db))?;
+
+            // Check remaining entries against first types.
+            for entry in &entries[1..] {
+                let key_type = synthesize(ctx, entry.key(db))?;
+                let value_type = synthesize(ctx, entry.value(db))?;
+
+                if !types_equivalent(db, first_key_type.ty(db), key_type.ty(db)) {
+                    return Err(TypeError::TypeMismatch {
+                        expected: type_to_string(db, first_key_type.ty(db)),
+                        actual: type_to_string(db, key_type.ty(db)),
+                    });
+                }
+                if !heaps_compatible(first_key_type.heap(db), key_type.heap(db)) {
+                    return Err(TypeError::HeapMismatch {
+                        expected_heap: heap_to_string(first_key_type.heap(db)),
+                        actual_heap: heap_to_string(key_type.heap(db)),
+                    });
+                }
+
+                if !types_equivalent(db, first_value_type.ty(db), value_type.ty(db)) {
+                    return Err(TypeError::TypeMismatch {
+                        expected: type_to_string(db, first_value_type.ty(db)),
+                        actual: type_to_string(db, value_type.ty(db)),
+                    });
+                }
+                if !heaps_compatible(first_value_type.heap(db), value_type.heap(db)) {
+                    return Err(TypeError::HeapMismatch {
+                        expected_heap: heap_to_string(first_value_type.heap(db)),
+                        actual_heap: heap_to_string(value_type.heap(db)),
+                    });
+                }
+            }
+
+            Type::Map(TypeMap::new(db, first_key_type, first_value_type))
+        }
+
         // Cannot synthesize for these - need type context.
-        Expr::AnonTuple(_)
-        | Expr::AnonStruct(_)
-        | Expr::AnonEnum(_)
-        | Expr::List(_)
-        | Expr::Map(_)
-        | Expr::Set(_)
+        Expr::AnonEnum(_)
         | Expr::None
         | Expr::Err(_) => return Err(TypeError::CannotSynthesize),
 

@@ -218,6 +218,86 @@ Type hint: @enum Result{Ok: @u32, Err: @string}
 Expression: @enum Result.Ok(@42) ⇒ @enum Result{Ok: @u32, Err: @string}
 ```
 
+### Rule: Syn-AnonTuple
+```
+∀i. ei ⇒ Ti
+───────────────────────────────────
+@(e1, e2, ..., en) ⇒ @(T1, T2, ..., Tn)
+```
+
+**Note**: Anonymous tuples can be synthesized by synthesizing each element independently.
+
+Example:
+```
+@(@true, @42, @3.14) ⇒ @(bool, u32, f32)
+```
+
+### Rule: Syn-AnonStruct
+```
+∀i. ei ⇒ Ti (for field fi = ei)
+───────────────────────────────────────────
+@{f1 = e1, f2 = e2, ...} ⇒ @{f1: T1, f2: T2, ...}
+```
+
+**Note**: Anonymous structs can be synthesized by synthesizing each field value independently.
+
+Example:
+```
+@{x = @42, y = @3.14} ⇒ @{x: u32, y: f32}
+```
+
+### Rule: Syn-List
+```
+n ≥ 1
+e1 ⇒ T
+∀i ∈ [2..n]. ei ⇒ T' where T ≡ T'
+───────────────────────────────────
+@[e1, e2, ..., en] ⇒ @[T]
+```
+
+**Note**: Lists can be synthesized by synthesizing all elements and ensuring they have the same type. The first element determines the expected type. Empty lists cannot be synthesized.
+
+Example:
+```
+@[@1, @2, @3] ⇒ @[u32]
+@[] ⇒ error (CannotSynthesize - no way to infer element type)
+```
+
+### Rule: Syn-Set
+```
+n ≥ 1
+e1 ⇒ T
+∀i ∈ [2..n]. ei ⇒ T' where T ≡ T'
+───────────────────────────────────
+@set{e1, e2, ..., en} ⇒ @set<T>
+```
+
+**Note**: Sets can be synthesized by synthesizing all elements and ensuring they have the same type. Empty sets cannot be synthesized.
+
+Example:
+```
+@set{@true, @false} ⇒ @set<bool>
+@set{} ⇒ error (CannotSynthesize)
+```
+
+### Rule: Syn-Map
+```
+n ≥ 1
+k1 ⇒ K, v1 ⇒ V
+∀i ∈ [2..n]. ki ⇒ K' where K ≡ K'
+∀i ∈ [2..n]. vi ⇒ V' where V ≡ V'
+────────────────────────────────────────
+@map{k1 = v1, k2 = v2, ...} ⇒ @map<K, V>
+```
+
+**Note**: Maps can be synthesized by synthesizing all keys and values and ensuring keys have the same type and values have the same type. Empty maps cannot be synthesized.
+
+Example:
+```
+@map{@1 = @10, @2 = @20} ⇒ @map<u32, u32>
+@map{} ⇒ error (CannotSynthesize)
+```
+
 ### Rule: Syn-None
 ```
 ─────────────────
@@ -226,19 +306,27 @@ Cannot synthesize type for @none (needs context)
 
 **Note**: `@none` can only be checked, not synthesized.
 
-### Rule: Syn-Anonymous-Types
+### Rule: Syn-AnonEnum
 ```
 ─────────────────
-Cannot synthesize types for:
-- Anonymous tuples: (@1, @2)
-- Anonymous structs: {x = @1}
-- Anonymous enums: @enum Foo(@1)
-- Lists: [@1, @2]
-- Maps: @map{@1 = "one"}
-- Sets: @set{@1, @2}
+Cannot synthesize type for anonymous enums (needs context)
 ```
 
-**Note**: These expressions need type context to determine their element/field types.
+**Note**: Anonymous enums cannot be synthesized because we cannot determine the full set of variants from a single variant expression.
+
+Example:
+```
+@enum Foo(@42) ⇒ error (CannotSynthesize)
+: @enum{Foo: @u32, Bar} / @enum Foo(@42) ⇒ @enum{Foo: @u32, Bar}  ✓ (with type hint)
+```
+
+### Rule: Syn-Err
+```
+─────────────────
+Cannot synthesize type for @err(e) (needs context)
+```
+
+**Note**: Error values can only be checked, not synthesized, because they need a Result type context.
 
 ## Checking Rules (e ⇐ T)
 
@@ -632,6 +720,17 @@ Use explicit type hints for other numeric types:
 ### 5. Option and Result implicit wrapping
 
 Values can be implicitly wrapped in Option/Result types. This is the only way to construct Some and Ok values (no explicit constructors).
+
+### 6. Anonymous composite type synthesis
+
+Anonymous composite types can be synthesized when all their components can be synthesized:
+- **Tuples**: `@(@true, @42)` synthesizes as `@(bool, u32)`
+- **Structs**: `@{x = @42}` synthesizes as `@{x: u32}`
+- **Lists**: `@[@1, @2, @3]` synthesizes as `@[u32]`
+- **Sets**: `@set{@true, @false}` synthesizes as `@set<bool>`
+- **Maps**: `@map{@1 = @10}` synthesizes as `@map<u32, u32>`
+
+For collections (lists, sets, maps), all elements/keys/values must have the same type. The first element determines the expected type for the rest. Empty collections cannot be synthesized (they need type context).
 
 ## Implementation Notes
 

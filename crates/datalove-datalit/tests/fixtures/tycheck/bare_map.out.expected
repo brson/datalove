@@ -1,0 +1,93 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Map": {
+          "entries": [
+            {
+              "key": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              },
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "10"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "key": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              },
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "20"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "key": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "3"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              },
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "30"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [],
+  "root_type": {
+    "heap": "@",
+    "key_type": "@u32",
+    "kind": "Map",
+    "value_type": "@u32"
+  }
+}
