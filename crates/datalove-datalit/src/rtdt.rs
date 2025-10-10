@@ -82,7 +82,23 @@ pub enum MapNodeTag {
 
 #[repr(C)]
 pub struct Set {
-    // todo
+    pub root: *const SetNode,
+    pub len: u32,
+}
+
+// B+tree node with variable-sized data following the fixed header.
+#[repr(C)]
+pub struct SetNode {
+    pub tag: SetNodeTag,
+    // Variable-sized data follows:
+    // Internal: num_keys (u32), keys[], child_ptrs[]
+    // Leaf: num_keys (u32), next_leaf (*const SetNode), keys[]
+}
+
+#[repr(u8)]
+pub enum SetNodeTag {
+    Internal,
+    Leaf,
 }
 
 
