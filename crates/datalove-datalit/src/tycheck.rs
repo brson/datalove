@@ -420,10 +420,12 @@ fn synthesize<'db>(
             Type::Map(TypeMap::new(db, first_key_type, first_value_type))
         }
 
+        // Rule: Syn-Error - error values synthesize as Type::Error.
+        Expr::Err(_) => Type::Error,
+
         // Cannot synthesize for these - need type context.
         Expr::AnonEnum(_)
-        | Expr::None
-        | Expr::Err(_) => return Err(TypeError::CannotSynthesize),
+        | Expr::None => return Err(TypeError::CannotSynthesize),
 
         Expr::ParseError(_) => return Err(TypeError::CannotSynthesize),
     };

@@ -1,0 +1,25 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Err": {
+          "value": {
+            "expr": {
+              "expr": {
+                "String": {
+                  "value": "\"something went wrong\""
+                }
+              },
+              "heap": "Omitted"
+            },
+            "type_hint": null
+          }
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [],
+  "root_type": "@error"
+}

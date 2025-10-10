@@ -320,13 +320,19 @@ Example:
 : @enum{Foo: @u32, Bar} / @enum Foo(@42) ⇒ @enum{Foo: @u32, Bar}  ✓ (with type hint)
 ```
 
-### Rule: Syn-Err
+### Rule: Syn-Error
 ```
-─────────────────
-Cannot synthesize type for @err(e) (needs context)
+msg : string literal
+────────────────────────
+@error msg ⇒ @error
 ```
 
-**Note**: Error values can only be checked, not synthesized, because they need a Result type context.
+**Note**: Error values always synthesize as `@error` type.
+
+Example:
+```
+@error "oops" ⇒ @error
+```
 
 ## Checking Rules (e ⇐ T)
 
