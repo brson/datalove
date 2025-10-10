@@ -595,7 +595,23 @@ Example:
       @42 ⇐ @?@u32  ✓ (implicit Some wrapping)
 ```
 
-### Rule: Check-Result (implicit wrapping)
+### Rule: Check-ResultErr (implicit Err wrapping)
+```
+──────────────────────
+@error "msg" ⇐ @!T
+```
+
+**Note**: Error expressions can check against any Result type as implicit Err wrapping.
+
+Example:
+```
+: @!@u32 / @error "failed"
+           ↑
+      @error "failed" ⇐ @error  ✓
+      @error "failed" ⇐ @!@u32  ✓ (implicit Err wrapping)
+```
+
+### Rule: Check-Result (implicit Ok wrapping)
 ```
 e ⇐ T
 ──────────────

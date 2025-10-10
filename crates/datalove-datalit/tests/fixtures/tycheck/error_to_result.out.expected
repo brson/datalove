@@ -1,0 +1,39 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Err": {
+          "value": {
+            "expr": {
+              "expr": {
+                "String": {
+                  "value": "\"operation failed\""
+                }
+              },
+              "heap": "Omitted"
+            },
+            "type_hint": null
+          }
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "Result": {
+          "inner_type": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "heap": "@",
+    "inner_type": "@u32",
+    "kind": "Result"
+  }
+}

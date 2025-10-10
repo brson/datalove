@@ -721,7 +721,13 @@ fn check<'db>(
             check(ctx, expr, opt.inner_type(db))
         }
 
-        // Rule: Check-Result (implicit wrapping)
+        // Rule: Check-ResultErr (implicit Err wrapping)
+        (Expr::Err(_), Type::Result(_)) => {
+            // Error expressions can check against any Result type (implicit Err wrapping).
+            Ok(())
+        }
+
+        // Rule: Check-Result (implicit Ok wrapping)
         (_, Type::Result(res)) => {
             // Try to check against inner type (implicit Ok wrapping).
             check(ctx, expr, res.inner_type(db))
