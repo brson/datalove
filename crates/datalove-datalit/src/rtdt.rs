@@ -38,7 +38,28 @@ pub struct Int {
 
 // ## Tuples, structs, and enums
 
-// todo
+/// Computed layout information for a tuple.
+pub struct TupleLayout {
+    pub size: u32,
+    pub align: u32,
+    pub field_offsets: Vec<u32>,
+}
+
+/// Computed layout information for a struct (same as tuple).
+pub struct StructLayout {
+    pub size: u32,
+    pub align: u32,
+    pub field_offsets: Vec<u32>,
+}
+
+/// Computed layout information for an enum.
+pub struct EnumLayout {
+    pub size: u32,
+    pub align: u32,
+    pub discriminant_size: u32,
+    pub payload_offset: u32,
+    pub variant_offsets: Vec<u32>,
+}
 
 
 
@@ -140,6 +161,7 @@ pub struct TyDesc {
 }
 
 #[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum TyTag {
     Bool,
     U32,

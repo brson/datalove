@@ -5,6 +5,7 @@ use rmx::prelude::*;
 pub mod ast;
 pub mod ast_serde;
 pub mod rtdt;
+pub mod rtdt_layout;
 pub mod parser;
 pub mod resolve;
 pub mod tycheck;
