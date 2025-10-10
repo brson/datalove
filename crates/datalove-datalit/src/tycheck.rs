@@ -129,6 +129,9 @@ pub struct TypeErrorEntry<'db> {
 /// Result of typechecking.
 #[salsa::tracked]
 pub struct TypecheckResult<'db> {
+    /// The root expression.
+    pub root_expr: ExprFull<'db>,
+
     /// The root expression type (if successfully synthesized).
     pub root_type: Option<TypeAndHeap<'db>>,
 
@@ -196,7 +199,7 @@ pub fn type_check<'db>(
         .map(|e| TypeErrorEntry::new(db, e))
         .collect();
 
-    TypecheckResult::new(db, root_type, errors)
+    TypecheckResult::new(db, expr, root_type, errors)
 }
 
 /// Synthesize a type for an expression.
