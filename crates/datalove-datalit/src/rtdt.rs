@@ -97,8 +97,8 @@ pub struct MapNode {
 
 #[repr(u8)]
 pub enum MapNodeTag {
-    Internal,
-    Leaf,
+    Internal = 1,
+    Leaf = 2,
 }
 
 #[repr(C)]
@@ -118,8 +118,8 @@ pub struct SetNode {
 
 #[repr(u8)]
 pub enum SetNodeTag {
-    Internal,
-    Leaf,
+    Internal = 1,
+    Leaf = 2,
 }
 
 
@@ -134,7 +134,10 @@ pub struct Option /* <T> */ {
 }
 
 #[repr(u8)]
-pub enum OptionTag { None, Some }
+pub enum OptionTag {
+    None = 1,
+    Some = 2,
+}
 
 
 
@@ -163,25 +166,24 @@ pub struct TyDesc {
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum TyTag {
-    Bool,
-    U32,
-    F32,
-    Int,
+    Bool = 1,
+    U32 = 2,
+    F32 = 3,
+    Int = 4,
 
-    Tuple,
-    Struct,
-    Enum,
+    Tuple = 10,
+    Struct = 11,
+    Enum = 12,
 
-    List,
-    String,
-    Map,
-    Set,
+    List = 20,
+    String = 21,
+    Map = 22,
+    Set = 23,
 
-    Option,
-    Result,
+    Option = 30,
+    Result = 31,
 
-    AnyData,
-    Error,
+    Error = 40,
 }
 
 #[repr(C)]
