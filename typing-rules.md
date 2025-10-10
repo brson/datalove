@@ -6,9 +6,9 @@ It follows a bidirectional typing discipline based on Dunfield & Krishnaswami (2
 ## Core Principles
 
 - **Bidirectional**: Expressions either synthesize (⇒) or check (⇐) against types
-- **Explicit heaps**: `@` for local, `#` for global, omitted for inferred (TBD)
+- **Explicit heaps**: `@` for local, `#` for global, omitted for inferred (defaults to local)
 - **Structural typing**: Anonymous types (tuples, structs, enums) are compatible by structure
-- **Nominal typing**: Named types (`struct Foo`, `enum Bar`, `token Nil`) are distinct even with same structure
+- **Nominal typing**: Named types (`struct Foo`, `enum Bar`, `tuple Pair`) are distinct even with same structure
 - **Explicit at boundaries**: The `: type / expr` syntax provides type information at expression boundaries
 
 ## Type Equivalence
@@ -19,7 +19,7 @@ Two types are equivalent (T ≡ T') when:
 - `@bool ≡ @bool`
 - `@u32 ≡ @u32`
 - `@f32 ≡ @f32`
-- `@int ≡ @int`
+- `@int ≡ @int` (arbitrary precision integers)
 - `@string ≡ @string`
 
 ### Tuples (structural)
@@ -37,13 +37,13 @@ Examples:
 ### Anonymous Structs (structural)
 - `{f1: T1, f2: T2, ...} ≡ {f1: T1', f2: T2', ...}` iff:
   - Same field names
-  - Same field order (for now - may relax later)
+  - Same field order (field order must be correct)
   - Ti ≡ Ti' for all i
 
 Examples:
 ```
 {x: @u32, y: @bool} ≡ {x: @u32, y: @bool}  ✓
-{x: @u32, y: @bool} ≡ {y: @bool, x: @u32}  ✗ (different order - for now)
+{x: @u32, y: @bool} ≡ {y: @bool, x: @u32}  ✗ (different order)
 {x: @u32} ≡ {x: @u32, y: @bool}            ✗ (different fields)
 ```
 
@@ -77,25 +77,11 @@ Examples:
 
 ## Subtyping
 
-**Conservative approach**: Minimal implicit conversions to start.
+**Conservative approach**: Minimal implicit conversions.
 
-### Integer subtyping
-- `@int <: @int` (reflexive)
-- No implicit conversions between integer types initially
+### Option/Result implicit wrapping
 
-Examples:
-```
-: @u32 / @1234  ✓ (explicit annotation)
-: @int / @1234  ✓ (explicit annotation)
-```
-
-**Open question**: Should we allow `@int <: @u32` with runtime range check?
-
-**Answer**: No.
-
-### Option/Result subtyping
-
-Implicit wrapping
+Values can be implicitly wrapped in Option or Result types:
 
 Examples:
 ```
@@ -104,17 +90,16 @@ Examples:
 : @!@u32 / @42    ✓ (implicit Ok wrapping)
 ```
 
-### Anonymous to named
+### Anonymous to named coercion
 
-- named types are supertypes of anonymous types
+Anonymous types can be coerced to named types with matching structure:
 
 Examples:
 ```
-: @struct Point{x: @u32, y: @u32} / {x = @1, y = @2}  ✓ (anon struct ≮: named struct)
-: (@u32, @u32) / @tuple Pair(@1, @2)                  ✗ (named tuple ≮: anon tuple)
+: @struct Point{x: @u32, y: @u32} / {x = @1, y = @2}  ✓ (anon struct → named struct)
+: @tuple Pair(@u32, @u32) / (@1, @2)                  ✓ (anon tuple → named tuple)
+: @enum Result{Ok: @u32, Err} / @enum Ok(@42)         ✓ (anon enum → named enum)
 ```
-
-
 
 ## Synthesis Rules (e ⇒ T)
 
@@ -142,22 +127,31 @@ Example:
 @false ⇒ @bool
 ```
 
-### Rule: Syn-U32
+### Rule: Syn-Int
 ```
-n : u32 value
-─────────────────
+n : integer literal (as string)
+n fits in u32 range
+────────────────────────────────
 @n ⇒ @u32
+
+n : integer literal (as string)
+n does not fit in u32 range
+────────────────────────────────
+@n ⇒ IntOutOfRange error
 ```
 
-Example:
+**Note**: Integer literals without type context default to `@u32`. If the value doesn't fit in u32 range, it's a type error. Use explicit type hints for arbitrary precision integers.
+
+Examples:
 ```
-@42 ⇒ @u32
-@1234 ⇒ @u32
+@42 ⇒ @u32                           ✓
+@99999999999999999999 ⇒ error        ✗ (IntOutOfRange)
+: @int / @99999999999999999999 ⇒ @int  ✓ (explicit type hint)
 ```
 
-### Rule: Syn-F32
+### Rule: Syn-Float
 ```
-f : f32 value (contains decimal point)
+f : float literal (contains decimal point)
 ────────────────────────────────────
 @f ⇒ @f32
 ```
@@ -232,6 +226,20 @@ Cannot synthesize type for @none (needs context)
 
 **Note**: `@none` can only be checked, not synthesized.
 
+### Rule: Syn-Anonymous-Types
+```
+─────────────────
+Cannot synthesize types for:
+- Anonymous tuples: (@1, @2)
+- Anonymous structs: {x = @1}
+- Anonymous enums: @enum Foo(@1)
+- Lists: [@1, @2]
+- Maps: @map{@1 = "one"}
+- Sets: @set{@1, @2}
+```
+
+**Note**: These expressions need type context to determine their element/field types.
+
 ## Checking Rules (e ⇐ T)
 
 Checking rules verify an expression against an expected type.
@@ -239,7 +247,7 @@ Checking rules verify an expression against an expected type.
 ### Rule: Check-Subsume
 ```
 e ⇒ T'
-T' <: T
+T' ≡ T
 ───────────
 e ⇐ T
 ```
@@ -248,12 +256,12 @@ This is the key rule that allows synthesizing expressions to be checked.
 
 ### Rule: Check-Int
 ```
-n : arbitrary precision integer
+n : integer literal (as string)
 n fits in u32 range
 ────────────────────────────────
 @n ⇐ @u32
 
-n : arbitrary precision integer
+n : integer literal (as string)
 ────────────────────────────────
 @n ⇐ @int
 ```
@@ -262,8 +270,22 @@ Examples:
 ```
 @42 ⇐ @u32     ✓
 @42 ⇐ @int     ✓
-@-1 ⇐ @u32     ✗ (out of range)
+@-1 ⇐ @u32     ✗ (negative, out of range for u32)
 @-1 ⇐ @int     ✓
+@99999999999999999999 ⇐ @int ✓
+@99999999999999999999 ⇐ @u32 ✗ (out of range)
+```
+
+### Rule: Check-Float
+```
+f : float literal
+────────────────────────────────
+@f ⇐ @f32
+```
+
+Example:
+```
+@3.14 ⇐ @f32  ✓
 ```
 
 ### Rule: Check-AnonTuple
@@ -282,6 +304,34 @@ Example:
               (@42, @true) ⇐ (@u32, @bool)  ✓
 ```
 
+### Rule: Check-NamedTuple (coercion)
+```
+@tuple Point(T1, T2, ..., Tn) is expected type
+length matches
+∀i. ei ⇐ Ti
+──────────────────────────────────
+(e1, e2, ..., en) ⇐ @tuple Point(T1, T2, ..., Tn)
+```
+
+**Note**: Anonymous tuples can be coerced to named tuples.
+
+Example:
+```
+: @tuple Pair(@u32, @bool) / (@42, @true)
+                              ↑
+                         (@42, @true) ⇐ @tuple Pair(@u32, @bool)  ✓
+```
+
+### Rule: Check-NamedTuple (exact match)
+```
+@tuple Point(T1, T2, ..., Tn) is expected type
+names match
+length matches
+∀i. ei ⇐ Ti
+──────────────────────────────────
+@tuple Point(e1, e2, ..., en) ⇐ @tuple Point(T1, T2, ..., Tn)
+```
+
 ### Rule: Check-AnonStruct
 ```
 {f1: T1, f2: T2, ...} is expected type
@@ -296,6 +346,34 @@ Example:
 : {x: @u32, y: @bool} / {x = @42, y = @true}
                          ↑
                     {x = @42, y = @true} ⇐ {x: @u32, y: @bool}  ✓
+```
+
+### Rule: Check-NamedStruct (coercion)
+```
+@struct Point{f1: T1, f2: T2, ...} is expected type
+fields match (same names, same order)
+∀i. ei ⇐ Ti
+─────────────────────────────────────────
+{f1 = e1, f2 = e2, ...} ⇐ @struct Point{f1: T1, f2: T2, ...}
+```
+
+**Note**: Anonymous structs can be coerced to named structs.
+
+Example:
+```
+: @struct Point{x: @u32, y: @bool} / {x = @42, y = @true}
+                                      ↑
+                                 {x = @42, y = @true} ⇐ @struct Point{x: @u32, y: @bool}  ✓
+```
+
+### Rule: Check-NamedStruct (exact match)
+```
+@struct Point{f1: T1, f2: T2, ...} is expected type
+names match
+fields match (same names, same order)
+∀i. ei ⇐ Ti
+─────────────────────────────────────────
+@struct Point{f1 = e1, f2 = e2, ...} ⇐ @struct Point{f1: T1, f2: T2, ...}
 ```
 
 ### Rule: Check-AnonEnum
@@ -313,6 +391,36 @@ Example:
 : @enum{Foo, Bar: @u32} / @enum Bar(@42)
                           ↑
                      @enum Bar(@42) ⇐ @enum{Foo, Bar: @u32}  ✓
+```
+
+### Rule: Check-NamedEnum (coercion)
+```
+@enum Result{V1, V2: T2, ...} is expected type
+variant Vi exists in the named enum
+If Vi has payload type Ti, then e ⇐ Ti
+If Vi has no payload, then expression has no payload
+──────────────────────────────────────────────────
+@enum Vi(...) ⇐ @enum Result{V1, V2: T2, ...}
+```
+
+**Note**: Anonymous enum constructors (without enum name prefix) can be coerced to named enums.
+
+Example:
+```
+: @enum Result{Ok: @u32, Err} / @enum Ok(@42)
+                                 ↑
+                            @enum Ok(@42) ⇐ @enum Result{Ok: @u32, Err}  ✓
+```
+
+### Rule: Check-NamedEnum (exact match)
+```
+@enum Result{V1, V2: T2, ...} is expected type
+enum names match
+variant Vi exists
+If Vi has payload type Ti, then e ⇐ Ti
+If Vi has no payload, then expression has no payload
+──────────────────────────────────────────────────
+@enum Result.Vi(...) ⇐ @enum Result{V1, V2: T2, ...}
 ```
 
 ### Rule: Check-List
@@ -376,6 +484,40 @@ Example:
 
 `@none` checks against any option type.
 
+### Rule: Check-Option (implicit wrapping)
+```
+e ⇐ T
+──────────────
+e ⇐ @?T
+```
+
+**Note**: This allows implicit wrapping in Some. Values that successfully check against type T can also check against @?T.
+
+Example:
+```
+: @?@u32 / @42
+           ↑
+      @42 ⇐ @u32  ✓
+      @42 ⇐ @?@u32  ✓ (implicit Some wrapping)
+```
+
+### Rule: Check-Result (implicit wrapping)
+```
+e ⇐ T
+──────────────
+e ⇐ @!T
+```
+
+**Note**: This allows implicit wrapping in Ok. Values that successfully check against type T can also check against @!T.
+
+Example:
+```
+: @!@u32 / @42
+           ↑
+      @42 ⇐ @u32  ✓
+      @42 ⇐ @!@u32  ✓ (implicit Ok wrapping)
+```
+
 ### Rule: Check-Error
 ```
 ──────────────────────
@@ -384,12 +526,12 @@ Example:
 
 ## Heap Checking
 
-**Design decision**: Heaps are tracked separately from types for now.
+**Design decision**: Heaps are tracked separately from types.
 
 Each type and expression has an associated heap:
 - `@` means local heap
 - `#` means global heap
-- Omitted means inferred (defaults to local for now)
+- Omitted means inferred (defaults to local)
 
 ### Heap Compatibility Rules
 
@@ -405,15 +547,26 @@ e has global heap
 T has global heap
 ─────────────────
 e : T is valid
+
+Omitted heap is compatible with local heap:
+e has omitted heap
+T has local heap
+─────────────────
+e : T is valid
+
+e has local heap
+T has omitted heap
+─────────────────
+e : T is valid
 ```
 
-Different heaps never unify. They are not compatible.
-
+Different heaps (local vs global) never unify. They are not compatible.
 
 Examples:
 ```
 : @u32 / @42   ✓ (both local heap)
 : #u32 / #42   ✓ (both global heap)
+: @u32 / 42    ✓ (omitted → local)
 : @u32 / #42   ✗ (heap mismatch)
 : #u32 / @42   ✗ (heap mismatch)
 ```
@@ -429,11 +582,11 @@ The `@error` type represents error values:
 
 This is distinct from the `@!T` (result) type. The `@error` type is for errors without associated success types.
 
-## Edge Cases and Open Questions
+## Design Decisions Summary
 
 ### 1. Empty collections
 
-**Current rule**: Empty collections can check against any element type.
+Empty collections can check against any element type:
 
 ```
 [] ⇐ [@T]           ✓ for any T
@@ -441,96 +594,44 @@ This is distinct from the `@!T` (result) type. The `@error` type is for errors w
 @map{} ⇐ @map<K, V> ✓ for any K, V
 ```
 
-**Question**: Should empty collections require a type annotation?
-
-**Answer**: empty collections need type hints generally, with exception:
-in lists of lists etc, the inner list type can be inferred
-from neighbor elements:
+In nested contexts, inner empty collections can infer type from neighbors:
 
 ```
 [
   [@true],
-  [] ; it's [@bool]
+  []        ; inferred as [@bool]
 ]
 ```
 
-### 2. Nested type hints
+### 2. Field order in anonymous structs
 
-```
-: @u32 / : @int / @5
-```
-
-**Current rule**: Inner type hint wins. The outer `@u32` is ignored, and the expression has type `@int`.
-
-**Answer**: If this is allowed in the grammer we should fix.
-
-
-
-### 3. Field order in anonymous structs
-
-**Current rule**: Field order matters.
+Field order must be correct:
 
 ```
 {x: @u32, y: @bool} ≢ {y: @bool, x: @u32}
 ```
 
-**Alternative**: Allow unordered fields (more flexible, but complicates implementation).
+This differs from many languages but simplifies implementation.
 
-**Answer**: Field order must be correct, unlike many languages.
+### 3. Anonymous to named coercion
 
-### 4. Anonymous enum to named enum coercion
+Anonymous types (tuples, structs, enums) can be coerced to named types with matching structure. This is a key feature for ergonomic data construction.
 
-From demo-data.dle:
+### 4. Default numeric types
+
+Bare numeric literals default to concrete types:
+- Integer literals → `@u32` (with range check)
+- Float literals → `@f32`
+
+Use explicit type hints for other numeric types:
 ```
-; this is actually a coercion from anonymous enum (no dot)
-: @enum Quux {
-  Bar(@u32),
-} / @enum Bar(@true, 1)
-```
-
-**Question**: Is this allowed? If so, what are the rules?
-- Named enum must have a variant matching the anonymous constructor?
-- Payload types must match?
-
-**Answer**: Yes those are the rules. We are generally going
-to be relying a lot on anonymous->named coercions for structs and enums.
-
-### 5. Bare numerals without @ or # sigil
-
-```
-: @u32 / 42   (no @ on the 42)
+: @int / @99999999999999999999  ; arbitrary precision
+: @i64 / @-42                     ; signed 64-bit (future)
 ```
 
-**Current behavior**: Parser treats bare numerals as having omitted heap.
+### 5. Option and Result implicit wrapping
 
-**Question**: What type do they synthesize?
-- Option A: Synthesize `@int` (most general)
-- Option B: Cannot synthesize (must be checked)
-- Option C: Synthesize based on value (small ints are u32, etc.)
-
-**Answer**: The lack of sigil is irrelevant to the numeric type synthesis,
-but the omitted sigil synthesis a local heap type.
-Like Rust we'll expect that for most integers type inference
-will force it into a concrete type, and otherwise we'll synthesize
-`u32`. In the future, this language will also have lightweight
-numeric widening, allowing that u32 to coerce later to a bigint (`int`).
-Don't forget that of course we'll have all the other typical int widths,
-not just `u32`.
-
-### 6. Option sugar and implicit wrapping
-
-Should these be allowed?
-
-```
-: @?@u32 / @42     (implicit Some wrapping?)
-: @!@u32 / @42     (implicit Ok wrapping?)
-```
-
-**Current**: No implicit wrapping. Must be explicit.
-
-**Alternative**: Allow implicit wrapping when expected type is option/result.
-
-**Answer**: yes. this is the only way to construct some and ok types
+Values can be implicitly wrapped in Option/Result types. This is the only way to construct Some and Ok values (no explicit constructors).
 
 ## Implementation Notes
 
@@ -549,24 +650,27 @@ Before typechecking:
 3. Run typechecker with resolution context
 
 Typechecker needs:
-- Resolution results to look up types for tokens, named structs, etc.
-- Scope information for type variables (if added later)
+- Resolution results to look up types for named structs, tuples, enums
+- Type definitions from the type hint in `: type / expr` syntax
 
 ### Error messages
 
-Typechecker should produce clear errors:
-- "Expected type `@u32`, but expression has type `@bool`"
-- "Field `y` is missing in struct construction"
-- "Cannot synthesize type for expression (add type annotation)"
-- "Integer literal `99999999999` is out of range for type `@u32`"
+Typechecker produces clear errors:
+- "Expected type `@u32`, but expression has type `@bool`" (TypeMismatch)
+- "Cannot synthesize type for expression (add type annotation)" (CannotSynthesize)
+- "Integer literal out of range for type `@u32`" (IntOutOfRange)
+- "Heap mismatch: expected `@`, got `#`" (HeapMismatch)
+- "Field order mismatch" (FieldOrderMismatch)
+- "Variant not found" (VariantNotFound)
+- "Arity mismatch: expected N fields, got M" (ArityMismatch)
 
 ## Future Extensions
 
 Features to consider adding later:
 
-1. **Type variables and generics**: `list<T>`, `@map<K, V>`
-2. **Subtyping**: More permissive conversions (with safety checks)
-3. **Type aliases**: `type Point = {x: @f32, y: @f32}`
-4. **Dependent types**: Types that depend on values
+1. **More numeric types**: `@i8`, `@i16`, `@i32`, `@i64`, `@u8`, `@u16`, `@u64`, `@f64`
+2. **Numeric widening**: Automatic coercion from smaller to larger types
+3. **Type variables and generics**: User-defined generic types
+4. **Type aliases**: `type Point = {x: @f32, y: @f32}`
 5. **Refinement types**: `@u32{x | x > 0}` (positive integers)
 6. **Gradual typing**: Mix of static and dynamic checking
