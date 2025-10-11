@@ -23,7 +23,7 @@ fn test_cmp_total_f32_less() -> AnyResult<()> {
     let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_td_cmp_total(
+        datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.value,
             inst_a.tydesc,
@@ -46,7 +46,7 @@ fn test_cmp_total_f32_equal() -> AnyResult<()> {
     let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_td_cmp_total(
+        datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.value,
             inst_a.tydesc,
@@ -69,7 +69,7 @@ fn test_cmp_total_f32_greater() -> AnyResult<()> {
     let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_td_cmp_total(
+        datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.value,
             inst_a.tydesc,
@@ -92,7 +92,7 @@ fn test_cmp_total_tuple_less() -> AnyResult<()> {
     let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_td_cmp_total(
+        datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.value,
             inst_a.tydesc,
@@ -115,7 +115,7 @@ fn test_cmp_total_tuple_equal() -> AnyResult<()> {
     let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_td_cmp_total(
+        datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.value,
             inst_a.tydesc,

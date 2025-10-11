@@ -67,7 +67,7 @@ pub enum RtEq {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_td_eq(
+pub unsafe extern "C" fn dtlv_rti_eq(
     _rt: LocalRtHandle,
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -83,7 +83,7 @@ pub unsafe extern "C" fn dtlv_rti_td_eq(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_td_eq_unique(
+pub unsafe extern "C" fn dtlv_rti_eq_unique(
     _rt: LocalRtHandle,
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -105,7 +105,7 @@ pub enum RtOrdering {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_td_cmp(
+pub unsafe extern "C" fn dtlv_rti_cmp(
     _rt: LocalRtHandle,
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -118,7 +118,7 @@ pub unsafe extern "C" fn dtlv_rti_td_cmp(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_td_cmp_total(
+pub unsafe extern "C" fn dtlv_rti_cmp_total(
     _rt: LocalRtHandle,
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,

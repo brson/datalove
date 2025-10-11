@@ -23,7 +23,7 @@ fn test_eq_unique_f32_equals() -> AnyResult<()> {
     let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_td_eq_unique(
+        datalove_rt::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.value,
             inst_a.tydesc,
@@ -46,7 +46,7 @@ fn test_eq_unique_u32_equals() -> AnyResult<()> {
     let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_td_eq_unique(
+        datalove_rt::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.value,
             inst_a.tydesc,
@@ -69,7 +69,7 @@ fn test_eq_unique_tuple_equals() -> AnyResult<()> {
     let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_td_eq_unique(
+        datalove_rt::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.value,
             inst_a.tydesc,
@@ -92,7 +92,7 @@ fn test_eq_unique_tuple_not_equals() -> AnyResult<()> {
     let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_td_eq_unique(
+        datalove_rt::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.value,
             inst_a.tydesc,
