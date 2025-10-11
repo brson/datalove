@@ -1252,11 +1252,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Requires parser support for list type hint syntax
     fn test_instantiate_empty_list() -> AnyResult<()> {
         let db = Database::default();
         // Empty lists need type hint.
-        let typechecked = compile(&db, ": @list [@u32] / @[]")?;
+        let typechecked = compile(&db, ": @[@u32] / @[]")?;
         let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
