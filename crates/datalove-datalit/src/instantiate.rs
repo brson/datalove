@@ -129,6 +129,8 @@ impl<'db> TyDescTable<'db> {
             }
             Type::AnonTuple(t) => self.create_tuple_tydesc(&t.fields(self.db)),
             Type::NamedTuple(t) => self.create_tuple_tydesc(&t.fields(self.db)),
+            Type::AnonStruct(s) => self.create_struct_tydesc(&s.fields(self.db)),
+            Type::NamedStruct(s) => self.create_struct_tydesc(&s.fields(self.db)),
             _ => unimplemented!("TyDesc creation for composite types"),
         }
     }
@@ -187,6 +189,73 @@ impl<'db> TyDescTable<'db> {
             align: layout.align,
             type_info: rtdt::TyInfo {
                 tuple: rtdt::TyInfoTuple {
+                    num_fields: fields.len() as u32,
+                    fields: fields_ptr,
+                },
+            },
+        })
+    }
+
+    /// Create TyDesc for struct (anon or named).
+    fn create_struct_tydesc(&mut self, fields: &[TypeNamedField<'db>]) -> Box<rtdt::TyDesc> {
+        // Recursively create TyDescs for field types.
+        let mut field_tydescs = Vec::new();
+        for field in fields {
+            let field_ty = field.ty(self.db);
+            let field_tydesc = self.get_or_create(field_ty.ty(self.db));
+            field_tydescs.push(field_tydesc);
+        }
+
+        // Create temporary field info array with placeholder offsets.
+        let mut temp_field_info = Vec::new();
+        for (i, field) in fields.iter().enumerate() {
+            let field_name = field.name(self.db).as_str(self.db);
+            temp_field_info.push(rtdt::TyInfoStructField {
+                name: field_name.as_ptr(),
+                name_len: field_name.len() as u32,
+                offset: 0,
+                tydesc: field_tydescs[i],
+            });
+        }
+
+        // Compute layout using struct layout function.
+        let layout = unsafe {
+            let temp_tydesc = rtdt::TyDesc {
+                type_tag: rtdt::TyTag::Struct,
+                size: 0,
+                align: 1,
+                type_info: rtdt::TyInfo {
+                    struct_: rtdt::TyInfoStruct {
+                        num_fields: fields.len() as u32,
+                        fields: temp_field_info.as_ptr(),
+                    },
+                },
+            };
+            rtdt::layout::compute_struct_layout(&temp_tydesc)
+        };
+
+        // Create final field info array with computed offsets.
+        let mut field_info = Vec::new();
+        for (i, field) in fields.iter().enumerate() {
+            let field_name = field.name(self.db).as_str(self.db);
+            field_info.push(rtdt::TyInfoStructField {
+                name: field_name.as_ptr(),
+                name_len: field_name.len() as u32,
+                offset: layout.field_offsets[i],
+                tydesc: field_tydescs[i],
+            });
+        }
+
+        // Store field array and get stable pointer.
+        self.struct_fields.push(field_info);
+        let fields_ptr = self.struct_fields.last().unwrap().as_ptr();
+
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Struct,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo {
+                struct_: rtdt::TyInfoStruct {
                     num_fields: fields.len() as u32,
                     fields: fields_ptr,
                 },
@@ -376,6 +445,19 @@ fn instantiate_expr<'db>(
             let tuple_tydesc = tydesc_table.get_or_create(ty);
             instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_arena, tuple_tydesc)
         }
+        (Expr::AnonStruct(struct_expr), Type::AnonStruct(struct_ty)) => {
+            let struct_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_struct(db, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, value_arena, struct_tydesc)
+        }
+        (Expr::AnonStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
+            // Anon struct can be coerced to named struct.
+            let struct_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_struct(db, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, value_arena, struct_tydesc)
+        }
+        (Expr::NamedStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
+            let struct_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_struct(db, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, value_arena, struct_tydesc)
+        }
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
@@ -411,6 +493,53 @@ fn instantiate_tuple<'db>(
     }
 
     Ok(tuple_ptr as *const u8)
+}
+
+/// Instantiate a struct value.
+fn instantiate_struct<'db>(
+    db: &'db dyn crate::Db,
+    expr_fields: &[ExprStructField<'db>],
+    type_fields: &[TypeNamedField<'db>],
+    tydesc_table: &mut TyDescTable<'db>,
+    value_arena: &mut ValueArena,
+    struct_tydesc: *const rtdt::TyDesc,
+) -> AnyResult<*const u8> {
+    // Use the provided struct tydesc and compute layout.
+    let layout = unsafe { rtdt::layout::compute_struct_layout(struct_tydesc) };
+
+    // Allocate space for struct.
+    let struct_ptr = value_arena.alloc(layout.size as usize, layout.align as usize);
+
+    // Create a map of field names to expr values for lookup.
+    let mut field_map: std::collections::HashMap<&str, ExprFull<'db>> = std::collections::HashMap::new();
+    for expr_field in expr_fields {
+        let name = expr_field.name(db).as_str(db);
+        field_map.insert(name, expr_field.value(db));
+    }
+
+    // Instantiate and write each field according to the type's field order.
+    for (i, type_field) in type_fields.iter().enumerate() {
+        let field_name = type_field.name(db).as_str(db);
+        let field_ty = type_field.ty(db);
+
+        // Find the corresponding expression field.
+        let field_expr = field_map.get(field_name)
+            .ok_or_else(|| anyhow!("Missing field: {}", field_name))?;
+
+        let field_value = instantiate_expr(db, *field_expr, field_ty.ty(db), tydesc_table, value_arena)?;
+        let field_offset = layout.field_offsets[i];
+        let field_size = unsafe { (*tydesc_table.get_or_create(field_ty.ty(db))).size };
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                field_value,
+                struct_ptr.add(field_offset as usize),
+                field_size as usize,
+            );
+        }
+    }
+
+    Ok(struct_ptr as *const u8)
 }
 
 /// Instantiate a value from a typechecked AST.
@@ -665,5 +794,80 @@ mod tests {
 
         assert_eq!(ptr2 as usize % 4, 0);
         assert_eq!(ptr4 as usize % 8, 0);
+    }
+
+    #[test]
+    fn test_instantiate_anon_struct() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, "@{x = @1, y = @2}")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
+            let struct_info = &(*inst.tydesc).type_info.struct_;
+            assert_eq!(struct_info.num_fields, 2);
+
+            let fields = std::slice::from_raw_parts(struct_info.fields, 2);
+
+            // Check field names.
+            let field0_name = std::slice::from_raw_parts(fields[0].name, fields[0].name_len as usize);
+            assert_eq!(field0_name, b"x");
+
+            let field1_name = std::slice::from_raw_parts(fields[1].name, fields[1].name_len as usize);
+            assert_eq!(field1_name, b"y");
+
+            // Check field values.
+            let x_value = *(inst.value.add(fields[0].offset as usize) as *const u32);
+            assert_eq!(x_value, 1);
+
+            let y_value = *(inst.value.add(fields[1].offset as usize) as *const u32);
+            assert_eq!(y_value, 2);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_named_struct() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @struct Point {x = @10, y = @20}")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
+            let struct_info = &(*inst.tydesc).type_info.struct_;
+            assert_eq!(struct_info.num_fields, 2);
+
+            let fields = std::slice::from_raw_parts(struct_info.fields, 2);
+
+            // Check field values.
+            let x_value = *(inst.value.add(fields[0].offset as usize) as *const u32);
+            assert_eq!(x_value, 10);
+
+            let y_value = *(inst.value.add(fields[1].offset as usize) as *const u32);
+            assert_eq!(y_value, 20);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_anon_to_named_struct() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @{x = @5, y = @15}")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
+            let struct_info = &(*inst.tydesc).type_info.struct_;
+            assert_eq!(struct_info.num_fields, 2);
+
+            let fields = std::slice::from_raw_parts(struct_info.fields, 2);
+
+            let x_value = *(inst.value.add(fields[0].offset as usize) as *const u32);
+            assert_eq!(x_value, 5);
+
+            let y_value = *(inst.value.add(fields[1].offset as usize) as *const u32);
+            assert_eq!(y_value, 15);
+        }
+        Ok(())
     }
 }
