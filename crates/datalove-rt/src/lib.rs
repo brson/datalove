@@ -9,6 +9,8 @@ use rmx::prelude::*;
 
 pub use datalove_rtdt as rtdt;
 
+mod cmp;
+
 /// A runtime handle. Needed for all calls.
 ///
 /// This is the only native type used in the ABI directly;
@@ -69,7 +71,9 @@ pub unsafe extern "C" fn dtlv_rti_td_eq(
     tydesc_a: *const rtdt::TyDesc,
     tydesc_b: *const rtdt::TyDesc,
 ) -> RtEq {
-    todo!()
+    unsafe {
+        cmp::eq(rt, tydesc_a, tydesc_b)
+    }
 }
 
 #[repr(u8)]
@@ -86,7 +90,9 @@ pub unsafe extern "C" fn dtlv_rti_td_cmp(
     tydesc_a: *const rtdt::TyDesc,
     tydesc_b: *const rtdt::TyDesc,
 ) -> RtOrdering {
-    todo!()
+    unsafe {
+        cmp::cmp(rt, tydesc_a, tydesc_b)
+    }
 }
 
 
