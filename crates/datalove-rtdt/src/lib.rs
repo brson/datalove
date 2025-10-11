@@ -373,6 +373,16 @@ pub struct ByValArg {
 
 /// Simple runtime argument ABI.
 ///
+/// We'll always pass a type descriptor even though it won't always be needed.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ByRefArg {
+    pub value: *const u8, // type aligned
+    pub tydesc: *const TyDesc,
+}
+
+/// Simple runtime argument ABI.
+///
 /// We'll pass return values like arguments for now.
 #[repr(C)]
 #[derive(Copy, Clone)]
