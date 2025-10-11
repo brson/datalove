@@ -132,6 +132,43 @@ pub enum SetNodeTag {
     Leaf = 2,
 }
 
+/// Computed layout information for a Map internal node.
+pub struct MapNodeInternalLayout {
+    pub size: u32,
+    pub align: u32,
+    pub num_keys_offset: u32,
+    pub keys_offset: u32,
+    pub child_ptrs_offset: u32,
+}
+
+/// Computed layout information for a Map leaf node.
+pub struct MapNodeLeafLayout {
+    pub size: u32,
+    pub align: u32,
+    pub num_keys_offset: u32,
+    pub next_leaf_offset: u32,
+    pub keys_offset: u32,
+    pub values_offset: u32,
+}
+
+/// Computed layout information for a Set internal node.
+pub struct SetNodeInternalLayout {
+    pub size: u32,
+    pub align: u32,
+    pub num_keys_offset: u32,
+    pub keys_offset: u32,
+    pub child_ptrs_offset: u32,
+}
+
+/// Computed layout information for a Set leaf node.
+pub struct SetNodeLeafLayout {
+    pub size: u32,
+    pub align: u32,
+    pub num_keys_offset: u32,
+    pub next_leaf_offset: u32,
+    pub keys_offset: u32,
+}
+
 
 
 
@@ -199,42 +236,6 @@ pub struct Error {
     pub tydesc: *const TyDesc,
 }
 
-/// Computed layout information for a Map internal node.
-pub struct MapNodeInternalLayout {
-    pub size: u32,
-    pub align: u32,
-    pub num_keys_offset: u32,
-    pub keys_offset: u32,
-    pub child_ptrs_offset: u32,
-}
-
-/// Computed layout information for a Map leaf node.
-pub struct MapNodeLeafLayout {
-    pub size: u32,
-    pub align: u32,
-    pub num_keys_offset: u32,
-    pub next_leaf_offset: u32,
-    pub keys_offset: u32,
-    pub values_offset: u32,
-}
-
-/// Computed layout information for a Set internal node.
-pub struct SetNodeInternalLayout {
-    pub size: u32,
-    pub align: u32,
-    pub num_keys_offset: u32,
-    pub keys_offset: u32,
-    pub child_ptrs_offset: u32,
-}
-
-/// Computed layout information for a Set leaf node.
-pub struct SetNodeLeafLayout {
-    pub size: u32,
-    pub align: u32,
-    pub num_keys_offset: u32,
-    pub next_leaf_offset: u32,
-    pub keys_offset: u32,
-}
 
 
 
