@@ -265,6 +265,60 @@ fn instantiate_expr<'db>(
             unsafe { *ptr = value };
             Ok(ptr as *const u8)
         }
+        (Expr::Int(int_expr), Type::Int) => {
+            let value_str = int_expr.value(db).as_str(db);
+
+            // Parse as i128 for now (limited bigint support).
+            let value: i128 = value_str.parse()?;
+
+            // Convert to limbs (u32 chunks).
+            let abs_value = value.unsigned_abs();
+            let is_negative = value < 0;
+
+            // Calculate number of limbs needed.
+            let mut limbs = Vec::new();
+            let mut remaining = abs_value;
+            while remaining > 0 {
+                limbs.push((remaining & 0xFFFFFFFF) as u32);
+                remaining >>= 32;
+            }
+
+            // Handle zero case.
+            if limbs.is_empty() {
+                limbs.push(0);
+            }
+
+            // Allocate space for limbs.
+            let limbs_size = limbs.len() * std::mem::size_of::<u32>();
+            let limbs_ptr = if limbs_size > 0 {
+                let ptr = value_arena.alloc(limbs_size, 4) as *mut u32;
+                unsafe {
+                    for (i, &limb) in limbs.iter().enumerate() {
+                        *ptr.add(i) = limb;
+                    }
+                }
+                ptr as *const u32
+            } else {
+                std::ptr::null()
+            };
+
+            // Allocate space for rtdt::Int struct.
+            let int_size = std::mem::size_of::<rtdt::Int>();
+            let int_align = std::mem::align_of::<rtdt::Int>();
+            let int_ptr = value_arena.alloc(int_size, int_align) as *mut rtdt::Int;
+
+            unsafe {
+                (*int_ptr).data = limbs_ptr;
+                (*int_ptr).size_and_sign = if is_negative {
+                    -(limbs.len() as i32)
+                } else {
+                    limbs.len() as i32
+                };
+                (*int_ptr).capacity = limbs.len() as u32;
+            }
+
+            Ok(int_ptr as *const u8)
+        }
         (Expr::Float(float_expr), Type::F32) => {
             let value_str = float_expr.value(db).as_str(db);
             let value: f32 = value_str.parse()?;
@@ -315,6 +369,10 @@ fn instantiate_expr<'db>(
             Ok(string_ptr as *const u8)
         }
         (Expr::AnonTuple(tuple_expr), Type::AnonTuple(tuple_ty)) => {
+            let tuple_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_arena, tuple_tydesc)
+        }
+        (Expr::NamedTuple(tuple_expr), Type::NamedTuple(tuple_ty)) => {
             let tuple_tydesc = tydesc_table.get_or_create(ty);
             instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_arena, tuple_tydesc)
         }
@@ -499,6 +557,84 @@ mod tests {
 
             let u32_value = *(inst.value.add(fields[1].offset as usize) as *const u32);
             assert_eq!(u32_value, 42);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_named_tuple() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @tuple Point(@u32, @u32) / @tuple Point(@1, @2)")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
+            let tuple_info = &(*inst.tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+
+            let fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let u32_value_1 = *(inst.value.add(fields[0].offset as usize) as *const u32);
+            assert_eq!(u32_value_1, 1);
+
+            let u32_value_2 = *(inst.value.add(fields[1].offset as usize) as *const u32);
+            assert_eq!(u32_value_2, 2);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_int_small() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @int / @42")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
+            let int = &*(inst.value as *const rtdt::Int);
+            assert_eq!(int.size_and_sign, 1);
+            assert_eq!(int.capacity, 1);
+            let limbs = std::slice::from_raw_parts(int.data, 1);
+            assert_eq!(limbs[0], 42);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_int_zero() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @int / @0")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
+            let int = &*(inst.value as *const rtdt::Int);
+            assert_eq!(int.size_and_sign, 1);
+            assert_eq!(int.capacity, 1);
+            let limbs = std::slice::from_raw_parts(int.data, 1);
+            assert_eq!(limbs[0], 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_int_large() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @int / @1234567890123456789")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
+            let int = &*(inst.value as *const rtdt::Int);
+            assert!(int.size_and_sign > 0);
+            let num_limbs = int.size_and_sign as usize;
+            let limbs = std::slice::from_raw_parts(int.data, num_limbs);
+
+            // Reconstruct the value to verify.
+            let mut reconstructed: u64 = 0;
+            for (i, &limb) in limbs.iter().enumerate() {
+                reconstructed |= (limb as u64) << (32 * i);
+            }
+            assert_eq!(reconstructed, 1234567890123456789);
         }
         Ok(())
     }
