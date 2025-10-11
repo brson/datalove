@@ -232,6 +232,7 @@ pub struct ResultLayout {
 
 #[repr(C)]
 pub struct Error {
+    // Encoding tbd.
     pub data: usize,
     pub tydesc: *const TyDesc,
 }
