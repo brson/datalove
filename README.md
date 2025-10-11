@@ -82,3 +82,15 @@ Floats use the typical ordering, like Rust's `total_cmp`:
 Equality, less than, greater than, etc. behave
 the standard way wrt float zeros and NaNs.
 
+
+## Roadmap
+
+- datalit - get this fairly polished before moving on
+  - `datalove lit-tycheck` - run the type checker and report
+  - `datalove lit-pretty` - pritty printer
+  - `datalove lit-op` - run built-in operations
+    > e.g. `datalove lit-op <expr1> eq <expr2>`
+  - tables proof of concept
+- datafun - the pure-data language
+  - repl - this will be the primary driver of development soon
+  - modules and standard library
