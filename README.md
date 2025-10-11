@@ -73,13 +73,26 @@ any type (an existential type).
 ### Floats and total ordering
 
 There are two flavors of equality and comparison &mdash;
-one mostly by procedural and logical program code,
+one mostly used by procedural and logical program code,
 and one mostly used by containers.
 The only difference is the treatment of floats.
+Floats always have an order, but not always a total order:
+*NaNs are always comparable and always have a total order*
 
 - `eq` - NaN != NaN; +0.0 == -0.0
-- `cmp` - NaN != NaN; +0.0 == -0.0
+- `cmp` - **NaN uses IEEE total order**; +0.0 == -0.0
+  - This formulation appears to be novel,
+    but I think it will behave well,
+    footguns are not as severe as might be imagined.
 - `eq_unique` - All float bit patterns are distinct.
   This is likely only needed for hashing.
-- `cmp_total` - IEEE total order for floats.
+- `cmp_total` - IEEE total order.
   Needed for B-tree maps.
+
+Float ordering for `cmp`:
+
+> -NaN < -Infinity < -numbers < -0.0 == +0.0 < +numbers < +Infinity < +NaN
+
+Float ordering for `cmp_total`:
+
+> -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
