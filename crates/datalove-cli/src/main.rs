@@ -170,14 +170,18 @@ impl LitOpCommand {
         let source2 = Source::new(&db, self.expr2.S());
         let expr2 = datalit::parser::parse(&db, source2);
 
+        // todo start runtime with dtlv_rti_init.
+        // todo (defer) end runtime with dtlv_rti_shutdown.
+
         // Execute the operation.
         match self.op.as_str() {
             "eq" => {
-                // Convert to serializable AST and compare.
-                let serde1 = datalit::ast_serde::ExprFull::from_ast(&db, expr1);
-                let serde2 = datalit::ast_serde::ExprFull::from_ast(&db, expr2);
-                let equal = serde1 == serde2;
-                println!("{}", equal);
+                // Should instantiate then call dtlv_rti_eq.
+                todo!();
+            }
+            "cmp" => {
+                // Should instantiate then call dtlv_rti_cmp_total.
+                todo!();
             }
             _ => {
                 bail!("Unknown operation: {}", self.op);

@@ -31,7 +31,7 @@ pub extern "C" fn dtlv_rti_init() -> LocalRtHandle {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_deinit(
+pub unsafe extern "C" fn dtlv_rti_shutdown(
     rt: LocalRtHandle,
 ) -> RtStatus {
     todo!()
