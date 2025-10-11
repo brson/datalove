@@ -11,10 +11,12 @@ pub unsafe fn eq(
     assert!(!(value_a.is_null() || value_b.is_null()));
     assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
 
-    if !eq_tydesc(tydesc_a, tydesc_b) {
-        return crate::RtEq::Error;
+    unsafe {
+        if !eq_tydesc(tydesc_a, tydesc_b) {
+            return crate::RtEq::Error;
+        }
+        todo!()
     }
-    todo!()
 }
 
 pub unsafe fn cmp(
@@ -26,10 +28,12 @@ pub unsafe fn cmp(
     assert!(!(value_a.is_null() || value_b.is_null()));
     assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
 
-    if !eq_tydesc(tydesc_a, tydesc_b) {
-        return crate::RtOrdering::Error;
+    unsafe {
+        if !eq_tydesc(tydesc_a, tydesc_b) {
+            return crate::RtOrdering::Error;
+        }
+        todo!()
     }
-    todo!()
 }
 
 unsafe fn eq_tydesc(
