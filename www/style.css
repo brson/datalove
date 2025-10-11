@@ -116,22 +116,12 @@ body {
 }
 
 .hero-title {
-    font-size: 4rem;
-    font-weight: 800;
+    font-size: 5rem;
+    font-weight: 700;
     line-height: 1.1;
     margin-bottom: var(--spacing-md);
-    display: flex;
-    flex-direction: column;
-}
-
-.hero-title-line {
-    display: block;
-}
-
-.hero-title-emphasis {
     color: var(--burnt-orange);
-    font-size: 5rem;
-    letter-spacing: 0.1em;
+    letter-spacing: -0.02em;
 }
 
 .hero-subtitle {
@@ -472,11 +462,7 @@ code {
 /* Responsive Design */
 @media (max-width: 768px) {
     .hero-title {
-        font-size: 2.5rem;
-    }
-
-    .hero-title-emphasis {
-        font-size: 3rem;
+        font-size: 3.5rem;
     }
 
     .nav-links {
@@ -498,10 +484,6 @@ code {
 
 @media (max-width: 480px) {
     .hero-title {
-        font-size: 2rem;
-    }
-
-    .hero-title-emphasis {
         font-size: 2.5rem;
     }
 
