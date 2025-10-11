@@ -269,12 +269,8 @@ unsafe fn eq_value(
                 match float_policy {
                     FloatEqPolicy::Ieee => {
                         // IEEE equality: NaN != NaN; +0.0 == -0.0
-                        // Special case: treat both zeros as equal.
-                        if a == 0.0 && b == 0.0 {
-                            true
-                        } else {
-                            a == b
-                        }
+                        // Same as Rust.
+                        a == b
                     }
                     FloatEqPolicy::Bitwise => {
                         // Bitwise equality: all float bit patterns are distinct.
@@ -427,32 +423,21 @@ unsafe fn cmp_value(
                     FloatOrdPolicy::Datalove => {
                         // Datalove ordering: NaN total order; +0.0 == -0.0
                         // -NaN < -Infinity < -numbers < -0.0 == +0.0 < +numbers < +Infinity < +NaN
-                        if a.is_nan() && b.is_nan() {
-                            // Both NaN - order by sign bit for deterministic ordering.
-                            let a_bits = a.to_bits();
-                            let b_bits = b.to_bits();
-                            if a_bits < b_bits {
-                                crate::RtOrdering::Less
-                            } else if a_bits > b_bits {
-                                crate::RtOrdering::Greater
-                            } else {
-                                crate::RtOrdering::Equal
+
+                        // Rust's partial_cmp gives us -0.0 ==+.0.0, rejects NaN
+                        match a.partial_cmp(&b) {
+                            Some(std::cmp::Ordering::Less) => crate::RtOrdering::Less,
+                            Some(std::cmp::Ordering::Greater) => crate::RtOrdering::Greater,
+                            Some(std::cmp::Ordering::Equal) => crate::RtOrdering::Equal,
+                            None => {
+                                debug_assert!(a.is_nan() || b.is_nan());
+                                // Rust's total_cmp gives us the correct NaN ordering.
+                                match a.total_cmp(&b) {
+                                    std::cmp::Ordering::Less => crate::RtOrdering::Less,
+                                    std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
+                                    std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
+                                }
                             }
-                        } else if a.is_nan() {
-                            // NaN is greater than non-NaN.
-                            crate::RtOrdering::Greater
-                        } else if b.is_nan() {
-                            // Non-NaN is less than NaN.
-                            crate::RtOrdering::Less
-                        } else if a == 0.0 && b == 0.0 {
-                            // Both zeros - consider equal regardless of sign.
-                            crate::RtOrdering::Equal
-                        } else if a < b {
-                            crate::RtOrdering::Less
-                        } else if a > b {
-                            crate::RtOrdering::Greater
-                        } else {
-                            crate::RtOrdering::Equal
                         }
                     }
                     FloatOrdPolicy::Total => {
