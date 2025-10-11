@@ -10,6 +10,7 @@ rmx.workspace = true
 bct.workspace = true
 datalove.path = "../datalove"
 datalove-datalit.path = "../datalove-datalit"
+datalove-rt.path = "../datalove-rt"
 
 [[bin]]
 name = "datalove"

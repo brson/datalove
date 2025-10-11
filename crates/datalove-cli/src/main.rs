@@ -170,18 +170,71 @@ impl LitOpCommand {
         let source2 = Source::new(&db, self.expr2.S());
         let expr2 = datalit::parser::parse(&db, source2);
 
-        // todo start runtime with dtlv_rti_init.
-        // todo (defer) end runtime with dtlv_rti_shutdown.
+        // Resolve and type check.
+        let resolved1 = datalit::resolve::resolve_names(&db, expr1);
+        let typechecked1 = datalit::tycheck::type_check(&db, expr1, resolved1);
+
+        let resolved2 = datalit::resolve::resolve_names(&db, expr2);
+        let typechecked2 = datalit::tycheck::type_check(&db, expr2, resolved2);
+
+        // Check for type errors.
+        if !typechecked1.errors(&db).is_empty() {
+            let errors: Vec<_> = typechecked1.errors(&db)
+                .iter()
+                .map(|e| e.error(&db))
+                .collect();
+            bail!("Type errors in first expression: {:?}", errors);
+        }
+        if !typechecked2.errors(&db).is_empty() {
+            let errors: Vec<_> = typechecked2.errors(&db)
+                .iter()
+                .map(|e| e.error(&db))
+                .collect();
+            bail!("Type errors in second expression: {:?}", errors);
+        }
+
+        // Instantiate values.
+        let (tydesc_table1, value_heap1, inst1) = datalit::instantiate::instantiate_value(&db, typechecked1)?;
+        let (tydesc_table2, value_heap2, inst2) = datalit::instantiate::instantiate_value(&db, typechecked2)?;
 
         // Execute the operation.
         match self.op.as_str() {
             "eq" => {
-                // Should instantiate then call dtlv_rti_eq.
-                todo!();
+                // Call dtlv_rti_eq.
+                let result = unsafe {
+                    datalove_rt::dtlv_rti_eq(
+                        std::ptr::null_mut(), // runtime handle not needed
+                        inst1.value,
+                        inst1.tydesc,
+                        inst2.value,
+                        inst2.tydesc,
+                    )
+                };
+
+                match result {
+                    datalove_rt::RtEq::Equals => println!("true"),
+                    datalove_rt::RtEq::NotEquals => println!("false"),
+                    datalove_rt::RtEq::Error => bail!("Type mismatch in equality comparison"),
+                }
             }
             "cmp" => {
-                // Should instantiate then call dtlv_rti_cmp_total.
-                todo!();
+                // Call dtlv_rti_cmp_total.
+                let result = unsafe {
+                    datalove_rt::dtlv_rti_cmp_total(
+                        std::ptr::null_mut(), // runtime handle not needed
+                        inst1.value,
+                        inst1.tydesc,
+                        inst2.value,
+                        inst2.tydesc,
+                    )
+                };
+
+                match result {
+                    datalove_rt::RtOrdering::Less => println!("less"),
+                    datalove_rt::RtOrdering::Equal => println!("equal"),
+                    datalove_rt::RtOrdering::Greater => println!("greater"),
+                    datalove_rt::RtOrdering::Error => bail!("Type mismatch in comparison"),
+                }
             }
             _ => {
                 bail!("Unknown operation: {}", self.op);
