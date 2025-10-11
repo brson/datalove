@@ -115,7 +115,6 @@ pub enum RtOrdering {
 /// Establish ordering using Datalove ordering.
 ///
 /// This is probably not actually useful. Just experimenting.
-///
 /// NaN's have total order; float zeros are equal.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_cmp(
