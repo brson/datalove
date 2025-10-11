@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>datalove - data|is·my·love|language</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <div class="nav-logo">datalove</div>
+            <ul class="nav-links">
+                <li><a href="#features">Features</a></li>
+                <li><a href="#components">Components</a></li>
+                <li><a href="#examples">Examples</a></li>
+                <li><a href="#get-started">Get Started</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                <span class="hero-title-line">data</span>
+                <span class="hero-title-line hero-title-emphasis">is·my·love</span>
+                <span class="hero-title-line">language</span>
+            </h1>
+            <p class="hero-subtitle">An expressive scripting language for efficient data modeling and transformation, with a batteries included standard library.</p>
+            <div class="hero-cta">
+                <a href="#get-started" class="btn btn-primary">Get Started</a>
+                <a href="https://github.com/yourusername/datalove" class="btn btn-secondary">View on GitHub</a>
+            </div>
+        </div>
+        <div class="hero-graphic">
+            <div class="geometric-shape shape-1"></div>
+            <div class="geometric-shape shape-2"></div>
+            <div class="geometric-shape shape-3"></div>
+        </div>
+    </header>
+
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">Why datalove?</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Statically Typed</h3>
+                    <p>Ergonomic coercions and runtime introspection for confident coding.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <h3>Fast Incremental</h3>
+                    <p>In-place updates and REPL-first design for rapid development.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">✨</div>
+                    <h3>First Class Types</h3>
+                    <p>Built-in option and result types for robust error handling.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="components" class="components">
+        <div class="container">
+            <h2 class="section-title">Three Flavors, One Language</h2>
+            <div class="components-layout">
+                <div class="component-block block-literals">
+                    <div class="component-header">
+                        <h3>Datalove Literals</h3>
+                        <span class="component-ext">.dle</span>
+                    </div>
+                    <p>For storage and transmission of structured and optionally typed data. Like JSON, but better. All plain old data without cycles.</p>
+                </div>
+
+                <div class="component-block block-modules">
+                    <div class="component-header">
+                        <h3>Datalove Modules</h3>
+                        <span class="component-ext">.dlm</span>
+                    </div>
+                    <p>A strict superset of Datalove Literals for modular code organization.</p>
+                </div>
+
+                <div class="component-block block-script">
+                    <div class="component-header">
+                        <h3>Datalove Script</h3>
+                        <span class="component-ext">.dls</span>
+                    </div>
+                    <p>The full scripting language. Dynamically interpreted or compiled. Strong typing with lightweight coercions. Task-oriented, non-async, with local heaps.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="examples" class="examples">
+        <div class="container">
+            <h2 class="section-title">See It In Action</h2>
+            <div class="example-block">
+                <h4>Data Expressions</h4>
+                <pre><code>{
+  name: "datalove",
+  version: "0.1.0",
+  features: ["fast", "expressive", "typed"],
+  metadata: {
+    author: "You",
+    license: "MIT"
+  }
+}</code></pre>
+            </div>
+            <div class="example-block">
+                <h4>Type-Safe Scripting</h4>
+                <pre><code>let data = load("config.dle");
+let result = transform(data)
+  |> validate()
+  |> process();
+
+match result {
+  Ok(value) => print("Success: {value}"),
+  Err(e) => print("Error: {e}")
+}</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <section id="get-started" class="get-started">
+        <div class="container">
+            <h2 class="section-title">Get Started</h2>
+            <div class="get-started-content">
+                <div class="install-block">
+                    <h3>Installation</h3>
+                    <pre><code>cargo install datalove</code></pre>
+                </div>
+                <div class="quick-start">
+                    <h3>Quick Start</h3>
+                    <ol>
+                        <li>Create a <code>.dls</code> file</li>
+                        <li>Write your data transformations</li>
+                        <li>Run with <code>datalove run script.dls</code></li>
+                        <li>Or use the REPL: <code>datalove repl</code></li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Built with ❤️ for data lovers everywhere</p>
+            <div class="footer-links">
+                <a href="https://github.com/yourusername/datalove">GitHub</a>
+                <a href="#docs">Documentation</a>
+                <a href="#community">Community</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
