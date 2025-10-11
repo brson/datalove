@@ -26,6 +26,8 @@ struct Cli {
 enum Command {
     /// Run the type checker and report errors.
     LitTycheck(LitTycheckCommand),
+    /// Print the AST of a datalit expression.
+    LitAst(LitAstCommand),
     /// Pretty print a datalit expression.
     LitPretty(LitPrettyCommand),
     /// Run built-in operations on datalit expressions.
@@ -39,6 +41,12 @@ struct Args {
 #[derive(clap::Args)]
 struct LitTycheckCommand {
     /// Path to the .dle file to type check.
+    file_path: PathBuf,
+}
+
+#[derive(clap::Args)]
+struct LitAstCommand {
+    /// Path to the .dle file to print AST for.
     file_path: PathBuf,
 }
 
@@ -62,6 +70,7 @@ impl Cli {
     fn run(&self) -> AnyResult<()> {
         match &self.cmd {
             Command::LitTycheck(cmd) => cmd.run(&self.args),
+            Command::LitAst(cmd) => cmd.run(&self.args),
             Command::LitPretty(cmd) => cmd.run(&self.args),
             Command::LitOp(cmd) => cmd.run(&self.args),
         }
@@ -103,6 +112,28 @@ impl LitTycheckCommand {
     }
 }
 
+impl LitAstCommand {
+    fn run(&self, _args: &Args) -> AnyResult<()> {
+        use datalove_datalit as datalit;
+        use bct::input::Source;
+
+        let db = datalit::Database::default();
+
+        // Read the file.
+        let contents = rmx::std::fs::read_to_string(&self.file_path)?;
+        let source = Source::new(&db, contents.S());
+
+        // Parse the expression.
+        let expr = datalit::parser::parse(&db, source);
+
+        // Convert to serializable AST and print.
+        let serde_ast = datalit::ast_serde::ExprFull::from_ast(&db, expr);
+        println!("{:#?}", serde_ast);
+
+        Ok(())
+    }
+}
+
 impl LitPrettyCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datalit as datalit;
@@ -117,11 +148,12 @@ impl LitPrettyCommand {
         // Parse the expression.
         let expr = datalit::parser::parse(&db, source);
 
-        // Convert to serializable AST and pretty print.
-        let serde_ast = datalit::ast_serde::ExprFull::from_ast(&db, expr);
-        println!("{:#?}", serde_ast);
+        // TODO: Implement pretty printer.
+        // Pretty print using the pretty printer (not yet implemented).
+        // let pretty_printed = datalit::pretty::pretty_print(&db, expr);
+        // println!("{}", pretty_printed);
 
-        Ok(())
+        bail!("Pretty printer not yet implemented. Use 'lit-ast' to view the AST.");
     }
 }
 
