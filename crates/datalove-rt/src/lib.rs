@@ -112,6 +112,11 @@ pub enum RtOrdering {
     Error = 4,
 }
 
+/// Establish ordering using Datalove ordering.
+///
+/// This is probably not actually useful. Just experimenting.
+///
+/// NaN's have total order; float zeros are equal.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_cmp(
     _rt: LocalRtHandle,
@@ -125,6 +130,11 @@ pub unsafe extern "C" fn dtlv_rti_cmp(
     }
 }
 
+/// Establish total ordering.
+///
+/// Floats use the typical ordering, like Rust's `total_cmp`:
+///
+/// > -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_cmp_total(
     _rt: LocalRtHandle,
