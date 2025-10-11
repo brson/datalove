@@ -245,13 +245,11 @@ where I: Iterator<Item = TreeToken<'db>>
     fn parse_type_hint_enum_variant(&mut self) -> ast::TypeHintEnumVariant<'db> {
         let name = self.need_name();
         let payload = if self.peek_sigil(Sigil::ParenOpen) {
-            // Parse (type1, type2, ...) as tuple payload.
-            let fields = self.parse_branch(Sigil::ParenOpen, &|p: &mut DynParser<'db>| {
-                p.parse_comma_separated(|p| p.parse_type_hint_and_heap())
+            // Parse a single type as payload.
+            let payload_type = self.parse_branch(Sigil::ParenOpen, &|p: &mut DynParser<'db>| {
+                p.parse_type_hint_and_heap()
             });
-            let tuple_type = ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields));
-            // Need to wrap in TypeHintAndHeap - use Omitted heap for tuple itself.
-            Some(ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, tuple_type))
+            Some(payload_type)
         } else {
             None
         };
@@ -362,21 +360,20 @@ where I: Iterator<Item = TreeToken<'db>>
                 self.eat_word("enum");
                 // Enum expression syntax:
                 // - enum Variant (anonymous, no payload)
-                // - enum Variant(...) (anonymous, with payload tuple)
+                // - enum Variant(...) (anonymous, with single value payload)
                 // - enum EnumName.Variant (named, with dot separator)
-                // - enum EnumName.Variant(...) (named, with payload tuple)
+                // - enum EnumName.Variant(...) (named, with single value payload)
                 let first_name = self.need_name();
                 if self.peek_sigil(Sigil::Dot) {
                     // Named enum: enum EnumName.Variant [(...)]
                     self.eat_sigil(Sigil::Dot);
                     let variant_name = self.need_name();
                     let payload = if self.peek_sigil(Sigil::ParenOpen) {
-                        // Parse (...) as tuple payload.
-                        let elements = self.parse_branch(Sigil::ParenOpen, &|p: &mut DynParser<'db>| {
-                            p.parse_comma_separated(|p| p.parse_expr_full())
+                        // Parse a single expression as payload.
+                        let payload_expr = self.parse_branch(Sigil::ParenOpen, &|p: &mut DynParser<'db>| {
+                            p.parse_expr_full()
                         });
-                        let tuple_expr = ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements));
-                        Some(ast::ExprFull::new(self.db, None, ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, tuple_expr)))
+                        Some(payload_expr)
                     } else {
                         None
                     };
@@ -390,12 +387,11 @@ where I: Iterator<Item = TreeToken<'db>>
                     // Anonymous enum: enum Variant [(...)]
                     let variant_name = first_name;
                     let payload = if self.peek_sigil(Sigil::ParenOpen) {
-                        // Parse (...) as tuple payload.
-                        let elements = self.parse_branch(Sigil::ParenOpen, &|p: &mut DynParser<'db>| {
-                            p.parse_comma_separated(|p| p.parse_expr_full())
+                        // Parse a single expression as payload.
+                        let payload_expr = self.parse_branch(Sigil::ParenOpen, &|p: &mut DynParser<'db>| {
+                            p.parse_expr_full()
                         });
-                        let tuple_expr = ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements));
-                        Some(ast::ExprFull::new(self.db, None, ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, tuple_expr)))
+                        Some(payload_expr)
                     } else {
                         None
                     };
@@ -682,7 +678,7 @@ impl<'db> DynParser<'db> {
     fn parse_type_hint_enum_variant(&mut self) -> ast::TypeHintEnumVariant<'db> {
         let name = self.need_name();
         let payload = if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.peek() {
-            // Parse (type1, type2, ...) as tuple payload.
+            // Parse a single type as payload.
             self.next(); // Consume the branch.
             let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
             let mut sub_parser = DynParser {
@@ -690,10 +686,8 @@ impl<'db> DynParser<'db> {
                 tokens,
                 pos: 0,
             };
-            let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
-            let tuple_type = ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields));
-            // Need to wrap in TypeHintAndHeap - use Omitted heap for tuple itself.
-            Some(ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, tuple_type))
+            let payload_type = sub_parser.parse_type_hint_and_heap();
+            Some(payload_type)
         } else {
             None
         };
@@ -780,7 +774,7 @@ impl<'db> DynParser<'db> {
             _ => {}
         }
 
-        // Not a keyword, check for numbers or tokens.
+        // Not a keyword, check for numbers, tokens, or branches.
         match self.peek() {
             Some(TreeToken::Token(token)) => {
                 match token.kind(self.db) {
@@ -829,6 +823,42 @@ impl<'db> DynParser<'db> {
                         ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
                     }
                 }
+            }
+            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
+                // Tuple.
+                self.next(); // Consume the branch.
+                let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                let mut sub_parser = DynParser {
+                    db: self.db,
+                    tokens,
+                    pos: 0,
+                };
+                let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements))
+            }
+            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
+                // Struct.
+                self.next(); // Consume the branch.
+                let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                let mut sub_parser = DynParser {
+                    db: self.db,
+                    tokens,
+                    pos: 0,
+                };
+                let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
+                ast::Expr::AnonStruct(ast::ExprAnonStruct::new(self.db, fields))
+            }
+            Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
+                // List.
+                self.next(); // Consume the branch.
+                let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                let mut sub_parser = DynParser {
+                    db: self.db,
+                    tokens,
+                    pos: 0,
+                };
+                let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                ast::Expr::List(ast::ExprList::new(self.db, elements))
             }
             _ => {
                 let message = InternedText::new(self.db, "unexpected tree node in DynParser expression".S());
@@ -1165,13 +1195,19 @@ fn test_parse_enum_variant_with_payload() {
 #[test]
 fn test_parse_enum_variant_with_tuple() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@enum Baz(@true, @1)"));
+    let source = Source::new(db, S("@enum Baz(@(@true, @1))"));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::AnonEnum(e) => {
             assert_eq!(e.variant_name(db).as_str(db), "Baz");
             assert!(e.payload(db).is_some());
+            // Verify the payload is a tuple.
+            let payload = e.payload(db).unwrap();
+            match payload.expr(db).expr(db) {
+                ast::Expr::AnonTuple(t) => assert_eq!(t.elements(db).len(), 2),
+                _ => panic!("expected tuple payload"),
+            }
         }
         _ => panic!("expected anonymous enum"),
     }
@@ -1180,7 +1216,7 @@ fn test_parse_enum_variant_with_tuple() {
 #[test]
 fn test_parse_named_enum_with_dot() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@enum Quux.Bar(@true, @1)"));
+    let source = Source::new(db, S("@enum Quux.Bar(@(@true, @1))"));
     let ast = parse(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
@@ -1188,6 +1224,12 @@ fn test_parse_named_enum_with_dot() {
             assert_eq!(e.enum_name(db).as_str(db), "Quux");
             assert_eq!(e.variant_name(db).as_str(db), "Bar");
             assert!(e.payload(db).is_some());
+            // Verify the payload is a tuple.
+            let payload = e.payload(db).unwrap();
+            match payload.expr(db).expr(db) {
+                ast::Expr::AnonTuple(t) => assert_eq!(t.elements(db).len(), 2),
+                _ => panic!("expected tuple payload"),
+            }
         }
         _ => panic!("expected named enum"),
     }

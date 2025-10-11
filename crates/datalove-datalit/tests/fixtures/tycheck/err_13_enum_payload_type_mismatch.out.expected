@@ -6,23 +6,11 @@
           "payload": {
             "expr": {
               "expr": {
-                "AnonTuple": {
-                  "elements": [
-                    {
-                      "expr": {
-                        "expr": {
-                          "String": {
-                            "value": "\"wrong\""
-                          }
-                        },
-                        "heap": "Local"
-                      },
-                      "type_hint": null
-                    }
-                  ]
+                "String": {
+                  "value": "\"wrong\""
                 }
               },
-              "heap": "Omitted"
+              "heap": "Local"
             },
             "type_hint": null
           },
@@ -40,17 +28,8 @@
             {
               "name": "Ok",
               "payload": {
-                "heap": "Omitted",
-                "type_hint": {
-                  "AnonTuple": {
-                    "fields": [
-                      {
-                        "heap": "Local",
-                        "type_hint": "U32"
-                      }
-                    ]
-                  }
-                }
+                "heap": "Local",
+                "type_hint": "U32"
               }
             }
           ]

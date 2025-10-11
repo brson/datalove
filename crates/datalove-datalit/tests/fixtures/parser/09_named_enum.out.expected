@@ -9,7 +9,7 @@
         "payload": {
           "type_hint": null,
           "expr": {
-            "heap": "Omitted",
+            "heap": "Local",
             "expr": {
               "AnonTuple": {
                 "elements": [

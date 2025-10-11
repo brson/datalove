@@ -8,22 +8,10 @@
         "payload": {
           "type_hint": null,
           "expr": {
-            "heap": "Omitted",
+            "heap": "Local",
             "expr": {
-              "AnonTuple": {
-                "elements": [
-                  {
-                    "type_hint": null,
-                    "expr": {
-                      "heap": "Local",
-                      "expr": {
-                        "Int": {
-                          "value": "42"
-                        }
-                      }
-                    }
-                  }
-                ]
+              "Int": {
+                "value": "42"
               }
             }
           }

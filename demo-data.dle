@@ -99,10 +99,13 @@
 }
 
 ; anonymous enum
+;
+; enums either have a single-value/type payload or no payload.
+; if you want multiple values the payload should be a tuple.
 : @enum {
   Foo,
-  Bar(@u32,
-  Baz(@bool, @u32),
+  Bar(@u32),
+  Baz(@(@bool, @u32)),
 } / @enum Foo
 
 : @enum {
@@ -114,8 +117,8 @@
 } / @enum Bar(: @u32 / 2) ; with type hint in expression
 
 : @enum {
-  Baz(@bool, @u32),
-} / @enum Baz(@true, 1)
+  Baz(@(@bool, @u32)),
+} / @enum Baz(@(@true, 1))
 
 ; named enum
 : @enum Quux {
@@ -124,13 +127,13 @@
 
 ; named enum
 : @enum Quux {
-  Bar(@u32, @bool),
-} / @enum Quux.Bar(1, @true)
+  Bar(@(@u32, @bool)),
+} / @enum Quux.Bar(@(1, @true))
 
 ; this is actually a coercion from anonymous enum (no dot)
 : @enum Quux {
   Bar(@u32),
-} / @enum Bar(@true, 1)
+} / @enum Bar(1)
 
 
 

@@ -6,23 +6,11 @@
           "payload": {
             "expr": {
               "expr": {
-                "AnonTuple": {
-                  "elements": [
-                    {
-                      "expr": {
-                        "expr": {
-                          "Int": {
-                            "value": "42"
-                          }
-                        },
-                        "heap": "Local"
-                      },
-                      "type_hint": null
-                    }
-                  ]
+                "Int": {
+                  "value": "42"
                 }
               },
-              "heap": "Omitted"
+              "heap": "Local"
             },
             "type_hint": null
           },
@@ -39,33 +27,15 @@
             {
               "name": "Ok",
               "payload": {
-                "heap": "Omitted",
-                "type_hint": {
-                  "AnonTuple": {
-                    "fields": [
-                      {
-                        "heap": "Local",
-                        "type_hint": "U32"
-                      }
-                    ]
-                  }
-                }
+                "heap": "Local",
+                "type_hint": "U32"
               }
             },
             {
               "name": "Err",
               "payload": {
-                "heap": "Omitted",
-                "type_hint": {
-                  "AnonTuple": {
-                    "fields": [
-                      {
-                        "heap": "Local",
-                        "type_hint": "String"
-                      }
-                    ]
-                  }
-                }
+                "heap": "Local",
+                "type_hint": "String"
               }
             }
           ]
@@ -80,23 +50,11 @@
     "variants": [
       {
         "name": "Ok",
-        "payload": {
-          "fields": [
-            "@u32"
-          ],
-          "heap": "",
-          "kind": "AnonTuple"
-        }
+        "payload": "@u32"
       },
       {
         "name": "Err",
-        "payload": {
-          "fields": [
-            "@string"
-          ],
-          "heap": "",
-          "kind": "AnonTuple"
-        }
+        "payload": "@string"
       }
     ]
   }
