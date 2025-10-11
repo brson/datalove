@@ -81,5 +81,5 @@ The only difference is the treatment of floats.
 - `cmp` - NaN != NaN; +0.0 == -0.0
 - `eq_unique` - All float bit patterns are distinct.
   This is likely only needed for hashing.
-- `cmp_total` - Total order for floats.
+- `cmp_total` - IEEE total order for floats.
   Needed for B-tree maps.
