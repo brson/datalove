@@ -704,6 +704,7 @@ dependencies = [
 name = "datalove-cli"
 version = "0.1.0"
 dependencies = [
+ "bct",
  "datalove",
  "datalove-datalit",
  "rustmax",
