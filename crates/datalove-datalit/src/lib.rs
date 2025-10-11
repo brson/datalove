@@ -8,6 +8,7 @@ pub mod parser;
 pub mod resolve;
 pub mod tycheck;
 pub mod instantiate;
+pub mod pretty;
 
 pub use datalove_rtdt as rtdt;
 

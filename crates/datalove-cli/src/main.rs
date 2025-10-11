@@ -148,12 +148,11 @@ impl LitPrettyCommand {
         // Parse the expression.
         let expr = datalit::parser::parse(&db, source);
 
-        // TODO: Implement pretty printer.
-        // Pretty print using the pretty printer (not yet implemented).
-        // let pretty_printed = datalit::pretty::pretty_print(&db, expr);
-        // println!("{}", pretty_printed);
+        // Pretty print using the pretty printer.
+        let pretty_printed = datalit::pretty::pretty_print(&db, expr);
+        println!("{}", pretty_printed);
 
-        bail!("Pretty printer not yet implemented. Use 'lit-ast' to view the AST.");
+        Ok(())
     }
 }
 
