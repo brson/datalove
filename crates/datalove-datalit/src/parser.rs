@@ -662,8 +662,49 @@ impl<'db> DynParser<'db> {
             Some("string") => { self.eat_word("string"); ast::TypeHint::String }
             Some("error") => { self.eat_word("error"); ast::TypeHint::Error }
             _ => {
-                let message = InternedText::new(self.db, "unknown type hint in DynParser".S());
-                ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                // Check for branches: parentheses for tuples, brackets for lists, braces for structs.
+                match self.peek() {
+                    Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
+                        // Anonymous tuple.
+                        self.next(); // Consume the branch.
+                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                        let mut sub_parser = DynParser {
+                            db: self.db,
+                            tokens,
+                            pos: 0,
+                        };
+                        let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
+                        ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
+                    }
+                    Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
+                        // List type.
+                        self.next(); // Consume the branch.
+                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                        let mut sub_parser = DynParser {
+                            db: self.db,
+                            tokens,
+                            pos: 0,
+                        };
+                        let element_type = sub_parser.parse_type_hint_and_heap();
+                        ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
+                    }
+                    Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
+                        // Anonymous struct.
+                        self.next(); // Consume the branch.
+                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                        let mut sub_parser = DynParser {
+                            db: self.db,
+                            tokens,
+                            pos: 0,
+                        };
+                        let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                        ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
+                    }
+                    _ => {
+                        let message = InternedText::new(self.db, "unknown type hint in DynParser".S());
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                    }
+                }
             }
         }
     }
@@ -683,10 +724,26 @@ impl<'db> DynParser<'db> {
             let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
             let mut sub_parser = DynParser {
                 db: self.db,
-                tokens,
+                tokens: tokens.clone(),
                 pos: 0,
             };
             let payload_type = sub_parser.parse_type_hint_and_heap();
+
+            // Check for unparsed tokens - this indicates a syntax error.
+            if sub_parser.pos < tokens.len() {
+                // There are extra tokens after the payload type.
+                let message = InternedText::new(
+                    self.db,
+                    "enum variant payload must be a single type (use a tuple for multiple values)".S()
+                );
+                let error_type = ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message));
+                return ast::TypeHintEnumVariant::new(
+                    self.db,
+                    name,
+                    Some(ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_type))
+                );
+            }
+
             Some(payload_type)
         } else {
             None
@@ -1232,5 +1289,35 @@ fn test_parse_named_enum_with_dot() {
             }
         }
         _ => panic!("expected named enum"),
+    }
+}
+
+#[test]
+fn test_parse_enum_variant_with_extra_tokens_error() {
+    let ref db = crate::Database::default();
+    // This should error: Ok(@u32, @string) - multiple types without explicit tuple.
+    let source = Source::new(db, S(": @enum { Ok(@u32, @string) } / @enum Ok(@1)"));
+    let ast = parse(db, source);
+    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
+    match type_hint {
+        ast::TypeHint::AnonEnum(e) => {
+            let variants = e.variants(db);
+            assert_eq!(variants.len(), 1);
+            let variant = &variants[0];
+            assert_eq!(variant.name(db).as_str(db), "Ok");
+            // Check that the payload contains a parse error.
+            match variant.payload(db) {
+                Some(payload_type) => {
+                    match payload_type.type_hint(db) {
+                        ast::TypeHint::ParseError(_) => {
+                            // Expected! This is the parse error for extra tokens.
+                        }
+                        _ => panic!("expected parse error for extra tokens in enum variant payload"),
+                    }
+                }
+                None => panic!("expected payload with parse error"),
+            }
+        }
+        _ => panic!("expected anonymous enum type hint"),
     }
 }
