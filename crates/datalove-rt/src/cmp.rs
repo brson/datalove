@@ -14,9 +14,9 @@ enum FloatEqPolicy {
 /// Float ordering policy for comparison operations.
 #[derive(Copy, Clone)]
 enum FloatOrdPolicy {
-    /// Novel ordering: NaN total order with zero coalescing.
+    /// Datalove ordering: NaN total order with zero coalescing.
     /// -NaN < -Infinity < -numbers < -0.0 == +0.0 < +numbers < +Infinity < +NaN
-    Novel,
+    Datalove,
     /// IEEE 754-2008 total order: distinguishes -0.0 from +0.0.
     /// -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
     Total,
@@ -77,7 +77,7 @@ pub unsafe fn cmp(
         if !eq_tydesc(tydesc_a, tydesc_b) {
             return crate::RtOrdering::Error;
         }
-        cmp_value(value_a, value_b, tydesc_a, FloatOrdPolicy::Novel)
+        cmp_value(value_a, value_b, tydesc_a, FloatOrdPolicy::Datalove)
     }
 }
 
@@ -424,8 +424,8 @@ unsafe fn cmp_value(
                 let a = *(value_a as *const f32);
                 let b = *(value_b as *const f32);
                 match float_policy {
-                    FloatOrdPolicy::Novel => {
-                        // Novel ordering: NaN total order; +0.0 == -0.0
+                    FloatOrdPolicy::Datalove => {
+                        // Datalove ordering: NaN total order; +0.0 == -0.0
                         // -NaN < -Infinity < -numbers < -0.0 == +0.0 < +numbers < +Infinity < +NaN
                         if a.is_nan() && b.is_nan() {
                             // Both NaN - order by sign bit for deterministic ordering.
