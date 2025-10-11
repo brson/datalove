@@ -57,6 +57,22 @@ pub unsafe extern "C" fn dtlv_rti_mem_free(
 }
 
 #[repr(u8)]
+pub enum RtEq {
+    Equals = 1,
+    NotEquals = 2,
+    Error = 3,
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_td_eq(
+    rt: LocalRtHandle,
+    tydesc_a: *const rtdt::TyDesc,
+    tydesc_b: *const rtdt::TyDesc,
+) -> RtEq {
+    todo!()
+}
+
+#[repr(u8)]
 pub enum RtOrdering {
     Less = 1,
     Equal = 2,
