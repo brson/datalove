@@ -66,6 +66,9 @@ pub enum RtEq {
     Error = 3,
 }
 
+/// Standard equality.
+///
+/// Floats have weird cases.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_eq(
     _rt: LocalRtHandle,
@@ -82,6 +85,11 @@ pub unsafe extern "C" fn dtlv_rti_eq(
     }
 }
 
+/// Equality where each value has a single representation.
+///
+/// Floats are compared bitwise.
+/// This is primarily useful for keying hash tables.
+/// Not yet clear whether Datalove wants this.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_eq_unique(
     _rt: LocalRtHandle,
