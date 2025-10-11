@@ -2,6 +2,26 @@ use rmx::prelude::*;
 
 use datalove_rtdt as rtdt;
 
+/// Float equality policy for comparison operations.
+#[derive(Copy, Clone)]
+enum FloatEqPolicy {
+    /// IEEE equality with zero coalescing: NaN != NaN; +0.0 == -0.0.
+    Ieee,
+    /// Bitwise equality: all bit patterns distinct.
+    Bitwise,
+}
+
+/// Float ordering policy for comparison operations.
+#[derive(Copy, Clone)]
+enum FloatOrdPolicy {
+    /// Novel ordering: NaN total order with zero coalescing.
+    /// -NaN < -Infinity < -numbers < -0.0 == +0.0 < +numbers < +Infinity < +NaN
+    Novel,
+    /// IEEE 754-2008 total order: distinguishes -0.0 from +0.0.
+    /// -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
+    Total,
+}
+
 pub unsafe fn eq(
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -15,7 +35,7 @@ pub unsafe fn eq(
         if !eq_tydesc(tydesc_a, tydesc_b) {
             return crate::RtEq::Error;
         }
-        if eq_value(value_a, value_b, tydesc_a) {
+        if eq_value(value_a, value_b, tydesc_a, FloatEqPolicy::Ieee) {
             crate::RtEq::Equals
         } else {
             crate::RtEq::NotEquals
@@ -36,7 +56,7 @@ pub unsafe fn eq_unique(
         if !eq_tydesc(tydesc_a, tydesc_b) {
             return crate::RtEq::Error;
         }
-        if eq_unique_value(value_a, value_b, tydesc_a) {
+        if eq_value(value_a, value_b, tydesc_a, FloatEqPolicy::Bitwise) {
             crate::RtEq::Equals
         } else {
             crate::RtEq::NotEquals
@@ -57,7 +77,7 @@ pub unsafe fn cmp(
         if !eq_tydesc(tydesc_a, tydesc_b) {
             return crate::RtOrdering::Error;
         }
-        cmp_value(value_a, value_b, tydesc_a)
+        cmp_value(value_a, value_b, tydesc_a, FloatOrdPolicy::Novel)
     }
 }
 
@@ -74,7 +94,7 @@ pub unsafe fn cmp_total(
         if !eq_tydesc(tydesc_a, tydesc_b) {
             return crate::RtOrdering::Error;
         }
-        cmp_total_value(value_a, value_b, tydesc_a)
+        cmp_value(value_a, value_b, tydesc_a, FloatOrdPolicy::Total)
     }
 }
 
@@ -227,6 +247,7 @@ unsafe fn eq_value(
     value_a: *const u8,
     value_b: *const u8,
     tydesc: *const rtdt::TyDesc,
+    float_policy: FloatEqPolicy,
 ) -> bool {
     unsafe {
         let td = &*tydesc;
@@ -245,19 +266,27 @@ unsafe fn eq_value(
             rtdt::TyTag::F32 => {
                 let a = *(value_a as *const f32);
                 let b = *(value_b as *const f32);
-                // IEEE equality: NaN != NaN; +0.0 == -0.0
-                // Special case: treat both zeros as equal.
-                if a == 0.0 && b == 0.0 {
-                    true
-                } else {
-                    a == b
+                match float_policy {
+                    FloatEqPolicy::Ieee => {
+                        // IEEE equality: NaN != NaN; +0.0 == -0.0
+                        // Special case: treat both zeros as equal.
+                        if a == 0.0 && b == 0.0 {
+                            true
+                        } else {
+                            a == b
+                        }
+                    }
+                    FloatEqPolicy::Bitwise => {
+                        // Bitwise equality: all float bit patterns are distinct.
+                        a.to_bits() == b.to_bits()
+                    }
                 }
             }
             rtdt::TyTag::Int => {
                 let int_a = &*(value_a as *const rtdt::Int);
                 let int_b = &*(value_b as *const rtdt::Int);
 
-                // Compare size and sign..
+                // Compare size and sign.
                 if int_a.size_and_sign != int_b.size_and_sign {
                     return false;
                 }
@@ -283,7 +312,7 @@ unsafe fn eq_value(
                 for field in fields {
                     let field_a = value_a.add(field.offset as usize);
                     let field_b = value_b.add(field.offset as usize);
-                    if !eq_value(field_a, field_b, field.tydesc) {
+                    if !eq_value(field_a, field_b, field.tydesc, float_policy) {
                         return false;
                     }
                 }
@@ -296,7 +325,7 @@ unsafe fn eq_value(
                 for field in fields {
                     let field_a = value_a.add(field.offset as usize);
                     let field_b = value_b.add(field.offset as usize);
-                    if !eq_value(field_a, field_b, field.tydesc) {
+                    if !eq_value(field_a, field_b, field.tydesc, float_policy) {
                         return false;
                     }
                 }
@@ -319,7 +348,7 @@ unsafe fn eq_value(
                     if !variant.payload.is_null() {
                         let payload_a = value_a.add(variant.offset as usize);
                         let payload_b = value_b.add(variant.offset as usize);
-                        return eq_value(payload_a, payload_b, variant.payload);
+                        return eq_value(payload_a, payload_b, variant.payload, float_policy);
                     }
                 }
                 true
@@ -341,7 +370,7 @@ unsafe fn eq_value(
                 for i in 0..list_a.size as usize {
                     let elem_a = list_a.data.add(i * element_size);
                     let elem_b = list_b.data.add(i * element_size);
-                    if !eq_value(elem_a, elem_b, element_tydesc) {
+                    if !eq_value(elem_a, elem_b, element_tydesc, float_policy) {
                         return false;
                     }
                 }
@@ -355,138 +384,6 @@ unsafe fn eq_value(
     }
 }
 
-/// Compare two values for unique equality given a shared type descriptor.
-///
-/// This uses bitwise equality for floats, making all bit patterns distinct.
-/// Primarily used for hashing (HashMap).
-/// Assumes both values have the same type (tydesc has already been checked).
-unsafe fn eq_unique_value(
-    value_a: *const u8,
-    value_b: *const u8,
-    tydesc: *const rtdt::TyDesc,
-) -> bool {
-    unsafe {
-        let td = &*tydesc;
-
-        match td.type_tag {
-            rtdt::TyTag::Bool => {
-                let a = *value_a;
-                let b = *value_b;
-                a == b
-            }
-            rtdt::TyTag::U32 => {
-                let a = *(value_a as *const u32);
-                let b = *(value_b as *const u32);
-                a == b
-            }
-            rtdt::TyTag::F32 => {
-                let a = *(value_a as *const f32);
-                let b = *(value_b as *const f32);
-                // Bitwise equality: all float bit patterns are distinct.
-                a.to_bits() == b.to_bits()
-            }
-            rtdt::TyTag::Int => {
-                let int_a = &*(value_a as *const rtdt::Int);
-                let int_b = &*(value_b as *const rtdt::Int);
-
-                // Compare size and sign..
-                if int_a.size_and_sign != int_b.size_and_sign {
-                    return false;
-                }
-
-                // Compare limbs.
-                let num_limbs = int_a.size_and_sign.abs() as usize;
-                let limbs_a = std::slice::from_raw_parts(int_a.data, num_limbs);
-                let limbs_b = std::slice::from_raw_parts(int_b.data, num_limbs);
-                limbs_a == limbs_b
-            }
-            rtdt::TyTag::String => {
-                let str_a = &*(value_a as *const rtdt::String);
-                let str_b = &*(value_b as *const rtdt::String);
-
-                let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size as usize);
-                let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size as usize);
-                bytes_a == bytes_b
-            }
-            rtdt::TyTag::Tuple => {
-                let tuple_info = &td.type_info.tuple;
-                let fields = std::slice::from_raw_parts(tuple_info.fields, tuple_info.num_fields as usize);
-
-                for field in fields {
-                    let field_a = value_a.add(field.offset as usize);
-                    let field_b = value_b.add(field.offset as usize);
-                    if !eq_unique_value(field_a, field_b, field.tydesc) {
-                        return false;
-                    }
-                }
-                true
-            }
-            rtdt::TyTag::Struct => {
-                let struct_info = &td.type_info.struct_;
-                let fields = std::slice::from_raw_parts(struct_info.fields, struct_info.num_fields as usize);
-
-                for field in fields {
-                    let field_a = value_a.add(field.offset as usize);
-                    let field_b = value_b.add(field.offset as usize);
-                    if !eq_unique_value(field_a, field_b, field.tydesc) {
-                        return false;
-                    }
-                }
-                true
-            }
-            rtdt::TyTag::Enum => {
-                let enum_info = &td.type_info.enum_;
-                let variants = std::slice::from_raw_parts(enum_info.variants, enum_info.num_variants as usize);
-
-                // Compare discriminants.
-                let disc_a = *(value_a as *const u32);
-                let disc_b = *(value_b as *const u32);
-                if disc_a != disc_b {
-                    return false;
-                }
-
-                // Compare payload if present.
-                if disc_a < enum_info.num_variants {
-                    let variant = &variants[disc_a as usize];
-                    if !variant.payload.is_null() {
-                        let payload_a = value_a.add(variant.offset as usize);
-                        let payload_b = value_b.add(variant.offset as usize);
-                        return eq_unique_value(payload_a, payload_b, variant.payload);
-                    }
-                }
-                true
-            }
-            rtdt::TyTag::List => {
-                let list_a = &*(value_a as *const rtdt::List);
-                let list_b = &*(value_b as *const rtdt::List);
-
-                // Compare sizes.
-                if list_a.size != list_b.size {
-                    return false;
-                }
-
-                // Compare elements.
-                let list_info = &td.type_info.list;
-                let element_tydesc = list_info.element_tydesc;
-                let element_size = (*element_tydesc).size as usize;
-
-                for i in 0..list_a.size as usize {
-                    let elem_a = list_a.data.add(i * element_size);
-                    let elem_b = list_b.data.add(i * element_size);
-                    if !eq_unique_value(elem_a, elem_b, element_tydesc) {
-                        return false;
-                    }
-                }
-                true
-            }
-            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Option | rtdt::TyTag::Result | rtdt::TyTag::Error => {
-                // Not yet implemented.
-                unimplemented!("eq_unique_value for {:?}", td.type_tag)
-            }
-        }
-    }
-}
-
 /// Compare two values for ordering given a shared type descriptor.
 ///
 /// Assumes both values have the same type (tydesc has already been checked).
@@ -494,6 +391,7 @@ unsafe fn cmp_value(
     value_a: *const u8,
     value_b: *const u8,
     tydesc: *const rtdt::TyDesc,
+    float_policy: FloatOrdPolicy,
 ) -> crate::RtOrdering {
     unsafe {
         let td = &*tydesc;
@@ -525,34 +423,47 @@ unsafe fn cmp_value(
             rtdt::TyTag::F32 => {
                 let a = *(value_a as *const f32);
                 let b = *(value_b as *const f32);
-                // Novel ordering: NaN total order; +0.0 == -0.0
-                // -NaN < -Infinity < -numbers < -0.0 == +0.0 < +numbers < +Infinity < +NaN
-                if a.is_nan() && b.is_nan() {
-                    // Both NaN - order by sign bit for deterministic ordering.
-                    let a_bits = a.to_bits();
-                    let b_bits = b.to_bits();
-                    if a_bits < b_bits {
-                        crate::RtOrdering::Less
-                    } else if a_bits > b_bits {
-                        crate::RtOrdering::Greater
-                    } else {
-                        crate::RtOrdering::Equal
+                match float_policy {
+                    FloatOrdPolicy::Novel => {
+                        // Novel ordering: NaN total order; +0.0 == -0.0
+                        // -NaN < -Infinity < -numbers < -0.0 == +0.0 < +numbers < +Infinity < +NaN
+                        if a.is_nan() && b.is_nan() {
+                            // Both NaN - order by sign bit for deterministic ordering.
+                            let a_bits = a.to_bits();
+                            let b_bits = b.to_bits();
+                            if a_bits < b_bits {
+                                crate::RtOrdering::Less
+                            } else if a_bits > b_bits {
+                                crate::RtOrdering::Greater
+                            } else {
+                                crate::RtOrdering::Equal
+                            }
+                        } else if a.is_nan() {
+                            // NaN is greater than non-NaN.
+                            crate::RtOrdering::Greater
+                        } else if b.is_nan() {
+                            // Non-NaN is less than NaN.
+                            crate::RtOrdering::Less
+                        } else if a == 0.0 && b == 0.0 {
+                            // Both zeros - consider equal regardless of sign.
+                            crate::RtOrdering::Equal
+                        } else if a < b {
+                            crate::RtOrdering::Less
+                        } else if a > b {
+                            crate::RtOrdering::Greater
+                        } else {
+                            crate::RtOrdering::Equal
+                        }
                     }
-                } else if a.is_nan() {
-                    // NaN is greater than non-NaN.
-                    crate::RtOrdering::Greater
-                } else if b.is_nan() {
-                    // Non-NaN is less than NaN.
-                    crate::RtOrdering::Less
-                } else if a == 0.0 && b == 0.0 {
-                    // Both zeros - consider equal regardless of sign.
-                    crate::RtOrdering::Equal
-                } else if a < b {
-                    crate::RtOrdering::Less
-                } else if a > b {
-                    crate::RtOrdering::Greater
-                } else {
-                    crate::RtOrdering::Equal
+                    FloatOrdPolicy::Total => {
+                        // IEEE 754-2008 total order: distinguishes -0.0 from +0.0.
+                        // -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
+                        match a.total_cmp(&b) {
+                            std::cmp::Ordering::Less => crate::RtOrdering::Less,
+                            std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
+                            std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
+                        }
+                    }
                 }
             }
             rtdt::TyTag::Int => {
@@ -645,7 +556,7 @@ unsafe fn cmp_value(
                 for field in fields {
                     let field_a = value_a.add(field.offset as usize);
                     let field_b = value_b.add(field.offset as usize);
-                    let field_cmp = cmp_value(field_a, field_b, field.tydesc);
+                    let field_cmp = cmp_value(field_a, field_b, field.tydesc, float_policy);
                     match field_cmp {
                         crate::RtOrdering::Less => return crate::RtOrdering::Less,
                         crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
@@ -663,7 +574,7 @@ unsafe fn cmp_value(
                 for field in fields {
                     let field_a = value_a.add(field.offset as usize);
                     let field_b = value_b.add(field.offset as usize);
-                    let field_cmp = cmp_value(field_a, field_b, field.tydesc);
+                    let field_cmp = cmp_value(field_a, field_b, field.tydesc, float_policy);
                     match field_cmp {
                         crate::RtOrdering::Less => return crate::RtOrdering::Less,
                         crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
@@ -695,7 +606,7 @@ unsafe fn cmp_value(
                     if !variant.payload.is_null() {
                         let payload_a = value_a.add(variant.offset as usize);
                         let payload_b = value_b.add(variant.offset as usize);
-                        return cmp_value(payload_a, payload_b, variant.payload);
+                        return cmp_value(payload_a, payload_b, variant.payload, float_policy);
                     }
                 }
                 crate::RtOrdering::Equal
@@ -713,7 +624,7 @@ unsafe fn cmp_value(
                 for i in 0..min_size {
                     let elem_a = list_a.data.add(i * element_size);
                     let elem_b = list_b.data.add(i * element_size);
-                    let elem_cmp = cmp_value(elem_a, elem_b, element_tydesc);
+                    let elem_cmp = cmp_value(elem_a, elem_b, element_tydesc, float_policy);
                     match elem_cmp {
                         crate::RtOrdering::Less => return crate::RtOrdering::Less,
                         crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
@@ -734,237 +645,6 @@ unsafe fn cmp_value(
             rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Option | rtdt::TyTag::Result | rtdt::TyTag::Error => {
                 // Not yet implemented.
                 unimplemented!("cmp_value for {:?}", td.type_tag)
-            }
-        }
-    }
-}
-
-/// Compare two values for total ordering given a shared type descriptor.
-///
-/// This uses IEEE 754-2008 total order for floats (distinguishes -0.0 from +0.0).
-/// Primarily used for BTreeMap.
-/// Assumes both values have the same type (tydesc has already been checked).
-unsafe fn cmp_total_value(
-    value_a: *const u8,
-    value_b: *const u8,
-    tydesc: *const rtdt::TyDesc,
-) -> crate::RtOrdering {
-    unsafe {
-        let td = &*tydesc;
-
-        match td.type_tag {
-            rtdt::TyTag::Bool => {
-                let a = *value_a;
-                let b = *value_b;
-                // false < true
-                if a < b {
-                    crate::RtOrdering::Less
-                } else if a > b {
-                    crate::RtOrdering::Greater
-                } else {
-                    crate::RtOrdering::Equal
-                }
-            }
-            rtdt::TyTag::U32 => {
-                let a = *(value_a as *const u32);
-                let b = *(value_b as *const u32);
-                if a < b {
-                    crate::RtOrdering::Less
-                } else if a > b {
-                    crate::RtOrdering::Greater
-                } else {
-                    crate::RtOrdering::Equal
-                }
-            }
-            rtdt::TyTag::F32 => {
-                let a = *(value_a as *const f32);
-                let b = *(value_b as *const f32);
-                // IEEE 754-2008 total order: -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
-                match a.total_cmp(&b) {
-                    std::cmp::Ordering::Less => crate::RtOrdering::Less,
-                    std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
-                    std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
-                }
-            }
-            rtdt::TyTag::Int => {
-                let int_a = &*(value_a as *const rtdt::Int);
-                let int_b = &*(value_b as *const rtdt::Int);
-
-                // Compare by sign first.
-                let sign_a = int_a.size_and_sign.signum();
-                let sign_b = int_b.size_and_sign.signum();
-
-                if sign_a != sign_b {
-                    // Different signs: negative < positive.
-                    return if sign_a < sign_b {
-                        crate::RtOrdering::Less
-                    } else {
-                        crate::RtOrdering::Greater
-                    };
-                }
-
-                // Same sign, compare magnitudes.
-                let num_limbs_a = int_a.size_and_sign.abs() as usize;
-                let num_limbs_b = int_b.size_and_sign.abs() as usize;
-
-                if num_limbs_a != num_limbs_b {
-                    // Different number of limbs.
-                    let mag_cmp = num_limbs_a.cmp(&num_limbs_b);
-                    return if sign_a >= 0 {
-                        // Positive: more limbs = greater.
-                        match mag_cmp {
-                            std::cmp::Ordering::Less => crate::RtOrdering::Less,
-                            std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
-                            std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
-                        }
-                    } else {
-                        // Negative: more limbs = smaller (more negative).
-                        match mag_cmp {
-                            std::cmp::Ordering::Less => crate::RtOrdering::Greater,
-                            std::cmp::Ordering::Greater => crate::RtOrdering::Less,
-                            std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
-                        }
-                    };
-                }
-
-                // Same number of limbs, compare limb by limb from most significant.
-                let limbs_a = std::slice::from_raw_parts(int_a.data, num_limbs_a);
-                let limbs_b = std::slice::from_raw_parts(int_b.data, num_limbs_b);
-
-                for i in (0..num_limbs_a).rev() {
-                    if limbs_a[i] != limbs_b[i] {
-                        let limb_cmp = limbs_a[i].cmp(&limbs_b[i]);
-                        return if sign_a >= 0 {
-                            // Positive numbers.
-                            match limb_cmp {
-                                std::cmp::Ordering::Less => crate::RtOrdering::Less,
-                                std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
-                                std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
-                            }
-                        } else {
-                            // Negative numbers: invert comparison.
-                            match limb_cmp {
-                                std::cmp::Ordering::Less => crate::RtOrdering::Greater,
-                                std::cmp::Ordering::Greater => crate::RtOrdering::Less,
-                                std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
-                            }
-                        };
-                    }
-                }
-
-                crate::RtOrdering::Equal
-            }
-            rtdt::TyTag::String => {
-                let str_a = &*(value_a as *const rtdt::String);
-                let str_b = &*(value_b as *const rtdt::String);
-
-                let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size as usize);
-                let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size as usize);
-
-                // Lexicographic comparison.
-                match bytes_a.cmp(bytes_b) {
-                    std::cmp::Ordering::Less => crate::RtOrdering::Less,
-                    std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
-                    std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
-                }
-            }
-            rtdt::TyTag::Tuple => {
-                let tuple_info = &td.type_info.tuple;
-                let fields = std::slice::from_raw_parts(tuple_info.fields, tuple_info.num_fields as usize);
-
-                // Lexicographic ordering by fields.
-                for field in fields {
-                    let field_a = value_a.add(field.offset as usize);
-                    let field_b = value_b.add(field.offset as usize);
-                    let field_cmp = cmp_total_value(field_a, field_b, field.tydesc);
-                    match field_cmp {
-                        crate::RtOrdering::Less => return crate::RtOrdering::Less,
-                        crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
-                        crate::RtOrdering::Equal => continue,
-                        crate::RtOrdering::Error => return crate::RtOrdering::Error,
-                    }
-                }
-                crate::RtOrdering::Equal
-            }
-            rtdt::TyTag::Struct => {
-                let struct_info = &td.type_info.struct_;
-                let fields = std::slice::from_raw_parts(struct_info.fields, struct_info.num_fields as usize);
-
-                // Lexicographic ordering by fields.
-                for field in fields {
-                    let field_a = value_a.add(field.offset as usize);
-                    let field_b = value_b.add(field.offset as usize);
-                    let field_cmp = cmp_total_value(field_a, field_b, field.tydesc);
-                    match field_cmp {
-                        crate::RtOrdering::Less => return crate::RtOrdering::Less,
-                        crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
-                        crate::RtOrdering::Equal => continue,
-                        crate::RtOrdering::Error => return crate::RtOrdering::Error,
-                    }
-                }
-                crate::RtOrdering::Equal
-            }
-            rtdt::TyTag::Enum => {
-                let enum_info = &td.type_info.enum_;
-                let variants = std::slice::from_raw_parts(enum_info.variants, enum_info.num_variants as usize);
-
-                // Compare discriminants first.
-                let disc_a = *(value_a as *const u32);
-                let disc_b = *(value_b as *const u32);
-
-                if disc_a != disc_b {
-                    return if disc_a < disc_b {
-                        crate::RtOrdering::Less
-                    } else {
-                        crate::RtOrdering::Greater
-                    };
-                }
-
-                // Same variant, compare payload if present.
-                if disc_a < enum_info.num_variants {
-                    let variant = &variants[disc_a as usize];
-                    if !variant.payload.is_null() {
-                        let payload_a = value_a.add(variant.offset as usize);
-                        let payload_b = value_b.add(variant.offset as usize);
-                        return cmp_total_value(payload_a, payload_b, variant.payload);
-                    }
-                }
-                crate::RtOrdering::Equal
-            }
-            rtdt::TyTag::List => {
-                let list_a = &*(value_a as *const rtdt::List);
-                let list_b = &*(value_b as *const rtdt::List);
-
-                let list_info = &td.type_info.list;
-                let element_tydesc = list_info.element_tydesc;
-                let element_size = (*element_tydesc).size as usize;
-
-                // Lexicographic comparison.
-                let min_size = list_a.size.min(list_b.size) as usize;
-                for i in 0..min_size {
-                    let elem_a = list_a.data.add(i * element_size);
-                    let elem_b = list_b.data.add(i * element_size);
-                    let elem_cmp = cmp_total_value(elem_a, elem_b, element_tydesc);
-                    match elem_cmp {
-                        crate::RtOrdering::Less => return crate::RtOrdering::Less,
-                        crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
-                        crate::RtOrdering::Equal => continue,
-                        crate::RtOrdering::Error => return crate::RtOrdering::Error,
-                    }
-                }
-
-                // All compared elements equal, compare by length.
-                if list_a.size < list_b.size {
-                    crate::RtOrdering::Less
-                } else if list_a.size > list_b.size {
-                    crate::RtOrdering::Greater
-                } else {
-                    crate::RtOrdering::Equal
-                }
-            }
-            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Option | rtdt::TyTag::Result | rtdt::TyTag::Error => {
-                // Not yet implemented.
-                unimplemented!("cmp_total_value for {:?}", td.type_tag)
             }
         }
     }
