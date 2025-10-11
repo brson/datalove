@@ -143,6 +143,15 @@ impl<'db> TyDescTable<'db> {
             field_tydescs.push(field_tydesc);
         }
 
+        // Create temporary field info array with placeholder offsets.
+        let mut temp_field_info = Vec::new();
+        for &field_tydesc in &field_tydescs {
+            temp_field_info.push(rtdt::TyInfoTupleField {
+                offset: 0,
+                tydesc: field_tydesc,
+            });
+        }
+
         // Compute layout.
         let layout = unsafe {
             let temp_tydesc = rtdt::TyDesc {
@@ -152,14 +161,14 @@ impl<'db> TyDescTable<'db> {
                 type_info: rtdt::TyInfo {
                     tuple: rtdt::TyInfoTuple {
                         num_fields: fields.len() as u32,
-                        fields: field_tydescs.as_ptr() as *const rtdt::TyInfoTupleField,
+                        fields: temp_field_info.as_ptr(),
                     },
                 },
             };
             rtdt::layout::compute_tuple_layout(&temp_tydesc)
         };
 
-        // Create field info array.
+        // Create final field info array with computed offsets.
         let mut field_info = Vec::new();
         for (i, &field_tydesc) in field_tydescs.iter().enumerate() {
             field_info.push(rtdt::TyInfoTupleField {
@@ -265,7 +274,16 @@ fn instantiate_expr<'db>(
             Ok(ptr as *const u8)
         }
         (Expr::String(string_expr), Type::String) => {
-            let value_str = string_expr.value(db).as_str(db);
+            let value_str_raw = string_expr.value(db).as_str(db);
+
+            // Strip surrounding quotes if present.
+            //
+            // The string tokens include the quotes. Hm.
+            let value_str = if value_str_raw.starts_with('"') && value_str_raw.ends_with('"') {
+                &value_str_raw[1..value_str_raw.len()-1]
+            } else {
+                bug!();
+            };
 
             // Allocate space for the string data.
             let data_len = value_str.len();
@@ -297,7 +315,8 @@ fn instantiate_expr<'db>(
             Ok(string_ptr as *const u8)
         }
         (Expr::AnonTuple(tuple_expr), Type::AnonTuple(tuple_ty)) => {
-            instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_arena)
+            let tuple_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_arena, tuple_tydesc)
         }
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
@@ -310,12 +329,10 @@ fn instantiate_tuple<'db>(
     field_types: &[TypeAndHeap<'db>],
     tydesc_table: &mut TyDescTable<'db>,
     value_arena: &mut ValueArena,
+    tuple_tydesc: *const rtdt::TyDesc,
 ) -> AnyResult<*const u8> {
-    // Compute layout.
-    let tuple_ty = Type::AnonTuple(TypeAnonTuple::new(db, field_types.to_vec()));
-    let tydesc = tydesc_table.get_or_create(&tuple_ty);
-
-    let layout = unsafe { rtdt::layout::compute_tuple_layout(tydesc) };
+    // Use the provided tuple tydesc and compute layout.
+    let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc) };
 
     // Allocate space for tuple.
     let tuple_ptr = value_arena.alloc(layout.size as usize, layout.align as usize);
@@ -365,4 +382,152 @@ pub fn instantiate_value<'db>(
             _phantom: std::marker::PhantomData,
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Database;
+
+    fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<TypecheckResult<'db>> {
+        let source = bct::input::Source::new(db, source_text.to_string());
+        let parsed = crate::parser::parse(db, source);
+        let resolved = crate::resolve::resolve_names(db, parsed);
+        let typechecked = crate::tycheck::type_check(db, parsed, resolved);
+        Ok(typechecked)
+    }
+
+    #[test]
+    fn test_instantiate_bool_true() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, "@true")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
+            assert_eq!(*inst.value, 1);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_bool_false() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, "@false")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
+            assert_eq!(*inst.value, 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_u32() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, "@42")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::U32);
+            assert_eq!(*(inst.value as *const u32), 42);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_f32() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, "@3.14")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::F32);
+            assert_eq!(*(inst.value as *const f32), 3.14);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_string() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, r#"@"hello""#)?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
+            let string = &*(inst.value as *const rtdt::String);
+            assert_eq!(string.size, 5);
+            assert_eq!(string.capacity, 5);
+            let str_slice = std::slice::from_raw_parts(string.data, string.size as usize);
+            assert_eq!(str_slice, b"hello");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_empty_string() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, r#"@"""#)?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
+            let string = &*(inst.value as *const rtdt::String);
+            assert_eq!(string.size, 0);
+            assert_eq!(string.capacity, 0);
+            assert!(string.data.is_null());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_tuple_simple() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, "@(@true, @42)")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
+            let tuple_info = &(*inst.tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+
+            let fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let bool_value = *(inst.value.add(fields[0].offset as usize));
+            assert_eq!(bool_value, 1);
+
+            let u32_value = *(inst.value.add(fields[1].offset as usize) as *const u32);
+            assert_eq!(u32_value, 42);
+        }
+        Ok(())
+    }
+
+
+    #[test]
+    fn test_tydesc_deduplication() -> AnyResult<()> {
+        let db = Database::default();
+        let mut table = TyDescTable::new(&db);
+
+        let ty_bool = Type::Bool;
+        let ptr1 = table.get_or_create(&ty_bool);
+        let ptr2 = table.get_or_create(&ty_bool);
+
+        assert_eq!(ptr1, ptr2);
+        assert_eq!(table.tydescs.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_value_arena_alignment() {
+        let mut arena = ValueArena::new();
+
+        let ptr1 = arena.alloc(1, 1);
+        let ptr2 = arena.alloc(4, 4);
+        let ptr3 = arena.alloc(1, 1);
+        let ptr4 = arena.alloc(8, 8);
+
+        assert_eq!(ptr2 as usize % 4, 0);
+        assert_eq!(ptr4 as usize % 8, 0);
+    }
 }
