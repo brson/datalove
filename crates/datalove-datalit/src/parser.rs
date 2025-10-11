@@ -816,6 +816,14 @@ impl<'db> DynParser<'db> {
                             ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
                         }
                     }
+                    TokenKind::String => {
+                        self.next();
+                        let value = InternedText::new(
+                            self.db,
+                            token.text(self.db).as_str(self.db).S(),
+                        );
+                        ast::Expr::String(ast::ExprString::new(self.db, value))
+                    }
                     _ => {
                         let message = InternedText::new(self.db, "unexpected token in DynParser expression".S());
                         ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))

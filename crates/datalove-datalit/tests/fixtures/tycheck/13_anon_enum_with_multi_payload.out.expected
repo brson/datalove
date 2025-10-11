@@ -22,8 +22,8 @@
                     {
                       "expr": {
                         "expr": {
-                          "ParseError": {
-                            "message": "unexpected token in DynParser expression"
+                          "String": {
+                            "value": "\"success\""
                           }
                         },
                         "heap": "Local"
@@ -89,10 +89,33 @@
       }
     }
   },
-  "errors": [
-    {
-      "kind": "CannotSynthesize"
-    }
-  ],
-  "root_type": null
+  "errors": [],
+  "root_type": {
+    "heap": "@",
+    "kind": "NamedEnum",
+    "name": "Result",
+    "variants": [
+      {
+        "name": "Ok",
+        "payload": {
+          "fields": [
+            "@u32",
+            "@string"
+          ],
+          "heap": "",
+          "kind": "AnonTuple"
+        }
+      },
+      {
+        "name": "Err",
+        "payload": {
+          "fields": [
+            "@string"
+          ],
+          "heap": "",
+          "kind": "AnonTuple"
+        }
+      }
+    ]
+  }
 }

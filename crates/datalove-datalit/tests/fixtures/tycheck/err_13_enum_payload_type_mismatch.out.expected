@@ -11,8 +11,8 @@
                     {
                       "expr": {
                         "expr": {
-                          "ParseError": {
-                            "message": "unexpected token in DynParser expression"
+                          "String": {
+                            "value": "\"wrong\""
                           }
                         },
                         "heap": "Local"
@@ -60,7 +60,9 @@
   },
   "errors": [
     {
-      "kind": "CannotSynthesize"
+      "actual": "string",
+      "expected": "u32",
+      "kind": "TypeMismatch"
     }
   ],
   "root_type": null

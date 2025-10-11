@@ -37,8 +37,8 @@
               "value": {
                 "expr": {
                   "expr": {
-                    "ParseError": {
-                      "message": "unexpected token in DynParser expression"
+                    "String": {
+                      "value": "\"test\""
                     }
                   },
                   "heap": "Local"
@@ -53,10 +53,23 @@
     },
     "type_hint": null
   },
-  "errors": [
-    {
-      "kind": "CannotSynthesize"
-    }
-  ],
-  "root_type": null
+  "errors": [],
+  "root_type": {
+    "fields": [
+      {
+        "name": "x",
+        "type": "@u32"
+      },
+      {
+        "name": "y",
+        "type": "@f32"
+      },
+      {
+        "name": "z",
+        "type": "@string"
+      }
+    ],
+    "heap": "@",
+    "kind": "AnonStruct"
+  }
 }
