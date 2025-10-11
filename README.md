@@ -26,6 +26,8 @@ with a superset syntax and types.
 
 Extension `.dle`.
 
+See [`demo-data.dle`] for an example.
+
 
 ## Datalove Script
 
@@ -44,10 +46,12 @@ Introspection and reflection.
 The syntax is a strict superset of Datalove Modules.
 Extension `.dls`.
 
+See [`demo-script.dls`] for an example.
 
 ## Datalove Modules
 
 The syntax is a strict superset of Datalove Expressions.
 Extension `.dlm`.
 
+See [`demo-module.dlm`] for an example.
 
