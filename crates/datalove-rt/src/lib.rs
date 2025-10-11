@@ -67,12 +67,15 @@ pub enum RtEq {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_td_eq(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     tydesc_a: *const rtdt::TyDesc,
     tydesc_b: *const rtdt::TyDesc,
 ) -> RtEq {
+    // Note that the runtime handle isn't needed
+    // because we don't allocate - it's just part
+    // of the ABI.
     unsafe {
-        cmp::eq(rt, tydesc_a, tydesc_b)
+        cmp::eq(tydesc_a, tydesc_b)
     }
 }
 
@@ -86,12 +89,12 @@ pub enum RtOrdering {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_td_cmp(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     tydesc_a: *const rtdt::TyDesc,
     tydesc_b: *const rtdt::TyDesc,
 ) -> RtOrdering {
     unsafe {
-        cmp::cmp(rt, tydesc_a, tydesc_b)
+        cmp::cmp(tydesc_a, tydesc_b)
     }
 }
 
