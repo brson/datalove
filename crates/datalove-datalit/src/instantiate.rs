@@ -637,7 +637,27 @@ fn instantiate_enum<'db>(
     // Get layout.
     let layout = unsafe { rtdt::layout::compute_enum_layout(enum_tydesc) };
 
-    // Allocate space for enum.
+    // IMPORTANT: Instantiate payload BEFORE allocating enum memory,
+    // and copy its data immediately to avoid pointer invalidation issues.
+    let payload_bytes = if let (Some(payload_expr), Some(payload_ty)) = (payload_expr, variant_ty.payload(db)) {
+        let payload_value = instantiate_expr(db, payload_expr, payload_ty.ty(db), tydesc_table, value_arena)?;
+        let payload_size = unsafe { (*tydesc_table.get_or_create(payload_ty.ty(db))).size } as usize;
+
+        // Copy payload data to a temporary buffer before allocating enum space.
+        let mut bytes = vec![0u8; payload_size];
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                payload_value,
+                bytes.as_mut_ptr(),
+                payload_size,
+            );
+        }
+        Some(bytes)
+    } else {
+        None
+    };
+
+    // Now allocate space for enum (after all nested allocations are done).
     let enum_ptr = value_arena.alloc(layout.size as usize, layout.align as usize);
 
     // Write discriminant (u32).
@@ -646,16 +666,13 @@ fn instantiate_enum<'db>(
     }
 
     // Write payload if present.
-    if let (Some(payload_expr), Some(payload_ty)) = (payload_expr, variant_ty.payload(db)) {
-        let payload_value = instantiate_expr(db, payload_expr, payload_ty.ty(db), tydesc_table, value_arena)?;
+    if let Some(payload_bytes) = payload_bytes {
         let payload_offset = layout.variant_offsets[variant_index];
-        let payload_size = unsafe { (*tydesc_table.get_or_create(payload_ty.ty(db))).size };
-
         unsafe {
             std::ptr::copy_nonoverlapping(
-                payload_value,
+                payload_bytes.as_ptr(),
                 enum_ptr.add(payload_offset as usize),
-                payload_size as usize,
+                payload_bytes.len(),
             );
         }
     }
@@ -1034,10 +1051,6 @@ mod tests {
         Ok(())
     }
 
-    // Note: Tuple payloads work in instantiation, but require more complex syntax
-    // for type hints. The scalar payload test above demonstrates that enum payloads
-    // are working correctly after the recent parser fixes.
-
     #[test]
     fn test_instantiate_enum_anon_to_named_coercion() -> AnyResult<()> {
         let db = Database::default();
@@ -1050,6 +1063,83 @@ mod tests {
             // Check discriminant.
             let discriminant = *(inst.value as *const u32);
             assert_eq!(discriminant, 1); // "Error" is second variant
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_enum_with_tuple_payload() -> AnyResult<()> {
+        let db = Database::default();
+        // Test enum variant with tuple payload - using same syntax as 13_anon_enum_with_multi_payload
+        let typechecked = compile(&db, ": @enum { Ok(@(@u32, @u32)), Err(@string) } / @enum Ok(@(@10, @20))")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
+            let enum_info = &(*inst.tydesc).type_info.enum_;
+            assert_eq!(enum_info.num_variants, 2);
+
+            // Check discriminant.
+            let discriminant = *(inst.value as *const u32);
+            assert_eq!(discriminant, 0); // "Ok" is first variant
+
+            // Check tuple payload.
+            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let payload_offset = variants[0].offset;
+            let payload_ptr = inst.value.add(payload_offset as usize);
+
+            // The payload is a tuple, get its tydesc.
+            let payload_tydesc = variants[0].payload;
+            assert!(!payload_tydesc.is_null());
+            assert_eq!((*payload_tydesc).type_tag, rtdt::TyTag::Tuple);
+
+            let tuple_info = &(*payload_tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+
+            let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let first_value = *(payload_ptr.add(tuple_fields[0].offset as usize) as *const u32);
+            let second_value = *(payload_ptr.add(tuple_fields[1].offset as usize) as *const u32);
+
+            assert_eq!(first_value, 10);
+            assert_eq!(second_value, 20);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_enum_with_struct_payload() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @enum { Data(@{x: @u32, y: @u32}), None } / @enum Data(@{x = @5, y = @15})")?;
+        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
+            let enum_info = &(*inst.tydesc).type_info.enum_;
+            assert_eq!(enum_info.num_variants, 2);
+
+            // Check discriminant.
+            let discriminant = *(inst.value as *const u32);
+            assert_eq!(discriminant, 0); // "Data" is first variant
+
+            // Check struct payload.
+            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let payload_offset = variants[0].offset;
+            let payload_ptr = inst.value.add(payload_offset as usize);
+
+            // The payload is a struct, get its tydesc.
+            let payload_tydesc = variants[0].payload;
+            assert!(!payload_tydesc.is_null());
+            assert_eq!((*payload_tydesc).type_tag, rtdt::TyTag::Struct);
+
+            let struct_info = &(*payload_tydesc).type_info.struct_;
+            assert_eq!(struct_info.num_fields, 2);
+
+            let struct_fields = std::slice::from_raw_parts(struct_info.fields, 2);
+            let x_value = *(payload_ptr.add(struct_fields[0].offset as usize) as *const u32);
+            let y_value = *(payload_ptr.add(struct_fields[1].offset as usize) as *const u32);
+
+            assert_eq!(x_value, 5);
+            assert_eq!(y_value, 15);
         }
         Ok(())
     }
