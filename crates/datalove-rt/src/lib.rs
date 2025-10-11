@@ -82,6 +82,19 @@ pub unsafe extern "C" fn dtlv_rti_td_eq(
     }
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_td_eq_unique(
+    _rt: LocalRtHandle,
+    value_a: *const u8,
+    tydesc_a: *const rtdt::TyDesc,
+    value_b: *const u8,
+    tydesc_b: *const rtdt::TyDesc,
+) -> RtEq {
+    unsafe {
+        cmp::eq_unique(value_a, tydesc_a, value_b, tydesc_b)
+    }
+}
+
 #[repr(u8)]
 pub enum RtOrdering {
     Less = 1,
@@ -101,6 +114,19 @@ pub unsafe extern "C" fn dtlv_rti_td_cmp(
 ) -> RtOrdering {
     unsafe {
         cmp::cmp(value_a, tydesc_a, value_b, tydesc_b)
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_td_cmp_total(
+    _rt: LocalRtHandle,
+    value_a: *const u8,
+    tydesc_a: *const rtdt::TyDesc,
+    value_b: *const u8,
+    tydesc_b: *const rtdt::TyDesc,
+) -> RtOrdering {
+    unsafe {
+        cmp::cmp_total(value_a, tydesc_a, value_b, tydesc_b)
     }
 }
 
