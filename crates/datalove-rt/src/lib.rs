@@ -62,6 +62,7 @@ pub unsafe extern "C" fn dtlv_rti_mem_free(
 pub enum RtEq {
     Equals = 1,
     NotEquals = 2,
+    /// Type mismatch.
     Error = 3,
 }
 
@@ -84,6 +85,7 @@ pub enum RtOrdering {
     Less = 1,
     Equal = 2,
     Greater = 3,
+    /// Type mismatch.
     Error = 4,
 }
 
