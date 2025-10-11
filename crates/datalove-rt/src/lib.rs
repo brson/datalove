@@ -1,4 +1,7 @@
 //! Datalove runtime.
+//!
+//! - "rt" calls are called by the language and have a restricted ABI.
+//! - "rti" calls are emitted only by the compiler and have whatever ABI is needed.
 
 #![allow(unused)]
 
@@ -52,6 +55,26 @@ pub unsafe extern "C" fn dtlv_rti_mem_free(
 ) -> RtStatus {
     todo!()
 }
+
+#[repr(u8)]
+pub enum RtOrdering {
+    Less = 1,
+    Equal = 2,
+    Greater = 3,
+    Error = 4,
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_td_cmp(
+    rt: LocalRtHandle,
+    tydesc_a: *const rtdt::TyDesc,
+    tydesc_b: *const rtdt::TyDesc,
+) -> RtOrdering {
+    todo!()
+}
+
+
+
 
 /// Hypothetical language-accessible runtime call.
 ///
