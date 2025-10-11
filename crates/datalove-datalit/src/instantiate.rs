@@ -1,7 +1,11 @@
 //! Instantiate runtime values and type descriptors from typechecked AST.
+//!
+//! This is a revised implementation using stable heap allocations instead of
+//! an unsafe arena that can invalidate pointers.
 
 use rmx::prelude::*;
 use std::collections::HashMap;
+use std::alloc::{alloc, dealloc, Layout};
 use bct::text::InternedText;
 use crate::ast::*;
 use crate::tycheck::*;
@@ -343,44 +347,63 @@ impl<'db> TyDescTable<'db> {
     }
 }
 
-/// Arena for value allocations.
-pub struct ValueArena {
-    /// Byte storage with alignment padding.
-    data: Vec<u8>,
+/// Heap for value allocations with stable addresses.
+///
+/// Each allocation gets its own memory block that never moves,
+/// ensuring pointers remain valid throughout the lifetime of the heap.
+pub struct ValueHeap {
+    /// Individual allocations: (pointer, layout).
+    allocations: Vec<(*mut u8, Layout)>,
 }
 
-impl ValueArena {
+impl ValueHeap {
     pub fn new() -> Self {
         Self {
-            data: Vec::new(),
+            allocations: Vec::new(),
         }
     }
 
-    /// Allocate aligned memory for a value.
+    /// Allocate memory with specified size and alignment.
+    ///
+    /// Returns a stable pointer that will never be invalidated by
+    /// subsequent allocations.
     pub fn alloc(&mut self, size: usize, align: usize) -> *mut u8 {
-        // Align current position.
-        let offset = self.data.len();
-        let aligned_offset = (offset + align - 1) & !(align - 1);
-        let padding = aligned_offset - offset;
+        let layout = Layout::from_size_align(size, align)
+            .expect("Invalid layout");
 
-        // Add padding.
-        self.data.resize(aligned_offset, 0);
+        let ptr = unsafe { alloc(layout) };
 
-        // Reserve space.
-        self.data.resize(aligned_offset + size, 0);
+        if ptr.is_null() {
+            panic!("Allocation failed");
+        }
 
-        // Return pointer to allocated space.
-        unsafe { self.data.as_mut_ptr().add(aligned_offset) }
+        // Initialize to zero.
+        unsafe {
+            std::ptr::write_bytes(ptr, 0, size);
+        }
+
+        self.allocations.push((ptr, layout));
+        ptr
+    }
+}
+
+impl Drop for ValueHeap {
+    fn drop(&mut self) {
+        for (ptr, layout) in &self.allocations {
+            unsafe {
+                dealloc(*ptr, *layout);
+            }
+        }
     }
 }
 
 /// An instantiated value with its type descriptor.
 ///
-/// Lifetime 'arena ensures value pointer doesn't outlive the arena.
-pub struct InstantiatedValue<'arena> {
+/// Lifetime 'heap ensures value pointer doesn't outlive the heap.
+pub struct InstantiatedValue<'heap> {
     pub value: *const u8,
     pub tydesc: *const rtdt::TyDesc,
-    _phantom: std::marker::PhantomData<&'arena ()>,
+    _phantom: std::marker::PhantomData<&'heap ()>,
 }
 
 /// Instantiate an expression into a runtime value.
@@ -389,19 +412,19 @@ fn instantiate_expr<'db>(
     expr: ExprFull<'db>,
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
-    value_arena: &mut ValueArena,
+    value_heap: &mut ValueHeap,
 ) -> AnyResult<*const u8> {
     let expr_and_heap = expr.expr(db);
     let expr_inner = expr_and_heap.expr(db);
 
     match (expr_inner, ty) {
         (Expr::True, Type::Bool) => {
-            let ptr = value_arena.alloc(1, 1);
+            let ptr = value_heap.alloc(1, 1);
             unsafe { *ptr = 1 };
             Ok(ptr as *const u8)
         }
         (Expr::False, Type::Bool) => {
-            let ptr = value_arena.alloc(1, 1);
+            let ptr = value_heap.alloc(1, 1);
             unsafe { *ptr = 0 };
             Ok(ptr as *const u8)
         }
@@ -409,7 +432,7 @@ fn instantiate_expr<'db>(
             let value_str = int_expr.value(db).as_str(db);
             let value: u32 = value_str.parse()?;
 
-            let ptr = value_arena.alloc(4, 4) as *mut u32;
+            let ptr = value_heap.alloc(4, 4) as *mut u32;
             unsafe { *ptr = value };
             Ok(ptr as *const u8)
         }
@@ -439,7 +462,7 @@ fn instantiate_expr<'db>(
             // Allocate space for limbs.
             let limbs_size = limbs.len() * std::mem::size_of::<u32>();
             let limbs_ptr = if limbs_size > 0 {
-                let ptr = value_arena.alloc(limbs_size, 4) as *mut u32;
+                let ptr = value_heap.alloc(limbs_size, 4) as *mut u32;
                 unsafe {
                     for (i, &limb) in limbs.iter().enumerate() {
                         *ptr.add(i) = limb;
@@ -453,7 +476,7 @@ fn instantiate_expr<'db>(
             // Allocate space for rtdt::Int struct.
             let int_size = std::mem::size_of::<rtdt::Int>();
             let int_align = std::mem::align_of::<rtdt::Int>();
-            let int_ptr = value_arena.alloc(int_size, int_align) as *mut rtdt::Int;
+            let int_ptr = value_heap.alloc(int_size, int_align) as *mut rtdt::Int;
 
             unsafe {
                 (*int_ptr).data = limbs_ptr;
@@ -471,7 +494,7 @@ fn instantiate_expr<'db>(
             let value_str = float_expr.value(db).as_str(db);
             let value: f32 = value_str.parse()?;
 
-            let ptr = value_arena.alloc(4, 4) as *mut f32;
+            let ptr = value_heap.alloc(4, 4) as *mut f32;
             unsafe { *ptr = value };
             Ok(ptr as *const u8)
         }
@@ -490,7 +513,7 @@ fn instantiate_expr<'db>(
             // Allocate space for the string data.
             let data_len = value_str.len();
             let data_ptr = if data_len > 0 {
-                let ptr = value_arena.alloc(data_len, 1);
+                let ptr = value_heap.alloc(data_len, 1);
                 unsafe {
                     std::ptr::copy_nonoverlapping(
                         value_str.as_ptr(),
@@ -506,7 +529,7 @@ fn instantiate_expr<'db>(
             // Allocate space for rtdt::String struct.
             let string_size = std::mem::size_of::<rtdt::String>();
             let string_align = std::mem::align_of::<rtdt::String>();
-            let string_ptr = value_arena.alloc(string_size, string_align) as *mut rtdt::String;
+            let string_ptr = value_heap.alloc(string_size, string_align) as *mut rtdt::String;
 
             unsafe {
                 (*string_ptr).data = data_ptr;
@@ -518,41 +541,41 @@ fn instantiate_expr<'db>(
         }
         (Expr::AnonTuple(tuple_expr), Type::AnonTuple(tuple_ty)) => {
             let tuple_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_arena, tuple_tydesc)
+            instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_heap, tuple_tydesc)
         }
         (Expr::NamedTuple(tuple_expr), Type::NamedTuple(tuple_ty)) => {
             let tuple_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_arena, tuple_tydesc)
+            instantiate_tuple(db, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, value_heap, tuple_tydesc)
         }
         (Expr::AnonStruct(struct_expr), Type::AnonStruct(struct_ty)) => {
             let struct_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, value_arena, struct_tydesc)
+            instantiate_struct(db, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, value_heap, struct_tydesc)
         }
         (Expr::AnonStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
             // Anon struct can be coerced to named struct.
             let struct_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, value_arena, struct_tydesc)
+            instantiate_struct(db, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, value_heap, struct_tydesc)
         }
         (Expr::NamedStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
             let struct_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, value_arena, struct_tydesc)
+            instantiate_struct(db, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, value_heap, struct_tydesc)
         }
         (Expr::AnonEnum(enum_expr), Type::AnonEnum(enum_ty)) => {
             let enum_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, value_arena, enum_tydesc)
+            instantiate_enum(db, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, value_heap, enum_tydesc)
         }
         (Expr::AnonEnum(enum_expr), Type::NamedEnum(enum_ty)) => {
             // Anon enum can be coerced to named enum.
             let enum_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, value_arena, enum_tydesc)
+            instantiate_enum(db, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, value_heap, enum_tydesc)
         }
         (Expr::NamedEnum(enum_expr), Type::NamedEnum(enum_ty)) => {
             let enum_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, value_arena, enum_tydesc)
+            instantiate_enum(db, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, value_heap, enum_tydesc)
         }
         (Expr::List(list_expr), Type::List(list_ty)) => {
             let list_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_list(db, &list_expr.elements(db), list_ty.element_type(db), tydesc_table, value_arena, list_tydesc)
+            instantiate_list(db, &list_expr.elements(db), list_ty.element_type(db), tydesc_table, value_heap, list_tydesc)
         }
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
@@ -564,18 +587,18 @@ fn instantiate_tuple<'db>(
     elements: &[ExprFull<'db>],
     field_types: &[TypeAndHeap<'db>],
     tydesc_table: &mut TyDescTable<'db>,
-    value_arena: &mut ValueArena,
+    value_heap: &mut ValueHeap,
     tuple_tydesc: *const rtdt::TyDesc,
 ) -> AnyResult<*const u8> {
     // Use the provided tuple tydesc and compute layout.
     let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc) };
 
     // Allocate space for tuple.
-    let tuple_ptr = value_arena.alloc(layout.size as usize, layout.align as usize);
+    let tuple_ptr = value_heap.alloc(layout.size as usize, layout.align as usize);
 
     // Instantiate and write each field.
     for (i, (elem, field_ty)) in elements.iter().zip(field_types.iter()).enumerate() {
-        let field_value = instantiate_expr(db, *elem, field_ty.ty(db), tydesc_table, value_arena)?;
+        let field_value = instantiate_expr(db, *elem, field_ty.ty(db), tydesc_table, value_heap)?;
         let field_offset = layout.field_offsets[i];
         let field_size = unsafe { (*tydesc_table.get_or_create(field_ty.ty(db))).size };
 
@@ -597,14 +620,14 @@ fn instantiate_struct<'db>(
     expr_fields: &[ExprStructField<'db>],
     type_fields: &[TypeNamedField<'db>],
     tydesc_table: &mut TyDescTable<'db>,
-    value_arena: &mut ValueArena,
+    value_heap: &mut ValueHeap,
     struct_tydesc: *const rtdt::TyDesc,
 ) -> AnyResult<*const u8> {
     // Use the provided struct tydesc and compute layout.
     let layout = unsafe { rtdt::layout::compute_struct_layout(struct_tydesc) };
 
     // Allocate space for struct.
-    let struct_ptr = value_arena.alloc(layout.size as usize, layout.align as usize);
+    let struct_ptr = value_heap.alloc(layout.size as usize, layout.align as usize);
 
     // Create a map of field names to expr values for lookup.
     let mut field_map: std::collections::HashMap<&str, ExprFull<'db>> = std::collections::HashMap::new();
@@ -622,7 +645,7 @@ fn instantiate_struct<'db>(
         let field_expr = field_map.get(field_name)
             .ok_or_else(|| anyhow!("Missing field: {}", field_name))?;
 
-        let field_value = instantiate_expr(db, *field_expr, field_ty.ty(db), tydesc_table, value_arena)?;
+        let field_value = instantiate_expr(db, *field_expr, field_ty.ty(db), tydesc_table, value_heap)?;
         let field_offset = layout.field_offsets[i];
         let field_size = unsafe { (*tydesc_table.get_or_create(field_ty.ty(db))).size };
 
@@ -645,7 +668,7 @@ fn instantiate_enum<'db>(
     payload_expr: Option<ExprFull<'db>>,
     type_variants: &[TypeEnumVariant<'db>],
     tydesc_table: &mut TyDescTable<'db>,
-    value_arena: &mut ValueArena,
+    value_heap: &mut ValueHeap,
     enum_tydesc: *const rtdt::TyDesc,
 ) -> AnyResult<*const u8> {
     // Find the variant index and type.
@@ -659,42 +682,28 @@ fn instantiate_enum<'db>(
     // Get layout.
     let layout = unsafe { rtdt::layout::compute_enum_layout(enum_tydesc) };
 
-    // IMPORTANT: Instantiate payload BEFORE allocating enum memory,
-    // and copy its data immediately to avoid pointer invalidation issues.
-    let payload_bytes = if let (Some(payload_expr), Some(payload_ty)) = (payload_expr, variant_ty.payload(db)) {
-        let payload_value = instantiate_expr(db, payload_expr, payload_ty.ty(db), tydesc_table, value_arena)?;
-        let payload_size = unsafe { (*tydesc_table.get_or_create(payload_ty.ty(db))).size } as usize;
-
-        // Copy payload data to a temporary buffer before allocating enum space.
-        let mut bytes = vec![0u8; payload_size];
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                payload_value,
-                bytes.as_mut_ptr(),
-                payload_size,
-            );
-        }
-        Some(bytes)
-    } else {
-        None
-    };
-
-    // Now allocate space for enum (after all nested allocations are done).
-    let enum_ptr = value_arena.alloc(layout.size as usize, layout.align as usize);
+    // Allocate space for enum first.
+    let enum_ptr = value_heap.alloc(layout.size as usize, layout.align as usize);
 
     // Write discriminant (u32).
     unsafe {
         *(enum_ptr as *mut u32) = variant_index as u32;
     }
 
-    // Write payload if present.
-    if let Some(payload_bytes) = payload_bytes {
+    // Instantiate and write payload if present.
+    //
+    // With stable allocations, we can now instantiate directly into the enum
+    // without worrying about pointer invalidation.
+    if let (Some(payload_expr), Some(payload_ty)) = (payload_expr, variant_ty.payload(db)) {
+        let payload_value = instantiate_expr(db, payload_expr, payload_ty.ty(db), tydesc_table, value_heap)?;
+        let payload_size = unsafe { (*tydesc_table.get_or_create(payload_ty.ty(db))).size } as usize;
         let payload_offset = layout.variant_offsets[variant_index];
+
         unsafe {
             std::ptr::copy_nonoverlapping(
-                payload_bytes.as_ptr(),
+                payload_value,
                 enum_ptr.add(payload_offset as usize),
-                payload_bytes.len(),
+                payload_size,
             );
         }
     }
@@ -703,16 +712,12 @@ fn instantiate_enum<'db>(
 }
 
 /// Instantiate a list value.
-///
-/// Note: This implementation has a limitation where arena reallocation can
-/// invalidate pointers. For types containing pointers (like String), we need
-/// to ensure the arena doesn't resize during element instantiation.
 fn instantiate_list<'db>(
     db: &'db dyn crate::Db,
     elements: &[ExprFull<'db>],
     element_type: TypeAndHeap<'db>,
     tydesc_table: &mut TyDescTable<'db>,
-    value_arena: &mut ValueArena,
+    value_heap: &mut ValueHeap,
     list_tydesc: *const rtdt::TyDesc,
 ) -> AnyResult<*const u8> {
     let element_ty = element_type.ty(db);
@@ -723,17 +728,14 @@ fn instantiate_list<'db>(
     // Allocate array for element data if not empty.
     let data_ptr = if !elements.is_empty() {
         let total_size = element_size * elements.len();
-
-        // Reserve space for the array upfront to minimize arena resizes.
-        // This helps avoid pointer invalidation during element instantiation.
-        let array_ptr = value_arena.alloc(total_size, element_align);
+        let array_ptr = value_heap.alloc(total_size, element_align);
 
         // Instantiate each element and copy it into the array.
-        // Note: If element instantiation causes arena reallocation, array_ptr
-        // could be invalidated. This is a known limitation that will be
-        // addressed when we implement a proper bump allocator.
+        //
+        // With stable allocations, array_ptr will never be invalidated
+        // by subsequent element instantiations.
         for (i, elem) in elements.iter().enumerate() {
-            let elem_value = instantiate_expr(db, *elem, element_ty, tydesc_table, value_arena)?;
+            let elem_value = instantiate_expr(db, *elem, element_ty, tydesc_table, value_heap)?;
 
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -751,7 +753,7 @@ fn instantiate_list<'db>(
     // Now allocate space for List struct.
     let list_size = std::mem::size_of::<rtdt::List>();
     let list_align = std::mem::align_of::<rtdt::List>();
-    let list_ptr = value_arena.alloc(list_size, list_align) as *mut rtdt::List;
+    let list_ptr = value_heap.alloc(list_size, list_align) as *mut rtdt::List;
 
     unsafe {
         (*list_ptr).data = data_ptr;
@@ -766,23 +768,23 @@ fn instantiate_list<'db>(
 pub fn instantiate_value<'db>(
     db: &'db dyn crate::Db,
     typechecked: TypecheckResult<'db>,
-) -> AnyResult<(TyDescTable<'db>, ValueArena, InstantiatedValue<'static>)> {
+) -> AnyResult<(TyDescTable<'db>, ValueHeap, InstantiatedValue<'static>)> {
     let root_type = typechecked.root_type(db)
         .ok_or_else(|| anyhow!("No root type"))?;
     let root_expr = typechecked.root_expr(db);
 
     let mut tydesc_table = TyDescTable::new(db);
-    let mut value_arena = ValueArena::new();
+    let mut value_heap = ValueHeap::new();
 
     // Build TyDesc for root type.
     let tydesc = tydesc_table.get_or_create(root_type.ty(db));
 
     // Instantiate value.
-    let value_ptr = instantiate_expr(db, root_expr, root_type.ty(db), &mut tydesc_table, &mut value_arena)?;
+    let value_ptr = instantiate_expr(db, root_expr, root_type.ty(db), &mut tydesc_table, &mut value_heap)?;
 
     Ok((
         tydesc_table,
-        value_arena,
+        value_heap,
         InstantiatedValue {
             value: value_ptr,
             tydesc,
@@ -808,7 +810,7 @@ mod tests {
     fn test_instantiate_bool_true() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@true")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
@@ -821,7 +823,7 @@ mod tests {
     fn test_instantiate_bool_false() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@false")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
@@ -834,7 +836,7 @@ mod tests {
     fn test_instantiate_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@42")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::U32);
@@ -847,7 +849,7 @@ mod tests {
     fn test_instantiate_f32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@3.14")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::F32);
@@ -860,7 +862,7 @@ mod tests {
     fn test_instantiate_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, r#"@"hello""#)?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
@@ -877,7 +879,7 @@ mod tests {
     fn test_instantiate_empty_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, r#"@"""#)?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
@@ -893,7 +895,7 @@ mod tests {
     fn test_instantiate_tuple_simple() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@(@true, @42)")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
@@ -914,7 +916,7 @@ mod tests {
     fn test_instantiate_named_tuple() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @tuple Point(@u32, @u32) / @tuple Point(@1, @2)")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
@@ -935,7 +937,7 @@ mod tests {
     fn test_instantiate_int_small() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @int / @42")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
@@ -952,7 +954,7 @@ mod tests {
     fn test_instantiate_int_zero() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @int / @0")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
@@ -969,7 +971,7 @@ mod tests {
     fn test_instantiate_int_large() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @int / @1234567890123456789")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
@@ -1004,13 +1006,13 @@ mod tests {
     }
 
     #[test]
-    fn test_value_arena_alignment() {
-        let mut arena = ValueArena::new();
+    fn test_value_heap_alignment() {
+        let mut heap = ValueHeap::new();
 
-        let ptr1 = arena.alloc(1, 1);
-        let ptr2 = arena.alloc(4, 4);
-        let ptr3 = arena.alloc(1, 1);
-        let ptr4 = arena.alloc(8, 8);
+        let ptr1 = heap.alloc(1, 1);
+        let ptr2 = heap.alloc(4, 4);
+        let ptr3 = heap.alloc(1, 1);
+        let ptr4 = heap.alloc(8, 8);
 
         assert_eq!(ptr2 as usize % 4, 0);
         assert_eq!(ptr4 as usize % 8, 0);
@@ -1020,7 +1022,7 @@ mod tests {
     fn test_instantiate_anon_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@{x = @1, y = @2}")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
@@ -1050,7 +1052,7 @@ mod tests {
     fn test_instantiate_named_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @struct Point {x = @10, y = @20}")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
@@ -1073,7 +1075,7 @@ mod tests {
     fn test_instantiate_anon_to_named_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @{x = @5, y = @15}")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
@@ -1095,7 +1097,7 @@ mod tests {
     fn test_instantiate_enum_no_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -1113,7 +1115,7 @@ mod tests {
     fn test_instantiate_enum_with_scalar_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -1137,7 +1139,7 @@ mod tests {
     fn test_instantiate_enum_anon_to_named_coercion() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Error")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -1154,7 +1156,7 @@ mod tests {
         let db = Database::default();
         // Test enum variant with tuple payload - using same syntax as 13_anon_enum_with_multi_payload
         let typechecked = compile(&db, ": @enum { Ok(@(@u32, @u32)), Err(@string) } / @enum Ok(@(@10, @20))")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -1192,7 +1194,7 @@ mod tests {
     fn test_instantiate_enum_with_struct_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum { Data(@{x: @u32, y: @u32}), None } / @enum Data(@{x = @5, y = @15})")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -1227,11 +1229,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Fix arena reallocation issue - array_ptr gets invalidated
     fn test_instantiate_list_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@[@1, @2, @3, @4, @5]")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -1256,7 +1257,7 @@ mod tests {
         let db = Database::default();
         // Empty lists need type hint.
         let typechecked = compile(&db, ": @list [@u32] / @[]")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -1272,7 +1273,7 @@ mod tests {
     fn test_instantiate_list_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, r#"@[@"hello", @"world", @"test"]"#)?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -1305,11 +1306,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Fix arena reallocation issue for complex nested types
     fn test_instantiate_list_of_tuples() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@[@(@1, @2), @(@3, @4), @(@5, @6)]")?;
-        let (tydesc_table, value_arena, inst) = instantiate_value(&db, typechecked)?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
