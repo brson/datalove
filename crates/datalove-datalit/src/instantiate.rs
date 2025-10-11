@@ -139,6 +139,7 @@ impl<'db> TyDescTable<'db> {
             Type::AnonEnum(e) => self.create_enum_tydesc(&e.variants(self.db)),
             Type::NamedEnum(e) => self.create_enum_tydesc(&e.variants(self.db)),
             Type::List(l) => self.create_list_tydesc(l.element_type(self.db)),
+            Type::Option(o) => self.create_option_tydesc(o.inner_type(self.db)),
             _ => unimplemented!("TyDesc creation for composite types"),
         }
     }
@@ -342,6 +343,35 @@ impl<'db> TyDescTable<'db> {
                 list: rtdt::TyInfoList {
                     element_tydesc,
                 },
+            },
+        })
+    }
+
+    /// Create TyDesc for option.
+    fn create_option_tydesc(&mut self, inner_type: TypeAndHeap<'db>) -> Box<rtdt::TyDesc> {
+        // Recursively create TyDesc for inner type.
+        let inner_tydesc = self.get_or_create(inner_type.ty(self.db));
+
+        // Create temporary TyDesc to compute layout.
+        let temp_tydesc = rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Option,
+            size: 0,
+            align: 1,
+            type_info: rtdt::TyInfo {
+                option: rtdt::TyInfoOption { inner_tydesc },
+            },
+        };
+
+        // Compute layout.
+        let layout = unsafe { rtdt::layout::compute_option_layout(&temp_tydesc) };
+
+        // Create final TyDesc with computed layout.
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Option,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo {
+                option: rtdt::TyInfoOption { inner_tydesc },
             },
         })
     }
@@ -577,6 +607,15 @@ fn instantiate_expr<'db>(
             let list_tydesc = tydesc_table.get_or_create(ty);
             instantiate_list(db, &list_expr.elements(db), list_ty.element_type(db), tydesc_table, value_heap, list_tydesc)
         }
+        (Expr::None, Type::Option(opt)) => {
+            let option_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_option(db, false, None, opt.inner_type(db), tydesc_table, value_heap, option_tydesc)
+        }
+        (_, Type::Option(opt)) => {
+            // Implicit Some wrapping - any value can be wrapped in Some.
+            let option_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_option(db, true, Some(expr), opt.inner_type(db), tydesc_table, value_heap, option_tydesc)
+        }
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
@@ -762,6 +801,46 @@ fn instantiate_list<'db>(
     }
 
     Ok(list_ptr as *const u8)
+}
+
+/// Instantiate an option value.
+fn instantiate_option<'db>(
+    db: &'db dyn crate::Db,
+    is_some: bool,
+    payload_expr: Option<ExprFull<'db>>,
+    inner_type: TypeAndHeap<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    value_heap: &mut ValueHeap,
+    option_tydesc: *const rtdt::TyDesc,
+) -> AnyResult<*const u8> {
+    // Get layout.
+    let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc) };
+
+    // Allocate space for Option.
+    let option_ptr = value_heap.alloc(layout.size as usize, layout.align as usize);
+
+    if is_some {
+        // Write tag = Some (2).
+        unsafe { *option_ptr = rtdt::OptionTag::Some as u8 };
+
+        // Instantiate and write payload.
+        let payload = payload_expr.ok_or_else(|| anyhow!("Some variant missing payload"))?;
+        let payload_value = instantiate_expr(db, payload, inner_type.ty(db), tydesc_table, value_heap)?;
+        let payload_size = unsafe { (*tydesc_table.get_or_create(inner_type.ty(db))).size } as usize;
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                payload_value,
+                option_ptr.add(layout.payload_offset as usize),
+                payload_size,
+            );
+        }
+    } else {
+        // Write tag = None (1).
+        unsafe { *option_ptr = rtdt::OptionTag::None as u8 };
+    }
+
+    Ok(option_ptr as *const u8)
 }
 
 /// Instantiate a value from a typechecked AST.
@@ -1339,4 +1418,38 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn test_instantiate_option_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@u32 / @none")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_some_u32() -> AnyResult<()> {
+        let db = Database::default();
+        // Implicit Some wrapping.
+        let typechecked = compile(&db, ": @?@u32 / @42")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.value.add(layout.payload_offset as usize) as *const u32;
+            assert_eq!(*payload_ptr, 42);
+        }
+        Ok(())
+    }
+
 }
