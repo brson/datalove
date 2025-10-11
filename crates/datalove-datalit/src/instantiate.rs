@@ -60,10 +60,7 @@ impl<'db> TyDescTable<'db> {
                     size: 1,
                     align: 1,
                     type_info: rtdt::TyInfo {
-                        tuple: rtdt::TyInfoTuple {
-                            num_fields: 0,
-                            fields: std::ptr::null(),
-                        },
+                        nothing: rtdt::TyInfoNothing,
                     },
                 })
             }
@@ -86,10 +83,7 @@ impl<'db> TyDescTable<'db> {
                     size: 4,
                     align: 4,
                     type_info: rtdt::TyInfo {
-                        tuple: rtdt::TyInfoTuple {
-                            num_fields: 0,
-                            fields: std::ptr::null(),
-                        },
+                        nothing: rtdt::TyInfoNothing,
                     },
                 })
             }
@@ -99,10 +93,7 @@ impl<'db> TyDescTable<'db> {
                     size: std::mem::size_of::<rtdt::Int>() as u32,
                     align: std::mem::align_of::<rtdt::Int>() as u32,
                     type_info: rtdt::TyInfo {
-                        tuple: rtdt::TyInfoTuple {
-                            num_fields: 0,
-                            fields: std::ptr::null(),
-                        },
+                        nothing: rtdt::TyInfoNothing,
                     },
                 })
             }
@@ -112,10 +103,7 @@ impl<'db> TyDescTable<'db> {
                     size: std::mem::size_of::<rtdt::String>() as u32,
                     align: std::mem::align_of::<rtdt::String>() as u32,
                     type_info: rtdt::TyInfo {
-                        tuple: rtdt::TyInfoTuple {
-                            num_fields: 0,
-                            fields: std::ptr::null(),
-                        },
+                        nothing: rtdt::TyInfoNothing,
                     },
                 })
             }
@@ -125,10 +113,7 @@ impl<'db> TyDescTable<'db> {
                     size: std::mem::size_of::<rtdt::Error>() as u32,
                     align: std::mem::align_of::<rtdt::Error>() as u32,
                     type_info: rtdt::TyInfo {
-                        tuple: rtdt::TyInfoTuple {
-                            num_fields: 0,
-                            fields: std::ptr::null(),
-                        },
+                        nothing: rtdt::TyInfoNothing,
                     },
                 })
             }

@@ -276,6 +276,8 @@ pub enum TyTag {
 
 #[repr(C)]
 pub union TyInfo {
+    // For scalars etc.
+    pub nothing: TyInfoNothing,
     pub tuple: TyInfoTuple,
     pub struct_: TyInfoStruct,
     pub enum_: TyInfoEnum,
@@ -285,6 +287,10 @@ pub union TyInfo {
     pub option: TyInfoOption,
     pub result: TyInfoResult,
 }
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoNothing;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
