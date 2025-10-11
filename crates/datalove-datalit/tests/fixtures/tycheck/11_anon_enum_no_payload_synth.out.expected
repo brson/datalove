@@ -1,0 +1,20 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonEnum": {
+          "payload": null,
+          "variant_name": "Ok"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

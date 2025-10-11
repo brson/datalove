@@ -1,0 +1,1 @@
+: @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)

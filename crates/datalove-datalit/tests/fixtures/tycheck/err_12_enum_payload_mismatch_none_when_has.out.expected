@@ -1,0 +1,47 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonEnum": {
+          "payload": null,
+          "variant_name": "Ok"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "NamedEnum": {
+          "name": "Result",
+          "variants": [
+            {
+              "name": "Ok",
+              "payload": {
+                "heap": "Omitted",
+                "type_hint": {
+                  "AnonTuple": {
+                    "fields": [
+                      {
+                        "heap": "Local",
+                        "type_hint": "U32"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "actual": "no payload",
+      "expected": "payload",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

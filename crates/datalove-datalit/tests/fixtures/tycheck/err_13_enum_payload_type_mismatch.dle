@@ -1,0 +1,1 @@
+: @enum Result { Ok(@u32) } / @enum Ok(@"wrong")

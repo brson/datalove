@@ -2,8 +2,7 @@
   "ast": {
     "expr": {
       "expr": {
-        "NamedEnum": {
-          "enum_name": "Result",
+        "AnonEnum": {
           "payload": {
             "expr": {
               "expr": {
@@ -12,8 +11,8 @@
                     {
                       "expr": {
                         "expr": {
-                          "Int": {
-                            "value": "42"
+                          "ParseError": {
+                            "message": "unexpected token in DynParser expression"
                           }
                         },
                         "heap": "Local"
@@ -53,34 +52,16 @@
                   }
                 }
               }
-            },
-            {
-              "name": "Err",
-              "payload": {
-                "heap": "Omitted",
-                "type_hint": {
-                  "AnonTuple": {
-                    "fields": [
-                      {
-                        "heap": "Local",
-                        "type_hint": "String"
-                      }
-                    ]
-                  }
-                }
-              }
             }
           ]
         }
       }
     }
   },
-  "errors": [],
-  "resolutions": [
+  "errors": [
     {
-      "binding_id": 0,
-      "name": "Result",
-      "scope_depth": 0
+      "kind": "CannotSynthesize"
     }
-  ]
+  ],
+  "root_type": null
 }

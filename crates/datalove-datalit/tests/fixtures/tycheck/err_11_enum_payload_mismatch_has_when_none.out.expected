@@ -2,8 +2,7 @@
   "ast": {
     "expr": {
       "expr": {
-        "NamedEnum": {
-          "enum_name": "Result",
+        "AnonEnum": {
           "payload": {
             "expr": {
               "expr": {
@@ -36,51 +35,27 @@
       "heap": "Local",
       "type_hint": {
         "NamedEnum": {
-          "name": "Result",
+          "name": "Status",
           "variants": [
             {
               "name": "Ok",
-              "payload": {
-                "heap": "Omitted",
-                "type_hint": {
-                  "AnonTuple": {
-                    "fields": [
-                      {
-                        "heap": "Local",
-                        "type_hint": "U32"
-                      }
-                    ]
-                  }
-                }
-              }
+              "payload": null
             },
             {
-              "name": "Err",
-              "payload": {
-                "heap": "Omitted",
-                "type_hint": {
-                  "AnonTuple": {
-                    "fields": [
-                      {
-                        "heap": "Local",
-                        "type_hint": "String"
-                      }
-                    ]
-                  }
-                }
-              }
+              "name": "Error",
+              "payload": null
             }
           ]
         }
       }
     }
   },
-  "errors": [],
-  "resolutions": [
+  "errors": [
     {
-      "binding_id": 0,
-      "name": "Result",
-      "scope_depth": 0
+      "actual": "payload",
+      "expected": "no payload",
+      "kind": "TypeMismatch"
     }
-  ]
+  ],
+  "root_type": null
 }

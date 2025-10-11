@@ -1,0 +1,38 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonEnum": {
+          "payload": null,
+          "variant_name": "NotFound"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "NamedEnum": {
+          "name": "Status",
+          "variants": [
+            {
+              "name": "Ok",
+              "payload": null
+            },
+            {
+              "name": "Error",
+              "payload": null
+            }
+          ]
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "kind": "VariantNotFound",
+      "variant": "NotFound"
+    }
+  ],
+  "root_type": null
+}

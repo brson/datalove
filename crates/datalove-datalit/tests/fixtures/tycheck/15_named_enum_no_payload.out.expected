@@ -1,0 +1,48 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "NamedEnum": {
+          "enum_name": "Status",
+          "payload": null,
+          "variant_name": "Ok"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "NamedEnum": {
+          "name": "Status",
+          "variants": [
+            {
+              "name": "Ok",
+              "payload": null
+            },
+            {
+              "name": "Error",
+              "payload": null
+            }
+          ]
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "heap": "@",
+    "kind": "NamedEnum",
+    "name": "Status",
+    "variants": [
+      {
+        "name": "Ok",
+        "payload": null
+      },
+      {
+        "name": "Error",
+        "payload": null
+      }
+    ]
+  }
+}

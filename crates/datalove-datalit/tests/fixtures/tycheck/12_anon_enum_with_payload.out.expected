@@ -2,8 +2,7 @@
   "ast": {
     "expr": {
       "expr": {
-        "NamedEnum": {
-          "enum_name": "Result",
+        "AnonEnum": {
           "payload": {
             "expr": {
               "expr": {
@@ -76,11 +75,31 @@
     }
   },
   "errors": [],
-  "resolutions": [
-    {
-      "binding_id": 0,
-      "name": "Result",
-      "scope_depth": 0
-    }
-  ]
+  "root_type": {
+    "heap": "@",
+    "kind": "NamedEnum",
+    "name": "Result",
+    "variants": [
+      {
+        "name": "Ok",
+        "payload": {
+          "fields": [
+            "@u32"
+          ],
+          "heap": "",
+          "kind": "AnonTuple"
+        }
+      },
+      {
+        "name": "Err",
+        "payload": {
+          "fields": [
+            "@string"
+          ],
+          "heap": "",
+          "kind": "AnonTuple"
+        }
+      }
+    ]
+  }
 }
