@@ -18,6 +18,8 @@ For storage and transmission of structured and optionally typed data ala JSON.
 It is a subset of the expression language in Datalove Script.
 
 The types are all plain old data without cycles.
+We call these types "pure types",
+and if you understand these types you will understand most of the type system.
 
 Also known as "the data language",
 or "data expressions",
@@ -55,3 +57,29 @@ Extension `.dlm`.
 
 See [`demo-module.dlm`] for an example.
 
+
+## Design notes
+
+### Error handling
+
+The result type is a language type,
+and is dedicated the `!` sigil &mdash;
+if you see `!` you are looking at error handling.
+
+The error type is a dynamic type that can hold
+any type (an existential type).
+
+
+### Floats and total ordering
+
+There are two flavors of equality and comparison &mdash;
+one mostly by procedural and logical program code,
+and one mostly used by containers.
+The only difference is the treatment of floats.
+
+- `eq` - NaN != NaN; +0.0 == -0.0
+- `cmp` - NaN != NaN; +0.0 == -0.0
+- `eq_unique` - All float bit patterns are distinct.
+  This is likely only needed for hashing.
+- `cmp_total` - Total order for floats.
+  Needed for B-tree maps.
