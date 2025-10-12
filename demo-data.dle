@@ -173,20 +173,31 @@
 
 
 
-; ## Error type
+; ## Existential types
+
+; any pure data type
+: @data / @data 1
+; with type hint
+: @data / @data : int / 1
 
 ; error type for representing failures
 : @error / @error "oops"
+; with type hint
+: @error / @error : int / 1
+
+
+
 
 
 ; ## TODO
 
-; - dates
-; - bitset
-; - table (polars, arrow)
-; - graph
-; - array
-; - multi-dimensional array
-; - range (python)?
-; - complex
-; - real
+; subranged ints
+; datetimes
+; bitset
+; table (polars, arrow)
+; graph
+; array
+; multi-dimensional array
+; range (python)?
+; complex
+; real
