@@ -2,6 +2,10 @@
 
 #![allow(unused)]
 
+use rmx::prelude::*;
+
+use datalove_repl as repl;
+
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
