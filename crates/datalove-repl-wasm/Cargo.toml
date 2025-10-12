@@ -1,5 +1,5 @@
 [package]
-name = "datalove-cli"
+name = "datalove-repl-wasm"
 version.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -7,13 +7,8 @@ edition.workspace = true
 
 [dependencies]
 rmx.workspace = true
-bct.workspace = true
-datalove.path = "../datalove"
-datalove-datalit.path = "../datalove-datalit"
-datalove-rt.path = "../datalove-rt"
 datalove-repl.path = "../datalove-repl"
 datalove-repl-rat.path = "../datalove-repl-rat"
 
-[[bin]]
-name = "datalove"
-path = "src/main.rs"
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"

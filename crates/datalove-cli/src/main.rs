@@ -32,6 +32,8 @@ enum Command {
     LitPretty(LitPrettyCommand),
     /// Run built-in operations on datalit expressions.
     LitOp(LitOpCommand),
+    /// Start an interactive REPL.
+    Repl(ReplCommand),
 }
 
 #[derive(clap::Args)]
@@ -66,6 +68,10 @@ struct LitOpCommand {
     expr2: String,
 }
 
+#[derive(clap::Args)]
+struct ReplCommand {
+}
+
 impl Cli {
     fn run(&self) -> AnyResult<()> {
         match &self.cmd {
@@ -73,6 +79,7 @@ impl Cli {
             Command::LitAst(cmd) => cmd.run(&self.args),
             Command::LitPretty(cmd) => cmd.run(&self.args),
             Command::LitOp(cmd) => cmd.run(&self.args),
+            Command::Repl(cmd) => cmd.run(&self.args),
         }
     }
 }
@@ -240,6 +247,14 @@ impl LitOpCommand {
                 bail!("Unknown operation: {}", self.op);
             }
         }
+
+        Ok(())
+    }
+}
+
+impl ReplCommand {
+    fn run(&self, _args: &Args) -> AnyResult<()> {
+        todo!();
 
         Ok(())
     }

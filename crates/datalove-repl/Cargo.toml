@@ -1,0 +1,9 @@
+[package]
+name = "datalove-repl"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+rmx.workspace = true
