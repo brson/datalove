@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Datalove REPL</title>
     <link data-trunk rel="rust" data-wasm-opt="z" data-target-name="datalove_repl_wasm" />
+    <script type="module">
+        window.addEventListener('TrunkApplicationStarted', async () => {
+            await window.wasmBindings.start();
+        });
+    </script>
     <style>
         html, body {
             margin: 0;
