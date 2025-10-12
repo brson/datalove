@@ -120,3 +120,9 @@ as a egui_ratatui application.
 - datafun - the pure-data language
   - repl - this will be the primary driver of development soon
   - modules and standard library
+
+
+## Wants
+
+- logic programming features:
+  - generators, choice points, memoization, and logic programming
