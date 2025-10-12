@@ -10,6 +10,7 @@ with a batteries included standard library.
 - Statically typed with ergonomic coercions and runtime introspection.
 - Fast incremental processing with in-place updates, REPL-first.
 - First class option and result types.
+- Virtualized I/O for simulation and record-and-replay.
 
 
 ## Datalove Literals
@@ -81,6 +82,18 @@ Floats use the typical ordering, like Rust's `total_cmp`:
 
 Equality, less than, greater than, etc. behave
 the standard way wrt float zeros and NaNs.
+
+
+## REPL
+
+The script is REPL-first and intends to advance the
+state of the art in REPLs.
+With pure data statements and virtualized I/O the repl
+supports undo/redo and record-and-replay.
+
+The repl is a modern Ratatui application.
+The datafun interpreter runs on the web
+as a egui_ratatui application.
 
 
 ## Roadmap
