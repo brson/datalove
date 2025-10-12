@@ -111,9 +111,9 @@
 ; potential lightweight syntax for anonymous enum types
 ;
 ; this relies on coercion by looking at the variant payload types
-: @u32 | @bool / @true
+; : @u32 | @bool / @true
 ; spelling the enum ctors
-: @u32 | @bool / @enum bool(@true)
+; : @u32 | @bool / @enum bool(@true)
 
 
 : @enum {
