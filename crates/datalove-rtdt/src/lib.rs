@@ -231,6 +231,13 @@ pub struct ResultLayout {
 // ## Dynamic types
 
 #[repr(C)]
+pub struct Data {
+    // Encoding tbd.
+    pub data: usize,
+    pub tydesc: *const TyDesc,
+}
+
+#[repr(C)]
 pub struct Error {
     // Encoding tbd.
     pub data: usize,
