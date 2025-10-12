@@ -95,11 +95,29 @@ impl App {
     /// Submit the current input.
     pub fn submit_input(&mut self) {
         if !self.input.is_empty() {
-            self.messages.push(format!("> {}", self.input));
-            // TODO: Actual REPL evaluation would go here.
-            self.messages.push(format!("  (not evaluated)"));
-            self.input.clear();
-            self.character_index = 0;
+            match repl::Command::parse(&self.input) {
+                repl::CommandParse::Empty => {
+                    self.input.clear();
+                    self.character_index = 0;
+                    self.messages.push(format!("> {}", self.input));
+                    self.messages.push(format!("  (empty)"));
+                }
+                repl::CommandParse::ReadAnotherLine => {
+                    todo!()
+                }
+                repl::CommandParse::Command(command) => {
+                    self.input.clear();
+                    self.character_index = 0;
+                    self.messages.push(format!("> {}", self.input));
+                    self.messages.push(format!("  ⏱"));
+                    match self.engine.eval(command) {
+                        repl::Eval::Nothing => {
+                            self.messages.pop();
+                            self.messages.push(format!("  nothing"));
+                        }
+                    }
+                }
+            }
         }
     }
 

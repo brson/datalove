@@ -23,19 +23,20 @@ pub struct ScriptStatement(String);
 #[derive(Debug)]
 pub enum CommandParse {
     Empty,
-    ReadAnotherLine(String),
-    ReplCommand(ReplCommand),
+    ReadAnotherLine,
+    Command(Command),
 }
 
 #[derive(Debug)]
-pub struct Eval {
+pub enum Eval {
+    Nothing
 }
 
 pub struct Engine {
 }
 
 impl Command {
-    pub fn parse(command: String) -> CommandParse {
+    pub fn parse(command: &str) -> CommandParse {
         CommandParse::Empty
     }
 }
@@ -45,7 +46,7 @@ impl Engine {
         Ok(Engine {})
     }
 
-    pub fn eval(&mut self, command: Command) -> AnyResult<Eval> {
-        Ok(Eval {})
+    pub fn eval(&mut self, command: Command) -> Eval {
+        Eval::Nothing
     }
 }
