@@ -125,4 +125,4 @@ as a egui_ratatui application.
 ## Wants
 
 - logic programming features:
-  - generators, choice points, memoization, and logic programming
+  - generators, choice points, memoization
