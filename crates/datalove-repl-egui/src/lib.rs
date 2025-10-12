@@ -1,4 +1,4 @@
-//! WASM bindings for the datalove REPL using egui_ratatui.
+//! Egui bindings for the datalove REPL using egui_ratatui.
 
 use eframe::egui;
 #[cfg(target_arch = "wasm32")]
@@ -61,7 +61,7 @@ pub fn start() -> Result<(), wasm_bindgen::JsValue> {
 /// The eframe application.
 struct ReplApp {
     terminal: Terminal<RataguiBackend<EmbeddedGraphics>>,
-    app: datalove_repl::App,
+    app: datalove_repl_rat::App,
 }
 
 impl ReplApp {
@@ -84,7 +84,7 @@ impl ReplApp {
 
         Self {
             terminal,
-            app: datalove_repl::App::new(),
+            app: datalove_repl_rat::App::new(),
         }
     }
 }
@@ -123,7 +123,7 @@ impl eframe::App for ReplApp {
 
             // Draw the ratatui terminal.
             self.terminal
-                .draw(|f| datalove_repl::ui(f, &self.app))
+                .draw(|f| datalove_repl_rat::ui(f, &self.app))
                 .expect("failed to draw terminal");
 
             // Render the terminal widget.

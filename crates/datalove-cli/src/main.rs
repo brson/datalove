@@ -254,6 +254,6 @@ impl LitOpCommand {
 
 impl ReplCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        datalove_repl_rat::run()
+        datalove_repl_term::run()
     }
 }

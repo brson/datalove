@@ -7,6 +7,4 @@ edition.workspace = true
 
 [dependencies]
 rmx.workspace = true
-datalove-repl.path = "../datalove-repl"
-ratatui = { version = "0.29", features = ["crossterm"] }
-crossterm = "0.28"
+ratatui = { version = "0.29", default-features = false }

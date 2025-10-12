@@ -1,5 +1,5 @@
 [package]
-name = "datalove-repl-wasm"
+name = "datalove-repl-egui"
 version.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rmx.workspace = true
-datalove-repl.path = "../datalove-repl"
+datalove-repl-rat.path = "../datalove-repl-rat"
 egui = "0.32"
 egui_ratatui = "2.0"
 soft_ratatui = "0.1"

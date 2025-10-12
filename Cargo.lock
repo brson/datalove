@@ -1323,7 +1323,7 @@ dependencies = [
  "bct",
  "datalove",
  "datalove-datalit",
- "datalove-repl-rat",
+ "datalove-repl-term",
  "datalove-rt",
  "rustmax",
 ]
@@ -1340,29 +1340,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "datalove-repl"
-version = "0.1.0"
-dependencies = [
- "ratatui",
- "rustmax",
-]
-
-[[package]]
-name = "datalove-repl-rat"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "datalove-repl",
- "ratatui",
- "rustmax",
-]
-
-[[package]]
-name = "datalove-repl-wasm"
+name = "datalove-repl-egui"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
- "datalove-repl",
+ "datalove-repl-rat",
  "eframe",
  "egui",
  "egui_ratatui",
@@ -1374,6 +1356,24 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "datalove-repl-rat"
+version = "0.1.0"
+dependencies = [
+ "ratatui",
+ "rustmax",
+]
+
+[[package]]
+name = "datalove-repl-term"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "datalove-repl-rat",
+ "ratatui",
+ "rustmax",
 ]
 
 [[package]]
