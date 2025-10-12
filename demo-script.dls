@@ -24,7 +24,8 @@ require data lookup_tables : { x: #u32, y: #bool }
 ; ## Functions and procedures
 
 ; Functions operate on pure data
-; and are comptime-compatible.
+; and are comptime-compatible; only
+; call other funs.
 fun increment(
   accum: u64, amount: u8,
 ) !u64
@@ -32,10 +33,27 @@ fun increment(
 end fun
 
 ; Procedures operate on types including
-; native pointers, may do I/O
+; native pointers, may do I/O, and may call
+; funs and procs.
 proc print_hello(msg: @string)
   std.io.print("hello {msg}")
 end proc
+
+; Argument modes, yup they're back.
+;
+fun demo(
+    ; `in` (implicit), by-val
+    a: u32,
+    ; `out`, by-mut-ptr _to uninitialized local_.
+    ; like mercury `uo`, "unique output".
+    ; not clear yet if we need the uninitialized requirement.
+    b: out u32,
+    ; `ref`, by-ref, like mercury `ui` "unique input"?
+    c: ref u32,
+    ; `mut`, by-mut-ref, like mercury `di` "destructive input"?
+    c: mut u32,
+)
+end fun
 
 
 ; ## Non plain-data types
