@@ -1,0 +1,57 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Data": {
+          "value": {
+            "expr": {
+              "expr": {
+                "AnonStruct": {
+                  "fields": [
+                    {
+                      "name": "x",
+                      "value": {
+                        "expr": {
+                          "expr": {
+                            "Int": {
+                              "value": "42"
+                            }
+                          },
+                          "heap": "Local"
+                        },
+                        "type_hint": null
+                      }
+                    },
+                    {
+                      "name": "y",
+                      "value": {
+                        "expr": {
+                          "expr": {
+                            "String": {
+                              "value": "\"hello\""
+                            }
+                          },
+                          "heap": "Local"
+                        },
+                        "type_hint": null
+                      }
+                    }
+                  ]
+                }
+              },
+              "heap": "Local"
+            },
+            "type_hint": null
+          }
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "Data"
+    }
+  },
+  "errors": [],
+  "root_type": "@data"
+}

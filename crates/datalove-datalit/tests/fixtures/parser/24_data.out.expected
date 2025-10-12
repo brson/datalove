@@ -1,0 +1,24 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": "Data"
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "Data": {
+        "value": {
+          "type_hint": null,
+          "expr": {
+            "heap": "Omitted",
+            "expr": {
+              "String": {
+                "value": "\"payload\""
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

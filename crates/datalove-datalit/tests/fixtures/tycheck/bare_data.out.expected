@@ -1,0 +1,25 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Data": {
+          "value": {
+            "expr": {
+              "expr": {
+                "String": {
+                  "value": "\"some value\""
+                }
+              },
+              "heap": "Omitted"
+            },
+            "type_hint": null
+          }
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [],
+  "root_type": "@data"
+}
