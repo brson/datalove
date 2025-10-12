@@ -44,10 +44,14 @@ pub fn run() -> AnyResult<()> {
 }
 
 /// Run the application loop.
-fn run_app<B: ratatui::backend::Backend>(
+fn run_app<B, E>(
     terminal: &mut Terminal<B>,
-    app: &mut datalove_repl_rat::App,
-) -> AnyResult<()> {
+    app: &mut datalove_repl_rat::App<E>,
+) -> AnyResult<()>
+where
+    B: ratatui::backend::Backend,
+    E: datalove_repl_rat::ReplExecutor,
+{
     loop {
         // Poll for worker results before drawing.
         app.poll_results();
@@ -70,11 +74,15 @@ fn run_app<B: ratatui::backend::Backend>(
 }
 
 /// Run the application loop with a provided event source.
-pub fn run_app_with_events<B: ratatui::backend::Backend>(
+pub fn run_app_with_events<B, E>(
     terminal: &mut Terminal<B>,
-    app: &mut datalove_repl_rat::App,
+    app: &mut datalove_repl_rat::App<E>,
     events: &mut dyn Iterator<Item = Event>,
-) -> AnyResult<()> {
+) -> AnyResult<()>
+where
+    B: ratatui::backend::Backend,
+    E: datalove_repl_rat::ReplExecutor,
+{
     loop {
         // Poll for worker results before drawing.
         app.poll_results();
@@ -100,7 +108,10 @@ pub fn run_app_with_events<B: ratatui::backend::Backend>(
 }
 
 /// Handle a key event.
-fn handle_key_event(app: &mut datalove_repl_rat::App, key: crossterm::event::KeyEvent) {
+fn handle_key_event<E: datalove_repl_rat::ReplExecutor>(
+    app: &mut datalove_repl_rat::App<E>,
+    key: crossterm::event::KeyEvent,
+) {
     // Only process press events, not repeat/release.
     if key.kind != KeyEventKind::Press {
         return;

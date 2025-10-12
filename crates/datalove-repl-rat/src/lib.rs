@@ -6,6 +6,12 @@ use rmx::prelude::*;
 
 use datalove_repl as repl;
 
+mod executor;
+mod executor_threaded;
+mod executor_blocking;
+
+pub use executor::{ReplExecutor, ThreadedExecutor, BlockingExecutor};
+
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
@@ -14,22 +20,7 @@ use ratatui::{
     Frame,
 };
 
-use std::sync::mpsc::{channel, Sender, Receiver};
-use std::thread;
-
-/// Request sent to the worker thread.
-#[derive(Debug)]
-enum WorkerRequest {
-    ParseAndEval { id: u64, input: String },
-    Shutdown,
-}
-
-/// Response from the worker thread.
-#[derive(Debug)]
-enum WorkerResponse {
-    ParseResult { id: u64, parse: repl::CommandParse },
-    EvalResult { id: u64, eval: repl::Eval },
-}
+use executor::WorkerResponse;
 
 /// In-flight request status.
 #[derive(Debug)]
@@ -39,11 +30,9 @@ enum RequestStatus {
 }
 
 /// Application state.
-pub struct App {
-    /// Channel to send requests to worker thread.
-    worker_tx: Sender<WorkerRequest>,
-    /// Channel to receive responses from worker thread.
-    worker_rx: Receiver<WorkerResponse>,
+pub struct App<E: ReplExecutor> {
+    /// Executor for parse and eval operations.
+    executor: E,
     /// Next request ID.
     next_id: u64,
     /// Current in-flight request.
@@ -62,19 +51,11 @@ pub struct App {
     should_exit: bool,
 }
 
-impl App {
-    pub fn new(engine: repl::Engine) -> Self {
-        let (main_tx, worker_rx) = channel();
-        let (worker_tx, main_rx) = channel();
-
-        // Spawn worker thread.
-        thread::spawn(move || {
-            worker_thread(engine, worker_rx, worker_tx);
-        });
-
+impl<E: ReplExecutor> App<E> {
+    /// Create a new app with the given executor type.
+    pub fn with_executor(engine: repl::Engine) -> Self {
         Self {
-            worker_tx: main_tx,
-            worker_rx: main_rx,
+            executor: E::new(engine),
             next_id: 0,
             in_flight: None,
             input: String::new(),
@@ -192,8 +173,25 @@ impl App {
     }
 }
 
+/// Platform-specific constructors.
+#[cfg(not(target_arch = "wasm32"))]
+impl App<ThreadedExecutor> {
+    /// Create a new app using the threaded executor (native platforms).
+    pub fn new(engine: repl::Engine) -> Self {
+        Self::with_executor(engine)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl App<BlockingExecutor> {
+    /// Create a new app using the blocking executor (WASM).
+    pub fn new(engine: repl::Engine) -> Self {
+        Self::with_executor(engine)
+    }
+}
+
 /// Render the UI.
-pub fn ui(f: &mut Frame, app: &App) {
+pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -236,7 +234,7 @@ pub fn ui(f: &mut Frame, app: &App) {
 }
 
 /// Render the ESC menu popup.
-pub fn render_menu(f: &mut Frame, app: &App) {
+pub fn render_menu<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
     let area = centered_rect(20, 20, f.area());
 
     // Clear the background.
@@ -287,7 +285,7 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-impl App {
+impl<E: ReplExecutor> App<E> {
     /// Submit input for async processing.
     pub fn handle_input(&mut self) {
         if self.input.is_empty() {
@@ -311,20 +309,17 @@ impl App {
         self.messages.push(format!("> {}", input_text));
         self.messages.push(format!("  ⏱"));
 
-        // Send request to worker thread.
-        let _ = self.worker_tx.send(WorkerRequest::ParseAndEval {
-            id,
-            input: input_text.clone(),
-        });
+        // Send request to executor.
+        self.executor.submit_parse_and_eval(id, input_text.clone());
 
         // Track in-flight request.
         self.in_flight = Some((id, input_text, RequestStatus::Parsing));
     }
 
-    /// Poll for results from worker thread.
+    /// Poll for results from executor.
     pub fn poll_results(&mut self) {
         // Process all available responses.
-        while let Ok(response) = self.worker_rx.try_recv() {
+        while let Some(response) = self.executor.try_recv_response() {
             match response {
                 WorkerResponse::ParseResult { id, parse } => {
                     self.handle_parse_result(id, parse);
@@ -399,39 +394,5 @@ impl App {
         }
 
         self.in_flight = None;
-    }
-}
-
-/// Worker thread that handles parse and eval operations.
-fn worker_thread(
-    mut engine: repl::Engine,
-    rx: Receiver<WorkerRequest>,
-    tx: Sender<WorkerResponse>,
-) {
-    loop {
-        match rx.recv() {
-            Ok(WorkerRequest::ParseAndEval { id, input }) => {
-                // Parse the input.
-                let parse = repl::Command::parse(&input);
-                let _ = tx.send(WorkerResponse::ParseResult {
-                    id,
-                    parse: parse.clone(),
-                });
-
-                // Evaluate if we got a command.
-                if let repl::CommandParse::Command(command) = parse {
-                    let eval = engine.eval(command);
-                    let _ = tx.send(WorkerResponse::EvalResult { id, eval });
-                }
-            }
-            Ok(WorkerRequest::Shutdown) => {
-                // todo actually send this
-                unreachable!();
-            }
-            Err(_) => {
-                // todo shouldn't happen
-                break;
-            }
-        }
     }
 }

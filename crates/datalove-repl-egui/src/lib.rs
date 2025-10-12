@@ -67,9 +67,16 @@ pub fn start() -> Result<(), wasm_bindgen::JsValue> {
 }
 
 /// The eframe application.
+#[cfg(not(target_arch = "wasm32"))]
 struct ReplApp {
     terminal: Terminal<RataguiBackend<EmbeddedGraphics>>,
-    app: datalove_repl_rat::App,
+    app: datalove_repl_rat::App<datalove_repl_rat::ThreadedExecutor>,
+}
+
+#[cfg(target_arch = "wasm32")]
+struct ReplApp {
+    terminal: Terminal<RataguiBackend<EmbeddedGraphics>>,
+    app: datalove_repl_rat::App<datalove_repl_rat::BlockingExecutor>,
 }
 
 impl ReplApp {
@@ -100,6 +107,9 @@ impl ReplApp {
 impl eframe::App for ReplApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            // Poll for executor results before handling input.
+            self.app.poll_results();
+
             // Handle keyboard input.
             ctx.input(|i| {
                 for event in &i.events {
