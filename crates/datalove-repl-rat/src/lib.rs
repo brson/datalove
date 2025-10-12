@@ -1,4 +1,4 @@
-//! Core REPL engine for datalove.
+//! The Ratatui REPL application.
 
 #![allow(unused)]
 

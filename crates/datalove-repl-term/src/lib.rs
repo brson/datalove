@@ -1,4 +1,4 @@
-//! Ratatui frontend for the datalove REPL.
+//! Crossterm Ratatui REPL.
 
 #![allow(unused)]
 
