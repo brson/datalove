@@ -104,8 +104,9 @@ as a egui_ratatui application.
 - JSON5. baseline markup language requirements
 - Python. negative inspiration - awkward dicts,
   heavyweight class abstractions
-- Polars / Pandas - tables
+- Polars / Pandas. tables
 - TigerBeetle. DST / virtualized I/O
+- Mercury. modes look useful: in, out, di (destructive input), uo (unique output)
 
 
 ## Roadmap
