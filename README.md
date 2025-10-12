@@ -96,6 +96,18 @@ The datafun interpreter runs on the web
 as a egui_ratatui application.
 
 
+## Influences
+
+- Rust. general syntax, general mechanical sympathy concerns,
+  data structure definitions, float total_cmp.
+- Zig. `?` / `!`, aspects of anonymous structs
+- JSON5. baseline markup language requirements
+- Python. negative inspiration - awkward dicts,
+  heavyweight class abstractions
+- Polars / Pandas - tables
+- TigerBeetle. DST / virtualized I/O
+
+
 ## Roadmap
 
 - datalit - get this fairly polished before moving on
