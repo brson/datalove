@@ -4,8 +4,27 @@
 
 use rmx::prelude::*;
 
+
 #[derive(Debug)]
-pub struct Command {
+pub enum Command {
+    ReplCommand(ReplCommand),
+    ScriptStatement(ScriptStatement),
+}
+
+#[derive(Debug)]
+pub enum ReplCommand {
+    Exit,
+    Help,
+}
+
+#[derive(Debug)]
+pub struct ScriptStatement(String);
+
+#[derive(Debug)]
+pub enum CommandParse {
+    Empty,
+    ReadAnotherLine(String),
+    ReplCommand(ReplCommand),
 }
 
 #[derive(Debug)]
@@ -16,8 +35,8 @@ pub struct Engine {
 }
 
 impl Command {
-    pub fn parse(command: String) -> AnyResult<Command> {
-        Ok(Command {})
+    pub fn parse(command: String) -> CommandParse {
+        CommandParse::Empty
     }
 }
 
