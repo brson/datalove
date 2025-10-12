@@ -147,7 +147,7 @@
 : @string / "abc"
 
 ; map
-: @map <@u32, @u32> / @map {
+: @map <@u32, @u32>) / @map {
   0 = 5,
   2 = 2,
   ; type hint in the expression

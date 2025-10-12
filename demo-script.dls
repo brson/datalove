@@ -92,13 +92,16 @@ let c /* : @u64 */ = b + b;
 let d /* : @u128 */ = c + c;
 let e : @int = d + d;
 
-; logic and comparison uses words
+; logic uses words
 
-let a = 1 lt 2 and 2 gt 3 or not 4 lte 5 and 4 gte 6
-let a = a or a eq 10 or a not eq 1
+let a = 1 and 3 or not 4 lte 5 and 4 xor 6
 
-
-
+; comparison uses sigils
+;
+; note lt and gt have unfortunate spellings
+let a = b .< d and c .> d
+let a = b <= d and c >= d
+let a = b == d and c != d
 
 ; ## Basic control flow
 

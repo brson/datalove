@@ -28,7 +28,7 @@
     "continue"
     "if"
     "else"
-    "lt" "gt" "lte" "gte" "eq" "not" "and" "or"
+    "lt" "gt" "lte" "gte" "eq" "not" "and" "or" "xor"
     )
   '(
     ("@" . 'font-lock-variable-name-face)
