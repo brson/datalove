@@ -237,10 +237,15 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 impl App {
 
+    // fixme: ideally this function is async
+    //
+    // on native we should be running the engine on another thread.
+    // on wasm we should be running in another container with wasm-mt.
     fn parse_input(&self, input: &str) -> repl::CommandParse {
         repl::Command::parse(&input)
     }
 
+    // fixme: ideally this function is async as above
     fn eval_command(&mut self, command: repl::Command) -> repl::Eval {
         self.engine.eval(command)
     }
