@@ -14,6 +14,7 @@ pub enum Command {
 
 #[derive(Debug)]
 pub enum ReplCommand {
+    Unknown,
     Exit,
     Help,
 }
@@ -31,6 +32,7 @@ pub enum CommandParse {
 #[derive(Debug)]
 pub enum Eval {
     Nothing,
+    Error(AnyError),
     Exit,
     CallerInterpret(ReplCommand),
 }
@@ -49,9 +51,13 @@ impl Command {
     }
 
     pub fn parse_repl_command(command: &str) -> CommandParse {
-        CommandParse::Command(
-            Command::ReplCommand(ReplCommand::Exit),
-        )
+        let command = command[1..].trim();
+        let c = match command {
+            "exit" => ReplCommand::Exit,
+            "help" => ReplCommand::Help,
+            _ => ReplCommand::Unknown,
+        };
+        CommandParse::Command(Command::ReplCommand(c))
     }
 
     pub fn parse_script_statement(command: &str) -> CommandParse {
@@ -77,6 +83,9 @@ impl Engine {
 
     fn eval_repl_command(&mut self, command: ReplCommand) -> Eval {
         match command {
+            ReplCommand::Unknown => {
+                Eval::Error(anyhow!("unknown command"))
+            }
             ReplCommand::Help => {
                 Eval::CallerInterpret(command)
             }

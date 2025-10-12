@@ -120,6 +120,10 @@ impl App {
                             self.messages.push(format!("  exiting"));
                             self.should_exit = true;
                         }
+                        repl::Eval::Error(e) => {
+                            self.messages.pop();
+                            self.messages.push(format!("  error: {e}"));
+                        }
                         repl::Eval::CallerInterpret(command) => {
                             match command {
                                 repl::ReplCommand::Help => {
