@@ -108,6 +108,14 @@
   Baz(@(@bool, @u32)),
 } / @enum Foo
 
+; potential lightweight syntax for anonymous enum types
+;
+; this relies on coercion by looking at the variant payload types
+: @u32 | @bool / @true
+; spelling the enum ctors
+: @u32 | @bool / @enum bool(@true)
+
+
 : @enum {
   Bar(@u32),
 } / @enum Bar(2)
