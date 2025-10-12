@@ -796,7 +796,6 @@ dependencies = [
  "bct",
  "datalove",
  "datalove-datalit",
- "datalove-repl",
  "datalove-repl-rat",
  "datalove-rt",
  "rustmax",

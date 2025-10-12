@@ -11,7 +11,6 @@ bct.workspace = true
 datalove.path = "../datalove"
 datalove-datalit.path = "../datalove-datalit"
 datalove-rt.path = "../datalove-rt"
-datalove-repl.path = "../datalove-repl"
 datalove-repl-rat.path = "../datalove-repl-rat"
 
 [[bin]]
