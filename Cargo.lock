@@ -1293,16 +1293,12 @@ name = "datalove-cli"
 version = "0.1.0"
 dependencies = [
  "bct",
- "crossterm",
  "datalove",
  "datalove-datalit",
  "datalove-repl",
- "datalove-repl-rat",
  "datalove-repl-term",
  "datalove-rt",
- "ratatui",
  "rustmax",
- "termcolor",
 ]
 
 [[package]]
@@ -1351,9 +1347,12 @@ dependencies = [
 name = "datalove-repl-rat"
 version = "0.1.0"
 dependencies = [
+ "crossterm",
  "datalove-repl",
+ "datalove-repl-term",
  "ratatui",
  "rustmax",
+ "termcolor",
 ]
 
 [[package]]
