@@ -94,7 +94,9 @@ let e : @int = d + d;
 
 ; logic uses words
 
-let a = 1 and 3 or not 4 lte 5 and 4 xor 6
+let a = 1 and 3 or not 4 lte 5 and 4 xor 6 implies 7
+
+; ^ note the `implies` operator
 
 ; comparison uses sigils
 ;
