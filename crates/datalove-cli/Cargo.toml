@@ -12,8 +12,6 @@ datalove.path = "../datalove"
 datalove-datalit.path = "../datalove-datalit"
 datalove-rt.path = "../datalove-rt"
 datalove-repl-term.path = "../datalove-repl-term"
-clap.version = "4.5"
-clap.features = ["derive"]
 
 [[bin]]
 name = "datalove"
