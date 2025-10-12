@@ -1293,11 +1293,16 @@ name = "datalove-cli"
 version = "0.1.0"
 dependencies = [
  "bct",
+ "crossterm",
  "datalove",
  "datalove-datalit",
+ "datalove-repl",
+ "datalove-repl-rat",
  "datalove-repl-term",
  "datalove-rt",
+ "ratatui",
  "rustmax",
+ "termcolor",
 ]
 
 [[package]]
@@ -1318,6 +1323,8 @@ version = "0.1.0"
 dependencies = [
  "datalove-datalit",
  "rustmax",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

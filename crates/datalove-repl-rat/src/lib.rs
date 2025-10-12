@@ -130,6 +130,11 @@ impl App {
         self.should_exit = val;
     }
 
+    /// Get the messages for testing.
+    pub fn messages(&self) -> &[String] {
+        &self.messages
+    }
+
     /// Execute the selected menu action.
     pub fn execute_menu_action(&mut self) {
         match self.menu_selection {
@@ -255,11 +260,13 @@ impl App {
             return;
         }
 
-        match self.parse_input(&self.input) {
+        let input_text = self.input.clone();
+
+        match self.parse_input(&input_text) {
             repl::CommandParse::Empty => {
                 self.input.clear();
                 self.character_index = 0;
-                self.messages.push(format!("> {}", self.input));
+                self.messages.push(format!("> {}", input_text));
                 self.messages.push(format!("  (empty)"));
             }
             repl::CommandParse::ReadAnotherLine => {
@@ -268,7 +275,7 @@ impl App {
             repl::CommandParse::Command(command) => {
                 self.input.clear();
                 self.character_index = 0;
-                self.messages.push(format!("> {}", self.input));
+                self.messages.push(format!("> {}", input_text));
                 self.messages.push(format!("  ⏱"));
                 match self.eval_command(command) {
                     repl::Eval::Nothing => {

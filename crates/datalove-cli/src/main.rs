@@ -70,6 +70,9 @@ struct LitOpCommand {
 
 #[derive(clap::Args)]
 struct ReplCommand {
+    /// Path to a script file (.dls) to execute in non-interactive mode.
+    #[arg(long)]
+    script: Option<PathBuf>,
 }
 
 impl Cli {
@@ -254,6 +257,10 @@ impl LitOpCommand {
 
 impl ReplCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        datalove_repl_term::run()
+        if let Some(script_path) = &self.script {
+            datalove_repl::Engine::run_script(script_path)
+        } else {
+            datalove_repl_term::run()
+        }
     }
 }
