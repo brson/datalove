@@ -110,30 +110,41 @@ impl eframe::App for ReplApp {
             // Poll for executor results before handling input.
             self.app.poll_results();
 
+            // Check if the app wants to exit.
+            if self.app.should_exit() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+
             // Handle keyboard input.
             ctx.input(|i| {
                 for event in &i.events {
-                    if let egui::Event::Key { key, pressed: true, modifiers: _, .. } = event {
-                        match key {
-                            egui::Key::Enter => self.app.submit_input(),
-                            egui::Key::Backspace => self.app.delete_char(),
-                            egui::Key::ArrowLeft => self.app.move_cursor_left(),
-                            egui::Key::ArrowRight => self.app.move_cursor_right(),
-                            egui::Key::Escape => {
-                                if self.app.menu_is_open() {
-                                    self.app.close_menu();
-                                } else {
-                                    self.app.open_menu();
-                                }
+                    if self.app.menu_is_open() {
+                        // Menu is open - handle menu navigation only.
+                        if let egui::Event::Key { key, pressed: true, modifiers: _, .. } = event {
+                            match key {
+                                egui::Key::ArrowUp => self.app.menu_up(),
+                                egui::Key::ArrowDown => self.app.menu_down(),
+                                egui::Key::Enter => self.app.execute_menu_action(),
+                                egui::Key::Escape => self.app.close_menu(),
+                                _ => {}
                             }
-                            egui::Key::ArrowUp if self.app.menu_is_open() => self.app.menu_up(),
-                            egui::Key::ArrowDown if self.app.menu_is_open() => self.app.menu_down(),
-                            _ => {}
                         }
-                    } else if let egui::Event::Text(text) = event {
-                        // Handle text input.
-                        for c in text.chars() {
-                            self.app.enter_char(c);
+                    } else {
+                        // Normal input mode.
+                        if let egui::Event::Key { key, pressed: true, modifiers: _, .. } = event {
+                            match key {
+                                egui::Key::Enter => self.app.submit_input(),
+                                egui::Key::Backspace => self.app.delete_char(),
+                                egui::Key::ArrowLeft => self.app.move_cursor_left(),
+                                egui::Key::ArrowRight => self.app.move_cursor_right(),
+                                egui::Key::Escape => self.app.open_menu(),
+                                _ => {}
+                            }
+                        } else if let egui::Event::Text(text) = event {
+                            // Handle text input.
+                            for c in text.chars() {
+                                self.app.enter_char(c);
+                            }
                         }
                     }
                 }
