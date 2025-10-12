@@ -1,0 +1,31 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Data": {
+          "value": {
+            "expr": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
+              },
+              "heap": "Omitted"
+            },
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "Int"
+            }
+          }
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "Data"
+    }
+  },
+  "errors": [],
+  "root_type": "@data"
+}

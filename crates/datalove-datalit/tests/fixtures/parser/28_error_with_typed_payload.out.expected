@@ -1,0 +1,27 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": "Error"
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "Err": {
+        "value": {
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "Int"
+          },
+          "expr": {
+            "heap": "Omitted",
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
