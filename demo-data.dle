@@ -45,6 +45,9 @@
 : bool / false
 
 : @u32 / 1
+
+; floats
+; fixme: need a bitpattern literal syntax or other deterministic float syntax wrt 0s, nans, etc
 : @f32 / 1.0
 
 

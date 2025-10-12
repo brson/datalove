@@ -6,19 +6,121 @@ and transformation,
 with a batteries included standard library.
 
 
+
+
 ## Features
 
-### Statically typed with ergonomic coercions and runtime reflection.
+### Cleanly-scoped strict sublanguages of increasing power
+
+**Datalove Literals** ("Datalit") is the tiny foundation of Datalove,
+a pure data language with rich and expressive types:
+
+- booleans
+- fixed integers and bigints
+- floats
+- anonymous and named tuples
+- anonymous and named structs
+- anonymous and named enums
+- lists and strings
+- maps and sets
+- option and result
+- `data` any of the above, with runtime introspection and reflection
+- `error` any of the above, but for error handling
+
+Datalit is a serialization format:
+
+```datalove
+; Personal info
+{
+  name = "Ada",
+  born = 1815,
+  interests = ["mathematics", "poetry", "music"],
+  address_book = set {
+    struct AddressEntry {
+      kind = enum Friend,
+      name = "Charles",
+    },
+    struct AddressEntry {
+      kind = enum Family,
+      name = "George",
+    },
+  },
+}
+```
+
+All expressions can be type hinted.
+The syntax for this is `: <type> / <expr>`
+
+```datalove
+; This is the type of the literal we're about to write.
+; When you see ":" in Datalove it is always followed by a type.
+: [{
+  name: string,
+  born: u32,
+  interests: [string],
+  address_book: set<
+    struct AddressEntry {
+      kind: enum { Friend, Family },
+      name: string,
+    }
+  >,
+}] / {
+  name = "Ada",
+  born = 1815,
+  ; We can throw a type hint anywhere.
+  interests = : [string] / ["mathematics", "poetry", "music"],
+  address_book = set {
+    struct AddressEntry {
+      kind = enum Friend,
+      name = "Charles",
+    },
+    struct AddressEntry {
+      kind = enum Family,
+      name = "George",
+    },
+  },
+}
+```
+
+Datalit is strongly typed
+but supports free non-destructive coercions,
+and other lightweight conversions.
+All types are owned tree-shaped value-types
+and do not support interior mutability, native pointers, or cycles.
+
+The shapes of Datalit types and type descriptiors are fully
+specified at runtime and form the basis of the Datalove
+runtime ABI.
+
+**Datalove Functions** ("Datafun") is a simple procedural language
+built on the datalit type system.
+
+todo
+
+
+### Statically typed with ergonomic coercions and runtime reflection
 
 Datalove is statically typed but feels like a dynamic scripting language.
 
+### Fast incremental compilation and execution with hot-reloading,
+    rewind-and-replay, rewind-and-do-something-else.
+
+### Interpreted or compiled, JIT or AOT
+
+### REPL-first design
+
+### Fully WASM-compatible toolchain
 
 
+## Aspirational features
 
-###
-- Fast incremental processing with in-place updates, REPL-first.
-- First class option and result types.
-- Virtualized I/O for simulation and record-and-replay.
+### Interpreted and 
+
+### Incremental computation, memoized predicates, choice points, and logic programming.
+
+### Virtualized I/O for simulation and record-and-replay.
+
+
 
 
 ## Datalove Literals
@@ -69,6 +171,22 @@ See [`demo-module.dlm`] for an example.
 
 ## Design notes
 
+### Allocations
+
+Besides encoding heaps in types,
+having local and global heaps,
+and enforcing a light syntax
+on allocating conversions,
+Datalove is not concerned with providing
+control over the allocator;
+but instead only with providing data access patterns
+and metadata with which the allocator can perform optimally.
+
+### Garbage collection
+
+Datalit and Datafun do not require a GC.
+Datalove may experiment with interior pointers and GCs in the future.
+
 ### Error handling
 
 The result type is a language type,
@@ -78,6 +196,13 @@ if you see `!` you are looking at error handling.
 The error type is a dynamic type that can hold
 any type (an existential type).
 
+### Threading and concurrency
+
+For simplicity and OS-mechanical sympathy,
+Datalove is a multithreaded language;
+no lightweight tasks or async-await.
+We may experiment with callback-based
+asynchrony and Gleam-style inline continuation syntax.
 
 ### Floats and total ordering
 
@@ -91,7 +216,6 @@ Floats use the typical ordering, like Rust's `total_cmp`:
 Equality, less than, greater than, etc. behave
 the standard way wrt float zeros and NaNs.
 
-
 ## REPL
 
 The script is REPL-first and intends to advance the
@@ -102,6 +226,10 @@ supports undo/redo and record-and-replay.
 The repl is a modern Ratatui application.
 The datafun interpreter runs on the web
 as a egui_ratatui application.
+
+## Trailing commas and separators
+
+Allowed and optional in all sequence forms of course.
 
 
 ## Influences
@@ -134,3 +262,4 @@ as a egui_ratatui application.
 
 - logic programming features:
   - generators, choice points, memoization
+- explicit linear-type destructors
