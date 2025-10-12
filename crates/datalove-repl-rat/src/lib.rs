@@ -115,6 +115,20 @@ impl App {
                             self.messages.pop();
                             self.messages.push(format!("  nothing"));
                         }
+                        repl::Eval::Exit => {
+                            self.messages.pop();
+                            self.messages.push(format!("  exiting"));
+                            self.should_exit = true;
+                        }
+                        repl::Eval::CallerInterpret(command) => {
+                            match command {
+                                repl::ReplCommand::Help => {
+                                    self.messages.pop();
+                                    self.messages.push(format!("  help"));
+                                }
+                                _ => bug!(),
+                            }
+                        }
                     }
                 }
             }
