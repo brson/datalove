@@ -128,6 +128,10 @@ where I: Iterator<Item = TreeToken<'db>>
                 self.eat_word("string");
                 ast::TypeHint::String
             }
+            Some("data") => {
+                self.eat_word("data");
+                ast::TypeHint::Data
+            }
             Some("error") => {
                 self.eat_word("error");
                 ast::TypeHint::Error
@@ -326,6 +330,11 @@ where I: Iterator<Item = TreeToken<'db>>
             Some("none") => {
                 self.eat_word("none");
                 return ast::Expr::None;
+            }
+            Some("data") => {
+                self.eat_word("data");
+                let value = self.parse_expr_full();
+                return ast::Expr::Data(ast::ExprData::new(self.db, value));
             }
             Some("error") => {
                 self.eat_word("error");
@@ -660,6 +669,7 @@ impl<'db> DynParser<'db> {
             Some("f32") => { self.eat_word("f32"); ast::TypeHint::F32 }
             Some("int") => { self.eat_word("int"); ast::TypeHint::Int }
             Some("string") => { self.eat_word("string"); ast::TypeHint::String }
+            Some("data") => { self.eat_word("data"); ast::TypeHint::Data }
             Some("error") => { self.eat_word("error"); ast::TypeHint::Error }
             _ => {
                 // Check for branches: parentheses for tuples, brackets for lists, braces for structs.

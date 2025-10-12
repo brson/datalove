@@ -245,6 +245,7 @@ fn collect_type_hint_names_inner<'db>(
         | TypeHint::F32
         | TypeHint::Int
         | TypeHint::String
+        | TypeHint::Data
         | TypeHint::Error
         | TypeHint::ParseError(_) => {
             // No names to collect.
@@ -343,6 +344,10 @@ fn resolve_expr_refs<'db>(
                 let element_expr = element.expr(db).expr(db);
                 resolve_expr_refs(db, element_expr, scope, resolutions, errors);
             }
+        }
+        Expr::Data(d) => {
+            let value_expr = d.value(db).expr(db).expr(db);
+            resolve_expr_refs(db, value_expr, scope, resolutions, errors);
         }
         Expr::Err(e) => {
             let value_expr = e.value(db).expr(db).expr(db);

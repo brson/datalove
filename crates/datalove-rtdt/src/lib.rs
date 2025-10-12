@@ -278,7 +278,8 @@ pub enum TyTag {
     Option = 30,
     Result = 31,
 
-    Error = 40,
+    Data = 40,
+    Error = 41,
 }
 
 #[repr(C)]

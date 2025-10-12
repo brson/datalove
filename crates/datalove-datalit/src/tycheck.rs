@@ -24,6 +24,7 @@ pub enum Type<'db> {
     Set(TypeSet<'db>),
     Option(TypeOption<'db>),
     Result(TypeResult<'db>),
+    Data,
     Error,
 }
 
@@ -423,6 +424,9 @@ fn synthesize<'db>(
             Type::Map(TypeMap::new(db, first_key_type, first_value_type))
         }
 
+        // Rule: Syn-Data - data values synthesize as Type::Data.
+        Expr::Data(_) => Type::Data,
+
         // Rule: Syn-Error - error values synthesize as Type::Error.
         Expr::Err(_) => Type::Error,
 
@@ -736,6 +740,9 @@ fn check<'db>(
             check(ctx, expr, res.inner_type(db))
         }
 
+        // Rule: Check-Data
+        (Expr::Data(_), Type::Data) => Ok(()),
+
         // Rule: Check-Error
         (Expr::Err(_), Type::Error) => Ok(()),
 
@@ -811,6 +818,7 @@ fn convert_type_hint<'db>(
         TypeHint::F32 => Type::F32,
         TypeHint::Int => Type::Int,
         TypeHint::String => Type::String,
+        TypeHint::Data => Type::Data,
         TypeHint::Error => Type::Error,
 
         TypeHint::AnonTuple(t) => {
@@ -944,6 +952,7 @@ fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>)
         (Type::F32, Type::F32) => true,
         (Type::Int, Type::Int) => true,
         (Type::String, Type::String) => true,
+        (Type::Data, Type::Data) => true,
         (Type::Error, Type::Error) => true,
 
         (Type::AnonTuple(t1), Type::AnonTuple(t2)) => {
@@ -1065,6 +1074,7 @@ fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
         Type::F32 => "f32".to_string(),
         Type::Int => "int".to_string(),
         Type::String => "string".to_string(),
+        Type::Data => "data".to_string(),
         Type::Error => "error".to_string(),
         Type::AnonTuple(t) => {
             let fields: Vec<_> = t.fields(db)

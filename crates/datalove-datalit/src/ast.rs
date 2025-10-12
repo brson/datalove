@@ -41,6 +41,7 @@ pub enum TypeHint<'db> {
     Set(TypeHintSet<'db>),
     Option(TypeHintOption<'db>),
     Result(TypeHintResult<'db>),
+    Data,
     Error,
     ParseError(TypeHintParseError<'db>),
 }
@@ -142,6 +143,7 @@ pub enum Expr<'db> {
     Map(ExprMap<'db>),
     Set(ExprSet<'db>),
     None,
+    Data(ExprData<'db>),
     Err(ExprErr<'db>),
     ParseError(ExprParseError<'db>),
 }
@@ -221,6 +223,11 @@ pub struct ExprMapEntry<'db> {
 #[salsa::tracked]
 pub struct ExprSet<'db> {
     pub elements: Vec<ExprFull<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprData<'db> {
+    pub value: ExprFull<'db>,
 }
 
 #[salsa::tracked]

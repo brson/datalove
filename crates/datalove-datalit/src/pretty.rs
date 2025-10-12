@@ -59,6 +59,7 @@ fn pretty_type_hint<'db>(
         TypeHint::F32 => out.push_str("f32"),
         TypeHint::Int => out.push_str("int"),
         TypeHint::String => out.push_str("string"),
+        TypeHint::Data => out.push_str("data"),
         TypeHint::Error => out.push_str("error"),
 
         TypeHint::AnonTuple(t) => {
@@ -344,6 +345,11 @@ fn pretty_expr<'db>(
                 pretty_expr_full(db, *elem, out, indent);
             }
             out.push('}');
+        }
+
+        Expr::Data(d) => {
+            out.push_str("data ");
+            pretty_expr_full(db, d.value(db), out, indent);
         }
 
         Expr::Err(e) => {

@@ -43,6 +43,7 @@ pub enum TypeHint {
     Set(TypeHintSet),
     Option(TypeHintOption),
     Result(TypeHintResult),
+    Data,
     Error,
     ParseError(TypeHintParseError),
 }
@@ -141,6 +142,7 @@ pub enum Expr {
     Map(ExprMap),
     Set(ExprSet),
     None,
+    Data(ExprData),
     Err(ExprErr),
     ParseError(ExprParseError),
 }
@@ -223,6 +225,11 @@ pub struct ExprSet {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprData {
+    pub value: Box<ExprFull>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprErr {
     pub value: Box<ExprFull>,
 }
@@ -285,6 +292,7 @@ impl TypeHint {
             crate::ast::TypeHint::Set(t) => TypeHint::Set(TypeHintSet::from_ast(db, t)),
             crate::ast::TypeHint::Option(t) => TypeHint::Option(TypeHintOption::from_ast(db, t)),
             crate::ast::TypeHint::Result(t) => TypeHint::Result(TypeHintResult::from_ast(db, t)),
+            crate::ast::TypeHint::Data => TypeHint::Data,
             crate::ast::TypeHint::Error => TypeHint::Error,
             crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
         }
@@ -428,6 +436,7 @@ impl Expr {
             crate::ast::Expr::Map(e) => Expr::Map(ExprMap::from_ast(db, e)),
             crate::ast::Expr::Set(e) => Expr::Set(ExprSet::from_ast(db, e)),
             crate::ast::Expr::None => Expr::None,
+            crate::ast::Expr::Data(e) => Expr::Data(ExprData::from_ast(db, e)),
             crate::ast::Expr::Err(e) => Expr::Err(ExprErr::from_ast(db, e)),
             crate::ast::Expr::ParseError(e) => Expr::ParseError(ExprParseError::from_ast(db, e)),
         }
@@ -549,6 +558,14 @@ impl ExprSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSet<'db>) -> Self {
         ExprSet {
             elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+        }
+    }
+}
+
+impl ExprData {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprData<'db>) -> Self {
+        ExprData {
+            value: Box::new(ExprFull::from_ast(db, ast.value(db))),
         }
     }
 }

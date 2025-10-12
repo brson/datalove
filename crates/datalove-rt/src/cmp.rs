@@ -123,7 +123,7 @@ unsafe fn eq_tydesc(
         // For composite types, we need to compare the structure recursively.
         match td_a.type_tag {
             rtdt::TyTag::Bool | rtdt::TyTag::U32 | rtdt::TyTag::F32 | rtdt::TyTag::Int |
-            rtdt::TyTag::String | rtdt::TyTag::Error => {
+            rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 true
             }
             rtdt::TyTag::Tuple => {
@@ -372,7 +372,7 @@ unsafe fn eq_value(
                 }
                 true
             }
-            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Option | rtdt::TyTag::Result | rtdt::TyTag::Error => {
+            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Option | rtdt::TyTag::Result | rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
                 unimplemented!("eq_value for {:?}", td.type_tag)
             }
@@ -627,7 +627,7 @@ unsafe fn cmp_value(
                     crate::RtOrdering::Equal
                 }
             }
-            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Option | rtdt::TyTag::Result | rtdt::TyTag::Error => {
+            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Option | rtdt::TyTag::Result | rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
                 unimplemented!("cmp_value for {:?}", td.type_tag)
             }

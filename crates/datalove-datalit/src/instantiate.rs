@@ -107,6 +107,16 @@ impl<'db> TyDescTable<'db> {
                     },
                 })
             }
+            Type::Data => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::Data,
+                    size: std::mem::size_of::<rtdt::Data>() as u32,
+                    align: std::mem::align_of::<rtdt::Data>() as u32,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
             Type::Error => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::Error,
@@ -601,6 +611,10 @@ fn instantiate_expr<'db>(
             let option_tydesc = tydesc_table.get_or_create(ty);
             instantiate_option(db, true, Some(expr), opt.inner_type(db), tydesc_table, value_heap, option_tydesc)
         }
+        (Expr::Data(data_expr), Type::Data) => {
+            let data_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_data(db, data_expr.value(db), tydesc_table, value_heap, data_tydesc)
+        }
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
@@ -826,6 +840,41 @@ fn instantiate_option<'db>(
     }
 
     Ok(option_ptr as *const u8)
+}
+
+/// Instantiate a data value.
+fn instantiate_data<'db>(
+    db: &'db dyn crate::Db,
+    inner_expr: ExprFull<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    value_heap: &mut ValueHeap,
+    data_tydesc: *const rtdt::TyDesc,
+) -> AnyResult<*const u8> {
+    // First, synthesize the type of the inner expression.
+    let source = bct::input::Source::new(db, "".to_string());
+    let resolved = crate::resolve::resolve_names(db, inner_expr);
+    let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
+
+    let inner_type = typechecked.root_type(db)
+        .ok_or_else(|| anyhow!("Cannot determine type of data value"))?;
+
+    // Get or create tydesc for inner type.
+    let inner_tydesc = tydesc_table.get_or_create(inner_type.ty(db));
+
+    // Instantiate the inner value.
+    let inner_value = instantiate_expr(db, inner_expr, inner_type.ty(db), tydesc_table, value_heap)?;
+
+    // Allocate space for Data struct.
+    let data_size = std::mem::size_of::<rtdt::Data>();
+    let data_align = std::mem::align_of::<rtdt::Data>();
+    let data_ptr = value_heap.alloc(data_size, data_align) as *mut rtdt::Data;
+
+    unsafe {
+        (*data_ptr).data = inner_value as usize;
+        (*data_ptr).tydesc = inner_tydesc;
+    }
+
+    Ok(data_ptr as *const u8)
 }
 
 /// Instantiate a value from a typechecked AST.
