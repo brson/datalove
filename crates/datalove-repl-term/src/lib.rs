@@ -48,7 +48,7 @@ fn run_app<B: ratatui::backend::Backend>(
     loop {
         terminal.draw(|f| datalove_repl_rat::ui(f, app))?;
 
-        if app.should_exit {
+        if app.should_exit() {
             break;
         }
 
@@ -58,7 +58,7 @@ fn run_app<B: ratatui::backend::Backend>(
                 continue;
             }
 
-            if app.menu_open {
+            if app.menu_is_open() {
                 // Menu is open - handle menu navigation.
                 match key.code {
                     KeyCode::Up => app.menu_up(),
@@ -71,7 +71,7 @@ fn run_app<B: ratatui::backend::Backend>(
                 // Normal input mode.
                 match key.code {
                     KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        app.should_exit = true;
+                        app.set_should_exit(true);
                     }
                     KeyCode::Enter => app.submit_input(),
                     KeyCode::Char(c) => app.enter_char(c),

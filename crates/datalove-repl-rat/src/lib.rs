@@ -17,17 +17,17 @@ use ratatui::{
 /// Application state.
 pub struct App {
     /// Current input text.
-    pub input: String,
+    input: String,
     /// Cursor position in characters.
-    pub character_index: usize,
+    character_index: usize,
     /// Display messages (submitted inputs and eval results).
-    pub messages: Vec<String>,
+    messages: Vec<String>,
     /// Whether the ESC menu is open.
-    pub menu_open: bool,
+    menu_open: bool,
     /// Selected menu item (0 = Resume, 1 = Exit).
-    pub menu_selection: usize,
+    menu_selection: usize,
     /// Whether to exit the app.
-    pub should_exit: bool,
+    should_exit: bool,
 }
 
 impl App {
@@ -120,6 +120,18 @@ impl App {
     /// Move menu selection down.
     pub fn menu_down(&mut self) {
         self.menu_selection = (self.menu_selection + 1).min(1);
+    }
+
+    pub fn menu_is_open(&self) -> bool {
+        self.menu_open
+    }
+
+    pub fn should_exit(&self) -> bool {
+        self.should_exit
+    }
+
+    pub fn set_should_exit(&mut self, val: bool) {
+        self.should_exit = val;
     }
 
     /// Execute the selected menu action.

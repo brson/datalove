@@ -102,14 +102,14 @@ impl eframe::App for ReplApp {
                             egui::Key::ArrowLeft => self.app.move_cursor_left(),
                             egui::Key::ArrowRight => self.app.move_cursor_right(),
                             egui::Key::Escape => {
-                                if self.app.menu_open {
+                                if self.app.menu_is_open() {
                                     self.app.close_menu();
                                 } else {
                                     self.app.open_menu();
                                 }
                             }
-                            egui::Key::ArrowUp if self.app.menu_open => self.app.menu_up(),
-                            egui::Key::ArrowDown if self.app.menu_open => self.app.menu_down(),
+                            egui::Key::ArrowUp if self.app.menu_is_open() => self.app.menu_up(),
+                            egui::Key::ArrowDown if self.app.menu_is_open() => self.app.menu_down(),
                             _ => {}
                         }
                     } else if let egui::Event::Text(text) = event {
