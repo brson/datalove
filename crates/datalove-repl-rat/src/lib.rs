@@ -424,8 +424,12 @@ fn worker_thread(
                     let _ = tx.send(WorkerResponse::EvalResult { id, eval });
                 }
             }
-            Ok(WorkerRequest::Shutdown) | Err(_) => {
-                // Shutdown or channel closed.
+            Ok(WorkerRequest::Shutdown) => {
+                // todo actually send this
+                unreachable!();
+            }
+            Err(_) => {
+                // todo shouldn't happen
                 break;
             }
         }
