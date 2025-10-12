@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 
-use rmx::clap::{self, Parser as _};
+use clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
 fn main() -> AnyResult<()> {

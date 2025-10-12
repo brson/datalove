@@ -1,7 +1,7 @@
 use rmx::prelude::*;
 use std::path::{Path, PathBuf};
 use std::io::Write;
-use rmx::termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 fn find_test_fixtures() -> Vec<PathBuf> {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR"))

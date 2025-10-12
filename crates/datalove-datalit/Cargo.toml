@@ -12,6 +12,9 @@ salsa.workspace = true
 serde = { version = "1", features = ["derive"] }
 datalove-rtdt.path = "../datalove-rtdt"
 
+[dev-dependencies]
+termcolor = "1.4.1"
+
 [[test]]
 name = "parser_tests"
 path = "tests/parser_tests.rs"

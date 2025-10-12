@@ -1,7 +1,7 @@
 use rmx::prelude::*;
 use std::path::{Path, PathBuf};
 use std::io::Write;
-use rmx::termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use rmx::serde_json::json;
 
 fn find_test_fixtures() -> Vec<PathBuf> {
