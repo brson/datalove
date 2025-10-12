@@ -1352,6 +1352,7 @@ dependencies = [
  "datalove-repl-term",
  "ratatui",
  "rustmax",
+ "serde",
  "termcolor",
 ]
 

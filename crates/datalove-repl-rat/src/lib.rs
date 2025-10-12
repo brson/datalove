@@ -53,9 +53,10 @@ pub struct App<E: ReplExecutor> {
 
 impl<E: ReplExecutor> App<E> {
     /// Create a new app with the given executor type.
-    pub fn with_executor(engine: repl::Engine) -> Self {
+    /// The executor will construct its own Engine internally.
+    pub fn with_executor() -> Self {
         Self {
-            executor: E::new(engine),
+            executor: E::new(),
             next_id: 0,
             in_flight: None,
             input: String::new(),
@@ -177,16 +178,16 @@ impl<E: ReplExecutor> App<E> {
 #[cfg(not(target_arch = "wasm32"))]
 impl App<ThreadedExecutor> {
     /// Create a new app using the threaded executor (native platforms).
-    pub fn new(engine: repl::Engine) -> Self {
-        Self::with_executor(engine)
+    pub fn new() -> Self {
+        Self::with_executor()
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 impl App<BlockingExecutor> {
     /// Create a new app using the blocking executor (WASM).
-    pub fn new(engine: repl::Engine) -> Self {
-        Self::with_executor(engine)
+    pub fn new() -> Self {
+        Self::with_executor()
     }
 }
 

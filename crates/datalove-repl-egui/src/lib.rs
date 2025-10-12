@@ -20,11 +20,10 @@ pub fn main() -> AnyResult<()> {
             .with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
-    let engine = datalove_repl::Engine::new()?;
     eframe::run_native(
         "Datalove REPL",
         options,
-        Box::new(|_cc| Ok(Box::new(ReplApp::new(engine)))),
+        Box::new(|_cc| Ok(Box::new(ReplApp::new()))),
     )
         .map_err(|e| anyhow!("{e}"))
         .context("failed to start eframe")?;
@@ -52,12 +51,11 @@ pub fn start() -> Result<(), wasm_bindgen::JsValue> {
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .expect("element is not a canvas");
 
-        let engine = datalove_repl::Engine::new().X(); // fixme handle error
         eframe::WebRunner::new()
             .start(
                 canvas,
                 web_options,
-                Box::new(|_cc| Ok(Box::new(ReplApp::new(engine)))),
+                Box::new(|_cc| Ok(Box::new(ReplApp::new()))),
             )
             .await
             .expect("failed to start eframe");
@@ -80,7 +78,7 @@ struct ReplApp {
 }
 
 impl ReplApp {
-    fn new(engine: datalove_repl::Engine) -> Self {
+    fn new() -> Self {
         // Create the soft backend with embedded graphics fonts.
         let font_regular = mono_8x13_atlas();
         let font_bold = Some(mono_8x13_bold_atlas());
@@ -99,7 +97,7 @@ impl ReplApp {
 
         Self {
             terminal,
-            app: datalove_repl_rat::App::new(engine),
+            app: datalove_repl_rat::App::new(),
         }
     }
 }

@@ -1,9 +1,10 @@
 //! Executor trait for abstracting REPL parse/eval execution.
 
 use crate::repl;
+use serde::{Serialize, Deserialize};
 
 /// Response from the worker/executor.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum WorkerResponse {
     ParseResult { id: u64, parse: repl::CommandParse },
     EvalResult { id: u64, eval: repl::Eval },
@@ -13,9 +14,10 @@ pub enum WorkerResponse {
 ///
 /// Implementations can be synchronous or asynchronous,
 /// single-threaded or multi-threaded.
+/// Each executor constructs its own Engine internally.
 pub trait ReplExecutor {
-    /// Create a new executor with the given engine.
-    fn new(engine: repl::Engine) -> Self where Self: Sized;
+    /// Create a new executor (constructs its own Engine internally).
+    fn new() -> Self where Self: Sized;
 
     /// Submit a parse-and-eval request.
     fn submit_parse_and_eval(&mut self, id: u64, input: String);

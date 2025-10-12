@@ -14,9 +14,9 @@ pub struct BlockingExecutor {
 }
 
 impl ReplExecutor for BlockingExecutor {
-    fn new(engine: repl::Engine) -> Self {
+    fn new() -> Self {
         Self {
-            engine,
+            engine: repl::Engine::new().unwrap(),
             response_queue: VecDeque::new(),
         }
     }

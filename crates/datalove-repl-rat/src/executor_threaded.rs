@@ -23,12 +23,14 @@ pub struct ThreadedExecutor {
 }
 
 impl ReplExecutor for ThreadedExecutor {
-    fn new(engine: repl::Engine) -> Self {
+    fn new() -> Self {
         let (main_tx, worker_rx) = channel();
         let (worker_tx, main_rx) = channel();
 
         // Spawn worker thread.
         thread::spawn(move || {
+            // Construct Engine in worker thread.
+            let mut engine = repl::Engine::new().X();
             worker_thread(engine, worker_rx, worker_tx);
         });
 

@@ -9,6 +9,7 @@ edition.workspace = true
 rmx.workspace = true
 datalove-repl.path = "../datalove-repl"
 ratatui = { version = "0.29", default-features = false }
+serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 termcolor = "1.4"

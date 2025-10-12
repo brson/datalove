@@ -71,8 +71,7 @@ fn run_script(path: &Path) -> String {
     let mut terminal = Terminal::new(backend).X();
 
     // Create app.
-    let engine = datalove_repl::Engine::new().X();
-    let mut app = datalove_repl_rat::App::new(engine);
+    let mut app = datalove_repl_rat::App::new();
 
     // Run app with events.
     datalove_repl_term::run_app_with_events(&mut terminal, &mut app, &mut events.into_iter()).X();
