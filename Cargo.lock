@@ -1325,6 +1325,7 @@ name = "datalove-repl-egui"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
+ "datalove-repl",
  "datalove-repl-rat",
  "eframe",
  "egui",
@@ -1353,6 +1354,7 @@ name = "datalove-repl-term"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "datalove-repl",
  "datalove-repl-rat",
  "ratatui",
  "rustmax",

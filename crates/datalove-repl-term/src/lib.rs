@@ -25,7 +25,8 @@ pub fn run() -> AnyResult<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run it.
-    let mut app = datalove_repl_rat::App::new();
+    let engine = datalove_repl::Engine::new()?;
+    let mut app = datalove_repl_rat::App::new(engine);
     let res = run_app(&mut terminal, &mut app);
 
     // Restore terminal.

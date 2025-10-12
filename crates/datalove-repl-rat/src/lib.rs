@@ -16,6 +16,7 @@ use ratatui::{
 
 /// Application state.
 pub struct App {
+    engine: repl::Engine,
     /// Current input text.
     input: String,
     /// Cursor position in characters.
@@ -31,8 +32,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(engine: repl::Engine) -> Self {
         Self {
+            engine,
             input: String::new(),
             character_index: 0,
             messages: Vec::new(),

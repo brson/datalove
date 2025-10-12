@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rmx.workspace = true
+datalove-repl.path = "../datalove-repl"
 datalove-repl-rat.path = "../datalove-repl-rat"
 egui = "0.32"
 egui_ratatui = "2.0"

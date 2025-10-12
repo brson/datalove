@@ -1,7 +1,12 @@
 //! Native binary entry point for datalove-repl-egui.
 
+#![allow(unused)]
+
+use rmx::prelude::*;
+
+
 #[cfg(not(target_arch = "wasm32"))]
-fn main() -> eframe::Result {
+fn main() -> AnyResult<()> {
     datalove_repl_egui::main()
 }
 
