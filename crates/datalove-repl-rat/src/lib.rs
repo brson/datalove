@@ -94,49 +94,7 @@ impl App {
 
     /// Submit the current input.
     pub fn submit_input(&mut self) {
-        if !self.input.is_empty() {
-            match repl::Command::parse(&self.input) {
-                repl::CommandParse::Empty => {
-                    self.input.clear();
-                    self.character_index = 0;
-                    self.messages.push(format!("> {}", self.input));
-                    self.messages.push(format!("  (empty)"));
-                }
-                repl::CommandParse::ReadAnotherLine => {
-                    todo!()
-                }
-                repl::CommandParse::Command(command) => {
-                    self.input.clear();
-                    self.character_index = 0;
-                    self.messages.push(format!("> {}", self.input));
-                    self.messages.push(format!("  ⏱"));
-                    match self.engine.eval(command) {
-                        repl::Eval::Nothing => {
-                            self.messages.pop();
-                            self.messages.push(format!("  nothing"));
-                        }
-                        repl::Eval::Exit => {
-                            self.messages.pop();
-                            self.messages.push(format!("  exiting"));
-                            self.should_exit = true;
-                        }
-                        repl::Eval::Error(e) => {
-                            self.messages.pop();
-                            self.messages.push(format!("  error: {e}"));
-                        }
-                        repl::Eval::CallerInterpret(command) => {
-                            match command {
-                                repl::ReplCommand::Help => {
-                                    self.messages.pop();
-                                    self.messages.push(format!("  help"));
-                                }
-                                _ => bug!(),
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        self.handle_input()
     }
 
     /// Open the ESC menu.
@@ -275,4 +233,63 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+impl App {
+
+    fn parse_input(&self, input: &str) -> repl::CommandParse {
+        repl::Command::parse(&input)
+    }
+
+    fn eval_command(&mut self, command: repl::Command) -> repl::Eval {
+        self.engine.eval(command)
+    }
+
+    pub fn handle_input(&mut self) {
+        if self.input.is_empty() {
+            return;
+        }
+
+        match self.parse_input(&self.input) {
+            repl::CommandParse::Empty => {
+                self.input.clear();
+                self.character_index = 0;
+                self.messages.push(format!("> {}", self.input));
+                self.messages.push(format!("  (empty)"));
+            }
+            repl::CommandParse::ReadAnotherLine => {
+                todo!()
+            }
+            repl::CommandParse::Command(command) => {
+                self.input.clear();
+                self.character_index = 0;
+                self.messages.push(format!("> {}", self.input));
+                self.messages.push(format!("  ⏱"));
+                match self.eval_command(command) {
+                    repl::Eval::Nothing => {
+                        self.messages.pop();
+                        self.messages.push(format!("  nothing"));
+                    }
+                    repl::Eval::Exit => {
+                        self.messages.pop();
+                        self.messages.push(format!("  exiting"));
+                        self.should_exit = true;
+                    }
+                    repl::Eval::Error(e) => {
+                        self.messages.pop();
+                        self.messages.push(format!("  error: {e}"));
+                    }
+                    repl::Eval::CallerInterpret(command) => {
+                        match command {
+                            repl::ReplCommand::Help => {
+                                self.messages.pop();
+                                self.messages.push(format!("  help"));
+                            }
+                            _ => bug!(),
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
