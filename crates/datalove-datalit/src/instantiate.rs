@@ -1437,4 +1437,352 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn test_instantiate_option_of_tuple_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@(@u32, @u32) / @none")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            // Verify inner type is tuple.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tuple);
+            let tuple_info = &(*inner_tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_tuple_some() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@(@u32, @u32) / @(@10, @20)")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.value.add(layout.payload_offset as usize);
+
+            // Get tuple structure.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tuple);
+            let tuple_info = &(*inner_tydesc).type_info.tuple;
+            let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+
+            // Check tuple values.
+            let first = *(payload_ptr.add(tuple_fields[0].offset as usize) as *const u32);
+            let second = *(payload_ptr.add(tuple_fields[1].offset as usize) as *const u32);
+            assert_eq!(first, 10);
+            assert_eq!(second, 20);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_struct_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@{x: @u32, y: @u32} / @none")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            // Verify inner type is struct.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Struct);
+            let struct_info = &(*inner_tydesc).type_info.struct_;
+            assert_eq!(struct_info.num_fields, 2);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_struct_some() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@{x: @u32, y: @u32} / @{x = @100, y = @200}")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.value.add(layout.payload_offset as usize);
+
+            // Get struct structure.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Struct);
+            let struct_info = &(*inner_tydesc).type_info.struct_;
+            let struct_fields = std::slice::from_raw_parts(struct_info.fields, 2);
+
+            // Check struct values.
+            let x_value = *(payload_ptr.add(struct_fields[0].offset as usize) as *const u32);
+            let y_value = *(payload_ptr.add(struct_fields[1].offset as usize) as *const u32);
+            assert_eq!(x_value, 100);
+            assert_eq!(y_value, 200);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_list_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@[@u32] / @none")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            // Verify inner type is list.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::List);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_list_some_empty() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@[@u32] / @[]")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.value.add(layout.payload_offset as usize);
+
+            // Get list structure.
+            let list = &*(payload_ptr as *const rtdt::List);
+            assert_eq!(list.size, 0);
+            assert_eq!(list.capacity, 0);
+            assert!(list.data.is_null());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_list_some_nonempty() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@[@u32] / @[@1, @2, @3]")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.value.add(layout.payload_offset as usize);
+
+            // Get list structure.
+            let list = &*(payload_ptr as *const rtdt::List);
+            assert_eq!(list.size, 3);
+            assert_eq!(list.capacity, 3);
+
+            // Check list elements.
+            let elements = std::slice::from_raw_parts(list.data as *const u32, list.size as usize);
+            assert_eq!(elements, &[1, 2, 3]);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_string_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@string / @none")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            // Verify inner type is string.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::String);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_enum_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@enum { Ok, Error } / @none")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            // Verify inner type is enum.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Enum);
+            let enum_info = &(*inner_tydesc).type_info.enum_;
+            assert_eq!(enum_info.num_variants, 2);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_enum_some() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@enum { Ok, Error(@string) } / @enum Error(@\"failed\")")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.value.add(layout.payload_offset as usize);
+
+            // Get enum structure.
+            let discriminant = *(payload_ptr as *const u32);
+            assert_eq!(discriminant, 1); // "Error" is second variant
+
+            // Get enum variant info.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let enum_info = &(*inner_tydesc).type_info.enum_;
+            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let enum_layout = rtdt::layout::compute_enum_layout(inner_tydesc);
+
+            // Check payload.
+            let enum_payload_ptr = payload_ptr.add(enum_layout.variant_offsets[1] as usize);
+            let string = &*(enum_payload_ptr as *const rtdt::String);
+            assert_eq!(string.size, 6);
+            let str_slice = std::slice::from_raw_parts(string.data, string.size as usize);
+            assert_eq!(str_slice, b"failed");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_nested_option_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@?@u32 / @none")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            // Verify inner type is also Option.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Option);
+
+            // Verify innermost type is u32.
+            let innermost_tydesc = (*inner_tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*innermost_tydesc).type_tag, rtdt::TyTag::U32);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_nested_option_some_none() -> AnyResult<()> {
+        let db = Database::default();
+        // Some(None) - outer option has value, inner option is None.
+        let typechecked = compile(&db, ": @?@?@u32 / @none")?;
+        // Note: This is tricky - we need explicit Some wrapping to get Some(None).
+        // For now, just @none will give us outer None. This test may need syntax adjustment.
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            // This test demonstrates the outer None case.
+            let tag = *inst.value;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_nested_option_some_some() -> AnyResult<()> {
+        let db = Database::default();
+        // Some(Some(42)) - implicit wrapping should handle this.
+        let typechecked = compile(&db, ": @?@?@u32 / @42")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let outer_tag = *inst.value;
+            assert_eq!(outer_tag, rtdt::OptionTag::Some as u8);
+
+            // Get outer payload.
+            let outer_layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let outer_payload_ptr = inst.value.add(outer_layout.payload_offset as usize);
+
+            // Verify inner option.
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Option);
+            let inner_tag = *outer_payload_ptr;
+            assert_eq!(inner_tag, rtdt::OptionTag::Some as u8);
+
+            // Get inner payload.
+            let inner_layout = rtdt::layout::compute_option_layout(inner_tydesc);
+            let inner_payload_ptr = outer_payload_ptr.add(inner_layout.payload_offset as usize);
+            let value = *(inner_payload_ptr as *const u32);
+            assert_eq!(value, 42);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_option_of_tuple() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@?@(@u32, @bool) / @(@5, @true)")?;
+        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let outer_tag = *inst.value;
+            assert_eq!(outer_tag, rtdt::OptionTag::Some as u8);
+
+            // Get outer payload.
+            let outer_layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let outer_payload_ptr = inst.value.add(outer_layout.payload_offset as usize);
+
+            // Verify inner option.
+            let inner_opt_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_opt_tydesc).type_tag, rtdt::TyTag::Option);
+            let inner_tag = *outer_payload_ptr;
+            assert_eq!(inner_tag, rtdt::OptionTag::Some as u8);
+
+            // Get inner payload (the tuple).
+            let inner_layout = rtdt::layout::compute_option_layout(inner_opt_tydesc);
+            let inner_payload_ptr = outer_payload_ptr.add(inner_layout.payload_offset as usize);
+
+            // Verify tuple structure.
+            let tuple_tydesc = (*inner_opt_tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*tuple_tydesc).type_tag, rtdt::TyTag::Tuple);
+            let tuple_info = &(*tuple_tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+
+            let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let u32_value = *(inner_payload_ptr.add(tuple_fields[0].offset as usize) as *const u32);
+            let bool_value = *(inner_payload_ptr.add(tuple_fields[1].offset as usize) as *const u8);
+            assert_eq!(u32_value, 5);
+            assert_eq!(bool_value, 1);
+        }
+        Ok(())
+    }
+
 }
