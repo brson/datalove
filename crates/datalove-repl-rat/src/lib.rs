@@ -5,7 +5,7 @@
 use rmx::prelude::*;
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -70,6 +70,9 @@ fn run_app<B: ratatui::backend::Backend>(
             } else {
                 // Normal input mode.
                 match key.code {
+                    KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.should_exit = true;
+                    }
                     KeyCode::Enter => app.submit_input(),
                     KeyCode::Char(c) => app.enter_char(c),
                     KeyCode::Backspace => app.delete_char(),
