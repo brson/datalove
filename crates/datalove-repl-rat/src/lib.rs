@@ -14,9 +14,40 @@ use ratatui::{
     Frame,
 };
 
+use std::sync::mpsc::{channel, Sender, Receiver};
+use std::thread;
+
+/// Request sent to the worker thread.
+#[derive(Debug)]
+enum WorkerRequest {
+    ParseAndEval { id: u64, input: String },
+    Shutdown,
+}
+
+/// Response from the worker thread.
+#[derive(Debug)]
+enum WorkerResponse {
+    ParseResult { id: u64, parse: repl::CommandParse },
+    EvalResult { id: u64, eval: repl::Eval },
+}
+
+/// In-flight request status.
+#[derive(Debug)]
+enum RequestStatus {
+    Parsing,
+    Evaluating { command: repl::Command },
+}
+
 /// Application state.
 pub struct App {
-    engine: repl::Engine,
+    /// Channel to send requests to worker thread.
+    worker_tx: Sender<WorkerRequest>,
+    /// Channel to receive responses from worker thread.
+    worker_rx: Receiver<WorkerResponse>,
+    /// Next request ID.
+    next_id: u64,
+    /// Current in-flight request.
+    in_flight: Option<(u64, String, RequestStatus)>,
     /// Current input text.
     input: String,
     /// Cursor position in characters.
@@ -33,8 +64,19 @@ pub struct App {
 
 impl App {
     pub fn new(engine: repl::Engine) -> Self {
+        let (main_tx, worker_rx) = channel();
+        let (worker_tx, main_rx) = channel();
+
+        // Spawn worker thread.
+        thread::spawn(move || {
+            worker_thread(engine, worker_rx, worker_tx);
+        });
+
         Self {
-            engine,
+            worker_tx: main_tx,
+            worker_rx: main_rx,
+            next_id: 0,
+            in_flight: None,
             input: String::new(),
             character_index: 0,
             messages: Vec::new(),
@@ -133,6 +175,11 @@ impl App {
     /// Get the messages for testing.
     pub fn messages(&self) -> &[String] {
         &self.messages
+    }
+
+    /// Check if there's work pending from the worker thread.
+    pub fn has_pending_work(&self) -> bool {
+        self.in_flight.is_some()
     }
 
     /// Execute the selected menu action.
@@ -241,66 +288,145 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 }
 
 impl App {
-
-    // fixme: ideally this function is async
-    //
-    // on native we should be running the engine on another thread.
-    // on wasm we should be running in another container with wasm-mt.
-    fn parse_input(&self, input: &str) -> repl::CommandParse {
-        repl::Command::parse(&input)
-    }
-
-    // fixme: ideally this function is async as above
-    fn eval_command(&mut self, command: repl::Command) -> repl::Eval {
-        self.engine.eval(command)
-    }
-
+    /// Submit input for async processing.
     pub fn handle_input(&mut self) {
         if self.input.is_empty() {
             return;
         }
 
-        let input_text = self.input.clone();
+        // Don't submit if there's already a request in flight.
+        if self.in_flight.is_some() {
+            return;
+        }
 
-        match self.parse_input(&input_text) {
+        let input_text = self.input.clone();
+        self.input.clear();
+        self.character_index = 0;
+
+        // Assign a request ID.
+        let id = self.next_id;
+        self.next_id += 1;
+
+        // Display the input and initial status.
+        self.messages.push(format!("> {}", input_text));
+        self.messages.push(format!("  ⏱"));
+
+        // Send request to worker thread.
+        let _ = self.worker_tx.send(WorkerRequest::ParseAndEval {
+            id,
+            input: input_text.clone(),
+        });
+
+        // Track in-flight request.
+        self.in_flight = Some((id, input_text, RequestStatus::Parsing));
+    }
+
+    /// Poll for results from worker thread.
+    pub fn poll_results(&mut self) {
+        // Process all available responses.
+        while let Ok(response) = self.worker_rx.try_recv() {
+            match response {
+                WorkerResponse::ParseResult { id, parse } => {
+                    self.handle_parse_result(id, parse);
+                }
+                WorkerResponse::EvalResult { id, eval } => {
+                    self.handle_eval_result(id, eval);
+                }
+            }
+        }
+    }
+
+    fn handle_parse_result(&mut self, id: u64, parse: repl::CommandParse) {
+        // Check if this matches our in-flight request.
+        let Some((in_flight_id, input_text, status)) = &self.in_flight else {
+            bug!();
+        };
+
+        assert_eq!(*in_flight_id, id);
+
+        match parse {
             repl::CommandParse::Empty => {
-                self.input.clear();
-                self.character_index = 0;
-                self.messages.push(format!("> {}", input_text));
+                // Remove the "⏱" and replace with result.
+                self.messages.pop();
                 self.messages.push(format!("  (empty)"));
+                self.in_flight = None;
             }
             repl::CommandParse::ReadAnotherLine => {
-                todo!()
+                // Remove the "⏱" and show error.
+                self.messages.pop();
+                self.messages.push(format!("  (read another line not yet supported)"));
+                self.in_flight = None;
             }
             repl::CommandParse::Command(command) => {
-                self.input.clear();
-                self.character_index = 0;
-                self.messages.push(format!("> {}", input_text));
-                self.messages.push(format!("  ⏱"));
-                match self.eval_command(command) {
-                    repl::Eval::Nothing => {
-                        self.messages.pop();
-                        self.messages.push(format!("  nothing"));
+                // Update status to evaluating.
+                self.in_flight = Some((id, input_text.clone(), RequestStatus::Evaluating { command }));
+            }
+        }
+    }
+
+    fn handle_eval_result(&mut self, id: u64, eval: repl::Eval) {
+        // Check if this matches our in-flight request.
+        let Some((in_flight_id, _, _)) = &self.in_flight else {
+            bug!();
+        };
+
+        assert_eq!(*in_flight_id, id);
+
+        // Remove the "⏱" and replace with result.
+        self.messages.pop();
+
+        match eval {
+            repl::Eval::Nothing => {
+                self.messages.push(format!("  nothing"));
+            }
+            repl::Eval::Exit => {
+                self.messages.push(format!("  exiting"));
+                self.should_exit = true;
+            }
+            repl::Eval::Error(e) => {
+                self.messages.push(format!("  error: {e}"));
+            }
+            repl::Eval::CallerInterpret(command) => {
+                match command {
+                    repl::ReplCommand::Help => {
+                        self.messages.push(format!("  help"));
                     }
-                    repl::Eval::Exit => {
-                        self.messages.pop();
-                        self.messages.push(format!("  exiting"));
-                        self.should_exit = true;
-                    }
-                    repl::Eval::Error(e) => {
-                        self.messages.pop();
-                        self.messages.push(format!("  error: {e}"));
-                    }
-                    repl::Eval::CallerInterpret(command) => {
-                        match command {
-                            repl::ReplCommand::Help => {
-                                self.messages.pop();
-                                self.messages.push(format!("  help"));
-                            }
-                            _ => bug!(),
-                        }
+                    _ => {
+                        self.messages.push(format!("  (unhandled repl command)"));
                     }
                 }
+            }
+        }
+
+        self.in_flight = None;
+    }
+}
+
+/// Worker thread that handles parse and eval operations.
+fn worker_thread(
+    mut engine: repl::Engine,
+    rx: Receiver<WorkerRequest>,
+    tx: Sender<WorkerResponse>,
+) {
+    loop {
+        match rx.recv() {
+            Ok(WorkerRequest::ParseAndEval { id, input }) => {
+                // Parse the input.
+                let parse = repl::Command::parse(&input);
+                let _ = tx.send(WorkerResponse::ParseResult {
+                    id,
+                    parse: parse.clone(),
+                });
+
+                // Evaluate if we got a command.
+                if let repl::CommandParse::Command(command) = parse {
+                    let eval = engine.eval(command);
+                    let _ = tx.send(WorkerResponse::EvalResult { id, eval });
+                }
+            }
+            Ok(WorkerRequest::Shutdown) | Err(_) => {
+                // Shutdown or channel closed.
+                break;
             }
         }
     }

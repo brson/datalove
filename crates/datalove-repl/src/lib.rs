@@ -23,7 +23,7 @@ pub enum ReplCommand {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptStatement(String);
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CommandParse {
     Empty,
     ReadAnotherLine,

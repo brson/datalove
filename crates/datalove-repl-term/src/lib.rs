@@ -15,6 +15,8 @@ use ratatui::{
 };
 use std::io;
 
+const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
+
 /// Run the ratatui-based REPL.
 pub fn run() -> AnyResult<()> {
     // Setup terminal.
@@ -47,14 +49,20 @@ fn run_app<B: ratatui::backend::Backend>(
     app: &mut datalove_repl_rat::App,
 ) -> AnyResult<()> {
     loop {
+        // Poll for worker results before drawing.
+        app.poll_results();
+
         terminal.draw(|f| datalove_repl_rat::ui(f, app))?;
 
         if app.should_exit() {
             break;
         }
 
-        if let Event::Key(key) = event::read()? {
-            handle_key_event(app, key);
+        // Use polling to check for events with timeout, so we can update UI.
+        if event::poll(std::time::Duration::from_millis(ENGINE_UPDATES_MAX_LATENCY_MS))? {
+            if let Event::Key(key) = event::read()? {
+                handle_key_event(app, key);
+            }
         }
     }
 
@@ -68,6 +76,9 @@ pub fn run_app_with_events<B: ratatui::backend::Backend>(
     events: &mut dyn Iterator<Item = Event>,
 ) -> AnyResult<()> {
     loop {
+        // Poll for worker results before drawing.
+        app.poll_results();
+
         terminal.draw(|f| datalove_repl_rat::ui(f, app))?;
 
         if app.should_exit() {
@@ -77,8 +88,11 @@ pub fn run_app_with_events<B: ratatui::backend::Backend>(
         if let Some(Event::Key(key)) = events.next() {
             handle_key_event(app, key);
         } else {
-            // No more events.
-            break;
+            // No more events, but keep polling for pending results.
+            app.poll_results();
+            if !app.has_pending_work() {
+                break;
+            }
         }
     }
 
