@@ -813,6 +813,9 @@ When documenting or discussing this syntax, emphasize:
   ```
   : outer / : inner / expr
   ```
+
+  (ed: This is not valid syntax!)
+
 - Better than OCaml's parentheses:
   ```ocaml
   ((expr : inner) : outer)
