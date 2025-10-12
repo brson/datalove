@@ -106,7 +106,7 @@ as a egui_ratatui application.
   heavyweight class abstractions
 - Polars / Pandas. tables
 - TigerBeetle. DST / virtualized I/O
-- Mercury. modes look useful: in, out, di (destructive input), uo (unique output)
+- Mercury. argument modes and logic applications
 
 
 ## Roadmap
