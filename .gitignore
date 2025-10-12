@@ -1,2 +1,3 @@
 target/
 *.out.actual
+crates/datalove-repl-wasm/dist
