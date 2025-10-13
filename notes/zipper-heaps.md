@@ -46,3 +46,10 @@ are at the tip of their respective buckets and are simply popped*.
 The unzip algorithm is the novelty and what is primarily
 described here, needs to be fully designed and verified.
 
+Terms, preconditions, and requirements:
+
+- All allocations are by known containers with constrained allocation patterns.
+  Many possible uses of allocators would not be compatible.
+  All allocating Datalit types are containers that should be compatible.
+- buckets - buckets are by container type
+
