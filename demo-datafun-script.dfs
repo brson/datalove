@@ -30,7 +30,7 @@ require data lookup_tables : { x: #u32, y: #bool }
 % call other funs.
 fun increment(
   accum: u64, amount: u8,
-) !u64
+): !u64
   % Explicit `ret` - functions are statement-oriented
   % and don't support a tail expression like Rust.
   ret accum +! amount
@@ -103,7 +103,7 @@ arena
 end arena
 
 % Memoized fibonacci.
-fun fib_memo(n: int)
+fun fib_memo(n: int): int
   if n <= @1
     ret n
   else
