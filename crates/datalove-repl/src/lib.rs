@@ -5,7 +5,7 @@
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
-const REPL_COMMAND_SIGIL: char = '\\';
+const REPL_COMMAND_SIGIL: char = '/';
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
