@@ -83,15 +83,17 @@ You'll probably get used to it.
 }
 ```
 
-Datalit is strongly typed
+Datalit is strongly statically typed
 but supports free non-destructive coercions,
 and other lightweight conversions.
 All types are owned tree-shaped value-types
 and do not support interior mutability, native pointers, or cycles.
 
-The shapes of Datalit types and type descriptiors are fully
+The shapes of Datalit types and type descriptors are fully
 specified at runtime and form the basis of the Datalove
 runtime ABI.
+
+If you understand Datalit you understand 80% of Datalove.
 
 
 ### Datalove Functions ("Datafun")
@@ -99,12 +101,37 @@ runtime ABI.
 A simple functional language built on the datalit type system.
 †
 
+
+todo
+
+If you understand Datafun you understand 90% of Datalove.
+
+
+### Full-on Datalove
+
+- `proc`
+- owned native pointers,
+  linear, non-clonable, non-mathable,
+  just tokens with provenance,
+  runtime can assume these are unaliased
+- `obj` - structs with object identity and encapsulation.
+  These are the unit of abstraction.
+  Still value types, not like C# classes.
+
+If you understand Datalove then objective achieved.
+It is a simple language.
+
+
 ## Features
+
+### A massive and battle-tested standard library.
+
 
 
 ### Statically typed with ergonomic coercions and runtime reflection
 
-Datalove is statically typed but feels like a dynamic scripting language.
+Datalove is statically typed but feels flexible and fast
+like a dynamic scripting language.
 
 ### Fast incremental compilation and execution with hot-reloading,
     rewind-and-replay, rewind-and-do-something-else.
