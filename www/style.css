@@ -243,8 +243,16 @@ section {
     font-size: 2.5rem;
     font-weight: 700;
     text-align: center;
+    margin-bottom: var(--spacing-sm);
+    color: var(--chocolate);
+}
+
+.section-description {
+    font-size: 1.125rem;
+    text-align: center;
     margin-bottom: var(--spacing-lg);
     color: var(--chocolate);
+    opacity: 0.85;
 }
 
 /* Features Section */
@@ -281,6 +289,18 @@ section {
 
 .feature-card:nth-child(3) {
     border-left-color: var(--avocado);
+}
+
+.feature-card:nth-child(4) {
+    border-left-color: var(--dusty-rose);
+}
+
+.feature-card:nth-child(5) {
+    border-left-color: var(--mustard);
+}
+
+.feature-card:nth-child(6) {
+    border-left-color: var(--chocolate);
 }
 
 .feature-card:hover {
@@ -355,13 +375,16 @@ section {
     font-size: 1.5rem;
 }
 
-.component-ext {
-    background: rgba(255, 255, 255, 0.3);
-    padding: 0.25rem 0.75rem;
-    border-radius: 4px;
-    font-family: 'Courier New', monospace;
-    font-size: 0.875rem;
-    font-weight: 600;
+.component-understanding {
+    margin-top: var(--spacing-sm);
+    padding-top: var(--spacing-sm);
+    border-top: 2px solid rgba(255, 255, 255, 0.3);
+    font-style: italic;
+    font-size: 1rem;
+}
+
+.component-block p:not(.component-understanding) {
+    margin-bottom: var(--spacing-xs);
 }
 
 /* Examples Section */

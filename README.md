@@ -134,7 +134,7 @@ Datalove is statically typed but feels flexible and fast
 like a dynamic scripting language.
 
 ### Fast incremental compilation and execution with hot-reloading,
-    rewind-and-replay, rewind-and-do-something-else.
+    rewind-and-replay, rewind-and-rewrite-history.
 
 ### Interpreted or compiled, JIT or AOT
 
