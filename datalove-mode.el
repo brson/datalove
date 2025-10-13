@@ -36,6 +36,7 @@
     "call"
     "memoize"
     "not" "and" "or" "xor" "implies"
+    "move" "copy" "ref" "out"
     )
   '(
     ("@" . 'font-lock-variable-name-face)
