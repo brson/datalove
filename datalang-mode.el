@@ -33,6 +33,8 @@
     "if"
     "end if"
     "else"
+    "call"
+    "memoize"
     "not" "and" "or" "xor" "implies"
     )
   '(

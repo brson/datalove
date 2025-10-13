@@ -68,7 +68,7 @@ end fun
 ; Data types that contain allocations:
 ; list, string, map, set, data, error, option, result.
 ;
-; some types require heap sigils to limit keywords in the grammar:
+; some types may require heap sigils to limit keywords in the grammar:
 ; @map, @set, etc.
 
 let local: @set<@data> = @set { 1, "2", 3.0 }
@@ -98,7 +98,20 @@ arena
 
   ; We can always clone out of the arena.
   ret stuck_inside.clone
+
+  ; Arenas interact with memoized functions in obvious desirable ways.
+  let fib: @int = memoize fib_memo(10000)
+
 end arena
+
+; Memoized fibonacci.
+fun fib_memo(n: int)
+  if n <= @1
+    ret n
+  else
+    ret memoize fib(n - 1) + memoize fib(n - 2)
+  end if
+end fun
 
 
 
