@@ -22,4 +22,11 @@ and those are our allocator buckets;
 as vectors grow they maintain a linked list to previous buckets
 that all have to be traversed during unzipping.
 
+Zipper-heap candidates:
+
+- bigint
+- list
+- string
+- what about map and set?
+- data and error
 
