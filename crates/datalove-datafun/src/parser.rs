@@ -173,9 +173,9 @@ impl<'db> Parser<'db> {
             }
         };
 
-        // Check for return type (sigil ! or ?)
-        let return_type = if self.peek_sigil(tokens, Sigil::Exclamation) ||
-                             self.peek_sigil(tokens, Sigil::Question) {
+        // Check for return type: `: type`
+        let return_type = if self.peek_sigil(tokens, Sigil::Colon) {
+            self.eat_sigil(tokens, Sigil::Colon);
             Some(self.parse_type_hint_and_heap(tokens))
         } else {
             None
@@ -714,7 +714,7 @@ mod tests {
     #[test]
     fn test_parse_fun_with_params() {
         let ref db = crate::Database::default();
-        let source = Source::new(db, S("fun increment(accum: @u64, amount: @u8) !@u64\nend fun"));
+        let source = Source::new(db, S("fun increment(accum: @u64, amount: @u8): !@u64\nend fun"));
         let script = parse(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
@@ -733,7 +733,7 @@ mod tests {
     #[test]
     fn test_parse_fun_multiline_params() {
         let ref db = crate::Database::default();
-        let source = Source::new(db, S("fun increment(\n  accum: @u64, amount: @u8,\n) !@u64\n  ret @0\nend fun"));
+        let source = Source::new(db, S("fun increment(\n  accum: @u64, amount: @u8,\n): !@u64\n  ret @0\nend fun"));
         let script = parse(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
