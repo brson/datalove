@@ -22,7 +22,7 @@
     (2 , @true),
   ],
 
-; fixme below is not strictly valid .dle syntax
+; fixme below is not strictly valid .dlt syntax
 ; since it contains multiple expressions.
 ; Imagine them in the above tuple.
 

@@ -18,7 +18,7 @@ fn find_test_fixtures() -> Vec<PathBuf> {
     for entry in std::fs::read_dir(&fixtures_dir).X() {
         let entry = entry.X();
         let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) == Some("dle") {
+        if path.extension().and_then(|s| s.to_str()) == Some("dlt") {
             fixtures.push(path);
         }
     }

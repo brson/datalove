@@ -102,6 +102,8 @@ If you understand Datalit you understand 80% of Datalove.
 ### Datalove Functions ("Datafun")
 
 > File extension `.dfs` (script), `.dfm` (modules)
+>
+> Example [demo-datafun-script.dfs], [demo-datafun-module.dfm].
 
 A simple functional language built on the datalit type system.
 †
@@ -118,6 +120,8 @@ If you understand Datafun you understand 90% of Datalove.
 ### Full-on Datalove
 
 > File extension `.dls` (script), `.dlm` (module)
+>
+> Example [demo-datalove-script.dls], [demo-datalove-module.dlm].
 
 - `proc`
 - owned native pointers,
@@ -178,9 +182,9 @@ or "data expressions",
 since datalove script also has expressions
 with a superset syntax and types.
 
-Extension `.dle`.
+Extension `.dlt`.
 
-See [`demo-data.dle`] for an example.
+See [`demo-data.dlt`] for an example.
 
 
 ## Datalove Script

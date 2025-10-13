@@ -42,19 +42,19 @@ struct Args {
 
 #[derive(clap::Args)]
 struct LitTycheckCommand {
-    /// Path to the .dle file to type check.
+    /// Path to the .dlt file to type check.
     file_path: PathBuf,
 }
 
 #[derive(clap::Args)]
 struct LitAstCommand {
-    /// Path to the .dle file to print AST for.
+    /// Path to the .dlt file to print AST for.
     file_path: PathBuf,
 }
 
 #[derive(clap::Args)]
 struct LitPrettyCommand {
-    /// Path to the .dle file to pretty print.
+    /// Path to the .dlt file to pretty print.
     file_path: PathBuf,
 }
 
