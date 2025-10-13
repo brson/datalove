@@ -6,26 +6,25 @@ and transformation,
 with a batteries included standard library.
 
 
+## A Tower of Love
 
+Datalove is built from three cleanly-scoped strict
+sublanguages of increasing power.
 
-## Features
+### Datalove Literals ("Datalit")
 
-### Cleanly-scoped strict sublanguages of increasing power
+The tiny and comprehensible foundation of Datalove,
+a strongly-typed pure-data language
+for expressing most typical data structures:
 
-**Datalove Literals** ("Datalit") is the tiny foundation of Datalove,
-a pure data language with rich and expressive types:
-
-- booleans
-- fixed integers and bigints
-- floats
-- anonymous and named tuples
-- anonymous and named structs
-- anonymous and named enums
-- lists and strings
-- maps and sets
+- booleans, fixed integers and bigints, floats
+- anonymous and named tuples, structs, and enums
+- lists and strings, maps and sets
 - option and result
-- `data` any of the above, with runtime introspection and reflection
-- `error` any of the above, but for error handling
+- `data` of any of the above, with runtime introspection and reflection
+- `error` of any of the above, but for error handling
+- (aspirational) datetimes, subrange ints, bitsets
+- (aspirational) tables, graphs, multidimensional arrays
 
 Datalit is a serialization format:
 
@@ -49,7 +48,8 @@ Datalit is a serialization format:
 ```
 
 All expressions can be type hinted.
-The syntax for this is `: <type> / <expr>`
+The syntax for this is `: <type> / <expr>`.
+You'll probably get used to it.
 
 ```datalove
 ; This is the type of the literal we're about to write.
@@ -96,6 +96,9 @@ runtime ABI.
 built on the datalit type system.
 
 todo
+
+
+## Features
 
 
 ### Statically typed with ergonomic coercions and runtime reflection

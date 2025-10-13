@@ -22,8 +22,6 @@
     (2 , @true),
   ],
 
-)
-
 ; fixme below is not strictly valid .dle syntax
 ; since it contains multiple expressions.
 ; Imagine them in the above tuple.
@@ -37,18 +35,22 @@
 
 : @bool / @true
 : @bool / @false
-; with no heap sigils - infered and defaulted.
-; unclear to what extent this will be supported.
-; the heap sigils allow us to avoid reserving lots of keywords in type
-; and expression namespaces.
+
+; With no heap sigils - infered and defaulted.
+; Local heap sigils will probably be totally ellidable,
+; but mandatory heap sigils allow us to avoid reserving lots of keywords in type
+; and expression namespaces, or avoid ugly disambiguation problems.
 : bool / true
 : bool / false
 
 : @u32 / 1
-
-; floats
-; fixme: need a bitpattern literal syntax or other deterministic float syntax wrt 0s, nans, etc
 : @f32 / 1.0
+
+; Float bitpattern coercion from hex literals (not dec literals).
+; Must have correct number of digits.
+; When you want to preserve floats exactly.
+; Sneaky!
+: @f32 / 0xABABABAB
 
 
 ; ## Heap sigils
@@ -210,5 +212,5 @@
 ; array
 ; multi-dimensional array
 ; range (python)?
-; complex
-; real
+; complex?
+; real?
