@@ -77,22 +77,50 @@ let global: #set<#data> = #set { 1, "2", 3.0 }
 let none: #struct Foo { } = #struct Foo { }
 
 ; clone can deep copy across heaps
-let globalized: #set<_> = std.clone(local)
+let globalized: #set<_> = local.clone
+; Can also write.
+let globalized: #set<_> = clone local
+
 
 ; they can not be intermixed:
 ;
 ;     let bogus: @set<#data> = ...
 
+; Scoped arenas fall out of the design naturally.
+arena
+  ; @ is a new type here - it is impossible to escape the arena.
+  let stuck_inside: @string = "helpme"
+  ; We can still access the outer heap.
+  let i_can_leave: @^string = "seeya"
+  if should_leave
+    ret i_can_leave
+  end if
+
+  ; We can always clone out of the arena.
+  ret stuck_inside.clone
+end arena
 
 
 
 ; ## Math and logic
+
+; Basic math ops on fixed-size ints result in ?T.
+; Basic math ops work on option of fixed-size ints.
+let foo: ?u8 = 1 + 2
+let bar = 3 + 4
+let baz = foo + bar
+let baz = : ?u8 / foo + : ?u8 / bar
+
+; So you can do a bunch of math ergonomically and
+; then deal with the optionalness at the end.
+; todo example
 
 ; bigints can use overflowing math
 let i = (1 + 2) - 3 * 4 / 5
 ; sized ints can't - the ! here indicates early-error-return
 let i: @u32 = (1 +! 2) -! 3 *! 4 /! 5
 ; or doubl sigils for checked (assert/panic) math
+; this is only available in procs, not funs
 let i: @u32 = (1 ++ 2) -- 3 ** 4 // 5
 
 ; compound assignment
