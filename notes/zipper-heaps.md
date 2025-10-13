@@ -1,4 +1,4 @@
-## Zipper Heaps
+# Zipper Heaps
 
 For datafun we should be able to track dataflow very precisely,
 and there are are only a few types of allocations involved,
@@ -14,7 +14,7 @@ and swapping their backing-buffers and owned pointers when scopes cross
 due to slot-clobbering, argument passing, or returning,
 treating the heap more like a shadow stack.
 
-### Zipper heaps for pow-growable buffers like vec/list/string
+## Zipper heaps for pow-growable buffers like vec/list/string
 
 You might not expect this to work for vector buffers
 but I think it can if we enforce that they e.g. always allocate powers of two elements,
@@ -31,6 +31,10 @@ Zipper-heap candidates:
 - map and set - more complex allocation patterns
 - data and error - unclear but possible
 
+As a simplification we are going to limit size-buckets to powers of 2 size
+(or powers of 2 + some constant), but i don't see why it couldn't
+support others.
+
 
 ## Strawman zipper-heap algorithm
 
@@ -46,10 +50,10 @@ are at the tip of their respective buckets and are simply popped*.
 The unzip algorithm is the novelty and what is primarily
 described here, needs to be fully designed and verified.
 
-Terms, preconditions, and requirements:
+## Terms, preconditions, and requirements:
 
-- All allocations are by known containers with constrained allocation patterns.
-  Many possible uses of allocators would not be compatible.
-  All allocating Datalit types are containers that should be compatible.
-- buckets - buckets are by container type
+All allocations are by known containers with constrained allocation patterns.
+Many possible uses of allocators would not be compatible.
+All allocating Datalit types are containers that should be compatible.
+
 

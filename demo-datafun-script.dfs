@@ -31,24 +31,20 @@ require data lookup_tables : { x: #u32, y: #bool }
 fun increment(
   accum: u64, amount: u8,
 ) !u64
-  accum +! amount
+  ; Explicit `ret` - functions are statement-oriented
+  ; and don't support a tail expression like Rust.
+  ret accum +! amount
 end fun
-
-; Procedures operate on types including
-; native pointers, may do I/O, and may call
-; funs and procs.
-proc print_hello(msg: @string)
-  std.io.print("hello {msg}")
-end proc
 
 ; Argument modes, yup they're back.
 ;
 fun demo(
     ; `in` (implicit), by-val
     a: u32,
-    ; `out`, by-mut-ptr _to uninitialized local_.
-    ; like mercury `uo`, "unique output".
-    ; not clear yet if we need the uninitialized requirement.
+    ; `out`, by-mut-ptr, like mercury `uo`, "unique output",
+    ; though i don't think we literally need the output slot to be uninitialized.
+    ; we can prevent callee from reading. not clear if we
+    ; need this distinct from `mut`.
     b: out u32,
     ; `ref`, by-ref, like mercury `ui` "unique input"?
     c: ref u32,
@@ -198,7 +194,9 @@ let ty: @type = @type @vec<u32>
 ; ## Dynamic-feel features
 
 ; lightweight anonymous enum decls
+; not committed to this syntax yet
 fun print(val: @u32 | @string)
+  ; syntax unclear yet
   match val {
     @enum u32(i) => {}
     @enum string(s) => {}
