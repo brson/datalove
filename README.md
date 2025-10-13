@@ -14,6 +14,8 @@ sublanguages of increasing power.
 
 ### Datalove Literals ("Datalit")
 
+> File extension `.dlt`
+
 The tiny and comprehensible foundation of Datalove,
 a strongly-typed pure-data language
 for expressing most typical data structures:
@@ -99,16 +101,23 @@ If you understand Datalit you understand 80% of Datalove.
 
 ### Datalove Functions ("Datafun")
 
+> File extension `.dfs` (script), `.dfm` (modules)
+
 A simple functional language built on the datalit type system.
 †
 
 
+Datafun may be defined in modules or in scripts, as in a repl.
+
 todo
+
 
 If you understand Datafun you understand 90% of Datalove.
 
 
 ### Full-on Datalove
+
+> File extension `.dls` (script), `.dlm` (module)
 
 - `proc`
 - owned native pointers,

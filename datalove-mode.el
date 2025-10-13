@@ -55,5 +55,5 @@
     ("<" . 'font-lock-constant-face)
     (">" . 'font-lock-constant-face)
     )
-  '(".dle\\'" ".dlm\\'" ".dls\\'")
+  '(".dlt\\'" ".dfs\\'" ".dfm\\'" ".dls\\'" ".dlm\\'")
   "datalove language")
