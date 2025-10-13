@@ -1,0 +1,7 @@
+{
+  "type_hint": null,
+  "expr": {
+    "heap": "Local",
+    "expr": "True"
+  }
+}
