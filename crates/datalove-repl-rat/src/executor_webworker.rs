@@ -2,7 +2,7 @@
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{Worker, MessageEvent, ErrorEvent};
+use web_sys::{Worker, WorkerOptions, WorkerType, MessageEvent, ErrorEvent};
 use serde::{Serialize, Deserialize};
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -32,9 +32,12 @@ impl ReplExecutor for WebWorkerExecutor {
     fn new() -> Self {
         web_sys::console::log_1(&"WebWorkerExecutor: Creating worker...".into());
 
-        // Create the worker.
+        // Create the worker as a module worker to support ES6 imports.
         // The worker script is in the worker-dist directory.
-        let worker = Worker::new("./worker-dist/worker.js")
+        let mut options = WorkerOptions::new();
+        options.set_type(WorkerType::Module);
+
+        let worker = Worker::new_with_options("./worker-dist/worker.js", &options)
             .expect("Failed to create worker");
 
         web_sys::console::log_1(&"WebWorkerExecutor: Worker created".into());

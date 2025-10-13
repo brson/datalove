@@ -16,7 +16,9 @@ struct WorkerRequest {
 }
 
 /// Entry point for the Web Worker.
-#[wasm_bindgen(start)]
+/// Note: This function doesn't have #[wasm_bindgen(start)] because it's
+/// included in both the main app and worker modules. The worker-specific
+/// crate adds the start attribute.
 pub fn worker_main() -> Result<(), JsValue> {
     // Set up panic hook for debugging.
     console_error_panic_hook::set_once();
