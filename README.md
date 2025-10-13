@@ -48,14 +48,14 @@ Datalit is a serialization format:
 }
 ```
 
-All expressions can be type hinted.
+All expressions can be type-hinted.
 The syntax for this is `: <type> / <expr>`.
 You'll probably get used to it.
 
 ```datalove
 ; This is the type of the literal we're about to write.
 ; When you see ":" in Datalove it is always followed by a type.
-: [{
+: {
   name: string,
   born: u32,
   interests: [string],
@@ -65,11 +65,12 @@ You'll probably get used to it.
       name: string,
     }
   >,
-}] / {
-  name = "Ada",
+} / {              ; After "/" is the literal expression.
+  name = "Ada",    ; We can throw a type hint anywhere.
   born = 1815,
-  ; We can throw a type hint anywhere.
-  interests = : [string] / ["mathematics", "poetry", "music"],
+  interests = : [string] / [
+    "mathematics", "poetry", "music",
+  ],
   address_book = set {
     struct AddressEntry {
       kind = enum Friend,
