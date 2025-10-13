@@ -11,6 +11,7 @@ with a batteries included standard library.
 Datalove is built from three cleanly-scoped strict
 sublanguages of increasing power.
 
+
 ### Datalove Literals ("Datalit")
 
 The tiny and comprehensible foundation of Datalove,
@@ -92,11 +93,11 @@ The shapes of Datalit types and type descriptiors are fully
 specified at runtime and form the basis of the Datalove
 runtime ABI.
 
-**Datalove Functions** ("Datafun") is a simple procedural language
-built on the datalit type system.
 
-todo
+### Datalove Functions ("Datafun")
 
+A simple functional language built on the datalit type system.
+†
 
 ## Features
 
@@ -173,6 +174,17 @@ See [`demo-module.dlm`] for an example.
 
 
 ## Design notes
+
+### † Pure functions + mutable-reference argument modes
+
+Datalove at first does not look pure functional because
+it has mutable by-reference arguments:
+
+```datalove
+```
+
+etc.
+
 
 ### Allocations
 
