@@ -74,7 +74,7 @@ struct ReplApp {
 #[cfg(target_arch = "wasm32")]
 struct ReplApp {
     terminal: Terminal<RataguiBackend<EmbeddedGraphics>>,
-    app: datalove_repl_rat::App<datalove_repl_rat::BlockingExecutor>,
+    app: datalove_repl_rat::App<datalove_repl_rat::WebWorkerExecutor>,
 }
 
 impl ReplApp {

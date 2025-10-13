@@ -4,16 +4,24 @@ default:
 test:
     cargo test --all
     cargo check -p datalove-repl-egui
-    env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo check -p datalove-repl-egui --target=wasm32-unknown-unknown
+    just check-wasm
 
 check:
     cargo check --all
-    env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo check -p datalove-repl-egui --target=wasm32-unknown-unknown
+    just check-wasm
 
 check-wasm:
     env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo check -p datalove-repl-egui --target=wasm32-unknown-unknown
+    env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo check -p datalove-repl-egui --target=wasm32-unknown-unknown
+
+build-wasm-repl:
+    cd crates/datalove-repl-worker && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk build --release
+    ./scripts/prepare-worker.sh
+    cd crates/datalove-repl-egui && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk build --release
 
 serve-wasm-repl:
+    cd crates/datalove-repl-worker && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk build --release
+    ./scripts/prepare-worker.sh
     cd crates/datalove-repl-egui && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk serve --release
 
 run-egui-repl:

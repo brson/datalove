@@ -1,0 +1,3 @@
+// Worker entry point that imports the WASM-generated module
+// The actual filename will be substituted during build
+importScripts('./WORKER_JS_FILENAME');

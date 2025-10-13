@@ -10,7 +10,18 @@ mod executor;
 mod executor_threaded;
 mod executor_blocking;
 
-pub use executor::{ReplExecutor, ThreadedExecutor, BlockingExecutor};
+#[cfg(target_arch = "wasm32")]
+mod executor_webworker;
+
+#[cfg(target_arch = "wasm32")]
+pub mod worker;
+
+pub use executor::ReplExecutor;
+pub use executor_threaded::ThreadedExecutor;
+pub use executor_blocking::BlockingExecutor;
+
+#[cfg(target_arch = "wasm32")]
+pub use executor_webworker::WebWorkerExecutor;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -184,8 +195,8 @@ impl App<ThreadedExecutor> {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl App<BlockingExecutor> {
-    /// Create a new app using the blocking executor (WASM).
+impl App<WebWorkerExecutor> {
+    /// Create a new app using the web worker executor (WASM).
     pub fn new() -> Self {
         Self::with_executor()
     }

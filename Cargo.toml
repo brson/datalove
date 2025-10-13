@@ -13,6 +13,10 @@ members = [
   "crates/*",
 ]
 
+exclude = [
+  "crates/datalove-repl-worker",
+]
+
 default-members = [
   "crates/datalove-cli",
 ]
