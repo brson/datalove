@@ -1,108 +1,108 @@
-; # Dataun Script example
+% # Dataun Script example
 
 
 
 
-; ## Imports
+% ## Imports
 
-; The compiler wants to see all source code up front.
-;
-; `require` statements tell the compiler what else a module
-; needs from the rest of the source code world.
+% The compiler wants to see all source code up front.
+%
+% `require` statements tell the compiler what else a module
+% needs from the rest of the source code world.
 
-; module linkage is explicit
+% module linkage is explicit
 require module std
 
-; include a datalove expression file
+% include a datalove expression file
 require data lookup_tables
 
-; require statements bring a name into scope.
-; modules are first-class types.
-; type hints?
+% require statements bring a name into scope.
+% modules are first-class types.
+% type hints?
 require module std : module { }
 require data lookup_tables : { x: #u32, y: #bool }
 
 
-; ## Functions and procedures
+% ## Functions and procedures
 
-; Functions operate on pure data
-; and are comptime-compatible; only
-; call other funs.
+% Functions operate on pure data
+% and are comptime-compatible; only
+% call other funs.
 fun increment(
   accum: u64, amount: u8,
 ) !u64
-  ; Explicit `ret` - functions are statement-oriented
-  ; and don't support a tail expression like Rust.
+  % Explicit `ret` - functions are statement-oriented
+  % and don't support a tail expression like Rust.
   ret accum +! amount
 end fun
 
-; Argument modes, yup they're back.
-;
+% Argument modes, yup they're back.
+%
 fun demo(
-    ; `in` (implicit), by-val
+    % `in` (implicit), by-val
     a: u32,
-    ; `out`, by-mut-ptr, like mercury `uo`, "unique output",
-    ; though i don't think we literally need the output slot to be uninitialized.
-    ; we can prevent callee from reading. not clear if we
-    ; need this distinct from `mut`.
+    % `out`, by-mut-ptr, like mercury `uo`, "unique output",
+    % though i don't think we literally need the output slot to be uninitialized.
+    % we can prevent callee from reading. not clear if we
+    % need this distinct from `mut`.
     b: out u32,
-    ; `ref`, by-ref, like mercury `ui` "unique input"?
+    % `ref`, by-ref, like mercury `ui` "unique input"?
     c: ref u32,
-    ; `mut`, by-mut-ref, like mercury `di` "destructive input"?
+    % `mut`, by-mut-ref, like mercury `di` "destructive input"?
     c: mut u32,
 )
 end fun
 
 
-; ## Non plain-data types
+% ## Non plain-data types
 
 
 
-; ## About the heap
+% ## About the heap
 
-; Every type includes a possibly-implicit heap type,
-; either local (`@`), global (`#`), infer (no sigil)
-;
-; Data types that contain allocations:
-; list, string, map, set, data, error, option, result.
-;
-; some types may require heap sigils to limit keywords in the grammar:
-; @map, @set, etc.
+% Every type includes a possibly-implicit heap type,
+% either local (`@`), global (`#`), infer (no sigil)
+%
+% Data types that contain allocations:
+% list, string, map, set, data, error, option, result.
+%
+% some types may require heap sigils to limit keywords in the grammar:
+% @map, @set, etc.
 
 let local: @set<@data> = @set { 1, "2", 3.0 }
 let global: #set<#data> = #set { 1, "2", 3.0 }
 
 let none: #struct Foo { } = #struct Foo { }
 
-; clone can deep copy across heaps
+% clone can deep copy across heaps
 let globalized: #set<_> = local.clone
-; Can also write.
+% Can also write.
 let globalized: #set<_> = clone local
 
 
-; they can not be intermixed:
-;
-;     let bogus: @set<#data> = ...
+% they can not be intermixed:
+%
+%     let bogus: @set<#data> = ...
 
-; Scoped arenas fall out of the design naturally.
+% Scoped arenas fall out of the design naturally.
 arena
-  ; @ is a new type here - it is impossible to escape the arena.
+  % @ is a new type here - it is impossible to escape the arena.
   let stuck_inside: @string = "helpme"
-  ; We can still access the outer heap.
+  % We can still access the outer heap.
   let i_can_leave: @^string = "seeya"
   if should_leave
     ret i_can_leave
   end if
 
-  ; We can always clone out of the arena.
+  % We can always clone out of the arena.
   ret stuck_inside.clone
 
-  ; Arenas interact with memoized functions in obvious desirable ways.
+  % Arenas interact with memoized functions in obvious desirable ways.
   let fib: @int = memoize fib_memo(10000)
 
 end arena
 
-; Memoized fibonacci.
+% Memoized fibonacci.
 fun fib_memo(n: int)
   if n <= @1
     ret n
@@ -113,56 +113,56 @@ end fun
 
 
 
-; ## Math and logic
+% ## Math and logic
 
-; Basic math ops on fixed-size ints result in ?T.
-; Basic math ops work on option of fixed-size ints.
+% Basic math ops on fixed-size ints result in ?T.
+% Basic math ops work on option of fixed-size ints.
 let foo: ?u8 = 1 + 2
 let bar = 3 + 4
 let baz = foo + bar
 let baz = : ?u8 / foo + : ?u8 / bar
 
-; So you can do a bunch of math ergonomically and
-; then deal with the optionalness at the end.
-; todo example
+% So you can do a bunch of math ergonomically and
+% then deal with the optionalness at the end.
+% todo example
 
-; bigints can use overflowing math
+% bigints can use overflowing math
 let i = (1 + 2) - 3 * 4 / 5
-; sized ints can't - the ! here indicates early-error-return
+% sized ints can't - the ! here indicates early-error-return
 let i: @u32 = (1 +! 2) -! 3 *! 4 /! 5
-; or doubl sigils for checked (assert/panic) math
-; this is only available in procs, not funs
+% or doubl sigils for checked (assert/panic) math
+% this is only available in procs, not funs
 let i: @u32 = (1 ++ 2) -- 3 ** 4 // 5
 
-; compound assignment
+% compound assignment
 var i = 0
 set i += 1;
 
-; overflow ops - worth having?
-let i = 1 +% 1 ; wrapping (from zig)
-let i = 1 +| 1 ; saturating (from zig)
+% overflow ops - worth having?
+let i = 1 +% 1 % wrapping (from zig)
+let i = 1 +| 1 % saturating (from zig)
 
-; numeric types expand when using overflowing math
+% numeric types expand when using overflowing math
 let a /* : @u16 */ = 1 + 2
 let b /* : @u32 */ = a + a;
 let c /* : @u64 */ = b + b;
 let d /* : @u128 */ = c + c;
 let e : @int = d + d;
 
-; logic uses words
+% logic uses words
 
 let a = 1 and 3 or not 4 lte 5 and 4 xor 6 implies 7
 
-; ^ note the `implies` operator
+% ^ note the `implies` operator
 
-; comparison uses sigils
-;
-; note lt and gt have unfortunate spellings
+% comparison uses sigils
+%
+% note lt and gt have unfortunate spellings
 let a = b .< d and c .> d
 let a = b <= d and c >= d
 let a = b == d and c != d
 
-; ## Basic control flow
+% ## Basic control flow
 
 if a {
 } else if {
@@ -181,29 +181,29 @@ loop {
 
 
 
-; ## Match expressions
+% ## Match expressions
 
-; ## Optional types
+% ## Optional types
 
 
-; ## Introspection
+% ## Introspection
 
 let ty: @type = @type @vec<u32>
 
 
-; ## Dynamic-feel features
+% ## Dynamic-feel features
 
-; lightweight anonymous enum decls
-; not committed to this syntax yet
+% lightweight anonymous enum decls
+% not committed to this syntax yet
 fun print(val: @u32 | @string)
-  ; syntax unclear yet
+  % syntax unclear yet
   match val {
     @enum u32(i) => {}
     @enum string(s) => {}
   }
 end fun
 
-; the full spelling
+% the full spelling
 fun print(val: @enum {
   U32(@u32),
   String(@string),

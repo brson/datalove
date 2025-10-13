@@ -1,20 +1,20 @@
-; # Datalove Expressions example
+% # Datalove Expressions example
 
-; this is an example of the data language.
-; there is also a code language.
-; values need to have specified binary runtime representation
+% this is an example of the data language.
+% there is also a code language.
+% values need to have specified binary runtime representation
 
-; This whole file is a single expression.
-; This is opening a tuple.
-; Each of the examples in this file is an element of this tuple.
+% This whole file is a single expression.
+% This is opening a tuple.
+% Each of the examples in this file is an element of this tuple.
 (
 
-  ; A basic example.
-  ;
-  ; The part between `: ... /` is on optional type hint,
-  ; with the `:` token generally for naming types.
-  ;
-  ; fixme better example
+  % A basic example.
+  %
+  % The part between `: ... /` is on optional type hint,
+  % with the `:` token generally for naming types.
+  %
+  % fixme better example
   : [
     (@u32, @bool),
   ] / [
@@ -22,104 +22,104 @@
     (2 , @true),
   ],
 
-; fixme below is not strictly valid .dlt syntax
-; since it contains multiple expressions.
-; Imagine them in the above tuple.
+% fixme below is not strictly valid .dlt syntax
+% since it contains multiple expressions.
+% Imagine them in the above tuple.
 
 
 
 
 
 
-; ## Basic scalars
+% ## Basic scalars
 
 : @bool / @true
 : @bool / @false
 
-; With no heap sigils - infered and defaulted.
-; Local heap sigils will probably be totally ellidable,
-; but mandatory heap sigils allow us to avoid reserving lots of keywords in type
-; and expression namespaces, or avoid ugly disambiguation problems.
+% With no heap sigils - infered and defaulted.
+% Local heap sigils will probably be totally ellidable,
+% but mandatory heap sigils allow us to avoid reserving lots of keywords in type
+% and expression namespaces, or avoid ugly disambiguation problems.
 : bool / true
 : bool / false
 
 : @u32 / 1
 : @f32 / 1.0
 
-; Float bitpattern coercion from hex literals (not dec literals).
-; Must have correct number of digits.
-; When you want to preserve floats exactly.
-; Sneaky!
+% Float bitpattern coercion from hex literals (not dec literals).
+% Must have correct number of digits.
+% When you want to preserve floats exactly.
+% Sneaky!
 : @f32 / 0xABABABAB
 
 
-; ## Heap sigils
+% ## Heap sigils
 
-; Every type has an associated heap - local, global, inferred,
-; indicated by a sigil: @-, #-, or none for inferred.
-; having sigil-less types and expressions will introduce lots
-; of keywords. At the moment all types require sigils and most literal expressions.
+% Every type has an associated heap - local, global, inferred,
+% indicated by a sigil: @-, #-, or none for inferred.
+% having sigil-less types and expressions will introduce lots
+% of keywords. At the moment all types require sigils and most literal expressions.
 
 : @u32 / @1
 : #u32 / #1
 : #u32 / 1
 : u32 / 1
 
-; ## Bigints
+% ## Bigints
 
-; unbounded signed, the default int type
+% unbounded signed, the default int type
 : @int / 1
 
 
 
 
-; ## Tuples, structs, and enums
+% ## Tuples, structs, and enums
 
-; anonymous tuple
+% anonymous tuple
 : (@bool, @u32) / (@true, 1)
 : (@u32 ) / (1)
 : () / ()
 
-; named tuple
+% named tuple
 : @tuple Bar (
   @bool, @u32,
 ) / @tuple Bar (@true, 1)
 
-; anonymous struct
+% anonymous struct
 : {
   field1: @bool,
   field2: @u32,
   field3: @u32,
 } / {
-  ; asignment without type hint
+  % asignment without type hint
   field1 = @true,
-  ; type hint in expression
+  % type hint in expression
   field3 = : @u32 / 2,
 }
 
-; named struct
+% named struct
 : @struct Foo {
   field1 : @bool,
 } / @struct Foo {
   field1 = @true,
 }
 
-; anonymous enum
-;
-; enums either have a single-value/type payload or no payload.
-; if you want multiple values the payload should be a tuple.
+% anonymous enum
+%
+% enums either have a single-value/type payload or no payload.
+% if you want multiple values the payload should be a tuple.
 : @enum {
   Foo,
   Bar(@u32),
   Baz(@(@bool, @u32)),
 } / @enum Foo
 
-; potential lightweight syntax for anonymous enum types
-;
-; this relies on coercion by looking at the variant payload types
-; : @u32 | @bool / @true
-; spelling the enum ctors
-; : @u32 | @bool / @enum bool(@true)
+% potential lightweight syntax for anonymous enum types
+%
+% this relies on coercion by looking at the variant payload types
+% : @u32 | @bool / @true
+% spelling the enum ctors
+% : @u32 | @bool / @enum bool(@true)
 
 
 : @enum {
@@ -128,23 +128,23 @@
 
 : @enum {
   Bar(@u32),
-} / @enum Bar(: @u32 / 2) ; with type hint in expression
+} / @enum Bar(: @u32 / 2) % with type hint in expression
 
 : @enum {
   Baz(@(@bool, @u32)),
 } / @enum Baz(@(@true, 1))
 
-; named enum
+% named enum
 : @enum Quux {
   Bar(@u32),
-} / @enum Quux.Bar(1) ; fully-qualified variant
+} / @enum Quux.Bar(1) % fully-qualified variant
 
-; named enum
+% named enum
 : @enum Quux {
   Bar(@(@u32, @bool)),
 } / @enum Quux.Bar(@(1, @true))
 
-; this is actually a coercion from anonymous enum (no dot)
+% this is actually a coercion from anonymous enum (no dot)
 : @enum Quux {
   Bar(@u32),
 } / @enum Bar(1)
@@ -152,66 +152,66 @@
 
 
 
-; ## Collection types
+% ## Collection types
 
-; list
+% list
 : [@u32] / [1, 2, 3]
 
-; string
+% string
 : @string / "abc"
 
-; map
+% map
 : @map <@u32, @u32>) / @map {
   0 = 5,
   2 = 2,
-  ; type hint in the expression
+  % type hint in the expression
   3 = : @u32 / 2,
 }
 
-; set
+% set
 : @set <@u32> / @set { 1, 2, 3 }
 
 
 
 
-; ## Special generic containers
+% ## Special generic containers
 
-; option - some of these heap sigils will be inferred eventually
+% option - some of these heap sigils will be inferred eventually
 : @?@u32 / 4
 : @?@u32 / @none
 
-; result - hm...
+% result - hm...
 : @!@u32 / 4
 : @!@u32 / @error "oops"
 
 
 
 
-; ## Existential types
+% ## Existential types
 
-; any pure data type
+% any pure data type
 : @data / @data 1
-; with type hint
+% with type hint
 : @data / @data : int / 1
 
-; error type for representing failures
+% error type for representing failures
 : @error / @error "oops"
-; with type hint
+% with type hint
 : @error / @error : int / 1
 
 
 
 
 
-; ## TODO
+% ## TODO
 
-; subranged ints
-; datetimes
-; bitset
-; table (polars, arrow)
-; graph
-; array
-; multi-dimensional array
-; range (python)?
-; complex?
-; real?
+% subranged ints
+% datetimes
+% bitset
+% table (polars, arrow)
+% graph
+% array
+% multi-dimensional array
+% range (python)?
+% complex?
+% real?

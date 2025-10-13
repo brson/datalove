@@ -32,7 +32,7 @@ for expressing most typical data structures:
 Datalit is a serialization format:
 
 ```datalove
-; Personal info
+% Personal info
 {
   name = "Ada",
   born = 1815,
@@ -55,8 +55,8 @@ The syntax for this is `: <type> / <expr>`.
 You'll probably get used to it.
 
 ```datalove
-; This is the type of the literal we're about to write.
-; When you see ":" in Datalove it is always followed by a type.
+% This is the type of the literal we're about to write.
+% When you see ":" in Datalove it is always followed by a type.
 : {
   name: string,
   born: u32,
@@ -67,8 +67,8 @@ You'll probably get used to it.
       name: string,
     }
   >,
-} / {              ; After "/" is the literal expression.
-  name = "Ada",    ; We can throw a type hint anywhere.
+} / {              % After "/" is the literal expression.
+  name = "Ada",    % We can throw a type hint anywhere.
   born = 1815,
   interests = : [string] / [
     "mathematics", "poetry", "music",
