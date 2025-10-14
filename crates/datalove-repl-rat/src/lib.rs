@@ -571,9 +571,7 @@ impl<E: ReplExecutor> App<E> {
         }
 
         // Don't submit if there's already a request in flight.
-        if self.history.last().map_or(false, |e| {
-            matches!(e.status, EntryStatus::Parsing | EntryStatus::Evaluating { .. })
-        }) {
+        if self.has_pending_work() {
             todo!(); // need to do something smart here
         }
 
@@ -624,18 +622,11 @@ impl<E: ReplExecutor> App<E> {
                 entry.status = EntryStatus::Empty;
             }
             repl::CommandParse::ReadAnotherLine => {
-                // Switch to multiline mode.
                 entry.parse_result = Some(parse);
-                self.multiline_mode = true;
-                // Note: This means we need another line, so we don't update status yet.
-                // For now, just complete it with an error message.
                 entry.status = EntryStatus::Error;
-                entry.eval_result = Some(repl::Eval::Error(
-                    "multiline not yet fully supported".to_string()
-                ));
+                self.multiline_mode = true;
             }
             repl::CommandParse::Command(command) => {
-                // Update status to evaluating.
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Evaluating { command };
             }

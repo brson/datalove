@@ -1,6 +1,4 @@
 > fun increment(accum: @u64, amount: @u8): !@u64
-  error: multiline not yet fully supported
 >   ret accum +! amount
-  error: multiline not yet fully supported
 > end fun
   nothing
