@@ -33,6 +33,23 @@ use ratatui::{
 
 use executor::WorkerResponse;
 
+/// A single REPL history entry.
+///
+/// There is one of these for every line/multiline sent to the repl engine.
+#[derive(Debug, Clone)]
+pub struct HistoryEntry {
+    /// Request ID for this entry.
+    id: u64,
+    /// The input text submitted.
+    input: String,
+    /// Parse result if available.
+    parse_result: Option<repl::CommandParse>,
+    /// Evaluation result if available.
+    eval_result: Option<repl::Eval>,
+    /// Entry status (lifecycle and outcome).
+    status: EntryStatus,
+}
+
 /// Status of a REPL history entry.
 /// Tracks both the processing lifecycle and the outcome.
 #[derive(Debug, Clone)]
@@ -47,21 +64,6 @@ enum EntryStatus {
     Error,
     /// Request completed with empty input.
     Empty,
-}
-
-/// A single REPL history entry (like a Jupyter cell).
-#[derive(Debug, Clone)]
-pub struct HistoryEntry {
-    /// Request ID for this entry.
-    id: u64,
-    /// The input text submitted.
-    input: String,
-    /// Parse result if available.
-    parse_result: Option<repl::CommandParse>,
-    /// Evaluation result if available.
-    eval_result: Option<repl::Eval>,
-    /// Entry status (lifecycle and outcome).
-    status: EntryStatus,
 }
 
 impl HistoryEntry {
@@ -210,6 +212,7 @@ impl<E: ReplExecutor> App<E> {
     }
 
     /// Get messages in the old format for backward compatibility in tests.
+    /// fixme get rid of this!
     pub fn messages(&self) -> Vec<String> {
         let mut messages = Vec::new();
         for entry in &self.history {
@@ -452,9 +455,9 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
 /// Render the input panel with multiline indicators.
 fn render_input<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
     let title = if app.multiline_mode {
-        "Input [MULTILINE - Shift+Enter to execute]"
+        "Input [Shift+Enter]"
     } else {
-        "Input [Enter to execute]"
+        "Input [Enter]"
     };
 
     let input_block = Block::default()
@@ -470,14 +473,12 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
         .block(input_block);
     f.render_widget(input, area);
 
-    // Set cursor position.
     f.set_cursor_position((
         area.x + app.character_index as u16 + 1,
         area.y + 1,
     ));
 }
 
-/// Render the debug pane with variable table.
 fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
     let debug_block = Block::default()
         .borders(Borders::ALL)
@@ -591,9 +592,7 @@ impl<E: ReplExecutor> App<E> {
         self.executor.submit_parse_and_eval(id, input_text);
     }
 
-    /// Poll for results from executor.
     pub fn poll_results(&mut self) {
-        // Process all available responses.
         while let Some(response) = self.executor.try_recv_response() {
             match response {
                 WorkerResponse::ParseResult { id, parse } => {
@@ -610,10 +609,8 @@ impl<E: ReplExecutor> App<E> {
     }
 
     fn handle_parse_result(&mut self, id: u64, parse: repl::CommandParse) {
-        // Get the last history entry (the one we just submitted).
         let entry = self.history.last_mut().X();
 
-        // Verify the request ID matches.
         assert_eq!(entry.id, id);
 
         match parse.clone() {
@@ -634,13 +631,10 @@ impl<E: ReplExecutor> App<E> {
     }
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval) {
-        // Get the last history entry.
         let entry = self.history.last_mut().X();
 
-        // Verify the request ID matches.
         assert_eq!(entry.id, id);
 
-        // Update entry with eval result.
         entry.eval_result = Some(eval.clone());
 
         match &eval {
@@ -656,7 +650,6 @@ impl<E: ReplExecutor> App<E> {
             }
         }
 
-        // Clear multiline mode on successful eval.
         self.multiline_mode = false;
     }
 }
