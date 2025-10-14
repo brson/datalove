@@ -28,7 +28,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::Line,
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
     Frame,
 };
 
@@ -399,9 +399,30 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
         lines.push(Line::from(""));
     }
 
+    // Calculate scroll position to keep bottom visible.
+    let content_height = lines.len();
+    let viewport_height = area.height.saturating_sub(2) as usize; // Subtract borders.
+    let scroll_offset = content_height.saturating_sub(viewport_height) as u16;
+
     let history = Paragraph::new(lines)
-        .block(history_block);
+        .block(history_block)
+        .scroll((scroll_offset, 0));
+
     f.render_widget(history, area);
+
+    // Render scrollbar.
+    let mut scrollbar_state = ScrollbarState::new(content_height)
+        .position(scroll_offset as usize);
+
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(None)
+        .end_symbol(None);
+
+    f.render_stateful_widget(
+        scrollbar,
+        area.inner(ratatui::layout::Margin { vertical: 1, horizontal: 0 }),
+        &mut scrollbar_state,
+    );
 }
 
 /// Render the input panel with multiline indicators.
