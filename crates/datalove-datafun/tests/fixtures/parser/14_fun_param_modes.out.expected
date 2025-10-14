@@ -1,0 +1,44 @@
+{
+  "statements": [
+    {
+      "kind": "Fun",
+      "name": "demo",
+      "params": [
+        {
+          "name": "a",
+          "mode": "In",
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        },
+        {
+          "name": "b",
+          "mode": "Out",
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        },
+        {
+          "name": "c",
+          "mode": "Ref",
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        },
+        {
+          "name": "d",
+          "mode": "Mut",
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        }
+      ],
+      "return_type": null,
+      "body": []
+    }
+  ]
+}

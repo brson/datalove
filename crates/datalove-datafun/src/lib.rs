@@ -3,6 +3,7 @@
 use rmx::prelude::*;
 
 pub mod ast;
+pub mod ast_serde;
 pub mod parser;
 
 pub use datalove_datalit as datalit;

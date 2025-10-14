@@ -1,0 +1,11 @@
+{
+  "statements": [
+    {
+      "kind": "Fun",
+      "name": "foo",
+      "params": [],
+      "return_type": null,
+      "body": []
+    }
+  ]
+}

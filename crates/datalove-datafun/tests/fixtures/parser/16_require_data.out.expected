@@ -1,0 +1,10 @@
+{
+  "statements": [
+    {
+      "kind": "Require",
+      "kind": "Data",
+      "name": "lookup_tables",
+      "type_hint": null
+    }
+  ]
+}

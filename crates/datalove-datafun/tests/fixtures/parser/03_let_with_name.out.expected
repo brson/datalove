@@ -1,0 +1,15 @@
+{
+  "statements": [
+    {
+      "kind": "Let",
+      "name": "result",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "Name",
+          "name": "accum"
+        }
+      }
+    }
+  ]
+}

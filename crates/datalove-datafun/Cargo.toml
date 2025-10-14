@@ -14,3 +14,8 @@ datalove-datalit.path = "../datalove-datalit"
 
 [dev-dependencies]
 termcolor = "1.4.1"
+
+[[test]]
+name = "parser_tests"
+path = "tests/parser_tests.rs"
+harness = false

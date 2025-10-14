@@ -1,0 +1,10 @@
+{
+  "statements": [
+    {
+      "kind": "Require",
+      "kind": "Module",
+      "name": "std",
+      "type_hint": null
+    }
+  ]
+}

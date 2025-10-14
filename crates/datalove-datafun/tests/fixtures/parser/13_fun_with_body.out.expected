@@ -1,0 +1,60 @@
+{
+  "statements": [
+    {
+      "kind": "Fun",
+      "name": "increment",
+      "params": [
+        {
+          "name": "accum",
+          "mode": "In",
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        },
+        {
+          "name": "amount",
+          "mode": "In",
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        }
+      ],
+      "return_type": {
+        "heap": "Omitted",
+        "type_hint": {
+          "Result": {
+            "inner_type": {
+              "heap": "Local",
+              "type_hint": "U32"
+            }
+          }
+        }
+      },
+      "body": [
+        {
+          "kind": "Ret",
+          "value": {
+            "expr": {
+              "kind": "BinOp",
+              "op": "AddChecked",
+              "lhs": {
+                "expr": {
+                  "kind": "Name",
+                  "name": "accum"
+                }
+              },
+              "rhs": {
+                "expr": {
+                  "kind": "Name",
+                  "name": "amount"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
