@@ -298,7 +298,7 @@ Allowed and optional in all sequence forms of course.
 
 - Rust. general syntax, general mechanical sympathy concerns,
   data structure definitions, float total_cmp.
-- Zig. `?` / `!`, aspects of anonymous structs
+- Zig. `?` / `!`, `+|`, aspects of anonymous structs
 - JSON5. baseline markup language requirements
 - Python. negative inspiration - awkward dicts,
   heavyweight class abstractions

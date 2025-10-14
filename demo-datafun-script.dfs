@@ -126,19 +126,18 @@ let baz = : ?u8 / foo + : ?u8 / bar
 % then deal with the optionalness at the end.
 % todo example
 
-% bigints can use overflowing math
-let i = (1 + 2) - 3 * 4 / 5
 % sized ints can't - the ! here indicates early-error-return
 let i: @u32 = (1 +! 2) -! 3 *! 4 /! 5
 % or doubl sigils for checked (assert/panic) math
-% this is only available in procs, not funs
-let i: @u32 = (1 ++ 2) -- 3 ** 4 // 5
+% this is only available in procs, not funs, so not datafun
+% let i: @u32 = (1 ++ 2) -- 3 ** 4 // 5
 
 % compound assignment
 var i = 0
 set i += 1;
 
 % overflow ops - worth having?
+% fixme this can't work with current line-comments
 let i = 1 +% 1 % wrapping (from zig)
 let i = 1 +| 1 % saturating (from zig)
 

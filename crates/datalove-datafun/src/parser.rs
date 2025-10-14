@@ -382,15 +382,217 @@ impl<'db> Parser<'db> {
     fn parse_expr_full(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
-    ) -> datalit::ast::ExprFull<'db> {
-        // Convert remaining tokens to a format datalit can parse
-        let remaining: Vec<TreeToken<'db>> = tokens.collect();
-        let mut datalit_parser = DatalitParser {
-            db: self.db,
-            tokens: remaining,
-            pos: 0,
-        };
-        datalit_parser.parse_expr_full()
+    ) -> ast::ExprFun<'db> {
+        self.parse_expr_binop(tokens, 0)
+    }
+
+    // Parse binary operations with precedence climbing algorithm.
+    fn parse_expr_binop(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        min_precedence: u8,
+    ) -> ast::ExprFun<'db> {
+        let mut lhs = self.parse_expr_primary(tokens);
+
+        loop {
+            // Check for binary operator
+            let op = match self.peek_binop(tokens) {
+                Some(op) => op,
+                None => break,
+            };
+
+            let precedence = Self::binop_precedence(op);
+            if precedence < min_precedence {
+                break;
+            }
+
+            // Consume the operator
+            self.eat_binop(tokens, op);
+
+            // Parse right-hand side with higher precedence
+            let rhs = self.parse_expr_binop(tokens, precedence + 1);
+
+            lhs = ast::ExprFun::new(
+                self.db,
+                ast::ExprFunKind::BinOp(ast::ExprBinOp::new(self.db, op, lhs, rhs))
+            );
+        }
+
+        lhs
+    }
+
+    // Get operator precedence (higher number = higher precedence).
+    fn binop_precedence(op: ast::BinOp) -> u8 {
+        match op {
+            // Comparison operators (lowest precedence)
+            ast::BinOp::Eq | ast::BinOp::Ne |
+            ast::BinOp::Lt | ast::BinOp::Gt |
+            ast::BinOp::Le | ast::BinOp::Ge => 1,
+
+            // Addition and subtraction (all variants)
+            ast::BinOp::Add | ast::BinOp::Sub |
+            ast::BinOp::AddChecked | ast::BinOp::SubChecked |
+            ast::BinOp::AddOptional | ast::BinOp::SubOptional |
+            ast::BinOp::AddSaturating | ast::BinOp::SubSaturating => 2,
+
+            // Multiplication and division (highest precedence)
+            ast::BinOp::Mul | ast::BinOp::Div |
+            ast::BinOp::MulChecked | ast::BinOp::DivChecked |
+            ast::BinOp::MulOptional | ast::BinOp::DivOptional |
+            ast::BinOp::MulSaturating | ast::BinOp::DivSaturating => 3,
+        }
+    }
+
+    // Peek at the next token(s) and return the binary operator if present.
+    fn peek_binop(
+        &self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> Option<ast::BinOp> {
+        match tokens.peek() {
+            Some(TreeToken::Token(token)) => {
+                match token.kind(self.db) {
+                    // Two-character operators
+                    TokenKind::Sigil(Sigil::PlusExclamation) => Some(ast::BinOp::AddChecked),
+                    TokenKind::Sigil(Sigil::MinusExclamation) => Some(ast::BinOp::SubChecked),
+                    TokenKind::Sigil(Sigil::StarExclamation) => Some(ast::BinOp::MulChecked),
+                    TokenKind::Sigil(Sigil::SlashExclamation) => Some(ast::BinOp::DivChecked),
+
+                    TokenKind::Sigil(Sigil::PlusQuestion) => Some(ast::BinOp::AddOptional),
+                    TokenKind::Sigil(Sigil::MinusQuestion) => Some(ast::BinOp::SubOptional),
+                    TokenKind::Sigil(Sigil::StarQuestion) => Some(ast::BinOp::MulOptional),
+                    TokenKind::Sigil(Sigil::SlashQuestion) => Some(ast::BinOp::DivOptional),
+
+                    TokenKind::Sigil(Sigil::PlusBar) => Some(ast::BinOp::AddSaturating),
+                    TokenKind::Sigil(Sigil::MinusBar) => Some(ast::BinOp::SubSaturating),
+                    TokenKind::Sigil(Sigil::StarBar) => Some(ast::BinOp::MulSaturating),
+                    TokenKind::Sigil(Sigil::SlashBar) => Some(ast::BinOp::DivSaturating),
+
+                    TokenKind::Sigil(Sigil::EqualsEquals) => Some(ast::BinOp::Eq),
+                    TokenKind::Sigil(Sigil::ExclamationEquals) => Some(ast::BinOp::Ne),
+                    TokenKind::Sigil(Sigil::DotLess) => Some(ast::BinOp::Lt),
+                    TokenKind::Sigil(Sigil::DotGreater) => Some(ast::BinOp::Gt),
+                    TokenKind::Sigil(Sigil::LessEquals) => Some(ast::BinOp::Le),
+                    TokenKind::Sigil(Sigil::GreaterEquals) => Some(ast::BinOp::Ge),
+
+                    // Single-character operators (basic arithmetic)
+                    TokenKind::Sigil(Sigil::Plus) => Some(ast::BinOp::Add),
+                    TokenKind::Sigil(Sigil::Minus) => Some(ast::BinOp::Sub),
+                    TokenKind::Sigil(Sigil::Star) => Some(ast::BinOp::Mul),
+                    TokenKind::Sigil(Sigil::SlashForward) => Some(ast::BinOp::Div),
+
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    // Consume the operator token(s).
+    fn eat_binop(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        expected_op: ast::BinOp,
+    ) {
+        // Peek to verify we're consuming the right operator
+        if let Some(op) = self.peek_binop(tokens) {
+            if op == expected_op {
+                tokens.next(); // consume the operator token
+                return;
+            }
+        }
+        panic!("expected binary operator {:?}", expected_op);
+    }
+
+    // Parse primary expression (literals, names, parenthesized expressions)
+    fn parse_expr_primary(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> ast::ExprFun<'db> {
+        // Check if it starts with a heap sigil (@ or #) - if so, it's a datalit expression
+        if self.peek_sigil(tokens, Sigil::At) || self.peek_sigil(tokens, Sigil::Hash) {
+            // Parse as datalit expression
+            let remaining: Vec<TreeToken<'db>> = tokens.collect();
+            let mut datalit_parser = DatalitParser {
+                db: self.db,
+                tokens: remaining,
+                pos: 0,
+            };
+            let datalit_expr = datalit_parser.parse_expr_full();
+            return ast::ExprFun::new(
+                self.db,
+                ast::ExprFunKind::Datalit(datalit_expr)
+            );
+        }
+
+        // Check if it's a bare name/identifier
+        match tokens.peek() {
+            Some(TreeToken::Token(token)) => {
+                match token.kind(self.db) {
+                    TokenKind::Word => {
+                        if let Some(word) = token.word_str(self.db) {
+                            // Check if it's a number literal - parse as datalit with omitted heap
+                            if word.chars().all(|c| c.is_ascii_digit()) {
+                                let remaining: Vec<TreeToken<'db>> = tokens.collect();
+                                let mut datalit_parser = DatalitParser {
+                                    db: self.db,
+                                    tokens: remaining,
+                                    pos: 0,
+                                };
+                                let datalit_expr = datalit_parser.parse_expr_full();
+                                ast::ExprFun::new(
+                                    self.db,
+                                    ast::ExprFunKind::Datalit(datalit_expr)
+                                )
+                            } else {
+                                // It's a bare name/identifier
+                                tokens.next(); // consume the token
+                                let name = InternedText::new(self.db, word.S());
+                                ast::ExprFun::new(
+                                    self.db,
+                                    ast::ExprFunKind::Name(name)
+                                )
+                            }
+                        } else {
+                            tokens.next();
+                            let message = InternedText::new(self.db, "unexpected token in expression".S());
+                            ast::ExprFun::new(
+                                self.db,
+                                ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, message))
+                            )
+                        }
+                    }
+                    _ => {
+                        tokens.next();
+                        let message = InternedText::new(self.db, "unexpected token in expression".S());
+                        ast::ExprFun::new(
+                            self.db,
+                            ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, message))
+                        )
+                    }
+                }
+            }
+            Some(TreeToken::Branch(..)) => {
+                // Could be tuple, struct, etc - parse as datalit
+                let remaining: Vec<TreeToken<'db>> = tokens.collect();
+                let mut datalit_parser = DatalitParser {
+                    db: self.db,
+                    tokens: remaining,
+                    pos: 0,
+                };
+                let datalit_expr = datalit_parser.parse_expr_full();
+                ast::ExprFun::new(
+                    self.db,
+                    ast::ExprFunKind::Datalit(datalit_expr)
+                )
+            }
+            None => {
+                let message = InternedText::new(self.db, "expected expression".S());
+                ast::ExprFun::new(
+                    self.db,
+                    ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, message))
+                )
+            }
+        }
     }
 
     // Token manipulation helpers
@@ -766,6 +968,206 @@ mod tests {
                 assert!(stmt.type_hint(db).is_none());
             }
             _ => panic!("expected require statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expr_bare_name() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = accum"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::Name(name) => {
+                        assert_eq!(name.as_str(db), "accum");
+                    }
+                    _ => panic!("expected name expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expr_datalit() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @42"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::Datalit(_) => {
+                        // Successfully parsed as datalit
+                    }
+                    _ => panic!("expected datalit expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expr_binop_checked() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = a +! b"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::BinOp(binop) => {
+                        assert_eq!(binop.op(db), ast::BinOp::AddChecked);
+                    }
+                    _ => panic!("expected binop expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expr_binop_optional() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = a +? b"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::BinOp(binop) => {
+                        assert_eq!(binop.op(db), ast::BinOp::AddOptional);
+                    }
+                    _ => panic!("expected binop expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expr_binop_saturating() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = a +| b"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::BinOp(binop) => {
+                        assert_eq!(binop.op(db), ast::BinOp::AddSaturating);
+                    }
+                    _ => panic!("expected binop expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expr_binop_basic() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = a + b"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::BinOp(binop) => {
+                        assert_eq!(binop.op(db), ast::BinOp::Add);
+                    }
+                    _ => panic!("expected binop expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expr_binop_comparison() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = a .< b"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::BinOp(binop) => {
+                        assert_eq!(binop.op(db), ast::BinOp::Lt);
+                    }
+                    _ => panic!("expected binop expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expr_binop_precedence() {
+        // Test that multiplication has higher precedence than addition
+        // "a + b * c" should parse as "a + (b * c)"
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = a + b * c"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::BinOp(binop) => {
+                        // Top level should be addition
+                        assert_eq!(binop.op(db), ast::BinOp::Add);
+                        // RHS should be multiplication
+                        match binop.rhs(db).expr(db) {
+                            ast::ExprFunKind::BinOp(rhs_binop) => {
+                                assert_eq!(rhs_binop.op(db), ast::BinOp::Mul);
+                            }
+                            _ => panic!("expected binop for rhs"),
+                        }
+                    }
+                    _ => panic!("expected binop expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_fun_with_binop_in_ret() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("fun increment(accum: @u64, amount: @u8): !@u64\n  ret accum +! amount\nend fun"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Fun(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "increment");
+                assert_eq!(stmt.body(db).len(), 1);
+                // Check the body has a ret statement with binop
+                match &stmt.body(db)[0] {
+                    ast::Statement::Ret(ret) => {
+                        match ret.value(db).expr(db) {
+                            ast::ExprFunKind::BinOp(binop) => {
+                                assert_eq!(binop.op(db), ast::BinOp::AddChecked);
+                            }
+                            _ => panic!("expected binop in ret"),
+                        }
+                    }
+                    _ => panic!("expected ret statement in body"),
+                }
+            }
+            _ => panic!("expected fun statement"),
         }
     }
 }

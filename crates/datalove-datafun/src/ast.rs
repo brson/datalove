@@ -23,7 +23,7 @@ pub enum Statement<'db> {
 pub struct StmtLet<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    pub value: datalit::ast::ExprFull<'db>,
+    pub value: ExprFun<'db>,
 }
 
 #[salsa::tracked]
@@ -54,7 +54,7 @@ pub enum ParamMode {
 
 #[salsa::tracked]
 pub struct StmtRet<'db> {
-    pub value: datalit::ast::ExprFull<'db>,
+    pub value: ExprFun<'db>,
 }
 
 #[salsa::tracked]
@@ -73,5 +73,72 @@ pub enum RequireKind {
 
 #[salsa::tracked]
 pub struct StmtParseError<'db> {
+    pub message: InternedText<'db>,
+}
+
+// Datafun expressions - wraps datalit expressions and adds datafun-specific variants
+#[salsa::tracked]
+pub struct ExprFun<'db> {
+    pub expr: ExprFunKind<'db>,
+}
+
+#[derive(Clone, Hash)]
+#[derive(salsa::Update)]
+pub enum ExprFunKind<'db> {
+    // Wrap datalit expression (literals, tuples, structs, etc.)
+    Datalit(datalit::ast::ExprFull<'db>),
+    // Bare name/identifier (for variables, function calls, etc.)
+    Name(InternedText<'db>),
+    // Binary operation
+    BinOp(ExprBinOp<'db>),
+    // Parse error
+    ParseError(ExprFunParseError<'db>),
+}
+
+#[salsa::tracked]
+pub struct ExprBinOp<'db> {
+    pub op: BinOp,
+    pub lhs: ExprFun<'db>,
+    pub rhs: ExprFun<'db>,
+}
+
+#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum BinOp {
+    // Basic arithmetic (no suffix)
+    Add,    // +
+    Sub,    // -
+    Mul,    // *
+    Div,    // /
+
+    // Checked arithmetic (! suffix, error propagation)
+    AddChecked,  // +!
+    SubChecked,  // -!
+    MulChecked,  // *!
+    DivChecked,  // /!
+
+    // Optional arithmetic (? suffix, returns Option)
+    AddOptional,  // +?
+    SubOptional,  // -?
+    MulOptional,  // *?
+    DivOptional,  // /?
+
+    // Saturating arithmetic (| suffix)
+    AddSaturating,  // +|
+    SubSaturating,  // -|
+    MulSaturating,  // *|
+    DivSaturating,  // /|
+
+    // Comparison operators
+    Lt,  // .<
+    Gt,  // .>
+    Le,  // <=
+    Ge,  // >=
+    Eq,  // ==
+    Ne,  // !=
+}
+
+#[salsa::tracked]
+pub struct ExprFunParseError<'db> {
     pub message: InternedText<'db>,
 }
