@@ -122,8 +122,10 @@ unsafe fn eq_tydesc(
 
         // For composite types, we need to compare the structure recursively.
         match td_a.type_tag {
-            rtdt::TyTag::Bool | rtdt::TyTag::U32 | rtdt::TyTag::F32 | rtdt::TyTag::Int |
-            rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error => {
+            rtdt::TyTag::Bool | rtdt::TyTag::U8 | rtdt::TyTag::I8 |
+            rtdt::TyTag::U16 | rtdt::TyTag::I16 | rtdt::TyTag::U32 | rtdt::TyTag::I32 |
+            rtdt::TyTag::F32 | rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::F64 |
+            rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 true
             }
             rtdt::TyTag::Tuple => {
@@ -263,6 +265,41 @@ unsafe fn eq_value(
                 let b = *(value_b as *const u32);
                 a == b
             }
+            rtdt::TyTag::U8 => {
+                let a = *value_a;
+                let b = *value_b;
+                a == b
+            }
+            rtdt::TyTag::I8 => {
+                let a = *(value_a as *const i8);
+                let b = *(value_b as *const i8);
+                a == b
+            }
+            rtdt::TyTag::U16 => {
+                let a = *(value_a as *const u16);
+                let b = *(value_b as *const u16);
+                a == b
+            }
+            rtdt::TyTag::I16 => {
+                let a = *(value_a as *const i16);
+                let b = *(value_b as *const i16);
+                a == b
+            }
+            rtdt::TyTag::I32 => {
+                let a = *(value_a as *const i32);
+                let b = *(value_b as *const i32);
+                a == b
+            }
+            rtdt::TyTag::U64 => {
+                let a = *(value_a as *const u64);
+                let b = *(value_b as *const u64);
+                a == b
+            }
+            rtdt::TyTag::I64 => {
+                let a = *(value_a as *const i64);
+                let b = *(value_b as *const i64);
+                a == b
+            }
             rtdt::TyTag::F32 => {
                 let a = *(value_a as *const f32);
                 let b = *(value_b as *const f32);
@@ -270,6 +307,20 @@ unsafe fn eq_value(
                     FloatEqPolicy::Ieee => {
                         // IEEE equality: NaN != NaN; +0.0 == -0.0
                         // Same as Rust.
+                        a == b
+                    }
+                    FloatEqPolicy::Bitwise => {
+                        // Bitwise equality: all float bit patterns are distinct.
+                        a.to_bits() == b.to_bits()
+                    }
+                }
+            }
+            rtdt::TyTag::F64 => {
+                let a = *(value_a as *const f64);
+                let b = *(value_b as *const f64);
+                match float_policy {
+                    FloatEqPolicy::Ieee => {
+                        // IEEE equality: NaN != NaN; +0.0 == -0.0
                         a == b
                     }
                     FloatEqPolicy::Bitwise => {
@@ -416,6 +467,83 @@ unsafe fn cmp_value(
                     crate::RtOrdering::Equal
                 }
             }
+            rtdt::TyTag::U8 => {
+                let a = *value_a;
+                let b = *value_b;
+                if a < b {
+                    crate::RtOrdering::Less
+                } else if a > b {
+                    crate::RtOrdering::Greater
+                } else {
+                    crate::RtOrdering::Equal
+                }
+            }
+            rtdt::TyTag::I8 => {
+                let a = *(value_a as *const i8);
+                let b = *(value_b as *const i8);
+                if a < b {
+                    crate::RtOrdering::Less
+                } else if a > b {
+                    crate::RtOrdering::Greater
+                } else {
+                    crate::RtOrdering::Equal
+                }
+            }
+            rtdt::TyTag::U16 => {
+                let a = *(value_a as *const u16);
+                let b = *(value_b as *const u16);
+                if a < b {
+                    crate::RtOrdering::Less
+                } else if a > b {
+                    crate::RtOrdering::Greater
+                } else {
+                    crate::RtOrdering::Equal
+                }
+            }
+            rtdt::TyTag::I16 => {
+                let a = *(value_a as *const i16);
+                let b = *(value_b as *const i16);
+                if a < b {
+                    crate::RtOrdering::Less
+                } else if a > b {
+                    crate::RtOrdering::Greater
+                } else {
+                    crate::RtOrdering::Equal
+                }
+            }
+            rtdt::TyTag::I32 => {
+                let a = *(value_a as *const i32);
+                let b = *(value_b as *const i32);
+                if a < b {
+                    crate::RtOrdering::Less
+                } else if a > b {
+                    crate::RtOrdering::Greater
+                } else {
+                    crate::RtOrdering::Equal
+                }
+            }
+            rtdt::TyTag::U64 => {
+                let a = *(value_a as *const u64);
+                let b = *(value_b as *const u64);
+                if a < b {
+                    crate::RtOrdering::Less
+                } else if a > b {
+                    crate::RtOrdering::Greater
+                } else {
+                    crate::RtOrdering::Equal
+                }
+            }
+            rtdt::TyTag::I64 => {
+                let a = *(value_a as *const i64);
+                let b = *(value_b as *const i64);
+                if a < b {
+                    crate::RtOrdering::Less
+                } else if a > b {
+                    crate::RtOrdering::Greater
+                } else {
+                    crate::RtOrdering::Equal
+                }
+            }
             rtdt::TyTag::F32 => {
                 let a = *(value_a as *const f32);
                 let b = *(value_b as *const f32);
@@ -443,6 +571,36 @@ unsafe fn cmp_value(
                     FloatOrdPolicy::Total => {
                         // IEEE 754-2008 total order: distinguishes -0.0 from +0.0.
                         // -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
+                        match a.total_cmp(&b) {
+                            std::cmp::Ordering::Less => crate::RtOrdering::Less,
+                            std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
+                            std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
+                        }
+                    }
+                }
+            }
+            rtdt::TyTag::F64 => {
+                let a = *(value_a as *const f64);
+                let b = *(value_b as *const f64);
+                match float_policy {
+                    FloatOrdPolicy::Datalove => {
+                        // Datalove ordering: NaN total order; +0.0 == -0.0
+                        match a.partial_cmp(&b) {
+                            Some(std::cmp::Ordering::Less) => crate::RtOrdering::Less,
+                            Some(std::cmp::Ordering::Greater) => crate::RtOrdering::Greater,
+                            Some(std::cmp::Ordering::Equal) => crate::RtOrdering::Equal,
+                            None => {
+                                debug_assert!(a.is_nan() || b.is_nan());
+                                match a.total_cmp(&b) {
+                                    std::cmp::Ordering::Less => crate::RtOrdering::Less,
+                                    std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
+                                    std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
+                                }
+                            }
+                        }
+                    }
+                    FloatOrdPolicy::Total => {
+                        // IEEE 754-2008 total order: distinguishes -0.0 from +0.0.
                         match a.total_cmp(&b) {
                             std::cmp::Ordering::Less => crate::RtOrdering::Less,
                             std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
@@ -631,6 +789,583 @@ unsafe fn cmp_value(
                 // Not yet implemented.
                 unimplemented!("cmp_value for {:?}", td.type_tag)
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper to create TyDesc instances for testing.
+    fn make_tydesc(type_tag: rtdt::TyTag) -> rtdt::TyDesc {
+        rtdt::TyDesc {
+            type_tag,
+            size: match type_tag {
+                rtdt::TyTag::U8 | rtdt::TyTag::I8 => 1,
+                rtdt::TyTag::U16 | rtdt::TyTag::I16 => 2,
+                rtdt::TyTag::U32 | rtdt::TyTag::I32 | rtdt::TyTag::F32 => 4,
+                rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::F64 => 8,
+                _ => 0,
+            },
+            align: match type_tag {
+                rtdt::TyTag::U8 | rtdt::TyTag::I8 => 1,
+                rtdt::TyTag::U16 | rtdt::TyTag::I16 => 2,
+                rtdt::TyTag::U32 | rtdt::TyTag::I32 | rtdt::TyTag::F32 => 4,
+                rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::F64 => 8,
+                _ => 0,
+            },
+            type_info: rtdt::TyInfo {
+                nothing: rtdt::TyInfoNothing,
+            },
+        }
+    }
+
+    #[test]
+    fn test_u8_eq() {
+        let tydesc = make_tydesc(rtdt::TyTag::U8);
+        let a: u8 = 42;
+        let b: u8 = 42;
+        let c: u8 = 99;
+
+        unsafe {
+            let result = eq(
+                &a as *const u8,
+                &tydesc,
+                &b as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::Equals);
+
+            let result = eq(
+                &a as *const u8,
+                &tydesc,
+                &c as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::NotEquals);
+        }
+    }
+
+    #[test]
+    fn test_i8_eq() {
+        let tydesc = make_tydesc(rtdt::TyTag::I8);
+        let a: i8 = -42;
+        let b: i8 = -42;
+        let c: i8 = 42;
+
+        unsafe {
+            let result = eq(
+                &a as *const i8 as *const u8,
+                &tydesc,
+                &b as *const i8 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::Equals);
+
+            let result = eq(
+                &a as *const i8 as *const u8,
+                &tydesc,
+                &c as *const i8 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::NotEquals);
+        }
+    }
+
+    #[test]
+    fn test_u16_eq() {
+        let tydesc = make_tydesc(rtdt::TyTag::U16);
+        let a: u16 = 1000;
+        let b: u16 = 1000;
+        let c: u16 = 2000;
+
+        unsafe {
+            let result = eq(
+                &a as *const u16 as *const u8,
+                &tydesc,
+                &b as *const u16 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::Equals);
+
+            let result = eq(
+                &a as *const u16 as *const u8,
+                &tydesc,
+                &c as *const u16 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::NotEquals);
+        }
+    }
+
+    #[test]
+    fn test_i16_eq() {
+        let tydesc = make_tydesc(rtdt::TyTag::I16);
+        let a: i16 = -1000;
+        let b: i16 = -1000;
+        let c: i16 = 1000;
+
+        unsafe {
+            let result = eq(
+                &a as *const i16 as *const u8,
+                &tydesc,
+                &b as *const i16 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::Equals);
+
+            let result = eq(
+                &a as *const i16 as *const u8,
+                &tydesc,
+                &c as *const i16 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::NotEquals);
+        }
+    }
+
+    #[test]
+    fn test_i32_eq() {
+        let tydesc = make_tydesc(rtdt::TyTag::I32);
+        let a: i32 = -1000000;
+        let b: i32 = -1000000;
+        let c: i32 = 1000000;
+
+        unsafe {
+            let result = eq(
+                &a as *const i32 as *const u8,
+                &tydesc,
+                &b as *const i32 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::Equals);
+
+            let result = eq(
+                &a as *const i32 as *const u8,
+                &tydesc,
+                &c as *const i32 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::NotEquals);
+        }
+    }
+
+    #[test]
+    fn test_u64_eq() {
+        let tydesc = make_tydesc(rtdt::TyTag::U64);
+        let a: u64 = 123456789012345;
+        let b: u64 = 123456789012345;
+        let c: u64 = 987654321098765;
+
+        unsafe {
+            let result = eq(
+                &a as *const u64 as *const u8,
+                &tydesc,
+                &b as *const u64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::Equals);
+
+            let result = eq(
+                &a as *const u64 as *const u8,
+                &tydesc,
+                &c as *const u64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::NotEquals);
+        }
+    }
+
+    #[test]
+    fn test_i64_eq() {
+        let tydesc = make_tydesc(rtdt::TyTag::I64);
+        let a: i64 = -123456789012345;
+        let b: i64 = -123456789012345;
+        let c: i64 = 123456789012345;
+
+        unsafe {
+            let result = eq(
+                &a as *const i64 as *const u8,
+                &tydesc,
+                &b as *const i64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::Equals);
+
+            let result = eq(
+                &a as *const i64 as *const u8,
+                &tydesc,
+                &c as *const i64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::NotEquals);
+        }
+    }
+
+    #[test]
+    fn test_f64_eq() {
+        let tydesc = make_tydesc(rtdt::TyTag::F64);
+        let a: f64 = 3.14159265358979;
+        let b: f64 = 3.14159265358979;
+        let c: f64 = 2.71828182845905;
+
+        unsafe {
+            let result = eq(
+                &a as *const f64 as *const u8,
+                &tydesc,
+                &b as *const f64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::Equals);
+
+            let result = eq(
+                &a as *const f64 as *const u8,
+                &tydesc,
+                &c as *const f64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtEq::NotEquals);
+        }
+    }
+
+    #[test]
+    fn test_u8_cmp() {
+        let tydesc = make_tydesc(rtdt::TyTag::U8);
+        let a: u8 = 10;
+        let b: u8 = 20;
+        let c: u8 = 10;
+
+        unsafe {
+            let result = cmp(
+                &a as *const u8,
+                &tydesc,
+                &b as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &b as *const u8,
+                &tydesc,
+                &a as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &a as *const u8,
+                &tydesc,
+                &c as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Equal);
+        }
+    }
+
+    #[test]
+    fn test_i8_cmp() {
+        let tydesc = make_tydesc(rtdt::TyTag::I8);
+        let a: i8 = -50;
+        let b: i8 = 50;
+        let c: i8 = -50;
+
+        unsafe {
+            let result = cmp(
+                &a as *const i8 as *const u8,
+                &tydesc,
+                &b as *const i8 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &b as *const i8 as *const u8,
+                &tydesc,
+                &a as *const i8 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &a as *const i8 as *const u8,
+                &tydesc,
+                &c as *const i8 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Equal);
+        }
+    }
+
+    #[test]
+    fn test_i16_cmp() {
+        let tydesc = make_tydesc(rtdt::TyTag::I16);
+        let a: i16 = -1000;
+        let b: i16 = 1000;
+        let c: i16 = -1000;
+
+        unsafe {
+            let result = cmp(
+                &a as *const i16 as *const u8,
+                &tydesc,
+                &b as *const i16 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &b as *const i16 as *const u8,
+                &tydesc,
+                &a as *const i16 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &a as *const i16 as *const u8,
+                &tydesc,
+                &c as *const i16 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Equal);
+        }
+    }
+
+    #[test]
+    fn test_i32_cmp() {
+        let tydesc = make_tydesc(rtdt::TyTag::I32);
+        let a: i32 = -1000000;
+        let b: i32 = 1000000;
+        let c: i32 = -1000000;
+
+        unsafe {
+            let result = cmp(
+                &a as *const i32 as *const u8,
+                &tydesc,
+                &b as *const i32 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &b as *const i32 as *const u8,
+                &tydesc,
+                &a as *const i32 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &a as *const i32 as *const u8,
+                &tydesc,
+                &c as *const i32 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Equal);
+        }
+    }
+
+    #[test]
+    fn test_i64_cmp() {
+        let tydesc = make_tydesc(rtdt::TyTag::I64);
+        let a: i64 = -123456789012345;
+        let b: i64 = 123456789012345;
+        let c: i64 = -123456789012345;
+
+        unsafe {
+            let result = cmp(
+                &a as *const i64 as *const u8,
+                &tydesc,
+                &b as *const i64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &b as *const i64 as *const u8,
+                &tydesc,
+                &a as *const i64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &a as *const i64 as *const u8,
+                &tydesc,
+                &c as *const i64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Equal);
+        }
+    }
+
+    #[test]
+    fn test_u64_cmp() {
+        let tydesc = make_tydesc(rtdt::TyTag::U64);
+        let a: u64 = 100;
+        let b: u64 = 200;
+        let c: u64 = 100;
+
+        unsafe {
+            let result = cmp(
+                &a as *const u64 as *const u8,
+                &tydesc,
+                &b as *const u64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &b as *const u64 as *const u8,
+                &tydesc,
+                &a as *const u64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &a as *const u64 as *const u8,
+                &tydesc,
+                &c as *const u64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Equal);
+        }
+    }
+
+    #[test]
+    fn test_f64_cmp() {
+        let tydesc = make_tydesc(rtdt::TyTag::F64);
+        let a: f64 = 1.5;
+        let b: f64 = 2.5;
+        let c: f64 = 1.5;
+
+        unsafe {
+            let result = cmp(
+                &a as *const f64 as *const u8,
+                &tydesc,
+                &b as *const f64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &b as *const f64 as *const u8,
+                &tydesc,
+                &a as *const f64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &a as *const f64 as *const u8,
+                &tydesc,
+                &c as *const f64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Equal);
+        }
+    }
+
+    #[test]
+    fn test_i8_boundaries() {
+        let tydesc = make_tydesc(rtdt::TyTag::I8);
+        let min: i8 = i8::MIN;
+        let max: i8 = i8::MAX;
+        let zero: i8 = 0;
+
+        unsafe {
+            let result = cmp(
+                &min as *const i8 as *const u8,
+                &tydesc,
+                &zero as *const i8 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &max as *const i8 as *const u8,
+                &tydesc,
+                &zero as *const i8 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &min as *const i8 as *const u8,
+                &tydesc,
+                &max as *const i8 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+        }
+    }
+
+    #[test]
+    fn test_i32_boundaries() {
+        let tydesc = make_tydesc(rtdt::TyTag::I32);
+        let min: i32 = i32::MIN;
+        let max: i32 = i32::MAX;
+        let zero: i32 = 0;
+
+        unsafe {
+            let result = cmp(
+                &min as *const i32 as *const u8,
+                &tydesc,
+                &zero as *const i32 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &max as *const i32 as *const u8,
+                &tydesc,
+                &zero as *const i32 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &min as *const i32 as *const u8,
+                &tydesc,
+                &max as *const i32 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+        }
+    }
+
+    #[test]
+    fn test_i64_boundaries() {
+        let tydesc = make_tydesc(rtdt::TyTag::I64);
+        let min: i64 = i64::MIN;
+        let max: i64 = i64::MAX;
+        let zero: i64 = 0;
+
+        unsafe {
+            let result = cmp(
+                &min as *const i64 as *const u8,
+                &tydesc,
+                &zero as *const i64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
+
+            let result = cmp(
+                &max as *const i64 as *const u8,
+                &tydesc,
+                &zero as *const i64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Greater);
+
+            let result = cmp(
+                &min as *const i64 as *const u8,
+                &tydesc,
+                &max as *const i64 as *const u8,
+                &tydesc,
+            );
+            assert_eq!(result, crate::RtOrdering::Less);
         }
     }
 }

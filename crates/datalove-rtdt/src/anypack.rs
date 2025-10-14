@@ -1,7 +1,8 @@
 //! Bitpacking for @data/@error.
 //!
-//! This module implements a tagged pointer scheme for efficiently packing
+//! This module implements a tagged pointer scheme for loosely packing
 //! Datalove types and values into 128 bits (two 64-bit words).
+//! It is intended to be simple and explainable.
 //!
 //! See `notes/anytype.md` for the complete design specification.
 
@@ -155,14 +156,9 @@ impl Data {
         Self::from_immediate(value as u64, TyTag::Bool)
     }
 
-    /// Construct u32 value (Tag 1 if small, Tag 4 if large).
-    pub fn from_u32(value: u32, tydesc: *const TyDesc) -> Self {
-        // Values ≤ 2^30 fit in 61-bit signed representation.
-        if value <= (1u32 << 30) {
-            Self::from_immediate(value as u64, TyTag::U32)
-        } else {
-            Self::from_inline64(tydesc, value as u64)
-        }
+    /// Construct u32 value (Tag 1).
+    pub fn from_u32(value: u32) -> Self {
+        Self::from_immediate(value as u64, TyTag::U32)
     }
 
     // ============================================================================
@@ -185,6 +181,49 @@ impl Data {
     /// Construct f32 value (Tag 4).
     pub fn from_f32(value: f32, tydesc: *const TyDesc) -> Self {
         Self::from_inline64(tydesc, value.to_bits() as u64)
+    }
+
+    /// Construct u8 value (Tag 1).
+    pub fn from_u8(value: u8) -> Self {
+        Self::from_immediate(value as u64, TyTag::U8)
+    }
+
+    /// Construct i8 value (Tag 1).
+    pub fn from_i8(value: i8) -> Self {
+        // Reinterpret as u8, then widen to u64 (no sign extension).
+        Self::from_immediate(value as u8 as u64, TyTag::I8)
+    }
+
+    /// Construct u16 value (Tag 1).
+    pub fn from_u16(value: u16) -> Self {
+        Self::from_immediate(value as u64, TyTag::U16)
+    }
+
+    /// Construct i16 value (Tag 1).
+    pub fn from_i16(value: i16) -> Self {
+        // Reinterpret as u16, then widen to u64 (no sign extension).
+        Self::from_immediate(value as u16 as u64, TyTag::I16)
+    }
+
+    /// Construct i32 value (Tag 1).
+    pub fn from_i32(value: i32) -> Self {
+        // Reinterpret as u32, then widen to u64 (no sign extension).
+        Self::from_immediate(value as u32 as u64, TyTag::I32)
+    }
+
+    /// Construct u64 value (Tag 4).
+    pub fn from_u64(value: u64, tydesc: *const TyDesc) -> Self {
+        Self::from_inline64(tydesc, value)
+    }
+
+    /// Construct i64 value (Tag 4).
+    pub fn from_i64(value: i64, tydesc: *const TyDesc) -> Self {
+        Self::from_inline64(tydesc, value as u64)
+    }
+
+    /// Construct f64 value (Tag 4).
+    pub fn from_f64(value: f64, tydesc: *const TyDesc) -> Self {
+        Self::from_inline64(tydesc, value.to_bits())
     }
 
     // ============================================================================
@@ -315,18 +354,8 @@ impl Data {
         match self.tag() {
             Tag::SmallImmediate if self.tytag() == TyTag::U32 => {
                 let value = self.immediate_u61();
-                if value <= u32::MAX as u64 {
-                    std::option::Option::Some(value as u32)
-                } else {
-                    std::option::Option::None
-                }
-            }
-            Tag::InlineWithTyDesc if self.tytag() == TyTag::U32 => {
-                if self.secondary <= u32::MAX as u64 {
-                    std::option::Option::Some(self.secondary as u32)
-                } else {
-                    std::option::Option::None
-                }
+                debug_assert!(value <= u32::MAX as u64);
+                std::option::Option::Some(value as u32)
             }
             _ => std::option::Option::None,
         }
@@ -337,6 +366,92 @@ impl Data {
         match self.tag() {
             Tag::InlineWithTyDesc if self.tytag() == TyTag::F32 => {
                 std::option::Option::Some(f32::from_bits(self.secondary as u32))
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as u8.
+    pub fn as_u8(&self) -> std::option::Option<u8> {
+        match self.tag() {
+            Tag::SmallImmediate if self.tytag() == TyTag::U8 => {
+                let value = self.immediate_u61();
+                std::option::Option::Some(value as u8)
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as i8.
+    pub fn as_i8(&self) -> std::option::Option<i8> {
+        match self.tag() {
+            Tag::SmallImmediate if self.tytag() == TyTag::I8 => {
+                let value = self.immediate_u61();
+                std::option::Option::Some(value as u8 as i8)
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as u16.
+    pub fn as_u16(&self) -> std::option::Option<u16> {
+        match self.tag() {
+            Tag::SmallImmediate if self.tytag() == TyTag::U16 => {
+                let value = self.immediate_u61();
+                std::option::Option::Some(value as u16)
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as i16.
+    pub fn as_i16(&self) -> std::option::Option<i16> {
+        match self.tag() {
+            Tag::SmallImmediate if self.tytag() == TyTag::I16 => {
+                let value = self.immediate_u61();
+                // Stored as u16, reinterpret as i16.
+                std::option::Option::Some(value as u16 as i16)
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as i32.
+    pub fn as_i32(&self) -> std::option::Option<i32> {
+        match self.tag() {
+            Tag::SmallImmediate if self.tytag() == TyTag::I32 => {
+                let value = self.immediate_u61();
+                std::option::Option::Some(value as u32 as i32)
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as u64.
+    pub fn as_u64(&self) -> std::option::Option<u64> {
+        match self.tag() {
+            Tag::InlineWithTyDesc if self.tytag() == TyTag::U64 => {
+                std::option::Option::Some(self.secondary)
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as i64.
+    pub fn as_i64(&self) -> std::option::Option<i64> {
+        match self.tag() {
+            Tag::InlineWithTyDesc if self.tytag() == TyTag::I64 => {
+                std::option::Option::Some(self.secondary as i64)
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as f64.
+    pub fn as_f64(&self) -> std::option::Option<f64> {
+        match self.tag() {
+            Tag::InlineWithTyDesc if self.tytag() == TyTag::F64 => {
+                std::option::Option::Some(f64::from_bits(self.secondary))
             }
             _ => std::option::Option::None,
         }
@@ -459,7 +574,17 @@ impl TyTag {
     pub fn can_inline(&self) -> bool {
         matches!(
             self,
-            TyTag::Bool | TyTag::U32 | TyTag::F32
+            TyTag::Bool
+                | TyTag::U8
+                | TyTag::I8
+                | TyTag::U16
+                | TyTag::I16
+                | TyTag::U32
+                | TyTag::I32
+                | TyTag::F32
+                | TyTag::U64
+                | TyTag::I64
+                | TyTag::F64
         )
     }
 }
@@ -524,8 +649,7 @@ mod tests {
 
     #[test]
     fn test_u32_small() {
-        let tydesc = make_tydesc(TyTag::U32);
-        let data = Data::from_u32(42, &tydesc);
+        let data = Data::from_u32(42);
         assert_eq!(data.tag(), Tag::SmallImmediate);
         assert_eq!(data.tytag(), TyTag::U32);
         assert_eq!(data.as_u32(), std::option::Option::Some(42));
@@ -533,9 +657,8 @@ mod tests {
 
     #[test]
     fn test_u32_large() {
-        let tydesc = make_tydesc(TyTag::U32);
-        let data = Data::from_u32(3_000_000_000, &tydesc);
-        assert_eq!(data.tag(), Tag::InlineWithTyDesc);
+        let data = Data::from_u32(3_000_000_000);
+        assert_eq!(data.tag(), Tag::SmallImmediate);
         assert_eq!(data.tytag(), TyTag::U32);
         assert_eq!(data.as_u32(), std::option::Option::Some(3_000_000_000));
     }
@@ -638,5 +761,141 @@ mod tests {
         assert_eq!(data.tag(), Tag::TwoPointers);
         assert_eq!(data.tytag(), TyTag::Error);
         assert_eq!(data.as_error(), std::option::Option::Some(&error_val as *const Error));
+    }
+
+    #[test]
+    fn test_u8() {
+        let data = Data::from_u8(42);
+        assert_eq!(data.tag(), Tag::SmallImmediate);
+        assert_eq!(data.tytag(), TyTag::U8);
+        assert_eq!(data.as_u8(), std::option::Option::Some(42));
+
+        let data = Data::from_u8(255);
+        assert_eq!(data.as_u8(), std::option::Option::Some(255));
+    }
+
+    #[test]
+    fn test_i8() {
+        let data = Data::from_i8(42);
+        assert_eq!(data.tag(), Tag::SmallImmediate);
+        assert_eq!(data.tytag(), TyTag::I8);
+        assert_eq!(data.as_i8(), std::option::Option::Some(42));
+
+        let data = Data::from_i8(-42);
+        assert_eq!(data.as_i8(), std::option::Option::Some(-42));
+
+        let data = Data::from_i8(127);
+        assert_eq!(data.as_i8(), std::option::Option::Some(127));
+
+        let data = Data::from_i8(-128);
+        assert_eq!(data.as_i8(), std::option::Option::Some(-128));
+    }
+
+    #[test]
+    fn test_u16() {
+        let data = Data::from_u16(1000);
+        assert_eq!(data.tag(), Tag::SmallImmediate);
+        assert_eq!(data.tytag(), TyTag::U16);
+        assert_eq!(data.as_u16(), std::option::Option::Some(1000));
+
+        let data = Data::from_u16(65535);
+        assert_eq!(data.as_u16(), std::option::Option::Some(65535));
+    }
+
+    #[test]
+    fn test_i16() {
+        let data = Data::from_i16(1000);
+        assert_eq!(data.tag(), Tag::SmallImmediate);
+        assert_eq!(data.tytag(), TyTag::I16);
+        assert_eq!(data.as_i16(), std::option::Option::Some(1000));
+
+        let data = Data::from_i16(-1000);
+        assert_eq!(data.as_i16(), std::option::Option::Some(-1000));
+
+        let data = Data::from_i16(32767);
+        assert_eq!(data.as_i16(), std::option::Option::Some(32767));
+
+        let data = Data::from_i16(-32768);
+        assert_eq!(data.as_i16(), std::option::Option::Some(-32768));
+    }
+
+    #[test]
+    fn test_i32_small() {
+        let data = Data::from_i32(42);
+        assert_eq!(data.tag(), Tag::SmallImmediate);
+        assert_eq!(data.tytag(), TyTag::I32);
+        assert_eq!(data.as_i32(), std::option::Option::Some(42));
+
+        let data = Data::from_i32(-42);
+        assert_eq!(data.as_i32(), std::option::Option::Some(-42));
+    }
+
+    #[test]
+    fn test_i32_large() {
+        let data = Data::from_i32(2_000_000_000);
+        assert_eq!(data.tag(), Tag::SmallImmediate);
+        assert_eq!(data.tytag(), TyTag::I32);
+        assert_eq!(data.as_i32(), std::option::Option::Some(2_000_000_000));
+
+        let data = Data::from_i32(-2_000_000_000);
+        assert_eq!(data.tag(), Tag::SmallImmediate);
+        assert_eq!(data.as_i32(), std::option::Option::Some(-2_000_000_000));
+
+        let data = Data::from_i32(i32::MAX);
+        assert_eq!(data.as_i32(), std::option::Option::Some(i32::MAX));
+
+        let data = Data::from_i32(i32::MIN);
+        assert_eq!(data.as_i32(), std::option::Option::Some(i32::MIN));
+    }
+
+    #[test]
+    fn test_u64() {
+        let tydesc = make_tydesc(TyTag::U64);
+
+        let data = Data::from_u64(12345678901234, &tydesc);
+        assert_eq!(data.tag(), Tag::InlineWithTyDesc);
+        assert_eq!(data.tytag(), TyTag::U64);
+        assert_eq!(data.as_u64(), std::option::Option::Some(12345678901234));
+
+        let data = Data::from_u64(u64::MAX, &tydesc);
+        assert_eq!(data.as_u64(), std::option::Option::Some(u64::MAX));
+    }
+
+    #[test]
+    fn test_i64() {
+        let tydesc = make_tydesc(TyTag::I64);
+
+        let data = Data::from_i64(12345678901234, &tydesc);
+        assert_eq!(data.tag(), Tag::InlineWithTyDesc);
+        assert_eq!(data.tytag(), TyTag::I64);
+        assert_eq!(data.as_i64(), std::option::Option::Some(12345678901234));
+
+        let data = Data::from_i64(-12345678901234, &tydesc);
+        assert_eq!(data.as_i64(), std::option::Option::Some(-12345678901234));
+
+        let data = Data::from_i64(i64::MAX, &tydesc);
+        assert_eq!(data.as_i64(), std::option::Option::Some(i64::MAX));
+
+        let data = Data::from_i64(i64::MIN, &tydesc);
+        assert_eq!(data.as_i64(), std::option::Option::Some(i64::MIN));
+    }
+
+    #[test]
+    fn test_f64() {
+        let tydesc = make_tydesc(TyTag::F64);
+
+        let data = Data::from_f64(3.14159265358979, &tydesc);
+        assert_eq!(data.tag(), Tag::InlineWithTyDesc);
+        assert_eq!(data.tytag(), TyTag::F64);
+        assert_eq!(data.as_f64(), std::option::Option::Some(3.14159265358979));
+
+        let data = Data::from_f64(-1.0, &tydesc);
+        assert_eq!(data.as_f64(), std::option::Option::Some(-1.0));
+
+        let data = Data::from_f64(f64::MAX, &tydesc);
+        assert_eq!(data.as_f64(), std::option::Option::Some(f64::MAX));
+
+        let data = Data::from_f64(f64::MIN, &tydesc);
+        assert_eq!(data.as_f64(), std::option::Option::Some(f64::MIN));
     }
 }

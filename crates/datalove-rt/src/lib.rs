@@ -59,6 +59,7 @@ pub unsafe extern "C" fn dtlv_rti_mem_free(
 }
 
 #[repr(u8)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RtEq {
     Equals = 1,
     NotEquals = 2,
@@ -104,6 +105,7 @@ pub unsafe extern "C" fn dtlv_rti_eq_unique(
 }
 
 #[repr(u8)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RtOrdering {
     Less = 1,
     Equal = 2,

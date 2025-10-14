@@ -266,6 +266,12 @@ pub enum TyTag {
     F32 = 3,
     Int = 4,
 
+    U8 = 5,
+    I8 = 6,
+    U16 = 7,
+    I16 = 8,
+    I32 = 9,
+
     Tuple = 10,
     Struct = 11,
     Enum = 12,
@@ -280,6 +286,10 @@ pub enum TyTag {
 
     Data = 40,
     Error = 41,
+
+    U64 = 50,
+    I64 = 51,
+    F64 = 52,
 }
 
 #[repr(C)]

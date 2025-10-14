@@ -94,8 +94,6 @@ secondary: 64-bit immediate value (interpretation depends on type)
 **Use for:**
 - **f32** (32 bits in lower part of secondary)
 - **f64** (64 bits, full secondary) ← **Important case**
-- **u32** (all values, when named or needs tydesc context)
-- **i32** (all values, when named or needs tydesc context)
 - **u64** (all values)
 - **i64** (all values)
 - **Small tuples/structs** (if all fields pack into ≤ 64 bits)
@@ -127,8 +125,12 @@ secondary: bits 0-7   = TyTag enum value
 
 **Use for:**
 - **bool** (0 or 1)
-- **u32** when ≤ 2^30 (most values fit)
-- **i32** when in ±2^30 range (most values fit)
+- **u8** (all values)
+- **i8** (all values)
+- **u16** (all values)
+- **i16** (all values)
+- **u32** (all values fit in 61 bits)
+- **i32** (all values fit in 61 bits)
 - **Unit enum variants** (just discriminant)
 
 **Example (bool true):**
@@ -161,12 +163,13 @@ Data {
 
 | Type | Size | Tag | Primary | Secondary | Notes |
 |------|------|-----|---------|-----------|-------|
-| **bool** (anon) | 1 bit | 1 | 0 or 1 (bits 3-63) | TyTag::Bool | No tydesc needed |
-| **bool** (named) | 1 bit | 4 | TyDesc* \| 0b100 | 0 or 1 | Need tydesc for name |
-| **u32** (≤ 2^30) | 32 bits | 1 | value (bits 3-63) | TyTag::U32 | Most values fit |
-| **u32** (> 2^30 or named) | 32 bits | 4 | TyDesc* \| 0b100 | value (32 bits) | Full range |
-| **i32** (±2^30) | 32 bits | 1 | value (bits 3-63) | TyTag::I32 | Most values fit |
-| **i32** (full or named) | 32 bits | 4 | TyDesc* \| 0b100 | value (32 bits) | Full range |
+| **bool** | 1 bit | 1 | 0 or 1 (bits 3-63) | TyTag::Bool | Always Tag 1 |
+| **u8** | 8 bits | 1 | value (bits 3-63) | TyTag::U8 | Always Tag 1 |
+| **i8** | 8 bits | 1 | value (bits 3-63) | TyTag::I8 | Always Tag 1 |
+| **u16** | 16 bits | 1 | value (bits 3-63) | TyTag::U16 | Always Tag 1 |
+| **i16** | 16 bits | 1 | value (bits 3-63) | TyTag::I16 | Always Tag 1 |
+| **u32** | 32 bits | 1 | value (bits 3-63) | TyTag::U32 | Always Tag 1 |
+| **i32** | 32 bits | 1 | value (bits 3-63) | TyTag::I32 | Always Tag 1 |
 | **f32** | 32 bits | 4 | TyDesc* \| 0b100 | IEEE-754 bits | Lower 32 bits of secondary |
 | **u64** | 64 bits | 4 | TyDesc* \| 0b100 | value | Full inline |
 | **i64** | 64 bits | 4 | TyDesc* \| 0b100 | value | Full inline |
@@ -199,11 +202,11 @@ Data {
 The design fully supports all numeric types:
 
 **Inline without tydesc (Tag 1):**
-- bool, small u32/i32
+- bool, u8, i8, u16, i16, u32, i32
 
 **Inline with tydesc (Tag 4):**
 - f32, f64 (← important!)
-- u32, i32, u64, i64 (all values)
+- u64, i64
 
 **Heap-allocated (Tag 0):**
 - u128, i128, u256, i256
@@ -323,11 +326,11 @@ impl Data {
     }
 
     pub fn from_u32(value: u32) -> Self {
-        if value <= (1u32 << 30) {
-            Self::from_immediate(value as u64, TyTag::U32)
-        } else {
-            Self::from_inline64(get_u32_tydesc(), value as u64)
-        }
+        Self::from_immediate(value as u64, TyTag::U32)
+    }
+
+    pub fn from_i32(value: i32) -> Self {
+        Self::from_immediate(value as u32 as u64, TyTag::I32)
     }
 
     pub fn from_f64(value: f64) -> Self {
@@ -372,7 +375,7 @@ Interpretation:
 - Value = 3.14159265358979... (f64)
 ```
 
-### Example 3: u32 (small, 42)
+### Example 3: u32 (42)
 
 ```
 Tag 1 encoding:
@@ -385,17 +388,17 @@ Interpretation:
 - Type = U32
 ```
 
-### Example 4: u32 (large, 3000000000)
+### Example 4: i32 (-42)
 
 ```
-Tag 4 encoding:
-primary:   0x00007f8a4c002004  = tydesc_ptr | 0b100
-secondary: 0x00000000b2d05e00  = 3000000000
+Tag 1 encoding:
+primary:   0x00000000ffffffd1  = (4294967254 << 3) | 0b001
+secondary: 0x0000000000000003  = TyTag::I32 (3)
 
 Interpretation:
-- Tag = 4 (inline with tydesc)
-- TyDesc at 0x00007f8a4c002000
-- Value = 3000000000 (doesn't fit in 30 bits)
+- Tag = 1 (small immediate)
+- Value = -42 (stored as u32 bit pattern)
+- Type = I32
 ```
 
 ### Example 5: Int (bigint)
@@ -411,7 +414,20 @@ Interpretation:
 - Int struct at 0x00007f8a4c004000
 ```
 
-### Example 6: String
+### Example 6: u64
+
+```
+Tag 4 encoding:
+primary:   0x00007f8a4c002004  = tydesc_ptr | 0b100
+secondary: 0x00000000b2d05e00  = 3000000000
+
+Interpretation:
+- Tag = 4 (inline with tydesc)
+- TyDesc at 0x00007f8a4c002000
+- Value = 3000000000 (u64)
+```
+
+### Example 7: String
 
 ```
 Tag 0 encoding:
