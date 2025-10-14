@@ -216,6 +216,26 @@ impl Data {
         Self::from_pointers(tydesc, set_ptr as *const u8)
     }
 
+    /// Construct Option value (Tag 0).
+    pub fn from_option(option_ptr: *const Option, tydesc: *const TyDesc) -> Self {
+        Self::from_pointers(tydesc, option_ptr as *const u8)
+    }
+
+    /// Construct Result value (Tag 0).
+    pub fn from_result(result_ptr: *const Result, tydesc: *const TyDesc) -> Self {
+        Self::from_pointers(tydesc, result_ptr as *const u8)
+    }
+
+    /// Construct nested Data value (Tag 0).
+    pub fn from_data(data_ptr: *const Data, tydesc: *const TyDesc) -> Self {
+        Self::from_pointers(tydesc, data_ptr as *const u8)
+    }
+
+    /// Construct Error value (Tag 0).
+    pub fn from_error(error_ptr: *const Error, tydesc: *const TyDesc) -> Self {
+        Self::from_pointers(tydesc, error_ptr as *const u8)
+    }
+
     // ============================================================================
     // Accessors - Type Descriptor
     // ============================================================================
@@ -371,6 +391,46 @@ impl Data {
             _ => std::option::Option::None,
         }
     }
+
+    /// Try to extract as Option pointer.
+    pub fn as_option(&self) -> std::option::Option<*const Option> {
+        match self.tag() {
+            Tag::TwoPointers if self.tytag() == TyTag::Option => {
+                std::option::Option::Some(self.value_ptr_as::<Option>())
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as Result pointer.
+    pub fn as_result(&self) -> std::option::Option<*const Result> {
+        match self.tag() {
+            Tag::TwoPointers if self.tytag() == TyTag::Result => {
+                std::option::Option::Some(self.value_ptr_as::<Result>())
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as nested Data pointer.
+    pub fn as_data(&self) -> std::option::Option<*const Data> {
+        match self.tag() {
+            Tag::TwoPointers if self.tytag() == TyTag::Data => {
+                std::option::Option::Some(self.value_ptr_as::<Data>())
+            }
+            _ => std::option::Option::None,
+        }
+    }
+
+    /// Try to extract as Error pointer.
+    pub fn as_error(&self) -> std::option::Option<*const Error> {
+        match self.tag() {
+            Tag::TwoPointers if self.tytag() == TyTag::Error => {
+                std::option::Option::Some(self.value_ptr_as::<Error>())
+            }
+            _ => std::option::Option::None,
+        }
+    }
 }
 
 // ============================================================================
@@ -522,5 +582,61 @@ mod tests {
             secondary: 0,
         };
         assert_eq!(data.tag(), Tag::InlineWithTyDesc);
+    }
+
+    #[test]
+    fn test_option() {
+        // Create a mock Option struct
+        let option_val = Option {
+            tag: OptionTag::None,
+        };
+
+        let tydesc = make_tydesc(TyTag::Option);
+        let data = Data::from_option(&option_val, &tydesc);
+
+        assert_eq!(data.tag(), Tag::TwoPointers);
+        assert_eq!(data.tytag(), TyTag::Option);
+        assert_eq!(data.as_option(), std::option::Option::Some(&option_val as *const Option));
+    }
+
+    #[test]
+    fn test_result() {
+        let result_val = Result {
+            tag: ResultTag::Ok,
+        };
+
+        let tydesc = make_tydesc(TyTag::Result);
+        let data = Data::from_result(&result_val, &tydesc);
+
+        assert_eq!(data.tag(), Tag::TwoPointers);
+        assert_eq!(data.tytag(), TyTag::Result);
+        assert_eq!(data.as_result(), std::option::Option::Some(&result_val as *const Result));
+    }
+
+    #[test]
+    fn test_nested_data() {
+        let inner_data = Data::from_bool(true);
+
+        let tydesc = make_tydesc(TyTag::Data);
+        let data = Data::from_data(&inner_data, &tydesc);
+
+        assert_eq!(data.tag(), Tag::TwoPointers);
+        assert_eq!(data.tytag(), TyTag::Data);
+        assert_eq!(data.as_data(), std::option::Option::Some(&inner_data as *const Data));
+    }
+
+    #[test]
+    fn test_error() {
+        let error_val = Error {
+            data: 0,
+            tydesc: std::ptr::null(),
+        };
+
+        let tydesc = make_tydesc(TyTag::Error);
+        let data = Data::from_error(&error_val, &tydesc);
+
+        assert_eq!(data.tag(), Tag::TwoPointers);
+        assert_eq!(data.tytag(), TyTag::Error);
+        assert_eq!(data.as_error(), std::option::Option::Some(&error_val as *const Error));
     }
 }
