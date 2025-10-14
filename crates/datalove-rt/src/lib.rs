@@ -39,7 +39,7 @@ pub unsafe extern "C" fn dtlv_rti_shutdown(
 
 /// Low-level allocator access.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_mem_alloc(
+pub unsafe extern "C" fn dtlv_rti_mem_alloc_local(
     rt: LocalRtHandle,
     // The type of the element being allocated (not the container).
     tydesc: *const rtdt::TyDesc,
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn dtlv_rti_mem_alloc(
 
 /// Low-level allocator access.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_mem_free(
+pub unsafe extern "C" fn dtlv_rti_mem_free_local(
     rt: LocalRtHandle,
     tydesc: *const rtdt::TyDesc,
     count: u32,
