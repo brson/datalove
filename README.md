@@ -1,9 +1,10 @@
-# datalove - data|is·my·love|language
+# Datalove - data|is·my·love|language
 
-An simple and expressive scripting language
-for efficient data modeling
-and transformation,
+An simple and expressive typed scripting language
+for efficient data modeling and transformation,
 with a batteries included standard library.
+
+
 
 
 ## A Tower of Love
@@ -12,12 +13,14 @@ Datalove is built from three cleanly-scoped strict
 sublanguages of increasing power.
 
 
+
+
 ### Datalove Literals ("Datalit")
 
 > File extension `.dlt`
 
 The tiny and comprehensible foundation of Datalove,
-a strongly-typed pure-data language
+a strongly-typed and declarative pure-data language
 for expressing most typical data structures:
 
 - booleans, fixed integers and bigints, floats
@@ -61,22 +64,20 @@ You'll probably get used to it.
   name: string,
   born: u32,
   interests: [string],
-  address_book: set<
-    struct AddressEntry {
-      kind: enum { Friend, Family },
-      name: string,
-    }
-  >,
-} / {              % After "/" is the literal expression.
-  name = "Ada",    % We can throw a type hint anywhere.
+  address_book: set<struct AddressEntry {
+    kind: enum { Friend, Family },
+    name: string,
+  }>,
+} / {                      % After "/" is the literal expression.
+  name = "Ada",    
   born = 1815,
-  interests = : [string] / [
+  interests = : [string] / [           % Here's another type hint.
     "mathematics", "poetry", "music",
   ],
   address_book = set {
     struct AddressEntry {
       kind = enum Friend,
-      name = "Charles",
+      name = : string / "Charles",    % And another!
     },
     struct AddressEntry {
       kind = enum Family,
@@ -86,7 +87,7 @@ You'll probably get used to it.
 }
 ```
 
-Datalit is strongly statically typed
+Datalit is strongly statically typed,
 but supports free non-destructive coercions,
 and other lightweight conversions.
 All types are owned tree-shaped value-types
@@ -99,13 +100,16 @@ runtime ABI.
 If you understand Datalit you understand 80% of Datalove.
 
 
+
+
 ### Datalove Functions ("Datafun")
 
 > File extension `.dfs` (script), `.dfm` (modules)
 >
 > Example [demo-datafun-script.dfs], [demo-datafun-module.dfm].
 
-A simple functional language built on the datalit type system.
+A simple pure-functional language that feels like an imperative language,
+built on the datalit type system.
 †
 
 
@@ -121,6 +125,8 @@ functional and logic programming become powerful extensions to
 less-restricted imperative programming.
 
 If you understand Datafun you understand 90% of Datalove.
+
+
 
 
 ### Full-on Datalove
@@ -142,11 +148,13 @@ If you understand Datalove then objective achieved.
 It is a simple language.
 
 
+
+
 ## Features
 
+
+
 ### A massive and battle-tested standard library.
-
-
 
 ### Statically typed with ergonomic coercions and runtime reflection
 
