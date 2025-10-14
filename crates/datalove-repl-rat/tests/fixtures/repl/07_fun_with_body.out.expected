@@ -15,7 +15,7 @@
   },
   {
     "id": 2,
-    "input": "fud funret accum +! amountn increment(accum: @u64, amount: @u8): !@u64",
+    "input": "furefunt accum +! amountn increment(accum: @u64, amount: @u8): !@u64",
     "parse_result": "ReadAnotherLine",
     "eval_result": null,
     "status": "KeepReading"

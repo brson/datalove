@@ -8,7 +8,7 @@
   },
   {
     "id": 1,
-    "input": "fnd funun foo()",
+    "input": "fud funn foo()",
     "parse_result": "ReadAnotherLine",
     "eval_result": null,
     "status": "KeepReading"
