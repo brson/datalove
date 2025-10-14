@@ -270,3 +270,483 @@ unsafe fn align_up_ptr(ptr: *mut u8, align: usize) -> *mut u8 {
     let aligned_addr = (addr + align - 1) & !(align - 1);
     aligned_addr as *mut u8
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    // Helper function to check if a pointer is aligned.
+    fn is_aligned(ptr: *mut u8, align: usize) -> bool {
+        (ptr as usize) % align == 0
+    }
+
+    // Helper function to write a pattern to memory and verify it.
+    unsafe fn test_write_read(ptr: *mut u8, size: usize) {
+        unsafe {
+            // Write a pattern.
+            for i in 0..size {
+                *ptr.add(i) = (i % 256) as u8;
+            }
+
+            // Read and verify.
+            for i in 0..size {
+                assert_eq!(*ptr.add(i), (i % 256) as u8);
+            }
+        }
+    }
+
+    #[test]
+    fn test_small_alloc_each_size_class() {
+        for &size in SIZE_CLASSES.iter() {
+            let mut rt = LocalRt::new();
+            unsafe {
+                let ptr = rt.alloc(size as u32, 8, 1);
+                assert!(!ptr.is_null());
+                assert!(is_aligned(ptr, 8));
+
+                // Write and read to verify memory is usable.
+                test_write_read(ptr, size);
+
+                rt.free(size as u32, 8, 1, ptr);
+                rt.shutdown();
+            }
+        }
+    }
+
+    #[test]
+    fn test_large_alloc() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            let sizes = [4097, 8192, 16384, 65536];
+            for size in sizes {
+                let ptr = rt.alloc(size, 8, 1);
+                assert!(!ptr.is_null());
+                assert!(is_aligned(ptr, 8));
+
+                test_write_read(ptr, size as usize);
+
+                rt.free(size, 8, 1, ptr);
+            }
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_free_null_pointer() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            // Should not panic.
+            rt.free(16, 8, 1, std::ptr::null_mut());
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_free_list_reuse() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            // Allocate and free from same size class.
+            let ptr1 = rt.alloc(32, 8, 1);
+            assert!(!ptr1.is_null());
+
+            rt.free(32, 8, 1, ptr1);
+
+            // Next allocation should reuse the freed block.
+            let ptr2 = rt.alloc(32, 8, 1);
+            assert_eq!(ptr1, ptr2);
+
+            rt.free(32, 8, 1, ptr2);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_multiple_small_allocs() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            let mut ptrs = Vec::new();
+            for _ in 0..100 {
+                let ptr = rt.alloc(64, 8, 1);
+                assert!(!ptr.is_null());
+                assert!(is_aligned(ptr, 8));
+                ptrs.push(ptr);
+            }
+
+            // Verify all pointers are unique.
+            for i in 0..ptrs.len() {
+                for j in (i + 1)..ptrs.len() {
+                    assert_ne!(ptrs[i], ptrs[j]);
+                }
+            }
+
+            // Free all.
+            for ptr in ptrs {
+                rt.free(64, 8, 1, ptr);
+            }
+
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_multiple_large_allocs() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            let mut ptrs = Vec::new();
+            for _ in 0..10 {
+                let ptr = rt.alloc(8192, 16, 1);
+                assert!(!ptr.is_null());
+                assert!(is_aligned(ptr, 16));
+                ptrs.push(ptr);
+            }
+
+            // Free all.
+            for ptr in ptrs {
+                rt.free(8192, 16, 1, ptr);
+            }
+
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_mixed_small_large() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            let small1 = rt.alloc(128, 8, 1);
+            let large1 = rt.alloc(16384, 16, 1);
+            let small2 = rt.alloc(256, 8, 1);
+            let large2 = rt.alloc(32768, 32, 1);
+
+            assert!(!small1.is_null());
+            assert!(!large1.is_null());
+            assert!(!small2.is_null());
+            assert!(!large2.is_null());
+
+            assert!(is_aligned(small1, 8));
+            assert!(is_aligned(large1, 16));
+            assert!(is_aligned(small2, 8));
+            assert!(is_aligned(large2, 32));
+
+            rt.free(128, 8, 1, small1);
+            rt.free(16384, 16, 1, large1);
+            rt.free(256, 8, 1, small2);
+            rt.free(32768, 32, 1, large2);
+
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_alignment_requirements() {
+        let mut rt = LocalRt::new();
+        let alignments = [1, 2, 4, 8, 16, 32, 64, 128];
+
+        unsafe {
+            for &align in &alignments {
+                let ptr = rt.alloc(256, align, 1);
+                assert!(!ptr.is_null());
+                assert!(is_aligned(ptr, align as usize));
+                rt.free(256, align, 1, ptr);
+            }
+
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_write_read_small() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            let ptr = rt.alloc(512, 8, 1);
+            assert!(!ptr.is_null());
+
+            test_write_read(ptr, 512);
+
+            rt.free(512, 8, 1, ptr);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_write_read_large() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            let ptr = rt.alloc(65536, 16, 1);
+            assert!(!ptr.is_null());
+
+            test_write_read(ptr, 65536);
+
+            rt.free(65536, 16, 1, ptr);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_size_class_boundaries() {
+        let mut rt = LocalRt::new();
+        let test_sizes = [7, 8, 9, 15, 16, 17, 31, 32, 33, 4095, 4096, 4097];
+
+        unsafe {
+            for size in test_sizes {
+                let ptr = rt.alloc(size, 8, 1);
+                assert!(!ptr.is_null());
+                assert!(is_aligned(ptr, 8));
+                rt.free(size, 8, 1, ptr);
+            }
+
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_max_alignment() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            // Test maximum reasonable alignment.
+            let ptr = rt.alloc(1024, 256, 1);
+            assert!(!ptr.is_null());
+            assert!(is_aligned(ptr, 256));
+
+            rt.free(1024, 256, 1, ptr);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_page_exhaustion() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            // Allocate enough 64-byte blocks to exhaust multiple pages.
+            let mut ptrs = Vec::new();
+            for _ in 0..200 {
+                let ptr = rt.alloc(64, 8, 1);
+                assert!(!ptr.is_null());
+                ptrs.push(ptr);
+            }
+
+            for ptr in ptrs {
+                rt.free(64, 8, 1, ptr);
+            }
+
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_shutdown_cleanup() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            // Allocate various sizes.
+            let _small1 = rt.alloc(128, 8, 1);
+            let _small2 = rt.alloc(256, 8, 1);
+            let _large1 = rt.alloc(8192, 16, 1);
+            let _large2 = rt.alloc(16384, 32, 1);
+
+            // Shutdown should clean up all pages without panic.
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_count_parameter() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            // Allocate array of 10 u32s.
+            let ptr = rt.alloc(4, 4, 10);
+            assert!(!ptr.is_null());
+            assert!(is_aligned(ptr, 4));
+
+            // Should have allocated 40 bytes.
+            test_write_read(ptr, 40);
+
+            rt.free(4, 4, 10, ptr);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_alignment_larger_than_size() {
+        let mut rt = LocalRt::new();
+        unsafe {
+            // Alignment larger than size.
+            let ptr = rt.alloc(4, 64, 1);
+            assert!(!ptr.is_null());
+            assert!(is_aligned(ptr, 64));
+
+            rt.free(4, 64, 1, ptr);
+            rt.shutdown();
+        }
+    }
+
+    // Property-based tests using proptest.
+
+    proptest! {
+        #[test]
+        fn proptest_random_alloc_free(size in 1u32..10000, align in prop::sample::select(vec![1u32, 2, 4, 8, 16, 32, 64]), count in 1u32..10) {
+            let mut rt = LocalRt::new();
+            unsafe {
+                let ptr = rt.alloc(size, align, count);
+                prop_assert!(!ptr.is_null());
+                prop_assert!(is_aligned(ptr, align as usize));
+
+                rt.free(size, align, count, ptr);
+                rt.shutdown();
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn proptest_write_read_random_data(size in 1usize..8192, data in prop::collection::vec(any::<u8>(), 1..8192)) {
+            let size = size.min(data.len());
+            let mut rt = LocalRt::new();
+            unsafe {
+                let ptr = rt.alloc(size as u32, 8, 1);
+                prop_assert!(!ptr.is_null());
+
+                // Write data.
+                for i in 0..size {
+                    *ptr.add(i) = data[i];
+                }
+
+                // Read and verify.
+                for i in 0..size {
+                    prop_assert_eq!(*ptr.add(i), data[i]);
+                }
+
+                rt.free(size as u32, 8, 1, ptr);
+                rt.shutdown();
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn proptest_alignment_correctness(
+            size in 1u32..4096,
+            align_pow in 0usize..7, // 2^0 to 2^6 = 1 to 64
+        ) {
+            let align = 1u32 << align_pow;
+            let mut rt = LocalRt::new();
+            unsafe {
+                let ptr = rt.alloc(size, align, 1);
+                prop_assert!(!ptr.is_null());
+                prop_assert!(is_aligned(ptr, align as usize));
+
+                rt.free(size, align, 1, ptr);
+                rt.shutdown();
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn proptest_alloc_free_patterns(ops in prop::collection::vec((1u32..256, 1u32..5), 1..50)) {
+            let mut rt = LocalRt::new();
+            let mut allocations = Vec::new();
+
+            unsafe {
+                // Allocate all.
+                for (size, count) in &ops {
+                    let ptr = rt.alloc(*size, 8, *count);
+                    prop_assert!(!ptr.is_null());
+                    allocations.push((*size, *count, ptr));
+                }
+
+                // Free in reverse order (LIFO).
+                for (size, count, ptr) in allocations.iter().rev() {
+                    rt.free(*size, 8, *count, *ptr);
+                }
+
+                rt.shutdown();
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn proptest_stress_test(
+            ops in prop::collection::vec((1u32..1024, prop::sample::select(vec![1u32, 2, 4, 8])), 1..100)
+        ) {
+            let mut rt = LocalRt::new();
+
+            unsafe {
+                for (size, align) in ops {
+                    let ptr = rt.alloc(size, align, 1);
+                    prop_assert!(!ptr.is_null());
+                    prop_assert!(is_aligned(ptr, align as usize));
+                    rt.free(size, align, 1, ptr);
+                }
+
+                rt.shutdown();
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn proptest_size_boundaries(offset in 0i32..10) {
+            // Test around size class boundaries.
+            let boundaries = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
+            let mut rt = LocalRt::new();
+
+            unsafe {
+                for base in boundaries {
+                    let size = (base as i32 + offset).max(1) as u32;
+                    let ptr = rt.alloc(size, 8, 1);
+                    prop_assert!(!ptr.is_null());
+                    rt.free(size, 8, 1, ptr);
+                }
+
+                rt.shutdown();
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn proptest_count_variations(size in 1u32..256, count in 1u32..100) {
+            let mut rt = LocalRt::new();
+            unsafe {
+                let ptr = rt.alloc(size, 8, count);
+                prop_assert!(!ptr.is_null());
+
+                let total_size = (size as usize) * (count as usize);
+                if total_size <= 8192 {
+                    // Test writing to the entire allocation.
+                    test_write_read(ptr, total_size);
+                }
+
+                rt.free(size, 8, count, ptr);
+                rt.shutdown();
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn proptest_reuse_freed_blocks(size in prop::sample::select(SIZE_CLASSES.to_vec())) {
+            let mut rt = LocalRt::new();
+            unsafe {
+                // Allocate and free multiple times.
+                let mut prev_ptr = std::ptr::null_mut();
+                for i in 0..10 {
+                    let ptr = rt.alloc(size as u32, 8, 1);
+                    prop_assert!(!ptr.is_null());
+
+                    if i > 0 {
+                        // After first free, subsequent allocations should reuse.
+                        prop_assert_eq!(ptr, prev_ptr);
+                    }
+
+                    prev_ptr = ptr;
+                    rt.free(size as u32, 8, 1, ptr);
+                }
+
+                rt.shutdown();
+            }
+        }
+    }
+}
