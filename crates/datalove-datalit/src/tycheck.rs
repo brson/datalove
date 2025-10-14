@@ -805,7 +805,7 @@ fn check<'db>(
 }
 
 /// Convert a type hint to a type.
-fn convert_type_hint<'db>(
+pub fn convert_type_hint<'db>(
     db: &'db dyn crate::Db,
     type_hint_and_heap: TypeHintAndHeap<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
@@ -945,7 +945,7 @@ fn heaps_compatible(h1: Heap, h2: Heap) -> bool {
 }
 
 /// Check if two types are equivalent.
-fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
+pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
     match (t1, t2) {
         (Type::Bool, Type::Bool) => true,
         (Type::U32, Type::U32) => true,
@@ -1067,7 +1067,7 @@ fn heap_to_string(heap: Heap) -> String {
 }
 
 /// Convert a type to a string for error messages.
-fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
+pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
     match ty {
         Type::Bool => "bool".to_string(),
         Type::U32 => "u32".to_string(),

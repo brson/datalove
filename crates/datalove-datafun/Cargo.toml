@@ -19,3 +19,8 @@ termcolor = "1.4.1"
 name = "parser_tests"
 path = "tests/parser_tests.rs"
 harness = false
+
+[[test]]
+name = "tycheck_tests"
+path = "tests/tycheck_tests.rs"
+harness = false

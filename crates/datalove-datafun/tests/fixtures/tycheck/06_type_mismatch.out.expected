@@ -1,0 +1,9 @@
+{
+  "errors": [
+    {
+      "actual": "@!@u32",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    }
+  ]
+}
