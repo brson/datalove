@@ -65,6 +65,8 @@ enum EntryStatus {
     Error,
     /// Request completed with empty input.
     Empty,
+    /// Read another line.
+    KeepReading,
 }
 
 impl HistoryEntry {
@@ -408,6 +410,18 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
                     ),
                 ]));
             }
+            EntryStatus::KeepReading => {
+                lines.push(Line::from(vec![
+                    ratatui::text::Span::styled(
+                        "  → ",
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                    ratatui::text::Span::styled(
+                        "keep-reading",
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+            }
         }
 
         // Separator between entries.
@@ -587,7 +601,9 @@ impl<E: ReplExecutor> App<E> {
             }
             repl::CommandParse::ReadAnotherLine => {
                 entry.parse_result = Some(parse);
-                entry.status = EntryStatus::Error;
+                entry.status = EntryStatus::KeepReading;
+
+                self.input = entry.input.C();
                 self.multiline_mode = true;
             }
             repl::CommandParse::Command(command) => {

@@ -4,24 +4,20 @@
     "input": "fun increment(accum: @u64, amount: @u8): !@u64",
     "parse_result": "ReadAnotherLine",
     "eval_result": null,
-    "status": "Error"
+    "status": "KeepReading"
   },
   {
     "id": 1,
-    "input": "  ret accum +! amount",
+    "input": "furet accum +! amountn increment(accum: @u64, amount: @u8): !@u64",
     "parse_result": "ReadAnotherLine",
     "eval_result": null,
-    "status": "Error"
+    "status": "KeepReading"
   },
   {
     "id": 2,
-    "input": "end fun",
-    "parse_result": {
-      "Command": {
-        "ScriptStatement": "fun increment(accum: @u64, amount: @u8): !@u64\n  ret accum +! amount\nend fun"
-      }
-    },
-    "eval_result": "Nothing",
-    "status": "Success"
+    "input": "fud funret accum +! amountn increment(accum: @u64, amount: @u8): !@u64",
+    "parse_result": "ReadAnotherLine",
+    "eval_result": null,
+    "status": "KeepReading"
   }
 ]

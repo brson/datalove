@@ -151,6 +151,7 @@ impl Engine {
     }
 
     /// Check if the source text contains "end fun" using the lexer.
+    // fixme just do the full statement parse comeon.
     fn check_has_end_fun(&self, source_text: &str) -> bool {
         let source = Source::new(&self.db, source_text.to_string().S());
         let chunk = bct::source_map::basic_source_map(&self.db, source);

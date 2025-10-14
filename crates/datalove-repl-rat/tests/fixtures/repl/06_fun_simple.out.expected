@@ -4,17 +4,13 @@
     "input": "fun foo()",
     "parse_result": "ReadAnotherLine",
     "eval_result": null,
-    "status": "Error"
+    "status": "KeepReading"
   },
   {
     "id": 1,
-    "input": "end fun",
-    "parse_result": {
-      "Command": {
-        "ScriptStatement": "fun foo()\nend fun"
-      }
-    },
-    "eval_result": "Nothing",
-    "status": "Success"
+    "input": "fnd funun foo()",
+    "parse_result": "ReadAnotherLine",
+    "eval_result": null,
+    "status": "KeepReading"
   }
 ]
