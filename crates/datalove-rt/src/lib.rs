@@ -41,6 +41,7 @@ pub unsafe extern "C" fn dtlv_rti_shutdown(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_mem_alloc(
     rt: LocalRtHandle,
+    // The type of the element being allocated (not the container).
     tydesc: *const rtdt::TyDesc,
     count: u32,
 ) -> *mut u8 {
