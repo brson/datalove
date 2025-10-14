@@ -45,6 +45,8 @@ enum EntryStatus {
 /// A single REPL history entry (like a Jupyter cell).
 #[derive(Debug, Clone)]
 pub struct HistoryEntry {
+    /// Request ID for this entry.
+    id: u64,
     /// The input text submitted.
     input: String,
     /// Parse result if available.
@@ -53,21 +55,25 @@ pub struct HistoryEntry {
     eval_result: Option<repl::Eval>,
     /// Overall status.
     status: EntryStatus,
+    /// Request status (Some if in-flight, None if complete).
+    request_status: Option<RequestStatus>,
 }
 
 impl HistoryEntry {
-    fn new(input: String) -> Self {
+    fn new(input: String, id: u64) -> Self {
         Self {
+            id,
             input,
             parse_result: None,
             eval_result: None,
             status: EntryStatus::Pending,
+            request_status: Some(RequestStatus::Parsing),
         }
     }
 }
 
 /// In-flight request status.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum RequestStatus {
     Parsing,
     Evaluating { command: repl::Command },
@@ -79,8 +85,6 @@ pub struct App<E: ReplExecutor> {
     executor: E,
     /// Next request ID.
     next_id: u64,
-    /// Current in-flight request.
-    in_flight: Option<(u64, RequestStatus)>,
     /// Current input text.
     input: String,
     /// Cursor position in characters.
@@ -106,7 +110,6 @@ impl<E: ReplExecutor> App<E> {
         Self {
             executor: E::new(),
             next_id: 0,
-            in_flight: None,
             input: String::new(),
             character_index: 0,
             history: Vec::new(),
@@ -235,7 +238,7 @@ impl<E: ReplExecutor> App<E> {
 
     /// Check if there's work pending from the worker thread.
     pub fn has_pending_work(&self) -> bool {
-        self.in_flight.is_some()
+        self.history.last().map_or(false, |e| e.request_status.is_some())
     }
 
     /// Execute the selected menu action.
@@ -557,7 +560,7 @@ impl<E: ReplExecutor> App<E> {
         }
 
         // Don't submit if there's already a request in flight.
-        if self.in_flight.is_some() {
+        if self.history.last().map_or(false, |e| e.request_status.is_some()) {
             return;
         }
 
@@ -569,15 +572,12 @@ impl<E: ReplExecutor> App<E> {
         let id = self.next_id;
         self.next_id += 1;
 
-        // Create a new history entry with pending status.
-        let entry = HistoryEntry::new(input_text.clone());
+        // Create a new history entry with pending status and request ID.
+        let entry = HistoryEntry::new(input_text.clone(), id);
         self.history.push(entry);
 
         // Send request to executor.
         self.executor.submit_parse_and_eval(id, input_text);
-
-        // Track in-flight request.
-        self.in_flight = Some((id, RequestStatus::Parsing));
     }
 
     /// Poll for results from executor.
@@ -599,52 +599,44 @@ impl<E: ReplExecutor> App<E> {
     }
 
     fn handle_parse_result(&mut self, id: u64, parse: repl::CommandParse) {
-        // Check if this matches our in-flight request.
-        let Some((in_flight_id, _status)) = &self.in_flight else {
-            bug!();
-        };
-
-        assert_eq!(*in_flight_id, id);
-
         // Get the last history entry (the one we just submitted).
         let entry = self.history.last_mut().X();
+
+        // Verify the request ID matches.
+        assert_eq!(entry.id, id);
 
         match parse.clone() {
             repl::CommandParse::Empty => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Empty;
-                self.in_flight = None;
+                entry.request_status = None;
             }
             repl::CommandParse::ReadAnotherLine => {
                 // Switch to multiline mode.
                 entry.parse_result = Some(parse);
                 self.multiline_mode = true;
-                // Note: This means we need another line, so we don't clear in_flight yet.
+                // Note: This means we need another line, so we don't clear request_status yet.
                 // For now, just clear it and show a message.
                 entry.status = EntryStatus::Error;
                 entry.eval_result = Some(repl::Eval::Error(
                     "multiline not yet fully supported".to_string()
                 ));
-                self.in_flight = None;
+                entry.request_status = None;
             }
             repl::CommandParse::Command(command) => {
                 // Update status to evaluating.
                 entry.parse_result = Some(parse);
-                self.in_flight = Some((id, RequestStatus::Evaluating { command }));
+                entry.request_status = Some(RequestStatus::Evaluating { command });
             }
         }
     }
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval) {
-        // Check if this matches our in-flight request.
-        let Some((in_flight_id, _)) = &self.in_flight else {
-            bug!();
-        };
-
-        assert_eq!(*in_flight_id, id);
-
         // Get the last history entry.
         let entry = self.history.last_mut().X();
+
+        // Verify the request ID matches.
+        assert_eq!(entry.id, id);
 
         // Update entry with eval result.
         entry.eval_result = Some(eval.clone());
@@ -665,6 +657,7 @@ impl<E: ReplExecutor> App<E> {
         // Clear multiline mode on successful eval.
         self.multiline_mode = false;
 
-        self.in_flight = None;
+        // Clear request status (request is complete).
+        entry.request_status = None;
     }
 }
