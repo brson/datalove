@@ -645,11 +645,28 @@ impl<E: ReplExecutor> App<E> {
             repl::Eval::Error(_) => {
                 entry.status = EntryStatus::Error;
             }
-            _ => {
+            repl::Eval::Nothing => {
                 entry.status = EntryStatus::Success;
+            }
+            repl::Eval::CallerInterpret(cmd) => {
+                self.handle_caller_interpret(id, cmd);
             }
         }
 
         self.multiline_mode = false;
+    }
+
+    fn handle_caller_interpret(&mut self, id: u64, cmd: &repl::ReplCommand) {
+        let entry = self.history.last_mut().X();
+        assert_eq!(entry.id, id);
+
+        match cmd {
+            repl::ReplCommand::Unknown => bug!(),
+            repl::ReplCommand::Exit => bug!(),
+            repl::ReplCommand::Help => {
+                // todo
+                entry.status = EntryStatus::Success;
+            },
+        }
     }
 }
