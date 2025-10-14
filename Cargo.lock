@@ -1329,6 +1329,8 @@ dependencies = [
 name = "datalove-repl"
 version = "0.1.0"
 dependencies = [
+ "bct",
+ "datalove-datafun",
  "datalove-datalit",
  "rustmax",
  "serde",

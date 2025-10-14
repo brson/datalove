@@ -1,2 +1,2 @@
 > some text that is not a command
-  (empty)
+  error: parse error: unexpected statement

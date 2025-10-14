@@ -1,0 +1,4 @@
+> fun foo()
+  (read another line not yet supported)
+> end fun
+  nothing

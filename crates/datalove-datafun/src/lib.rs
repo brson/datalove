@@ -4,7 +4,9 @@ use rmx::prelude::*;
 
 pub mod ast;
 pub mod ast_serde;
+pub mod script;
 pub mod parser;
+pub mod resolution;
 pub mod tycheck;
 
 pub use datalove_datalit as datalit;

@@ -7,6 +7,8 @@ edition.workspace = true
 
 [dependencies]
 rmx.workspace = true
+bct.workspace = true
 datalove-datalit.path = "../datalove-datalit"
+datalove-datafun.path = "../datalove-datafun"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

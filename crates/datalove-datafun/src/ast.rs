@@ -3,6 +3,7 @@ use rmx::prelude::*;
 use bct::text::InternedText;
 use crate::datalit;
 
+/// Result of parsing a source text into statements.
 #[salsa::tracked]
 pub struct Script<'db> {
     #[returns(ref)]

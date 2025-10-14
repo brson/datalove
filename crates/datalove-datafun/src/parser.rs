@@ -23,6 +23,22 @@ use bct::{
 
 use crate::ast;
 use crate::datalit;
+use crate::script;
+
+/// Parse a specific unit from a Script.
+/// Returns the parsed statements for that unit.
+/// Salsa will memoize this per unit, so unchanged units don't need re-parsing.
+#[salsa::tracked]
+pub fn parse_script_unit<'db>(
+    db: &'db dyn crate::Db,
+    script: script::Script,
+    unit_index: usize,
+) -> ast::Script<'db> {
+    let units = &script.units(db);
+    let unit = units[unit_index];
+    let source = unit.source(db);
+    parse(db, source)
+}
 
 #[salsa::tracked]
 pub fn parse<'db>(

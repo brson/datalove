@@ -58,8 +58,8 @@ fn worker_thread(
     loop {
         match rx.recv() {
             Ok(WorkerRequest::ParseAndEval { id, input }) => {
-                // Parse the input.
-                let parse = repl::Command::parse(&input);
+                // Parse the input using the engine (which handles multiline state).
+                let parse = engine.parse_line(&input);
                 let _ = tx.send(WorkerResponse::ParseResult {
                     id,
                     parse: parse.clone(),
