@@ -33,23 +33,19 @@ use ratatui::{
 
 use executor::WorkerResponse;
 
-/// Request status for a history entry.
+/// Status of a REPL history entry.
+/// Tracks both the processing lifecycle and the outcome.
 #[derive(Debug, Clone)]
-enum RequestStatus {
+enum EntryStatus {
     /// Request is being parsed.
     Parsing,
     /// Request is being evaluated.
     Evaluating { command: repl::Command },
-    /// Request is complete.
-    Complete,
-}
-
-/// Status of a history entry.
-#[derive(Debug, Clone)]
-enum EntryStatus {
-    Pending,
+    /// Request completed successfully.
     Success,
+    /// Request completed with an error.
     Error,
+    /// Request completed with empty input.
     Empty,
 }
 
@@ -64,10 +60,8 @@ pub struct HistoryEntry {
     parse_result: Option<repl::CommandParse>,
     /// Evaluation result if available.
     eval_result: Option<repl::Eval>,
-    /// Overall status.
+    /// Entry status (lifecycle and outcome).
     status: EntryStatus,
-    /// Request status.
-    request_status: RequestStatus,
 }
 
 impl HistoryEntry {
@@ -77,8 +71,7 @@ impl HistoryEntry {
             input,
             parse_result: None,
             eval_result: None,
-            status: EntryStatus::Pending,
-            request_status: RequestStatus::Parsing,
+            status: EntryStatus::Parsing,
         }
     }
 }
@@ -233,7 +226,7 @@ impl<E: ReplExecutor> App<E> {
                 }
             } else if matches!(entry.status, EntryStatus::Empty) {
                 messages.push("  (empty)".to_string());
-            } else if matches!(entry.status, EntryStatus::Pending) {
+            } else if matches!(entry.status, EntryStatus::Parsing | EntryStatus::Evaluating { .. }) {
                 messages.push("  ⏱".to_string());
             }
         }
@@ -242,7 +235,9 @@ impl<E: ReplExecutor> App<E> {
 
     /// Check if there's work pending from the worker thread.
     pub fn has_pending_work(&self) -> bool {
-        self.history.last().map_or(false, |e| !matches!(e.request_status, RequestStatus::Complete))
+        self.history.last().map_or(false, |e| {
+            matches!(e.status, EntryStatus::Parsing | EntryStatus::Evaluating { .. })
+        })
     }
 
     /// Execute the selected menu action.
@@ -337,7 +332,19 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
 
         // Output/status line.
         match &entry.status {
-            EntryStatus::Pending => {
+            EntryStatus::Parsing => {
+                lines.push(Line::from(vec![
+                    ratatui::text::Span::styled(
+                        "  ⏱ ",
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    ratatui::text::Span::styled(
+                        "parsing...",
+                        Style::default().fg(Color::Yellow),
+                    ),
+                ]));
+            }
+            EntryStatus::Evaluating { .. } => {
                 lines.push(Line::from(vec![
                     ratatui::text::Span::styled(
                         "  ⏱ ",
@@ -564,7 +571,9 @@ impl<E: ReplExecutor> App<E> {
         }
 
         // Don't submit if there's already a request in flight.
-        if self.history.last().map_or(false, |e| !matches!(e.request_status, RequestStatus::Complete)) {
+        if self.history.last().map_or(false, |e| {
+            matches!(e.status, EntryStatus::Parsing | EntryStatus::Evaluating { .. })
+        }) {
             todo!(); // need to do something smart here
         }
 
@@ -613,24 +622,22 @@ impl<E: ReplExecutor> App<E> {
             repl::CommandParse::Empty => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Empty;
-                entry.request_status = RequestStatus::Complete;
             }
             repl::CommandParse::ReadAnotherLine => {
                 // Switch to multiline mode.
                 entry.parse_result = Some(parse);
                 self.multiline_mode = true;
-                // Note: This means we need another line, so we don't clear request_status yet.
-                // For now, just clear it and show a message.
+                // Note: This means we need another line, so we don't update status yet.
+                // For now, just complete it with an error message.
                 entry.status = EntryStatus::Error;
                 entry.eval_result = Some(repl::Eval::Error(
                     "multiline not yet fully supported".to_string()
                 ));
-                entry.request_status = RequestStatus::Complete;
             }
             repl::CommandParse::Command(command) => {
                 // Update status to evaluating.
                 entry.parse_result = Some(parse);
-                entry.request_status = RequestStatus::Evaluating { command };
+                entry.status = EntryStatus::Evaluating { command };
             }
         }
     }
@@ -660,8 +667,5 @@ impl<E: ReplExecutor> App<E> {
 
         // Clear multiline mode on successful eval.
         self.multiline_mode = false;
-
-        // Mark request as complete.
-        entry.request_status = RequestStatus::Complete;
     }
 }
