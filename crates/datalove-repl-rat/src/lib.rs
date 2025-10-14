@@ -33,6 +33,39 @@ use ratatui::{
 
 use executor::WorkerResponse;
 
+/// Status of a history entry.
+#[derive(Debug, Clone)]
+enum EntryStatus {
+    Pending,
+    Success,
+    Error,
+    Empty,
+}
+
+/// A single REPL history entry (like a Jupyter cell).
+#[derive(Debug, Clone)]
+pub struct HistoryEntry {
+    /// The input text submitted.
+    input: String,
+    /// Parse result if available.
+    parse_result: Option<repl::CommandParse>,
+    /// Evaluation result if available.
+    eval_result: Option<repl::Eval>,
+    /// Overall status.
+    status: EntryStatus,
+}
+
+impl HistoryEntry {
+    fn new(input: String) -> Self {
+        Self {
+            input,
+            parse_result: None,
+            eval_result: None,
+            status: EntryStatus::Pending,
+        }
+    }
+}
+
 /// In-flight request status.
 #[derive(Debug)]
 enum RequestStatus {
@@ -47,13 +80,17 @@ pub struct App<E: ReplExecutor> {
     /// Next request ID.
     next_id: u64,
     /// Current in-flight request.
-    in_flight: Option<(u64, String, RequestStatus)>,
+    in_flight: Option<(u64, RequestStatus)>,
     /// Current input text.
     input: String,
     /// Cursor position in characters.
     character_index: usize,
-    /// Display messages (submitted inputs and eval results).
-    messages: Vec<String>,
+    /// History of REPL entries (interactive cards).
+    history: Vec<HistoryEntry>,
+    /// Current environment variables (for debug pane).
+    environment: Vec<(String, String)>,
+    /// Whether we're in multiline mode.
+    multiline_mode: bool,
     /// Whether the ESC menu is open.
     menu_open: bool,
     /// Selected menu item (0 = Resume, 1 = Exit).
@@ -72,7 +109,9 @@ impl<E: ReplExecutor> App<E> {
             in_flight: None,
             input: String::new(),
             character_index: 0,
-            messages: Vec::new(),
+            history: Vec::new(),
+            environment: Vec::new(),
+            multiline_mode: false,
             menu_open: false,
             menu_selection: 0,
             should_exit: false,
@@ -165,9 +204,33 @@ impl<E: ReplExecutor> App<E> {
         self.should_exit = val;
     }
 
-    /// Get the messages for testing.
-    pub fn messages(&self) -> &[String] {
-        &self.messages
+    /// Get the history entries for testing.
+    pub fn history(&self) -> &[HistoryEntry] {
+        &self.history
+    }
+
+    /// Get messages in the old format for backward compatibility in tests.
+    pub fn messages(&self) -> Vec<String> {
+        let mut messages = Vec::new();
+        for entry in &self.history {
+            messages.push(format!("> {}", entry.input));
+            if let Some(eval) = &entry.eval_result {
+                match eval {
+                    repl::Eval::Nothing => messages.push("  nothing".to_string()),
+                    repl::Eval::Exit => messages.push("  exiting".to_string()),
+                    repl::Eval::Error(e) => messages.push(format!("  error: {e}")),
+                    repl::Eval::CallerInterpret(repl::ReplCommand::Help) => {
+                        messages.push("  help".to_string())
+                    }
+                    _ => messages.push("  (unhandled repl command)".to_string()),
+                }
+            } else if matches!(entry.status, EntryStatus::Empty) {
+                messages.push("  (empty)".to_string());
+            } else if matches!(entry.status, EntryStatus::Pending) {
+                messages.push("  ⏱".to_string());
+            }
+        }
+        messages
     }
 
     /// Check if there's work pending from the worker thread.
@@ -204,45 +267,234 @@ impl App<WebWorkerExecutor> {
 
 /// Render the UI.
 pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
+    // Three-panel layout: history (top), input (middle), debug (bottom).
+    // Single-line mode: Input centered like a Cylon visor.
+    // Multi-line mode: Input grows downward from center to 1/3 screen.
+
+    let screen_height = f.area().height;
+
+    let constraints = if app.multiline_mode {
+        // Multi-line mode: Keep history at same height, input grows to 1/3, debug compressed.
+        let top_height = (screen_height.saturating_sub(3)) / 2;
+        vec![
+            Constraint::Length(top_height),  // History (same as single-line center point)
+            Constraint::Percentage(33),      // Input (1/3 of screen)
+            Constraint::Min(0),              // Debug (fills remaining space)
+        ]
+    } else {
+        // Single-line mode: Input centered vertically.
+        vec![
+            Constraint::Fill(1),      // Top half (centers input)
+            Constraint::Length(3),    // Input (3 lines: 1 text + 2 borders)
+            Constraint::Fill(1),      // Bottom half (centers input)
+        ]
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3), // Input area
-            Constraint::Min(1),    // Display area
-        ])
+        .constraints(constraints)
         .split(f.area());
 
-    // Input area.
-    let input_block = Block::default()
-        .borders(Borders::ALL)
-        .title("Input");
-    let input = Paragraph::new(app.input.as_str())
-        .block(input_block);
-    f.render_widget(input, chunks[0]);
+    // History panel - scrollable display of interactive cards.
+    render_history(f, app, chunks[0]);
 
-    // Set cursor position.
-    f.set_cursor_position((
-        chunks[0].x + app.character_index as u16 + 1,
-        chunks[0].y + 1,
-    ));
+    // Input panel - current text input with multiline indicators.
+    render_input(f, app, chunks[1]);
 
-    // Display area.
-    let display_block = Block::default()
-        .borders(Borders::ALL)
-        .title("Output");
-    let messages_text: Vec<Line> = app
-        .messages
-        .iter()
-        .map(|m| Line::from(m.as_str()))
-        .collect();
-    let display = Paragraph::new(messages_text)
-        .block(display_block);
-    f.render_widget(display, chunks[1]);
+    // Debug panel - table of variables and values.
+    render_debug_pane(f, app, chunks[2]);
 
     // Render menu if open.
     if app.menu_open {
         render_menu(f, app);
     }
+}
+
+/// Render the history panel with interactive cards.
+fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
+    let history_block = Block::default()
+        .borders(Borders::ALL)
+        .title("History");
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    for entry in &app.history {
+        // Input line with prompt.
+        lines.push(Line::from(vec![
+            ratatui::text::Span::styled(
+                "> ",
+                Style::default().fg(Color::Cyan),
+            ),
+            ratatui::text::Span::raw(&entry.input),
+        ]));
+
+        // Output/status line.
+        match &entry.status {
+            EntryStatus::Pending => {
+                lines.push(Line::from(vec![
+                    ratatui::text::Span::styled(
+                        "  ⏱ ",
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    ratatui::text::Span::styled(
+                        "evaluating...",
+                        Style::default().fg(Color::Yellow),
+                    ),
+                ]));
+            }
+            EntryStatus::Success => {
+                if let Some(eval) = &entry.eval_result {
+                    match eval {
+                        repl::Eval::Nothing => {
+                            lines.push(Line::from(vec![
+                                ratatui::text::Span::styled(
+                                    "  ✓ ",
+                                    Style::default().fg(Color::Green),
+                                ),
+                                ratatui::text::Span::raw("nothing"),
+                            ]));
+                        }
+                        repl::Eval::Exit => {
+                            lines.push(Line::from(vec![
+                                ratatui::text::Span::styled(
+                                    "  ✓ ",
+                                    Style::default().fg(Color::Green),
+                                ),
+                                ratatui::text::Span::raw("exiting"),
+                            ]));
+                        }
+                        repl::Eval::Error(e) => {
+                            lines.push(Line::from(vec![
+                                ratatui::text::Span::styled(
+                                    "  ✗ ",
+                                    Style::default().fg(Color::Red),
+                                ),
+                                ratatui::text::Span::styled(
+                                    format!("error: {e}"),
+                                    Style::default().fg(Color::Red),
+                                ),
+                            ]));
+                        }
+                        repl::Eval::CallerInterpret(command) => {
+                            match command {
+                                repl::ReplCommand::Help => {
+                                    lines.push(Line::from(vec![
+                                        ratatui::text::Span::styled(
+                                            "  ℹ ",
+                                            Style::default().fg(Color::Blue),
+                                        ),
+                                        ratatui::text::Span::raw("help"),
+                                    ]));
+                                }
+                                _ => {
+                                    lines.push(Line::from(vec![
+                                        ratatui::text::Span::styled(
+                                            "  ℹ ",
+                                            Style::default().fg(Color::Blue),
+                                        ),
+                                        ratatui::text::Span::raw("(repl command)"),
+                                    ]));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            EntryStatus::Error => {
+                lines.push(Line::from(vec![
+                    ratatui::text::Span::styled(
+                        "  ✗ ",
+                        Style::default().fg(Color::Red),
+                    ),
+                    ratatui::text::Span::styled(
+                        "error",
+                        Style::default().fg(Color::Red),
+                    ),
+                ]));
+            }
+            EntryStatus::Empty => {
+                lines.push(Line::from(vec![
+                    ratatui::text::Span::styled(
+                        "  · ",
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                    ratatui::text::Span::styled(
+                        "(empty)",
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+            }
+        }
+
+        // Separator between entries.
+        lines.push(Line::from(""));
+    }
+
+    let history = Paragraph::new(lines)
+        .block(history_block);
+    f.render_widget(history, area);
+}
+
+/// Render the input panel with multiline indicators.
+fn render_input<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
+    let title = if app.multiline_mode {
+        "Input [MULTILINE - Shift+Enter to execute]"
+    } else {
+        "Input [Enter to execute]"
+    };
+
+    let input_block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .style(Style::default().fg(if app.multiline_mode {
+            Color::Yellow
+        } else {
+            Color::White
+        }));
+
+    let input = Paragraph::new(app.input.as_str())
+        .block(input_block);
+    f.render_widget(input, area);
+
+    // Set cursor position.
+    f.set_cursor_position((
+        area.x + app.character_index as u16 + 1,
+        area.y + 1,
+    ));
+}
+
+/// Render the debug pane with variable table.
+fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
+    let debug_block = Block::default()
+        .borders(Borders::ALL)
+        .title("Environment");
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    if app.environment.is_empty() {
+        lines.push(Line::from(vec![
+            ratatui::text::Span::styled(
+                "(no variables defined)",
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]));
+    } else {
+        // Variables.
+        for (name, value) in &app.environment {
+            lines.push(Line::from(vec![
+                ratatui::text::Span::styled(
+                    name,
+                    Style::default().fg(Color::Green),
+                ),
+                ratatui::text::Span::raw("  │  "),
+                ratatui::text::Span::raw(value),
+            ]));
+        }
+    }
+
+    let debug = Paragraph::new(lines)
+        .block(debug_block);
+    f.render_widget(debug, area);
 }
 
 /// Render the ESC menu popup.
@@ -317,15 +569,15 @@ impl<E: ReplExecutor> App<E> {
         let id = self.next_id;
         self.next_id += 1;
 
-        // Display the input and initial status.
-        self.messages.push(format!("> {}", input_text));
-        self.messages.push(format!("  ⏱"));
+        // Create a new history entry with pending status.
+        let entry = HistoryEntry::new(input_text.clone());
+        self.history.push(entry);
 
         // Send request to executor.
-        self.executor.submit_parse_and_eval(id, input_text.clone());
+        self.executor.submit_parse_and_eval(id, input_text);
 
         // Track in-flight request.
-        self.in_flight = Some((id, input_text, RequestStatus::Parsing));
+        self.in_flight = Some((id, RequestStatus::Parsing));
     }
 
     /// Poll for results from executor.
@@ -339,71 +591,79 @@ impl<E: ReplExecutor> App<E> {
                 WorkerResponse::EvalResult { id, eval } => {
                     self.handle_eval_result(id, eval);
                 }
+                WorkerResponse::EnvironmentUpdate { environment } => {
+                    self.environment = environment;
+                }
             }
         }
     }
 
     fn handle_parse_result(&mut self, id: u64, parse: repl::CommandParse) {
         // Check if this matches our in-flight request.
-        let Some((in_flight_id, input_text, status)) = &self.in_flight else {
+        let Some((in_flight_id, _status)) = &self.in_flight else {
             bug!();
         };
 
         assert_eq!(*in_flight_id, id);
 
-        match parse {
+        // Get the last history entry (the one we just submitted).
+        let entry = self.history.last_mut().X();
+
+        match parse.clone() {
             repl::CommandParse::Empty => {
-                // Remove the "⏱" and replace with result.
-                self.messages.pop();
-                self.messages.push(format!("  (empty)"));
+                entry.parse_result = Some(parse);
+                entry.status = EntryStatus::Empty;
                 self.in_flight = None;
             }
             repl::CommandParse::ReadAnotherLine => {
-                // Remove the "⏱" and show error.
-                self.messages.pop();
-                self.messages.push(format!("  (read another line not yet supported)"));
+                // Switch to multiline mode.
+                entry.parse_result = Some(parse);
+                self.multiline_mode = true;
+                // Note: This means we need another line, so we don't clear in_flight yet.
+                // For now, just clear it and show a message.
+                entry.status = EntryStatus::Error;
+                entry.eval_result = Some(repl::Eval::Error(
+                    "multiline not yet fully supported".to_string()
+                ));
                 self.in_flight = None;
             }
             repl::CommandParse::Command(command) => {
                 // Update status to evaluating.
-                self.in_flight = Some((id, input_text.clone(), RequestStatus::Evaluating { command }));
+                entry.parse_result = Some(parse);
+                self.in_flight = Some((id, RequestStatus::Evaluating { command }));
             }
         }
     }
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval) {
         // Check if this matches our in-flight request.
-        let Some((in_flight_id, _, _)) = &self.in_flight else {
+        let Some((in_flight_id, _)) = &self.in_flight else {
             bug!();
         };
 
         assert_eq!(*in_flight_id, id);
 
-        // Remove the "⏱" and replace with result.
-        self.messages.pop();
+        // Get the last history entry.
+        let entry = self.history.last_mut().X();
 
-        match eval {
-            repl::Eval::Nothing => {
-                self.messages.push(format!("  nothing"));
-            }
+        // Update entry with eval result.
+        entry.eval_result = Some(eval.clone());
+
+        match &eval {
             repl::Eval::Exit => {
-                self.messages.push(format!("  exiting"));
+                entry.status = EntryStatus::Success;
                 self.should_exit = true;
             }
-            repl::Eval::Error(e) => {
-                self.messages.push(format!("  error: {e}"));
+            repl::Eval::Error(_) => {
+                entry.status = EntryStatus::Error;
             }
-            repl::Eval::CallerInterpret(command) => {
-                match command {
-                    repl::ReplCommand::Help => {
-                        self.messages.push(format!("  help"));
-                    }
-                    _ => {
-                        self.messages.push(format!("  (unhandled repl command)"));
-                    }
-                }
+            _ => {
+                entry.status = EntryStatus::Success;
             }
         }
+
+        // Clear multiline mode on successful eval.
+        self.multiline_mode = false;
 
         self.in_flight = None;
     }

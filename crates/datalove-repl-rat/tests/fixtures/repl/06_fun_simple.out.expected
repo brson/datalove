@@ -1,4 +1,4 @@
 > fun foo()
-  (read another line not yet supported)
+  error: multiline not yet fully supported
 > end fun
   nothing

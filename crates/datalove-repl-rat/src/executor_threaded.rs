@@ -69,6 +69,10 @@ fn worker_thread(
                 if let repl::CommandParse::Command(command) = parse {
                     let eval = engine.eval(command);
                     let _ = tx.send(WorkerResponse::EvalResult { id, eval });
+
+                    // Send updated environment.
+                    let environment = engine.get_environment();
+                    let _ = tx.send(WorkerResponse::EnvironmentUpdate { environment });
                 }
             }
             Ok(WorkerRequest::Shutdown) => {

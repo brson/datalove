@@ -8,6 +8,7 @@ use serde::{Serialize, Deserialize};
 pub enum WorkerResponse {
     ParseResult { id: u64, parse: repl::CommandParse },
     EvalResult { id: u64, eval: repl::Eval },
+    EnvironmentUpdate { environment: Vec<(String, String)> },
 }
 
 /// Trait for executing REPL parse and eval operations.

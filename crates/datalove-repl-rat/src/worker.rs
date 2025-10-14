@@ -86,6 +86,15 @@ pub fn worker_main() -> Result<(), JsValue> {
             let eval_json = serde_json::to_string(&eval_response).unwrap();
             if let Err(e) = post_message(&eval_json) {
                 web_sys::console::error_1(&format!("Worker: Failed to send eval result: {:?}", e).into());
+                return;
+            }
+
+            // Send updated environment.
+            let environment = engine.get_environment();
+            let env_response = WorkerResponse::EnvironmentUpdate { environment };
+            let env_json = serde_json::to_string(&env_response).unwrap();
+            if let Err(e) = post_message(&env_json) {
+                web_sys::console::error_1(&format!("Worker: Failed to send environment update: {:?}", e).into());
             }
         }
     }) as Box<dyn FnMut(MessageEvent)>);

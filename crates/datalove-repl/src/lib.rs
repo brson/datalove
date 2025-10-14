@@ -33,7 +33,7 @@ pub enum CommandParse {
     Command(Command),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Eval {
     Nothing,
     Error(String),
@@ -251,6 +251,47 @@ impl Engine {
 
         // Successfully parsed and compiled.
         Eval::Nothing
+    }
+
+    /// Get current environment bindings (functions and let statements).
+    /// Returns a list of (name, description) pairs.
+    pub fn get_environment(&self) -> Vec<(String, String)> {
+        let mut bindings = Vec::new();
+
+        let Some(script) = self.script else {
+            return bindings;
+        };
+
+        let db = &self.db;
+
+        // Get resolved function units.
+        let fun_resolution = datafun::resolution::resolve_functions(db, script);
+        let green_units = fun_resolution.green_units(db);
+
+        // Extract function names from green units.
+        for &fun_idx in green_units {
+            let parsed = datafun::parser::parse_script_unit(db, script, fun_idx);
+            for stmt in parsed.statements(db) {
+                if let datafun::ast::Statement::Fun(fun) = stmt {
+                    let name = fun.name(db).as_str(db).to_string();
+                    bindings.push((name, "function".to_string()));
+                }
+            }
+        }
+
+        // Extract let bindings from all units.
+        let units = script.units(db);
+        for unit_idx in 0..units.len() {
+            let parsed = datafun::parser::parse_script_unit(db, script, unit_idx);
+            for stmt in parsed.statements(db) {
+                if let datafun::ast::Statement::Let(let_stmt) = stmt {
+                    let name = let_stmt.name(db).as_str(db).to_string();
+                    bindings.push((name, "let (not evaluated)".to_string()));
+                }
+            }
+        }
+
+        bindings
     }
 
     /// Execute a script file line by line and output JSON results.

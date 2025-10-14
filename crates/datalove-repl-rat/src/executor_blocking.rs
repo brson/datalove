@@ -33,6 +33,10 @@ impl ReplExecutor for BlockingExecutor {
         if let repl::CommandParse::Command(command) = parse {
             let eval = self.engine.eval(command);
             self.response_queue.push_back(WorkerResponse::EvalResult { id, eval });
+
+            // Send updated environment.
+            let environment = self.engine.get_environment();
+            self.response_queue.push_back(WorkerResponse::EnvironmentUpdate { environment });
         }
     }
 
