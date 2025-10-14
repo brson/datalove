@@ -561,7 +561,7 @@ impl<E: ReplExecutor> App<E> {
 
         // Don't submit if there's already a request in flight.
         if self.history.last().map_or(false, |e| e.request_status.is_some()) {
-            return;
+            todo!();
         }
 
         let input_text = self.input.clone();
