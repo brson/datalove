@@ -2,8 +2,6 @@
 
 use rmx::prelude::*;
 
-mod rtdt;
-
 use salsa::Database as Db;
 
 #[salsa::db]
