@@ -55,8 +55,8 @@ pub struct HistoryEntry {
     eval_result: Option<repl::Eval>,
     /// Overall status.
     status: EntryStatus,
-    /// Request status (Some if in-flight, None if complete).
-    request_status: Option<RequestStatus>,
+    /// Request status.
+    request_status: RequestStatus,
 }
 
 impl HistoryEntry {
@@ -67,16 +67,20 @@ impl HistoryEntry {
             parse_result: None,
             eval_result: None,
             status: EntryStatus::Pending,
-            request_status: Some(RequestStatus::Parsing),
+            request_status: RequestStatus::Parsing,
         }
     }
 }
 
-/// In-flight request status.
+/// Request status for a history entry.
 #[derive(Debug, Clone)]
 enum RequestStatus {
+    /// Request is being parsed.
     Parsing,
+    /// Request is being evaluated.
     Evaluating { command: repl::Command },
+    /// Request is complete.
+    Complete,
 }
 
 /// Application state.
@@ -238,7 +242,7 @@ impl<E: ReplExecutor> App<E> {
 
     /// Check if there's work pending from the worker thread.
     pub fn has_pending_work(&self) -> bool {
-        self.history.last().map_or(false, |e| e.request_status.is_some())
+        self.history.last().map_or(false, |e| !matches!(e.request_status, RequestStatus::Complete))
     }
 
     /// Execute the selected menu action.
@@ -560,7 +564,7 @@ impl<E: ReplExecutor> App<E> {
         }
 
         // Don't submit if there's already a request in flight.
-        if self.history.last().map_or(false, |e| e.request_status.is_some()) {
+        if self.history.last().map_or(false, |e| !matches!(e.request_status, RequestStatus::Complete)) {
             todo!(); // need to do something smart here
         }
 
@@ -609,7 +613,7 @@ impl<E: ReplExecutor> App<E> {
             repl::CommandParse::Empty => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Empty;
-                entry.request_status = None;
+                entry.request_status = RequestStatus::Complete;
             }
             repl::CommandParse::ReadAnotherLine => {
                 // Switch to multiline mode.
@@ -621,12 +625,12 @@ impl<E: ReplExecutor> App<E> {
                 entry.eval_result = Some(repl::Eval::Error(
                     "multiline not yet fully supported".to_string()
                 ));
-                entry.request_status = None;
+                entry.request_status = RequestStatus::Complete;
             }
             repl::CommandParse::Command(command) => {
                 // Update status to evaluating.
                 entry.parse_result = Some(parse);
-                entry.request_status = Some(RequestStatus::Evaluating { command });
+                entry.request_status = RequestStatus::Evaluating { command };
             }
         }
     }
@@ -657,7 +661,7 @@ impl<E: ReplExecutor> App<E> {
         // Clear multiline mode on successful eval.
         self.multiline_mode = false;
 
-        // Clear request status (request is complete).
-        entry.request_status = None;
+        // Mark request as complete.
+        entry.request_status = RequestStatus::Complete;
     }
 }
