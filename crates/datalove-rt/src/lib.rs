@@ -10,7 +10,7 @@ use rmx::prelude::*;
 pub use datalove_rtdt as rtdt;
 
 mod cmp;
-mod alloc;
+pub mod alloc;
 
 /// A runtime handle. Needed for all calls.
 ///
