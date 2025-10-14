@@ -211,31 +211,6 @@ impl<E: ReplExecutor> App<E> {
         &self.history
     }
 
-    /// Get messages in the old format for backward compatibility in tests.
-    /// fixme get rid of this!
-    pub fn messages(&self) -> Vec<String> {
-        let mut messages = Vec::new();
-        for entry in &self.history {
-            messages.push(format!("> {}", entry.input));
-            if let Some(eval) = &entry.eval_result {
-                match eval {
-                    repl::Eval::Nothing => messages.push("  nothing".to_string()),
-                    repl::Eval::Exit => messages.push("  exiting".to_string()),
-                    repl::Eval::Error(e) => messages.push(format!("  error: {e}")),
-                    repl::Eval::CallerInterpret(repl::ReplCommand::Help) => {
-                        messages.push("  help".to_string())
-                    }
-                    _ => messages.push("  (unhandled repl command)".to_string()),
-                }
-            } else if matches!(entry.status, EntryStatus::Empty) {
-                messages.push("  (empty)".to_string());
-            } else if matches!(entry.status, EntryStatus::Parsing | EntryStatus::Evaluating { .. }) {
-                messages.push("  ⏱".to_string());
-            }
-        }
-        messages
-    }
-
     /// Check if there's work pending from the worker thread.
     pub fn has_pending_work(&self) -> bool {
         self.history.last().map_or(false, |e| {
@@ -369,15 +344,6 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
                                     Style::default().fg(Color::Green),
                                 ),
                                 ratatui::text::Span::raw("nothing"),
-                            ]));
-                        }
-                        repl::Eval::Exit => {
-                            lines.push(Line::from(vec![
-                                ratatui::text::Span::styled(
-                                    "  ✓ ",
-                                    Style::default().fg(Color::Green),
-                                ),
-                                ratatui::text::Span::raw("exiting"),
                             ]));
                         }
                         repl::Eval::Error(e) => {
@@ -638,10 +604,6 @@ impl<E: ReplExecutor> App<E> {
         entry.eval_result = Some(eval.clone());
 
         match &eval {
-            repl::Eval::Exit => {
-                entry.status = EntryStatus::Success;
-                self.should_exit = true;
-            }
             repl::Eval::Error(_) => {
                 entry.status = EntryStatus::Error;
             }
@@ -662,7 +624,10 @@ impl<E: ReplExecutor> App<E> {
 
         match cmd {
             repl::ReplCommand::Unknown => bug!(),
-            repl::ReplCommand::Exit => bug!(),
+            repl::ReplCommand::Exit => {
+                entry.status = EntryStatus::Success;
+                self.should_exit = true;
+            }
             repl::ReplCommand::Help => {
                 // todo
                 entry.status = EntryStatus::Success;

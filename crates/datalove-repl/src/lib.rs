@@ -37,7 +37,6 @@ pub enum CommandParse {
 pub enum Eval {
     Nothing,
     Error(String),
-    Exit,
     CallerInterpret(ReplCommand),
 }
 
@@ -193,7 +192,7 @@ impl Engine {
                 Eval::CallerInterpret(command)
             }
             ReplCommand::Exit => {
-                Eval::Exit
+                Eval::CallerInterpret(command)
             }
         }
     }
