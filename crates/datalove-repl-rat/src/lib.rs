@@ -603,7 +603,8 @@ impl<E: ReplExecutor> App<E> {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::KeepReading;
 
-                self.input = entry.input.C();
+                self.input = entry.input.C() + "\n";
+                self.character_index = self.input.len();
                 self.multiline_mode = true;
             }
             repl::CommandParse::Command(command) => {
