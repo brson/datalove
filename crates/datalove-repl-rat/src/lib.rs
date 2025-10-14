@@ -3,6 +3,7 @@
 #![allow(unused)]
 
 use rmx::prelude::*;
+use serde::{Serialize, Deserialize};
 
 use datalove_repl as repl;
 
@@ -36,7 +37,7 @@ use executor::WorkerResponse;
 /// A single REPL history entry.
 ///
 /// There is one of these for every line/multiline sent to the repl engine.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryEntry {
     /// Request ID for this entry.
     id: u64,
@@ -52,7 +53,7 @@ pub struct HistoryEntry {
 
 /// Status of a REPL history entry.
 /// Tracks both the processing lifecycle and the outcome.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum EntryStatus {
     /// Request is being parsed.
     Parsing,

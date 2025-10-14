@@ -1,2 +1,15 @@
-> /exit
-  exiting
+[
+  {
+    "id": 0,
+    "input": "/exit",
+    "parse_result": {
+      "Command": {
+        "ReplCommand": "Exit"
+      }
+    },
+    "eval_result": {
+      "CallerInterpret": "Exit"
+    },
+    "status": "Success"
+  }
+]

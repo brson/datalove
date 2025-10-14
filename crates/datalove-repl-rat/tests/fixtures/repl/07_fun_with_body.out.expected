@@ -1,4 +1,27 @@
-> fun increment(accum: @u64, amount: @u8): !@u64
->   ret accum +! amount
-> end fun
-  nothing
+[
+  {
+    "id": 0,
+    "input": "fun increment(accum: @u64, amount: @u8): !@u64",
+    "parse_result": "ReadAnotherLine",
+    "eval_result": null,
+    "status": "Error"
+  },
+  {
+    "id": 1,
+    "input": "  ret accum +! amount",
+    "parse_result": "ReadAnotherLine",
+    "eval_result": null,
+    "status": "Error"
+  },
+  {
+    "id": 2,
+    "input": "end fun",
+    "parse_result": {
+      "Command": {
+        "ScriptStatement": "fun increment(accum: @u64, amount: @u8): !@u64\n  ret accum +! amount\nend fun"
+      }
+    },
+    "eval_result": "Nothing",
+    "status": "Success"
+  }
+]

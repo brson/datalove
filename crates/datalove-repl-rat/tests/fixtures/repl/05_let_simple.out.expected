@@ -1,2 +1,13 @@
-> let x = @42
-  nothing
+[
+  {
+    "id": 0,
+    "input": "let x = @42",
+    "parse_result": {
+      "Command": {
+        "ScriptStatement": "let x = @42"
+      }
+    },
+    "eval_result": "Nothing",
+    "status": "Success"
+  }
+]

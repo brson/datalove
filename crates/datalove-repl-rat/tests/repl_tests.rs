@@ -61,7 +61,7 @@ fn parse_script_to_events(script: &str) -> Vec<Event> {
     events
 }
 
-/// Run a script and capture the output messages as JSON.
+/// Run a script and capture the serialized history.
 fn run_script(path: &Path) -> String {
     let script_content = std::fs::read_to_string(path).X();
     let events = parse_script_to_events(&script_content);
@@ -76,9 +76,8 @@ fn run_script(path: &Path) -> String {
     // Run app with events.
     datalove_repl_term::run_app_with_events(&mut terminal, &mut app, &mut events.into_iter()).X();
 
-    // Return messages as-is, one per line.
-    // Each message is already a formatted string from the REPL.
-    app.messages().join("\n") + "\n"
+    // Serialize the entire history as pretty JSON.
+    serde_json::to_string_pretty(app.history()).X() + "\n"
 }
 
 enum TestResult {

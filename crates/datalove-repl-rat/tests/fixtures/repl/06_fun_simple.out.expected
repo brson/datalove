@@ -1,3 +1,20 @@
-> fun foo()
-> end fun
-  nothing
+[
+  {
+    "id": 0,
+    "input": "fun foo()",
+    "parse_result": "ReadAnotherLine",
+    "eval_result": null,
+    "status": "Error"
+  },
+  {
+    "id": 1,
+    "input": "end fun",
+    "parse_result": {
+      "Command": {
+        "ScriptStatement": "fun foo()\nend fun"
+      }
+    },
+    "eval_result": "Nothing",
+    "status": "Success"
+  }
+]

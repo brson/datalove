@@ -1,2 +1,15 @@
-> /unknown
-  error: unknown command
+[
+  {
+    "id": 0,
+    "input": "/unknown",
+    "parse_result": {
+      "Command": {
+        "ReplCommand": "Unknown"
+      }
+    },
+    "eval_result": {
+      "Error": "unknown command"
+    },
+    "status": "Error"
+  }
+]
