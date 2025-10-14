@@ -10,6 +10,7 @@ use rmx::prelude::*;
 pub use datalove_rtdt as rtdt;
 
 mod cmp;
+mod alloc;
 
 /// A runtime handle. Needed for all calls.
 ///
@@ -27,14 +28,24 @@ pub enum RtStatus {
 /// May return null.
 #[unsafe(no_mangle)]
 pub extern "C" fn dtlv_rti_init() -> LocalRtHandle {
-    todo!()
+    let rt = alloc::LocalRt::new();
+    Box::into_raw(rt) as *mut u8
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_shutdown(
     rt: LocalRtHandle,
 ) -> RtStatus {
-    todo!()
+    if rt.is_null() {
+        return RtStatus::Error;
+    }
+
+    unsafe {
+        let rt = Box::from_raw(rt as *mut alloc::LocalRt);
+        rt.shutdown();
+    }
+
+    RtStatus::Ok
 }
 
 /// Low-level allocator access.
@@ -45,7 +56,15 @@ pub unsafe extern "C" fn dtlv_rti_mem_alloc_local(
     tydesc: *const rtdt::TyDesc,
     count: u32,
 ) -> *mut u8 {
-    todo!()
+    if rt.is_null() || tydesc.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let ty = &*tydesc;
+        rt_ref.alloc(ty.size, ty.align, count)
+    }
 }
 
 /// Low-level allocator access.
@@ -56,7 +75,17 @@ pub unsafe extern "C" fn dtlv_rti_mem_free_local(
     count: u32,
     ptr: *mut u8
 ) -> RtStatus {
-    todo!()
+    if rt.is_null() || tydesc.is_null() {
+        return RtStatus::Error;
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let ty = &*tydesc;
+        rt_ref.free(ty.size, ty.align, count, ptr);
+    }
+
+    RtStatus::Ok
 }
 
 #[repr(u8)]

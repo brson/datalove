@@ -8,3 +8,4 @@ edition.workspace = true
 [dependencies]
 rmx.workspace = true
 datalove-rtdt.path = "../datalove-rtdt"
+libc = "0.2"
