@@ -76,9 +76,6 @@ impl Command {
             return CommandParse::Empty;
         }
 
-        // For now, assume single-line statements.
-        // We'll handle multiline later.
-        // Just wrap it in a ScriptStatement.
         CommandParse::Command(Command::ScriptStatement(
             ScriptStatement(command.to_string())
         ))
@@ -101,18 +98,24 @@ impl Engine {
 
         // Check if we're accumulating a multiline statement.
         if !self.multiline_buffer.is_empty() {
-            // We're in multiline mode. Check if this line ends it.
-            // fixme use the actual parser
-            let words: Vec<&str> = line.split_whitespace().collect();
-            if words.len() >= 2 && words[0] == "end" && words[1] == "fun" {
-                // End of multiline statement. Add this line and return complete statement.
-                self.multiline_buffer.push(line.to_string());
-                let complete = self.multiline_buffer.join("\n");
+            // We're in multiline mode. Add this line and try to parse.
+            self.multiline_buffer.push(line.to_string());
+            let complete = self.multiline_buffer.join("\n");
+
+            // Try to parse the accumulated buffer.
+            let source = Source::new(&self.db, complete.clone().S());
+            let parsed = datafun::parser::parse(&self.db, source);
+            let statements = parsed.statements(&self.db);
+
+            // Check if we have a Fun statement. If so, require "end fun" to be present.
+            let has_fun = statements.iter().any(|s| matches!(s, datafun::ast::Statement::Fun(_)));
+            let has_end_fun = self.check_has_end_fun(&complete);
+            let has_errors = statements.iter().any(|s| matches!(s, datafun::ast::Statement::ParseError(_)));
+
+            if has_fun && has_end_fun {
                 self.multiline_buffer.clear();
                 return Command::parse_script_statement(&complete);
             } else {
-                // Still accumulating.
-                self.multiline_buffer.push(line.to_string());
                 return CommandParse::ReadAnotherLine;
             }
         }
@@ -130,17 +133,44 @@ impl Engine {
             return CommandParse::Empty;
         }
 
-        // Check if this starts a multiline statement (fun).
-        // fixme use the parser!
-        let words: Vec<&str> = trimmed.split_whitespace().collect();
-        if !words.is_empty() && words[0] == "fun" {
-            // Start multiline mode.
+        // Try to parse this line to detect what kind of statement it is.
+        let source = Source::new(&self.db, trimmed.to_string().S());
+        let parsed = datafun::parser::parse(&self.db, source);
+        let statements = parsed.statements(&self.db);
+
+        // Check if this is a Fun statement (which requires multiline input in REPL).
+        let has_fun = statements.iter().any(|s| matches!(s, datafun::ast::Statement::Fun(_)));
+
+        if has_fun {
+            // Function statement. Start multiline mode.
             self.multiline_buffer.push(line.to_string());
             return CommandParse::ReadAnotherLine;
+        } else {
+            // Not a function, return it (whether complete or error).
+            return Command::parse_script_statement(trimmed);
         }
+    }
 
-        // Single-line statement.
-        Command::parse_script_statement(trimmed)
+    /// Check if the source text contains "end fun" using the lexer.
+    fn check_has_end_fun(&self, source_text: &str) -> bool {
+        let source = Source::new(&self.db, source_text.to_string().S());
+        let chunk = bct::source_map::basic_source_map(&self.db, source);
+        let chunk_lex = bct::lexer::lex_chunk(&self.db, chunk);
+
+        // Filter out whitespace tokens to get just words and sigils.
+        let tokens: Vec<_> = chunk_lex.tokens(&self.db).iter()
+            .filter(|t| !matches!(t.kind(&self.db), bct::lexer::TokenKind::Whitespace))
+            .collect();
+
+        // Look for consecutive "end" and "fun" tokens.
+        for i in 0..tokens.len().saturating_sub(1) {
+            let t1 = tokens[i];
+            let t2 = tokens[i + 1];
+            if let (Some("end"), Some("fun")) = (t1.word_str(&self.db), t2.word_str(&self.db)) {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn eval(&mut self, command: Command) -> Eval {
