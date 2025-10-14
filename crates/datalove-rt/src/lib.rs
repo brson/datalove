@@ -88,6 +88,25 @@ pub unsafe extern "C" fn dtlv_rti_mem_free_local(
     RtStatus::Ok
 }
 
+
+/// Clone any type into the local heap.
+///
+/// Space is already allocated for the proximate type
+/// at the `value_out` location - we just need to allocate
+/// any needed buffers.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_clone_local(
+    _rt: LocalRtHandle,
+    value_in: *const u8,
+    tydesc_in: *const rtdt::TyDesc,
+    value_out: *mut u8,
+) -> RtStatus {
+    assert!(!value_in.is_null());
+    assert!(!tydesc_in.is_null());
+    assert!(!value_out.is_null());
+    todo!()
+}
+
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum RtEq {
