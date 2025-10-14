@@ -1,3 +1,0 @@
-fun increment(accum: @u64, amount: @u8): !@u64
-  ret accum +! amount
-end fun
