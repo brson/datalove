@@ -33,6 +33,17 @@ use ratatui::{
 
 use executor::WorkerResponse;
 
+/// Request status for a history entry.
+#[derive(Debug, Clone)]
+enum RequestStatus {
+    /// Request is being parsed.
+    Parsing,
+    /// Request is being evaluated.
+    Evaluating { command: repl::Command },
+    /// Request is complete.
+    Complete,
+}
+
 /// Status of a history entry.
 #[derive(Debug, Clone)]
 enum EntryStatus {
@@ -70,17 +81,6 @@ impl HistoryEntry {
             request_status: RequestStatus::Parsing,
         }
     }
-}
-
-/// Request status for a history entry.
-#[derive(Debug, Clone)]
-enum RequestStatus {
-    /// Request is being parsed.
-    Parsing,
-    /// Request is being evaluated.
-    Evaluating { command: repl::Command },
-    /// Request is complete.
-    Complete,
 }
 
 /// Application state.
