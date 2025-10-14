@@ -32,6 +32,8 @@ use ratatui::{
     Frame,
 };
 
+use tui_textarea::TextArea;
+
 use executor::WorkerResponse;
 
 /// A single REPL history entry.
@@ -87,10 +89,8 @@ pub struct App<E: ReplExecutor> {
     executor: E,
     /// Next request ID.
     next_id: u64,
-    /// Current input text.
-    input: String,
-    /// Cursor position in characters.
-    character_index: usize,
+    /// Text area for input.
+    textarea: TextArea<'static>,
     /// History of REPL entries (interactive cards).
     history: Vec<HistoryEntry>,
     /// Current environment variables (for debug pane).
@@ -112,8 +112,7 @@ impl<E: ReplExecutor> App<E> {
         Self {
             executor: E::new(),
             next_id: 0,
-            input: String::new(),
-            character_index: 0,
+            textarea: TextArea::default(),
             history: Vec::new(),
             environment: Vec::new(),
             multiline_mode: false,
@@ -123,52 +122,24 @@ impl<E: ReplExecutor> App<E> {
         }
     }
 
-    /// Move cursor to the left.
-    pub fn move_cursor_left(&mut self) {
-        let cursor_moved_left = self.character_index.saturating_sub(1);
-        self.character_index = self.clamp_cursor(cursor_moved_left);
+    /// Handle a key event for text input.
+    pub fn handle_input_key(&mut self, key: crossterm::event::KeyEvent) {
+        self.textarea.input(key);
     }
 
-    /// Move cursor to the right.
-    pub fn move_cursor_right(&mut self) {
-        let cursor_moved_right = self.character_index.saturating_add(1);
-        self.character_index = self.clamp_cursor(cursor_moved_right);
+    /// Get the current input text.
+    pub fn input_text(&self) -> String {
+        self.textarea.lines().join("\n")
     }
 
-    /// Enter a character at the cursor position.
-    pub fn enter_char(&mut self, new_char: char) {
-        let index = self.byte_index();
-        self.input.insert(index, new_char);
-        self.move_cursor_right();
+    /// Get a reference to the textarea for rendering.
+    pub fn textarea(&self) -> &TextArea<'static> {
+        &self.textarea
     }
 
-    /// Convert character index to byte index.
-    fn byte_index(&self) -> usize {
-        self.input
-            .char_indices()
-            .map(|(i, _)| i)
-            .nth(self.character_index)
-            .unwrap_or(self.input.len())
-    }
-
-    /// Delete character before cursor.
-    pub fn delete_char(&mut self) {
-        let is_not_cursor_leftmost = self.character_index != 0;
-        if is_not_cursor_leftmost {
-            let current_index = self.character_index;
-            let from_left_to_current_index = current_index - 1;
-
-            let before_char_to_delete = self.input.chars().take(from_left_to_current_index);
-            let after_char_to_delete = self.input.chars().skip(current_index);
-
-            self.input = before_char_to_delete.chain(after_char_to_delete).collect();
-            self.move_cursor_left();
-        }
-    }
-
-    /// Clamp cursor to valid range.
-    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.input.chars().count())
+    /// Get a mutable reference to the textarea.
+    pub fn textarea_mut(&mut self) -> &mut TextArea<'static> {
+        &mut self.textarea
     }
 
     /// Submit the current input.
@@ -441,23 +412,22 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
         "Input [Enter]"
     };
 
-    let input_block = Block::default()
-        .borders(Borders::ALL)
-        .title(title)
-        .style(Style::default().fg(if app.multiline_mode {
-            Color::Yellow
-        } else {
-            Color::White
-        }));
+    let border_style = if app.multiline_mode {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::White)
+    };
 
-    let input = Paragraph::new(app.input.as_str())
-        .block(input_block);
-    f.render_widget(input, area);
+    let mut textarea = app.textarea.clone();
+    textarea.set_block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .style(border_style)
+    );
+    textarea.set_cursor_line_style(Style::default());
 
-    f.set_cursor_position((
-        area.x + app.character_index as u16 + 1,
-        area.y + 1,
-    ));
+    f.render_widget(&textarea, area);
 }
 
 fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
@@ -548,7 +518,9 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 impl<E: ReplExecutor> App<E> {
     /// Submit input for async processing.
     pub fn handle_input(&mut self) {
-        if self.input.is_empty() {
+        let input_text = self.input_text();
+
+        if input_text.is_empty() {
             return;
         }
 
@@ -557,9 +529,8 @@ impl<E: ReplExecutor> App<E> {
             todo!(); // need to do something smart here
         }
 
-        let input_text = self.input.clone();
-        self.input.clear();
-        self.character_index = 0;
+        // Clear the textarea.
+        self.textarea = TextArea::default();
 
         // Assign a request ID.
         let id = self.next_id;
@@ -603,8 +574,9 @@ impl<E: ReplExecutor> App<E> {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::KeepReading;
 
-                self.input = entry.input.C() + "\n";
-                self.character_index = self.input.len();
+                // Restore input with newline and enter multiline mode.
+                let restored_text = entry.input.C() + "\n";
+                self.textarea = TextArea::from(restored_text.lines().map(|s| s.to_string()));
                 self.multiline_mode = true;
             }
             repl::CommandParse::Command(command) => {

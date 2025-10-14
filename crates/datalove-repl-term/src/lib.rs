@@ -131,13 +131,20 @@ fn handle_key_event<E: datalove_repl_rat::ReplExecutor>(
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 app.set_should_exit(true);
             }
-            KeyCode::Enter => app.submit_input(),
-            KeyCode::Char(c) => app.enter_char(c),
-            KeyCode::Backspace => app.delete_char(),
-            KeyCode::Left => app.move_cursor_left(),
-            KeyCode::Right => app.move_cursor_right(),
+            KeyCode::Enter => {
+                // In multiline mode, Shift+Enter inserts a newline, Enter submits.
+                // In single-line mode, Enter submits.
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    app.handle_input_key(key);
+                } else {
+                    app.submit_input();
+                }
+            }
             KeyCode::Esc => app.open_menu(),
-            _ => {}
+            _ => {
+                // Pass all other keys to the textarea for handling.
+                app.handle_input_key(key);
+            }
         }
     }
 }
