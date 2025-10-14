@@ -1,5 +1,5 @@
 (define-generic-mode 'la2-mode
-  '(";") 
+  '("%") 
   '(
     "let"
     "var"
@@ -43,7 +43,6 @@
     ("#" . 'font-lock-variable-name-face)
     ("$" . 'font-lock-variable-name-face)
     ("#" . 'font-lock-variable-name-face)
-    ("%" . 'font-lock-variable-name-face)
     ("?" . 'font-lock-variable-name-face)
     (":" . 'font-lock-variable-name-face)
     ("," . 'font-lock-variable-name-face)
