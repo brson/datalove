@@ -132,21 +132,45 @@ impl Engine {
             return CommandParse::Empty;
         }
 
-        // Try to parse this line to detect what kind of statement it is.
+        // First try to parse a statement.
         let source = Source::new(&self.db, trimmed.to_string().S());
-        let parsed = datafun::parser::parse(&self.db, source);
-        let statements = parsed.statements(&self.db);
+        let statement_parse = datafun::parser::parse(&self.db, source);
+        let statement_parse_has_errors: bool = todo!();
+        let is_statement = !statement_parse_has_errors;
+        if is_statement {
+            let statements = statement_parse.statements(&self.db);
 
-        // Check if this is a Fun statement (which requires multiline input in REPL).
-        let has_fun = statements.iter().any(|s| matches!(s, datafun::ast::Statement::Fun(_)));
+            // Check if this is a Fun statement (which requires multiline input in REPL).
+            let has_fun = statements.iter().any(|s| matches!(s, datafun::ast::Statement::Fun(_)));
 
-        if has_fun {
-            // Function statement. Start multiline mode.
-            self.multiline_buffer.push(line.to_string());
-            return CommandParse::ReadAnotherLine;
+            if has_fun {
+                // Function statement. Start multiline mode.
+                self.multiline_buffer.push(line.to_string());
+                return CommandParse::ReadAnotherLine;
+            } else {
+                // Not a function, return it (whether complete or error).
+                return Command::script_statement(trimmed);
+            }
         } else {
             // Not a function, return it (whether complete or error).
             return Command::script_statement(trimmed);
+            // Now try to parse an expression.
+            let is_expr = todo!();
+            if is_expr {
+                // probably Command::parse_expression(trimmed);
+                todo!()
+            } else {
+                // Now just parse a brace tree,
+                // _without balancing mismatched braces_.
+                // If the brace tree is not closed enter multiline mode.
+                let is_open_brace_tree = todo!();
+                if is_open_brace_tree {
+                    todo!();
+                } else {
+                    // error
+                    todo!();
+                }
+            }
         }
     }
 
