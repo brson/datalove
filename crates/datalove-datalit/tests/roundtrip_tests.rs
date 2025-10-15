@@ -2,7 +2,7 @@ use rmx::prelude::*;
 use std::path::{Path, PathBuf};
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use datalove_datafun as datafun;
+use datalove_datalit as datalit;
 
 fn find_test_fixtures() -> Vec<PathBuf> {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -37,19 +37,19 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Step 1: Parse the original datalit.
-    let db = datafun::Database::default();
+    let db = datalit::Database::default();
     let source = bct::input::Source::new(&db, source_text.S());
-    let ast = datafun::datalit::parser::parse(&db, source);
+    let ast = datalit::parser::parse(&db, source);
 
     // Step 2: Pretty-print the AST.
-    let pretty1 = datafun::datalit::pretty::pretty_print(&db, ast);
+    let pretty1 = datalit::pretty::pretty_print(&db, ast);
 
     // Step 3: Parse the pretty-printed output.
     let source2 = bct::input::Source::new(&db, pretty1.S());
-    let ast2 = datafun::datalit::parser::parse(&db, source2);
+    let ast2 = datalit::parser::parse(&db, source2);
 
     // Step 4: Pretty-print again.
-    let pretty2 = datafun::datalit::pretty::pretty_print(&db, ast2);
+    let pretty2 = datalit::pretty::pretty_print(&db, ast2);
 
     // Step 5: Check that both pretty-prints are identical.
     if pretty1 != pretty2 {
