@@ -67,7 +67,7 @@ fn run_script(path: &Path) -> String {
         };
 
         // Parse the input.
-        let parse_result = engine.parse_input(&input_to_parse);
+        let parse_result = engine.parse_input(repl::Input::Input(input_to_parse));
 
         match parse_result {
             repl::InputParse::ReadMultiline => {

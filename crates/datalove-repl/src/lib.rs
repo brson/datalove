@@ -11,6 +11,11 @@ pub use datalove_datafun as datafun;
 const REPL_COMMAND_SIGIL: char = '/';
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Input {
+    Input(String),
+}
+    
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     ReplCommand(ReplCommand),
     ScriptStatement(ScriptStatement),
@@ -80,8 +85,9 @@ impl Engine {
 
     /// Parse input and determine if we have a complete command.
     /// This is stateless - caller handles accumulation for multiline input.
-    pub fn parse_input(&mut self, input: &str) -> InputParse {
-        let input = input.trim_end();
+    pub fn parse_input(&mut self, input: Input) -> InputParse {
+        let Input::Input(input_str) = input;
+        let input = input_str.trim_end();
         let trimmed = input.trim();
 
         // Check for REPL command.
@@ -270,7 +276,7 @@ impl Engine {
             .context("failed to read script file")?;
 
         for line in contents.lines() {
-            let parse_result = engine.parse_input(line);
+            let parse_result = engine.parse_input(Input::Input(line.to_string()));
             let eval_result = match &parse_result {
                 InputParse::Command(cmd) => Some(engine.eval(cmd.clone())),
                 _ => None,

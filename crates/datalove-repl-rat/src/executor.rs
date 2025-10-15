@@ -21,7 +21,7 @@ pub trait ReplExecutor {
     fn new() -> Self where Self: Sized;
 
     /// Submit a parse-and-eval request.
-    fn submit_parse_and_eval(&mut self, id: u64, input: String);
+    fn submit_parse_and_eval(&mut self, id: u64, input: repl::Input);
 
     /// Try to receive a response.
     /// Returns None if no response is available.

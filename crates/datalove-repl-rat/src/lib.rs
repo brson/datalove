@@ -588,7 +588,7 @@ impl<E: ReplExecutor> App<E> {
         self.history.push(entry);
 
         // Send request to executor.
-        self.executor.submit_parse_and_eval(id, input_text);
+        self.executor.submit_parse_and_eval(id, repl::Input::Input(input_text));
     }
 
     pub fn poll_results(&mut self) {

@@ -12,7 +12,7 @@ use crate::executor::WorkerResponse;
 #[derive(Debug, Serialize, Deserialize)]
 struct WorkerRequest {
     id: u64,
-    input: String,
+    input: repl::Input,
 }
 
 /// Entry point for the Web Worker.
@@ -61,7 +61,7 @@ pub fn worker_main() -> Result<(), JsValue> {
         web_sys::console::log_1(&format!("Worker: Processing request id={}", request.id).into());
 
         // Parse the input.
-        let parse = engine.parse_input(&request.input);
+        let parse = engine.parse_input(request.input);
         let parse_response = WorkerResponse::ParseResult {
             id: request.id,
             parse: parse.clone(),

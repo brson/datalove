@@ -9,7 +9,7 @@ use std::thread;
 /// Request sent to the worker thread.
 #[derive(Debug)]
 enum WorkerRequest {
-    ParseAndEval { id: u64, input: String },
+    ParseAndEval { id: u64, input: repl::Input },
     Shutdown,
 }
 
@@ -40,7 +40,7 @@ impl ReplExecutor for ThreadedExecutor {
         }
     }
 
-    fn submit_parse_and_eval(&mut self, id: u64, input: String) {
+    fn submit_parse_and_eval(&mut self, id: u64, input: repl::Input) {
         let _ = self.worker_tx.send(WorkerRequest::ParseAndEval { id, input });
     }
 
@@ -59,7 +59,7 @@ fn worker_thread(
         match rx.recv() {
             Ok(WorkerRequest::ParseAndEval { id, input }) => {
                 // Parse the input.
-                let parse = engine.parse_input(&input);
+                let parse = engine.parse_input(input);
                 let _ = tx.send(WorkerResponse::ParseResult {
                     id,
                     parse: parse.clone(),
