@@ -28,7 +28,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::Line,
-    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table},
     Frame,
 };
 
@@ -552,32 +552,48 @@ fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
         .borders(Borders::ALL)
         .title("Environment");
 
-    let mut lines: Vec<Line> = Vec::new();
-
     if app.environment.is_empty() {
-        lines.push(Line::from(vec![
-            ratatui::text::Span::styled(
-                "(no variables defined)",
-                Style::default().fg(Color::DarkGray),
-            ),
-        ]));
-    } else {
-        // Variables.
-        for (name, value) in &app.environment {
-            lines.push(Line::from(vec![
+        // Display empty state message as a paragraph.
+        let lines = vec![
+            Line::from(vec![
                 ratatui::text::Span::styled(
-                    name,
-                    Style::default().fg(Color::Green),
+                    "(no variables defined)",
+                    Style::default().fg(Color::DarkGray),
                 ),
-                ratatui::text::Span::raw("  │  "),
-                ratatui::text::Span::raw(value),
-            ]));
-        }
-    }
+            ]),
+        ];
+        let debug = Paragraph::new(lines)
+            .block(debug_block);
+        f.render_widget(debug, area);
+    } else {
+        // Create header row.
+        let header = Row::new(vec![
+            Cell::from("Name").style(Style::default().fg(Color::Yellow)),
+            Cell::from("Type").style(Style::default().fg(Color::Yellow)),
+        ])
+        .height(1);
 
-    let debug = Paragraph::new(lines)
-        .block(debug_block);
-    f.render_widget(debug, area);
+        // Create data rows.
+        let rows = app.environment.iter().map(|(name, desc)| {
+            Row::new(vec![
+                Cell::from(name.as_str()).style(Style::default().fg(Color::Cyan)),
+                Cell::from(desc.as_str()),
+            ])
+            .height(1)
+        });
+
+        // Create table with column constraints.
+        let widths = [
+            Constraint::Percentage(30),
+            Constraint::Percentage(70),
+        ];
+
+        let table = Table::new(rows, widths)
+            .header(header)
+            .block(debug_block);
+
+        f.render_widget(table, area);
+    }
 }
 
 /// Render the ESC menu popup.
