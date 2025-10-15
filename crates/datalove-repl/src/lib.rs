@@ -27,6 +27,7 @@ pub enum InputParse {
 pub enum Command {
     ReplCommand(ReplCommand),
     ScriptStatement(ScriptStatement),
+    Expression(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,14 +66,14 @@ impl Command {
         InputParse::Command(Command::ReplCommand(c))
     }
 
-    fn script_statement(command: &str) -> InputParse {
-        if command.trim().is_empty() {
-            return InputParse::Empty;
-        }
-
+    fn script_statement(input: &str) -> InputParse {
         InputParse::Command(Command::ScriptStatement(
-            ScriptStatement(command.to_string())
+            ScriptStatement(S(input))
         ))
+    }
+
+    fn expression(input: &str) -> InputParse {
+        InputParse::Command(Command::Expression(S(input)))
     }
 }
 
@@ -84,8 +85,6 @@ impl Engine {
         })
     }
 
-    /// Parse input and determine if we have a complete command.
-    /// This is stateless - caller handles accumulation for multiline input.
     pub fn parse_input(&mut self, input: Input) -> InputParse {
         match input {
             Input::Input(s) => self.parse_input_oneline(&s),
@@ -100,7 +99,7 @@ impl Engine {
             InputKind::OnelineStatement => Command::script_statement(input),
             InputKind::MultilineStatement => InputParse::ReadMultiline(S(input)),
             InputKind::OpenBraceTree => InputParse::ReadMultiline(S(input)),
-            InputKind::Expression => todo!(),
+            InputKind::Expression => Command::expression(input),
         }
     }
 
@@ -111,7 +110,7 @@ impl Engine {
             InputKind::OnelineStatement => Command::script_statement(input),
             InputKind::MultilineStatement => Command::script_statement(input),
             InputKind::OpenBraceTree => todo!(),
-            InputKind::Expression => todo!(),
+            InputKind::Expression => Command::expression(input),
         }
     }
 
@@ -122,6 +121,9 @@ impl Engine {
             }
             Command::ScriptStatement(source) => {
                 self.eval_script_statement(source)
+            }
+            Command::Expression(source) => {
+                self.eval_expression(source)
             }
         }
     }
@@ -193,6 +195,10 @@ impl Engine {
 
         // Successfully parsed and compiled.
         Eval::Nothing
+    }
+
+    fn eval_expression(&mut self, source: String) -> Eval {
+        Eval::Error(S("expr unimplemented"))
     }
 
     /// Get current environment bindings (functions and let statements).
@@ -291,7 +297,7 @@ fn classify_input(input: &str) -> InputKind {
     } else if is_oneline_statement_keyword {
         InputKind::OnelineStatement
     } else if is_multiline_statement_keyword {
-        InputKind::OnelineStatement
+        InputKind::MultilineStatement
     } else if is_open_brace_tree {
         InputKind::OpenBraceTree
     } else {
