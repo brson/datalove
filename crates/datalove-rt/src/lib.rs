@@ -223,6 +223,25 @@ pub unsafe extern "C" fn dtlv_rti_string_destroy_local(
     todo!()
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_string_push_bytes_local(
+    rt: LocalRtHandle,
+    string_value_mut: *mut u8,
+    string_value_ref: *const rtdt::TyDesc,
+    bytes_ref: *const u8,
+    bytes_len: u32,
+) -> RtStatus {
+    todo!()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_string_clear_local(
+    rt: LocalRtHandle,
+    string_value_mut: *mut u8,
+    string_value_ref: *const rtdt::TyDesc,
+) -> RtStatus {
+    todo!()
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_pretty_print_local(
