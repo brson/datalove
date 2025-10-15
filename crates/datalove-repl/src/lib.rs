@@ -658,4 +658,96 @@ mod tests {
             other => panic!("Expected Command, got {:?}", other),
         }
     }
+
+    #[test]
+    fn test_eval_let_returns_typechecker_type() {
+        let mut engine = Engine::new().unwrap();
+
+        // Test u32 literal - typechecker should infer u32 type.
+        let parse_result = engine.parse_input(Input::Input("let x = 42".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessLet(eval_let) => {
+                        assert_eq!(eval_let.name, "x");
+                        assert_eq!(eval_let.ty, "u32");
+                        assert_eq!(eval_let.value, "@42");
+                    }
+                    other => panic!("Expected Eval::SuccessLet, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eval_let_sequential() {
+        let mut engine = Engine::new().unwrap();
+
+        // First let binding.
+        let parse_result = engine.parse_input(Input::Input("let x = 10".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessLet(eval_let) => {
+                        assert_eq!(eval_let.name, "x");
+                        assert_eq!(eval_let.ty, "u32");
+                        assert_eq!(eval_let.value, "@10");
+                    }
+                    other => panic!("Expected Eval::SuccessLet, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+
+        // Second let binding using the first.
+        let parse_result = engine.parse_input(Input::Input("let y = x".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessLet(eval_let) => {
+                        assert_eq!(eval_let.name, "y");
+                        assert_eq!(eval_let.ty, "u32");
+                        assert_eq!(eval_let.value, "@10");
+                    }
+                    other => panic!("Expected Eval::SuccessLet, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eval_let_multiple_vars() {
+        let mut engine = Engine::new().unwrap();
+
+        // Define multiple variables.
+        let vars = vec![
+            ("a", "100", "u32"),
+            ("b", "200", "u32"),
+            ("c", "300", "u32"),
+        ];
+
+        for (name, value, ty) in vars {
+            let input = format!("let {} = {}", name, value);
+            let parse_result = engine.parse_input(Input::Input(input));
+            match parse_result {
+                InputParse::Command(cmd) => {
+                    let eval_result = engine.eval(cmd);
+                    match eval_result {
+                        Eval::SuccessLet(eval_let) => {
+                            assert_eq!(eval_let.name, name);
+                            assert_eq!(eval_let.ty, ty);
+                            assert!(eval_let.value.contains(value));
+                        }
+                        other => panic!("Expected Eval::SuccessLet for {}, got {:?}", name, other),
+                    }
+                }
+                other => panic!("Expected Command, got {:?}", other),
+            }
+        }
+    }
 } 
