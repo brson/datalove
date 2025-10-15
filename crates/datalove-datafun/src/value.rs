@@ -304,6 +304,131 @@ impl Value {
         }
     }
 
+    /// Pretty-print this value using the runtime pretty printer.
+    ///
+    /// Returns a string representation in valid datalit syntax.
+    pub fn pretty_print(&self, rt: &mut rt::alloc::LocalRt) -> Result<String, crate::interp::InterpError> {
+        unsafe {
+            // Get runtime handle.
+            let rt_handle = rt as *mut _ as rt::LocalRtHandle;
+
+            // Create string type descriptor.
+            let string_tydesc = rtdt::TyDesc {
+                type_tag: rtdt::TyTag::String,
+                size: std::mem::size_of::<rtdt::String>() as u32,
+                align: std::mem::align_of::<rtdt::String>() as u32,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            };
+
+            // Create output string.
+            let mut output_string = std::mem::MaybeUninit::<rtdt::String>::uninit();
+            let status = rt::dtlv_rti_string_create_local(
+                rt_handle,
+                output_string.as_mut_ptr() as *mut u8,
+                &string_tydesc,
+            );
+
+            if status != rt::RtStatus::Ok {
+                return Err(crate::interp::InterpError::RuntimeError(
+                    "Failed to create output string".to_string(),
+                ));
+            }
+
+            let mut output_string = output_string.assume_init();
+
+            // Get value pointer and type descriptor.
+            let (value_ptr, tydesc_ptr) = match self {
+                Value::Bool(b) => {
+                    // Create inline bool tydesc.
+                    let tydesc = rtdt::TyDesc {
+                        type_tag: rtdt::TyTag::Bool,
+                        size: 1,
+                        align: 1,
+                        type_info: rtdt::TyInfo {
+                            nothing: rtdt::TyInfoNothing,
+                        },
+                    };
+                    (b as *const bool as *const u8, &tydesc as *const rtdt::TyDesc)
+                }
+                Value::U32(n) => {
+                    // Create inline u32 tydesc.
+                    let tydesc = rtdt::TyDesc {
+                        type_tag: rtdt::TyTag::U32,
+                        size: 4,
+                        align: 4,
+                        type_info: rtdt::TyInfo {
+                            nothing: rtdt::TyInfoNothing,
+                        },
+                    };
+                    (n as *const u32 as *const u8, &tydesc as *const rtdt::TyDesc)
+                }
+                Value::F32(f) => {
+                    // Create inline f32 tydesc.
+                    let tydesc = rtdt::TyDesc {
+                        type_tag: rtdt::TyTag::F32,
+                        size: 4,
+                        align: 4,
+                        type_info: rtdt::TyInfo {
+                            nothing: rtdt::TyInfoNothing,
+                        },
+                    };
+                    (f as *const f32 as *const u8, &tydesc as *const rtdt::TyDesc)
+                }
+                Value::Int { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::String { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::Tuple { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::Struct { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::Enum { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::List { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::Map { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::Set { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::Option { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::Result { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::Data { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+                Value::Error { ptr, tydesc } => (*ptr as *const u8, *tydesc),
+            };
+
+            // Pretty-print value.
+            let status = rt::dtlv_rti_pretty_print_local(
+                rt_handle,
+                value_ptr,
+                tydesc_ptr,
+                &mut output_string as *mut rtdt::String as *mut u8,
+                &string_tydesc,
+            );
+
+            if status != rt::RtStatus::Ok {
+                rt::dtlv_rti_string_destroy_local(
+                    rt_handle,
+                    &mut output_string as *mut rtdt::String as *mut u8,
+                    &string_tydesc,
+                );
+                return Err(crate::interp::InterpError::RuntimeError(
+                    "Failed to pretty-print value".to_string(),
+                ));
+            }
+
+            // Extract string contents.
+            let result = if output_string.data.is_null() || output_string.size == 0 {
+                String::new()
+            } else {
+                let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
+                String::from_utf8_lossy(bytes).to_string()
+            };
+
+            // Cleanup.
+            rt::dtlv_rti_string_destroy_local(
+                rt_handle,
+                &mut output_string as *mut rtdt::String as *mut u8,
+                &string_tydesc,
+            );
+
+            Ok(result)
+        }
+    }
+
     /// Free this value using the runtime allocator.
     pub unsafe fn free(&mut self, rt: &mut rt::alloc::LocalRt) {
         match self {

@@ -130,6 +130,18 @@ impl<'db> InterpContext<'db> {
             .get(&name)
             .ok_or_else(|| InterpError::UnresolvedName(name.as_str(self.db).to_string()))
     }
+
+    /// Pretty-print a variable's value.
+    pub fn pretty_print_variable(&mut self, name: InternedText<'db>) -> Result<String, InterpError> {
+        // Look up the variable first to check it exists.
+        if !self.variables.contains_key(&name) {
+            return Err(InterpError::UnresolvedName(name.as_str(self.db).to_string()));
+        }
+
+        // Get the value (need to work around borrow checker).
+        let value = self.variables.get(&name).unwrap();
+        value.pretty_print(&mut self.rt)
+    }
 }
 
 impl<'db> Drop for InterpContext<'db> {
