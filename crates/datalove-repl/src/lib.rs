@@ -80,7 +80,7 @@ impl Engine {
 
     /// Parse input and determine if we have a complete command.
     /// This is stateless - caller handles accumulation for multiline input.
-    pub fn parse_line(&mut self, input: &str) -> CommandParse {
+    pub fn parse_input(&mut self, input: &str) -> CommandParse {
         let input = input.trim_end();
         let trimmed = input.trim();
 
@@ -270,7 +270,7 @@ impl Engine {
             .context("failed to read script file")?;
 
         for line in contents.lines() {
-            let parse_result = engine.parse_line(line);
+            let parse_result = engine.parse_input(line);
             let eval_result = match &parse_result {
                 CommandParse::Command(cmd) => Some(engine.eval(cmd.clone())),
                 _ => None,

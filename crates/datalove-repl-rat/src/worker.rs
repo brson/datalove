@@ -60,8 +60,8 @@ pub fn worker_main() -> Result<(), JsValue> {
 
         web_sys::console::log_1(&format!("Worker: Processing request id={}", request.id).into());
 
-        // Parse the input using the engine (which handles multiline state).
-        let parse = engine.parse_line(&request.input);
+        // Parse the input.
+        let parse = engine.parse_input(&request.input);
         let parse_response = WorkerResponse::ParseResult {
             id: request.id,
             parse: parse.clone(),

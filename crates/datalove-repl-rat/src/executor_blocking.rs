@@ -22,8 +22,8 @@ impl ReplExecutor for BlockingExecutor {
     }
 
     fn submit_parse_and_eval(&mut self, id: u64, input: String) {
-        // Parse the input using the engine (which handles multiline state).
-        let parse = self.engine.parse_line(&input);
+        // Parse the input.
+        let parse = self.engine.parse_input(&input);
         self.response_queue.push_back(WorkerResponse::ParseResult {
             id,
             parse: parse.clone(),
