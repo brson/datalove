@@ -19,7 +19,8 @@ pub mod eval_datafun;
 
 pub use datalove_datalit as datalit;
 
-use salsa::Database as Db;
+// Re-export Db trait for external use.
+pub use salsa::Database as Db;
 
 #[salsa::db]
 #[derive(Default, Clone)]
