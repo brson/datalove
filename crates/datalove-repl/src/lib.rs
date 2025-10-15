@@ -3,6 +3,7 @@
 #![allow(unused)]
 
 use rmx::prelude::*;
+use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 use bct::input::Source;
 
@@ -55,6 +56,101 @@ pub struct Engine {
     /// The current script (Salsa input) tracking all submitted statements.
     /// None if no statements have been submitted yet.
     script: Option<datafun::script::Script>,
+}
+
+/// Create a new script with an additional statement.
+///
+/// This creates Salsa input structs (Script, ScriptUnit, Source)
+/// which don't require being in a tracked function context.
+fn eval_script_statement_impl(
+    db: &dyn datafun::Db,
+    current_script: Option<datafun::script::Script>,
+    source_text: String,
+) -> datafun::script::Script {
+    // Create Source input.
+    let source_input = Source::new(db, source_text);
+
+    // Create new ScriptUnit input.
+    let new_unit = datafun::script::ScriptUnit::new(db, source_input);
+
+    // Get current units or start with empty vec.
+    let current_units = match current_script {
+        Some(script) => script.units(db).clone(),
+        None => vec![],
+    };
+
+    // Create new Script with the new unit appended.
+    let mut updated_units = current_units;
+    updated_units.push(new_unit);
+    datafun::script::Script::new(db, updated_units)
+}
+
+/// Tracked function to parse all script units into a single AST Script.
+#[salsa::tracked]
+fn parse_full_script<'db>(
+    db: &'db dyn datafun::Db,
+    script: datafun::script::Script,
+) -> datafun::ast::Script<'db> {
+    // Parse all units and collect their statements into a single ast::Script.
+    let mut all_statements = Vec::new();
+    let units = script.units(db);
+    for unit_idx in 0..units.len() {
+        let parsed_unit = datafun::parser::parse_script_unit(db, script, unit_idx);
+        all_statements.extend(parsed_unit.statements(db).iter().cloned());
+    }
+
+    datafun::ast::Script::new(db, all_statements)
+}
+
+/// Execute a script with the interpreter.
+///
+/// This is NOT a tracked function because InterpContext contains non-Sync types.
+/// The caller must handle execution directly.
+fn execute_with_interpreter_impl(
+    db: &dyn datafun::Db,
+    script: datafun::script::Script,
+) -> Result<datafun::interp::InterpContext<'_>, datafun::interp::InterpError> {
+    // Parse the full script using a tracked function.
+    let parsed_script = parse_full_script(db, script);
+
+    // Type check the script.
+    let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
+    if !tycheck_result.errors(db).is_empty() {
+        return Err(datafun::interp::InterpError::TypeError(
+            format!("{} type error(s)", tycheck_result.errors(db).len())
+        ));
+    }
+
+    // Build type table.
+    let type_table = datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result)
+        .map_err(|e| datafun::interp::InterpError::RuntimeError(format!("failed to build type table: {}", e)))?;
+
+    // Create interpreter context.
+    let mut ctx = datafun::interp::InterpContext::new(db, type_table);
+
+    // Execute the full script.
+    ctx.execute(parsed_script)?;
+
+    Ok(ctx)
+}
+
+/// Create a script for an expression evaluation.
+///
+/// This wraps the expression in a let statement and creates the script,
+/// but does not execute it. The caller must execute and pretty-print.
+fn create_expression_script(
+    db: &dyn datafun::Db,
+    current_script: Option<datafun::script::Script>,
+    expression: &str,
+) -> (datafun::script::Script, &'static str) {
+    // Wrap the expression in a let statement with a temporary variable.
+    let temp_var = "_expr_result";
+    let let_statement = format!("let {} = {}", temp_var, expression);
+
+    // Create the new script with the let statement.
+    let new_script = eval_script_statement_impl(db, current_script, let_statement);
+
+    (new_script, temp_var)
 }
 
 impl Command {
@@ -196,22 +292,12 @@ impl Engine {
         let source_text = source.0;
         let db = &self.db;
 
-        // Create Source input.
-        let source_input = Source::new(db, source_text.S());
-
-        // Create new ScriptUnit input.
-        let new_unit = datafun::script::ScriptUnit::new(db, source_input);
-
-        // Get current units or start with empty vec.
-        let current_units = match self.script {
-            Some(script) => script.units(db).clone(),
-            None => vec![],
-        };
-
-        // Create new Script with the new unit appended.
-        let mut updated_units = current_units;
-        updated_units.push(new_unit);
-        let new_script = datafun::script::Script::new(db, updated_units);
+        // Create the new script with the statement.
+        let new_script = eval_script_statement_impl(
+            db,
+            self.script,
+            source_text,
+        );
 
         // Store the new script.
         self.script = Some(new_script);
@@ -245,7 +331,7 @@ impl Engine {
         // Execute the statement using the interpreter.
         // The context is dropped after execution, which frees all values.
         // For persistent state, we'd need to store the context or its components.
-        let result = self.execute_with_interpreter(new_script);
+        let result = execute_with_interpreter_impl(db, new_script);
         match result {
             Ok(_ctx) => Eval::Nothing,
             Err(e) => Eval::Error(format!("execution error: {:?}", e)),
@@ -259,69 +345,33 @@ impl Engine {
         &self,
         script: datafun::script::Script,
     ) -> Result<datafun::interp::InterpContext<'_>, datafun::interp::InterpError> {
-        let db = &self.db;
-
-        // Parse all units and collect their statements into a single ast::Script.
-        let mut all_statements = Vec::new();
-        let units = script.units(db);
-        for unit_idx in 0..units.len() {
-            let parsed_unit = datafun::parser::parse_script_unit(db, script, unit_idx);
-            all_statements.extend(parsed_unit.statements(db).iter().cloned());
-        }
-
-        let parsed_script = datafun::ast::Script::new(db, all_statements);
-
-        // Type check the script.
-        let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
-        if !tycheck_result.errors(db).is_empty() {
-            return Err(datafun::interp::InterpError::TypeError(
-                format!("{} type error(s)", tycheck_result.errors(db).len())
-            ));
-        }
-
-        // Build type table.
-        let type_table = datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result)
-            .map_err(|e| datafun::interp::InterpError::RuntimeError(format!("failed to build type table: {}", e)))?;
-
-        // Create interpreter context.
-        let mut ctx = datafun::interp::InterpContext::new(db, type_table);
-
-        // Execute the full script.
-        ctx.execute(parsed_script)?;
-
-        Ok(ctx)
+        execute_with_interpreter_impl(&self.db, script)
     }
 
     fn eval_expression(&mut self, source: String) -> Eval {
-        // Wrap the expression in a let statement with a temporary variable.
-        let temp_var = "_expr_result";
-        let let_statement = format!("let {} = {}", temp_var, source);
+        let db = &self.db;
 
-        // Evaluate as a script statement.
-        let result = self.eval_script_statement(ScriptStatement(let_statement));
+        // Create the script with the expression wrapped in a let statement.
+        let (new_script, temp_var) = create_expression_script(
+            db,
+            self.script,
+            &source,
+        );
 
-        // If execution succeeded, re-execute to get the context and pretty-print.
-        match result {
-            Eval::Nothing => {
-                // Re-execute to get the context with the temp variable.
-                if let Some(script) = self.script {
-                    match self.execute_with_interpreter(script) {
-                        Ok(mut ctx) => {
-                            let db = &self.db;
-                            let temp_name = bct::text::InternedText::new(db, S(temp_var));
+        // Store the new script.
+        self.script = Some(new_script);
 
-                            match ctx.pretty_print_variable(temp_name) {
-                                Ok(s) => Eval::Error(s), // Using Error variant to display the result.
-                                Err(e) => Eval::Error(format!("failed to pretty-print: {:?}", e)),
-                            }
-                        }
-                        Err(e) => Eval::Error(format!("execution error: {:?}", e)),
-                    }
-                } else {
-                    Eval::Error("no script to execute".to_string())
+        // Execute the script and pretty-print the result.
+        match execute_with_interpreter_impl(db, new_script) {
+            Ok(mut ctx) => {
+                let temp_name = bct::text::InternedText::new(db, S(temp_var));
+
+                match ctx.pretty_print_variable(temp_name) {
+                    Ok(s) => Eval::Error(s), // Using Error variant to display the result.
+                    Err(e) => Eval::Error(format!("failed to pretty-print: {:?}", e)),
                 }
             }
-            other => other,
+            Err(e) => Eval::Error(format!("execution error: {:?}", e)),
         }
     }
 
@@ -442,7 +492,117 @@ fn alphanumeric_prefix(s: &str) -> Option<&str> {
 mod tests {
     use super::*;
 
-    // NOTE: The REPL engine tests require being called from within a Salsa tracked function context
-    // because they create ScriptUnits dynamically. Tests of the interpreter integration should be
-    // done at a higher level (e.g., integration tests or through actual REPL usage).
+    #[test]
+    fn test_execute_with_interpreter() {
+        let mut engine = Engine::new().unwrap();
+
+        // Add a simple let statement.
+        let parse_result = engine.parse_input(Input::Input("let x = 42".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::Nothing => {
+                        // Success - the statement was executed.
+                    }
+                    other => panic!("Expected Eval::Nothing, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+
+        // Verify the script was created.
+        assert!(engine.script.is_some());
+
+        // Verify we can execute the interpreter.
+        let script = engine.script.unwrap();
+        let result = engine.execute_with_interpreter(script);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_eval_expression() {
+        let mut engine = Engine::new().unwrap();
+
+        // First add a simple let binding to verify the system works.
+        let parse_result = engine.parse_input(Input::Input("let x = @42".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                engine.eval(cmd);
+            }
+            _ => panic!("Expected Command"),
+        }
+
+        // Now test evaluating an expression that references the variable.
+        let parse_result = engine.parse_input(Input::Input("x".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::Error(msg) => {
+                        // The result should contain "42".
+                        assert!(msg.contains("42") || msg.contains("@42"),
+                            "Expected result to contain '42' or '@42', got: {}", msg);
+                    }
+                    other => panic!("Expected Eval::Error with result, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+
+        // Verify the script was updated with the let statement.
+        assert!(engine.script.is_some());
+    }
+
+    #[test]
+    fn test_eval_expression_with_previous_bindings() {
+        let mut engine = Engine::new().unwrap();
+
+        // Add a let statement.
+        let parse_result = engine.parse_input(Input::Input("let x = 10".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                engine.eval(cmd);
+            }
+            _ => panic!("Expected Command"),
+        }
+
+        // Evaluate an expression using the previous binding.
+        let parse_result = engine.parse_input(Input::Input("x + 5".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::Error(msg) => {
+                        // The result should contain "15".
+                        assert!(msg.contains("15"), "Expected result to contain '15', got: {}", msg);
+                    }
+                    other => panic!("Expected Eval::Error with result, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_error_handling() {
+        let mut engine = Engine::new().unwrap();
+
+        // Try to evaluate invalid syntax.
+        let parse_result = engine.parse_input(Input::Input("let x =".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::Error(msg) => {
+                        // Should contain "parse error".
+                        assert!(msg.contains("parse error") || msg.contains("error"),
+                            "Expected parse error, got: {}", msg);
+                    }
+                    other => panic!("Expected Eval::Error, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
 } 

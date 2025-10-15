@@ -1335,6 +1335,7 @@ dependencies = [
  "datalove-datafun",
  "datalove-datalit",
  "rustmax",
+ "salsa",
  "serde",
  "serde_json",
  "termcolor",
