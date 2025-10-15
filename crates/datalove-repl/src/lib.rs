@@ -29,7 +29,7 @@ pub struct ScriptStatement(String);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CommandParse {
     Empty,
-    ReadAnotherLine,
+    ReadMultiline,
     Command(Command),
 }
 
@@ -46,8 +46,6 @@ pub struct Engine {
     /// The current script (Salsa input) tracking all submitted statements.
     /// None if no statements have been submitted yet.
     script: Option<datafun::script::Script>,
-    /// Buffer for accumulating multiline input (e.g., fun...end fun).
-    multiline_buffer: Vec<String>,
 }
 
 impl Command {
@@ -86,66 +84,46 @@ impl Engine {
         Ok(Engine {
             db: datafun::Database::default(),
             script: None,
-            multiline_buffer: Vec::new(),
         })
     }
 
-    /// Parse a line of input and determine if we have a complete command.
-    /// This handles multiline input for fun statements.
-    pub fn parse_line(&mut self, line: &str) -> CommandParse {
-        let line = line.trim_end();
-
-        // Check if we're accumulating a multiline statement.
-        if !self.multiline_buffer.is_empty() {
-            // We're in multiline mode. Add this line and try to parse.
-            self.multiline_buffer.push(line.to_string());
-            let complete = self.multiline_buffer.join("\n");
-
-            // Try to parse the accumulated buffer.
-            let source = Source::new(&self.db, complete.clone().S());
-            let parsed = datafun::parser::parse(&self.db, source);
-            let statements = parsed.statements(&self.db);
-
-            // Check if we have a Fun statement. If so, require "end fun" to be present.
-            let has_fun = statements.iter().any(|s| matches!(s, datafun::ast::Statement::Fun(_)));
-            let has_end_fun = self.check_has_end_fun(&complete);
-            let has_errors = statements.iter().any(|s| matches!(s, datafun::ast::Statement::ParseError(_)));
-
-            if has_fun && has_end_fun {
-                self.multiline_buffer.clear();
-                return Command::script_statement(&complete);
-            } else {
-                return CommandParse::ReadAnotherLine;
-            }
-        }
-
-        // Not in multiline mode. Check what this line is.
-        let trimmed = line.trim();
+    /// Parse input and determine if we have a complete command.
+    /// This is stateless - caller handles accumulation for multiline input.
+    pub fn parse_line(&mut self, input: &str) -> CommandParse {
+        let input = input.trim_end();
+        let trimmed = input.trim();
 
         // Check for REPL command.
         if trimmed.starts_with(REPL_COMMAND_SIGIL) {
             return Command::repl_command(trimmed);
         }
 
-        // Check for empty line.
+        // Check for empty input.
         if trimmed.is_empty() {
             return CommandParse::Empty;
         }
 
-        // Try to parse this line to detect what kind of statement it is.
-        let source = Source::new(&self.db, trimmed.to_string().S());
+        // Try to parse the input.
+        let source = Source::new(&self.db, input.to_string().S());
         let parsed = datafun::parser::parse(&self.db, source);
         let statements = parsed.statements(&self.db);
 
-        // Check if this is a Fun statement (which requires multiline input in REPL).
+        // Check if this is a Fun statement.
         let has_fun = statements.iter().any(|s| matches!(s, datafun::ast::Statement::Fun(_)));
 
         if has_fun {
-            // Function statement. Start multiline mode.
-            self.multiline_buffer.push(line.to_string());
-            return CommandParse::ReadAnotherLine;
+            // Function statement. Check if it's complete (has "end fun").
+            let has_end_fun = self.check_has_end_fun(input);
+
+            if has_end_fun {
+                // Complete function statement.
+                return Command::script_statement(input);
+            } else {
+                // Incomplete function statement. Needs more input.
+                return CommandParse::ReadMultiline;
+            }
         } else {
-            // Not a function, return it (whether complete or error).
+            // Not a function statement, return it directly.
             return Command::script_statement(trimmed);
         }
     }

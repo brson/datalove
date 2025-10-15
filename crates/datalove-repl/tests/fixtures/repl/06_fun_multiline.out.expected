@@ -2,7 +2,7 @@
   {
     "id": 0,
     "input": "fun foo() = @42",
-    "parse_result": "ReadAnotherLine",
+    "parse_result": "ReadMultiline",
     "eval_result": null
   },
   {

@@ -50,14 +50,32 @@ fn run_script(path: &Path) -> String {
     let mut history: Vec<HistoryEntry> = Vec::new();
     let mut next_id = 0u64;
 
+    // Buffer for accumulating multiline input.
+    let mut multiline_buffer: Vec<String> = Vec::new();
+
     for line in script_content.lines() {
-        // Pass each line to parse_line.
-        // The engine maintains its own multiline_buffer internally.
-        let parse_result = engine.parse_line(line);
+        // Accumulate line if we're in multiline mode.
+        if !multiline_buffer.is_empty() {
+            multiline_buffer.push(line.to_string());
+        }
+
+        // Determine what to parse: accumulated buffer or current line.
+        let input_to_parse = if !multiline_buffer.is_empty() {
+            multiline_buffer.join("\n")
+        } else {
+            line.to_string()
+        };
+
+        // Parse the input.
+        let parse_result = engine.parse_line(&input_to_parse);
 
         match parse_result {
-            repl::CommandParse::ReadAnotherLine => {
-                // Need more input, continue to next line.
+            repl::CommandParse::ReadMultiline => {
+                // Need more input. Start accumulating if we haven't already.
+                if multiline_buffer.is_empty() {
+                    multiline_buffer.push(line.to_string());
+                }
+
                 // Create a history entry showing we're waiting for more.
                 let entry = HistoryEntry {
                     id: next_id,
@@ -92,6 +110,9 @@ fn run_script(path: &Path) -> String {
                 };
                 history.push(entry);
                 next_id += 1;
+
+                // Clear multiline buffer if we were accumulating.
+                multiline_buffer.clear();
             }
         }
     }

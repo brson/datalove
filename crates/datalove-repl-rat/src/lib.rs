@@ -617,7 +617,7 @@ impl<E: ReplExecutor> App<E> {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Empty;
             }
-            repl::CommandParse::ReadAnotherLine => {
+            repl::CommandParse::ReadMultiline => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::KeepReading;
 
