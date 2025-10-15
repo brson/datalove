@@ -114,11 +114,27 @@ built on the datalit type system.
 
 ```
 fun increment(
-  accum: u64, amount: u8,
-): ?u64
+  accum: int, amount: u8,
+): int
   ret accum + amount
 end fun
 ```
+
+That's with bigints. Here's the one with fixed ints,
+handling that pesky overflow:
+
+```
+fun increment(
+  accum: u64, amount: u8,
+): ?u64
+  ret accum +? amount
+end fun
+```
+
+A `fun` is a pure total function on Datalit types, can't panic.
+It is one of the few types Datafun adds over Datalit.
+
+todo
 
 The Datalit type system has extremely nice properties that
 enable: pure functions, total comptime evaluation, full or partial memoization,
