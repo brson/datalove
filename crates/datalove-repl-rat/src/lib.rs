@@ -123,6 +123,7 @@ impl<E: ReplExecutor> App<E> {
     }
 
     /// Handle a key event for text input.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn handle_input_key(&mut self, key: crossterm::event::KeyEvent) {
         self.textarea.input(key);
     }
@@ -140,6 +141,26 @@ impl<E: ReplExecutor> App<E> {
     /// Get a mutable reference to the textarea.
     pub fn textarea_mut(&mut self) -> &mut TextArea<'static> {
         &mut self.textarea
+    }
+
+    /// Delete the character before the cursor.
+    pub fn delete_char(&mut self) {
+        self.textarea.delete_char();
+    }
+
+    /// Move the cursor left.
+    pub fn move_cursor_left(&mut self) {
+        self.textarea.move_cursor(tui_textarea::CursorMove::Back);
+    }
+
+    /// Move the cursor right.
+    pub fn move_cursor_right(&mut self) {
+        self.textarea.move_cursor(tui_textarea::CursorMove::Forward);
+    }
+
+    /// Insert a character at the cursor position.
+    pub fn enter_char(&mut self, c: char) {
+        self.textarea.insert_char(c);
     }
 
     /// Submit the current input.
