@@ -13,8 +13,16 @@ const REPL_COMMAND_SIGIL: char = '/';
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Input {
     Input(String),
+    Multiline(String),
 }
     
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InputParse {
+    Empty,
+    ReadMultiline(String),
+    Command(Command),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     ReplCommand(ReplCommand),
@@ -30,13 +38,6 @@ pub enum ReplCommand {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptStatement(String);
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum InputParse {
-    Empty,
-    ReadMultiline,
-    Command(Command),
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Eval {
@@ -55,7 +56,7 @@ pub struct Engine {
 
 impl Command {
     fn repl_command(command: &str) -> InputParse {
-        let command = command[1..].trim();
+        let command = &command.trim()[1..];
         let c = match command {
             "exit" => ReplCommand::Exit,
             "help" => ReplCommand::Help,
@@ -86,66 +87,32 @@ impl Engine {
     /// Parse input and determine if we have a complete command.
     /// This is stateless - caller handles accumulation for multiline input.
     pub fn parse_input(&mut self, input: Input) -> InputParse {
-        let Input::Input(input_str) = input;
-        let input = input_str.trim_end();
-        let trimmed = input.trim();
-
-        // Check for REPL command.
-        if trimmed.starts_with(REPL_COMMAND_SIGIL) {
-            return Command::repl_command(trimmed);
-        }
-
-        // Check for empty input.
-        if trimmed.is_empty() {
-            return InputParse::Empty;
-        }
-
-        // Try to parse the input.
-        let source = Source::new(&self.db, input.to_string().S());
-        let parsed = datafun::parser::parse(&self.db, source);
-        let statements = parsed.statements(&self.db);
-
-        // Check if this is a Fun statement.
-        let has_fun = statements.iter().any(|s| matches!(s, datafun::ast::Statement::Fun(_)));
-
-        if has_fun {
-            // Function statement. Check if it's complete (has "end fun").
-            let has_end_fun = self.check_has_end_fun(input);
-
-            if has_end_fun {
-                // Complete function statement.
-                return Command::script_statement(input);
-            } else {
-                // Incomplete function statement. Needs more input.
-                return InputParse::ReadMultiline;
-            }
-        } else {
-            // Not a function statement, return it directly.
-            return Command::script_statement(trimmed);
+        match input {
+            Input::Input(s) => self.parse_input_oneline(&s),
+            Input::Multiline(s) => self.parse_input_multiline(&s),
         }
     }
 
-    /// Check if the source text contains "end fun" using the lexer.
-    // fixme just do the full statement parse comeon.
-    fn check_has_end_fun(&self, source_text: &str) -> bool {
-        let source = Source::new(&self.db, source_text.to_string().S());
-        let chunk = bct::source_map::basic_source_map(&self.db, source);
-        let chunk_lex = bct::lexer::lex_chunk(&self.db, chunk);
-
-        // Filter out whitespace tokens to get just words and sigils.
-        let tokens: Vec<_> = chunk_lex.tokens(&self.db).iter()
-            .filter(|t| !matches!(t.kind(&self.db), bct::lexer::TokenKind::Whitespace))
-            .collect();
-
-        // Look for consecutive "end" and "fun" tokens.
-        for i in 0..tokens.len().saturating_sub(1) {
-            let t1 = tokens[i];
-            let t2 = tokens[i + 1];
-            if let (Some("end"), Some("fun")) = (t1.word_str(&self.db), t2.word_str(&self.db)) {
-                return true;
-            }
+    pub fn parse_input_oneline(&mut self, input: &str) -> InputParse {
+        match classify_input(input) {
+            InputKind::Whitespace => InputParse::Empty,
+            InputKind::ReplCommand => Command::repl_command(input),
+            InputKind::OnelineStatement => Command::script_statement(input),
+            InputKind::MultilineStatement => InputParse::ReadMultiline(S(input)),
+            InputKind::OpenBraceTree => InputParse::ReadMultiline(S(input)),
+            InputKind::Expression => todo!(),
         }
-        false
+    }
+
+    pub fn parse_input_multiline(&mut self, input: &str) -> InputParse {
+        match classify_input(input) {
+            InputKind::Whitespace => InputParse::Empty,
+            InputKind::ReplCommand => Command::repl_command(input),
+            InputKind::OnelineStatement => Command::script_statement(input),
+            InputKind::MultilineStatement => Command::script_statement(input),
+            InputKind::OpenBraceTree => todo!(),
+            InputKind::Expression => todo!(),
+        }
     }
 
     pub fn eval(&mut self, command: Command) -> Eval {
@@ -294,3 +261,49 @@ impl Engine {
         Ok(())
     }
 }
+
+enum InputKind {
+    Whitespace,
+    ReplCommand,
+    OnelineStatement,
+    MultilineStatement,
+    OpenBraceTree,
+    Expression,
+}
+
+fn classify_input(input: &str) -> InputKind {
+    let is_whitespace = input.chars().all(char::is_whitespace);
+    let is_repl_command = input.trim().starts_with(REPL_COMMAND_SIGIL);
+    let is_oneline_statement_keyword = parse_ident(input).map(|ident| match ident {
+        "let" => true,
+        _ => false
+    }).unwrap_or(false);
+    let is_multiline_statement_keyword = parse_ident(input).map(|ident| match ident {
+        "fun" => true,
+        _ => false
+    }).unwrap_or(false);
+    let is_open_brace_tree = false; // todo
+
+    if is_whitespace {
+        InputKind::Whitespace
+    } else if is_repl_command {
+        InputKind::ReplCommand
+    } else if is_oneline_statement_keyword {
+        InputKind::OnelineStatement
+    } else if is_multiline_statement_keyword {
+        InputKind::OnelineStatement
+    } else if is_open_brace_tree {
+        InputKind::OpenBraceTree
+    } else {
+        InputKind::Expression
+    }
+}
+
+fn parse_ident(input: &str) -> Option<&str> {
+    alphanumeric_prefix(input.trim())
+}
+
+fn alphanumeric_prefix(s: &str) -> Option<&str> {
+    s.find(|c: char| !c.is_alphanumeric())
+        .map(|pos| &s[..pos])
+} 

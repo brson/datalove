@@ -67,8 +67,8 @@ enum EntryStatus {
     Error,
     /// Request completed with empty input.
     Empty,
-    /// Read another line.
-    KeepReading,
+    /// Read a multiline input.
+    ReadMultiline,
 }
 
 impl HistoryEntry {
@@ -406,14 +406,14 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
                     ),
                 ]));
             }
-            EntryStatus::KeepReading => {
+            EntryStatus::ReadMultiline => {
                 lines.push(Line::from(vec![
                     ratatui::text::Span::styled(
                         "  → ",
                         Style::default().fg(Color::DarkGray),
                     ),
                     ratatui::text::Span::styled(
-                        "keep-reading",
+                        "read-multiline",
                         Style::default().fg(Color::DarkGray),
                     ),
                 ]));
@@ -564,16 +564,22 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 impl<E: ReplExecutor> App<E> {
     /// Submit input for async processing.
     pub fn handle_input(&mut self) {
+        // Don't submit if there's already a request in flight.
+        if self.has_pending_work() {
+            todo!(); // need to do something smart here
+        }
+
         let input_text = self.input_text();
 
         if input_text.is_empty() {
             return;
         }
 
-        // Don't submit if there's already a request in flight.
-        if self.has_pending_work() {
-            todo!(); // need to do something smart here
-        }
+        let input = if !self.multiline_mode {
+            repl::Input::Input(input_text.C())
+        } else {
+            repl::Input::Multiline(input_text.C())
+        };
 
         // Clear the textarea and reset multiline mode.
         self.textarea = TextArea::default();
@@ -584,11 +590,11 @@ impl<E: ReplExecutor> App<E> {
         self.next_id += 1;
 
         // Create a new history entry with pending status and request ID.
-        let entry = HistoryEntry::new(input_text.clone(), id);
+        let entry = HistoryEntry::new(input_text, id);
         self.history.push(entry);
 
         // Send request to executor.
-        self.executor.submit_parse_and_eval(id, repl::Input::Input(input_text));
+        self.executor.submit_parse_and_eval(id, input);
     }
 
     pub fn poll_results(&mut self) {
@@ -617,16 +623,16 @@ impl<E: ReplExecutor> App<E> {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Empty;
             }
-            repl::InputParse::ReadMultiline => {
+            repl::InputParse::ReadMultiline(input) => {
                 entry.parse_result = Some(parse);
-                entry.status = EntryStatus::KeepReading;
+                entry.status = EntryStatus::ReadMultiline;
 
-                // Restore input with newline and enter multiline mode.
-                let mut lines: Vec<String> = entry.input.lines().map(|s| s.to_string()).collect();
-                lines.push(String::new()); // Add empty second line.
+                assert!(!input.contains('\n'));
+                let lines = vec![
+                    input,
+                    String::new(),
+                ];
                 self.textarea = TextArea::from(lines);
-
-                // Move cursor to end of second line (which is empty, so start of line).
                 self.textarea.move_cursor(tui_textarea::CursorMove::Bottom);
 
                 self.multiline_mode = true;
