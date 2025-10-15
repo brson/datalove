@@ -66,7 +66,7 @@ fn worker_thread(
                 });
 
                 // Evaluate if we got a command.
-                if let repl::CommandParse::Command(command) = parse {
+                if let repl::InputParse::Command(command) = parse {
                     let eval = engine.eval(command);
                     let _ = tx.send(WorkerResponse::EvalResult { id, eval });
 

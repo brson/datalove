@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 /// Response from the worker/executor.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum WorkerResponse {
-    ParseResult { id: u64, parse: repl::CommandParse },
+    ParseResult { id: u64, parse: repl::InputParse },
     EvalResult { id: u64, eval: repl::Eval },
     EnvironmentUpdate { environment: Vec<(String, String)> },
 }

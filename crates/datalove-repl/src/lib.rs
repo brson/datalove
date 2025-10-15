@@ -27,7 +27,7 @@ pub enum ReplCommand {
 pub struct ScriptStatement(String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum CommandParse {
+pub enum InputParse {
     Empty,
     ReadMultiline,
     Command(Command),
@@ -49,22 +49,22 @@ pub struct Engine {
 }
 
 impl Command {
-    fn repl_command(command: &str) -> CommandParse {
+    fn repl_command(command: &str) -> InputParse {
         let command = command[1..].trim();
         let c = match command {
             "exit" => ReplCommand::Exit,
             "help" => ReplCommand::Help,
             _ => ReplCommand::Unknown,
         };
-        CommandParse::Command(Command::ReplCommand(c))
+        InputParse::Command(Command::ReplCommand(c))
     }
 
-    fn script_statement(command: &str) -> CommandParse {
+    fn script_statement(command: &str) -> InputParse {
         if command.trim().is_empty() {
-            return CommandParse::Empty;
+            return InputParse::Empty;
         }
 
-        CommandParse::Command(Command::ScriptStatement(
+        InputParse::Command(Command::ScriptStatement(
             ScriptStatement(command.to_string())
         ))
     }
@@ -80,7 +80,7 @@ impl Engine {
 
     /// Parse input and determine if we have a complete command.
     /// This is stateless - caller handles accumulation for multiline input.
-    pub fn parse_input(&mut self, input: &str) -> CommandParse {
+    pub fn parse_input(&mut self, input: &str) -> InputParse {
         let input = input.trim_end();
         let trimmed = input.trim();
 
@@ -91,7 +91,7 @@ impl Engine {
 
         // Check for empty input.
         if trimmed.is_empty() {
-            return CommandParse::Empty;
+            return InputParse::Empty;
         }
 
         // Try to parse the input.
@@ -111,7 +111,7 @@ impl Engine {
                 return Command::script_statement(input);
             } else {
                 // Incomplete function statement. Needs more input.
-                return CommandParse::ReadMultiline;
+                return InputParse::ReadMultiline;
             }
         } else {
             // Not a function statement, return it directly.
@@ -272,7 +272,7 @@ impl Engine {
         for line in contents.lines() {
             let parse_result = engine.parse_input(line);
             let eval_result = match &parse_result {
-                CommandParse::Command(cmd) => Some(engine.eval(cmd.clone())),
+                InputParse::Command(cmd) => Some(engine.eval(cmd.clone())),
                 _ => None,
             };
 

@@ -46,7 +46,7 @@ pub struct HistoryEntry {
     /// The input text submitted.
     input: String,
     /// Parse result if available.
-    parse_result: Option<repl::CommandParse>,
+    parse_result: Option<repl::InputParse>,
     /// Evaluation result if available.
     eval_result: Option<repl::Eval>,
     /// Entry status (lifecycle and outcome).
@@ -607,17 +607,17 @@ impl<E: ReplExecutor> App<E> {
         }
     }
 
-    fn handle_parse_result(&mut self, id: u64, parse: repl::CommandParse) {
+    fn handle_parse_result(&mut self, id: u64, parse: repl::InputParse) {
         let entry = self.history.last_mut().X();
 
         assert_eq!(entry.id, id);
 
         match parse.clone() {
-            repl::CommandParse::Empty => {
+            repl::InputParse::Empty => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Empty;
             }
-            repl::CommandParse::ReadMultiline => {
+            repl::InputParse::ReadMultiline => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::KeepReading;
 
@@ -631,7 +631,7 @@ impl<E: ReplExecutor> App<E> {
 
                 self.multiline_mode = true;
             }
-            repl::CommandParse::Command(command) => {
+            repl::InputParse::Command(command) => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Evaluating { command };
             }

@@ -30,7 +30,7 @@ impl ReplExecutor for BlockingExecutor {
         });
 
         // Evaluate if we got a command.
-        if let repl::CommandParse::Command(command) = parse {
+        if let repl::InputParse::Command(command) = parse {
             let eval = self.engine.eval(command);
             self.response_queue.push_back(WorkerResponse::EvalResult { id, eval });
 

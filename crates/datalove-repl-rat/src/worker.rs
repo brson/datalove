@@ -75,7 +75,7 @@ pub fn worker_main() -> Result<(), JsValue> {
         }
 
         // Evaluate if we got a command.
-        if let repl::CommandParse::Command(command) = parse {
+        if let repl::InputParse::Command(command) = parse {
             let eval = engine.eval(command);
             let eval_response = WorkerResponse::EvalResult {
                 id: request.id,

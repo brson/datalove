@@ -38,7 +38,7 @@ struct HistoryEntry {
     /// The input text submitted.
     input: String,
     /// Parse result if available.
-    parse_result: Option<repl::CommandParse>,
+    parse_result: Option<repl::InputParse>,
     /// Evaluation result if available.
     eval_result: Option<repl::Eval>,
 }
@@ -70,7 +70,7 @@ fn run_script(path: &Path) -> String {
         let parse_result = engine.parse_input(&input_to_parse);
 
         match parse_result {
-            repl::CommandParse::ReadMultiline => {
+            repl::InputParse::ReadMultiline => {
                 // Need more input. Start accumulating if we haven't already.
                 if multiline_buffer.is_empty() {
                     multiline_buffer.push(line.to_string());
@@ -87,7 +87,7 @@ fn run_script(path: &Path) -> String {
                 next_id += 1;
                 continue;
             }
-            repl::CommandParse::Empty => {
+            repl::InputParse::Empty => {
                 // Empty input, record it.
                 let entry = HistoryEntry {
                     id: next_id,
@@ -98,7 +98,7 @@ fn run_script(path: &Path) -> String {
                 history.push(entry);
                 next_id += 1;
             }
-            repl::CommandParse::Command(ref command) => {
+            repl::InputParse::Command(ref command) => {
                 // Got a complete command, evaluate it.
                 let eval_result = engine.eval(command.clone());
 
