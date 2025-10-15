@@ -112,12 +112,15 @@ A simple pure-functional language that feels like an imperative language,
 built on the datalit type system.
 †
 
+```
+fun increment(
+  accum: u64, amount: u8,
+): ?u64
+  ret accum + amount
+end fun
+```
 
-Datafun may be defined in modules or in scripts, as in a repl.
-
-todo
-
-Note that the Datalit type system has extremely nice properties that
+The Datalit type system has extremely nice properties that
 enable: pure functions, total comptime evaluation, full or partial memoization,
 undo/redo, rewind/replay, prolog-style choice points, backtracing, and multi-determinism;
 but these capabilities are surfaced with a familiar looking and feeling language -
