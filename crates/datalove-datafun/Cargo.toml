@@ -26,3 +26,8 @@ harness = false
 name = "tycheck_tests"
 path = "tests/tycheck_tests.rs"
 harness = false
+
+[[test]]
+name = "roundtrip_tests"
+path = "tests/roundtrip_tests.rs"
+harness = false
