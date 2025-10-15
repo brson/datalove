@@ -350,7 +350,6 @@ impl<'db> Parser<'db> {
     ) -> datalit::ast::TypeHintAndHeap<'db> {
         // For now, do simple type parsing inline without delegating
         // This avoids the issue of the datalit parser consuming too many tokens
-        // fixme
 
         // Heap sigils: @ for local, # for global.
         let heap = if self.peek_sigil(tokens, Sigil::At) {
