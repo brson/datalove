@@ -92,7 +92,7 @@ impl Engine {
         }
     }
 
-    pub fn parse_input_oneline(&mut self, input: &str) -> InputParse {
+    fn parse_input_oneline(&mut self, input: &str) -> InputParse {
         match classify_input(input) {
             InputKind::Whitespace => InputParse::Empty,
             InputKind::ReplCommand => Command::repl_command(input),
@@ -103,7 +103,7 @@ impl Engine {
         }
     }
 
-    pub fn parse_input_multiline(&mut self, input: &str) -> InputParse {
+    fn parse_input_multiline(&mut self, input: &str) -> InputParse {
         match classify_input(input) {
             InputKind::Whitespace => InputParse::Empty,
             InputKind::ReplCommand => Command::repl_command(input),
