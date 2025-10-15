@@ -69,10 +69,7 @@ impl<'db> TyDescTable<'db> {
                     size: 4,
                     align: 4,
                     type_info: rtdt::TyInfo {
-                        tuple: rtdt::TyInfoTuple {
-                            num_fields: 0,
-                            fields: std::ptr::null(),
-                        },
+                        nothing: rtdt::TyInfoNothing,
                     },
                 })
             }
@@ -133,8 +130,10 @@ impl<'db> TyDescTable<'db> {
             Type::AnonEnum(e) => self.create_enum_tydesc(&e.variants(self.db)),
             Type::NamedEnum(e) => self.create_enum_tydesc(&e.variants(self.db)),
             Type::List(l) => self.create_list_tydesc(l.element_type(self.db)),
+            Type::Map(m) => self.create_map_tydesc(m.key_type(self.db), m.value_type(self.db)),
+            Type::Set(s) => self.create_set_tydesc(s.element_type(self.db)),
             Type::Option(o) => self.create_option_tydesc(o.inner_type(self.db)),
-            _ => unimplemented!("TyDesc creation for composite types"),
+            Type::Result(r) => self.create_result_tydesc(r.inner_type(self.db)),
         }
     }
 
@@ -366,6 +365,79 @@ impl<'db> TyDescTable<'db> {
             align: layout.align,
             type_info: rtdt::TyInfo {
                 option: rtdt::TyInfoOption { inner_tydesc },
+            },
+        })
+    }
+
+    /// Create TyDesc for map.
+    fn create_map_tydesc(
+        &mut self,
+        key_type: TypeAndHeap<'db>,
+        value_type: TypeAndHeap<'db>,
+    ) -> Box<rtdt::TyDesc> {
+        // Recursively create TyDescs for key and value types.
+        let key_tydesc = self.get_or_create(key_type.ty(self.db));
+        let value_tydesc = self.get_or_create(value_type.ty(self.db));
+
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Map,
+            size: std::mem::size_of::<rtdt::Map>() as u32,
+            align: std::mem::align_of::<rtdt::Map>() as u32,
+            type_info: rtdt::TyInfo {
+                map: rtdt::TyInfoMap {
+                    key_tydesc,
+                    value_tydesc,
+                },
+            },
+        })
+    }
+
+    /// Create TyDesc for set.
+    fn create_set_tydesc(&mut self, element_type: TypeAndHeap<'db>) -> Box<rtdt::TyDesc> {
+        // Recursively create TyDesc for element type.
+        let element_tydesc = self.get_or_create(element_type.ty(self.db));
+
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Set,
+            size: std::mem::size_of::<rtdt::Set>() as u32,
+            align: std::mem::align_of::<rtdt::Set>() as u32,
+            type_info: rtdt::TyInfo {
+                set: rtdt::TyInfoSet {
+                    element_tydesc,
+                },
+            },
+        })
+    }
+
+    /// Create TyDesc for result.
+    fn create_result_tydesc(&mut self, inner_type: TypeAndHeap<'db>) -> Box<rtdt::TyDesc> {
+        // Recursively create TyDesc for inner type.
+        let inner_tydesc = self.get_or_create(inner_type.ty(self.db));
+
+        // Create temporary TyDesc to compute layout.
+        let temp_tydesc = rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Result,
+            size: 0,
+            align: 1,
+            type_info: rtdt::TyInfo {
+                result: rtdt::TyInfoResult {
+                    ok_tydesc: inner_tydesc,
+                },
+            },
+        };
+
+        // Compute layout.
+        let layout = unsafe { rtdt::layout::compute_result_layout(&temp_tydesc) };
+
+        // Create final TyDesc with computed layout.
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Result,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo {
+                result: rtdt::TyInfoResult {
+                    ok_tydesc: inner_tydesc,
+                },
             },
         })
     }
