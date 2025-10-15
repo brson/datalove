@@ -186,6 +186,7 @@ pub struct Option /* <T> */ {
 }
 
 #[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OptionTag {
     None = 1,
     Some = 2,
@@ -204,6 +205,7 @@ pub struct Result /* <T> */ {
 }
 
 #[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ResultTag {
     Ok = 1,
     Err = 2,

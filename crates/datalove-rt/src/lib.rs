@@ -11,6 +11,7 @@ pub use datalove_rtdt as rtdt;
 
 mod cmp;
 pub mod alloc;
+pub mod clone;
 
 /// A runtime handle. Needed for all calls.
 ///
@@ -20,6 +21,7 @@ pub type LocalRtHandle = *mut u8;
 
 /// A simple status code.
 #[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RtStatus {
     Ok = 1,
     Error = 2,
@@ -96,15 +98,14 @@ pub unsafe extern "C" fn dtlv_rti_mem_free_local(
 /// any needed buffers.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_clone_local(
-    _rt: LocalRtHandle,
+    rt: LocalRtHandle,
     value_in: *const u8,
     tydesc_in: *const rtdt::TyDesc,
     value_out: *mut u8,
 ) -> RtStatus {
-    assert!(!value_in.is_null());
-    assert!(!tydesc_in.is_null());
-    assert!(!value_out.is_null());
-    todo!()
+    unsafe {
+        clone::clone_value(rt, value_in, tydesc_in, value_out)
+    }
 }
 
 #[repr(u8)]
