@@ -54,13 +54,13 @@ impl Command {
     pub fn parse(command: &str) -> CommandParse {
         let command = command.trim();
         if command.chars().next() == Some(REPL_COMMAND_SIGIL) {
-            Self::parse_repl_command(command)
+            Self::repl_command(command)
         } else {
-            Self::parse_script_statement(command)
+            Self::script_statement(command)
         }
     }
 
-    pub fn parse_repl_command(command: &str) -> CommandParse {
+    fn repl_command(command: &str) -> CommandParse {
         let command = command[1..].trim();
         let c = match command {
             "exit" => ReplCommand::Exit,
@@ -70,7 +70,7 @@ impl Command {
         CommandParse::Command(Command::ReplCommand(c))
     }
 
-    pub fn parse_script_statement(command: &str) -> CommandParse {
+    fn script_statement(command: &str) -> CommandParse {
         if command.trim().is_empty() {
             return CommandParse::Empty;
         }
@@ -113,7 +113,7 @@ impl Engine {
 
             if has_fun && has_end_fun {
                 self.multiline_buffer.clear();
-                return Command::parse_script_statement(&complete);
+                return Command::script_statement(&complete);
             } else {
                 return CommandParse::ReadAnotherLine;
             }
@@ -124,7 +124,7 @@ impl Engine {
 
         // Check for REPL command.
         if trimmed.starts_with(REPL_COMMAND_SIGIL) {
-            return Command::parse_repl_command(trimmed);
+            return Command::repl_command(trimmed);
         }
 
         // Check for empty line.
@@ -146,7 +146,7 @@ impl Engine {
             return CommandParse::ReadAnotherLine;
         } else {
             // Not a function, return it (whether complete or error).
-            return Command::parse_script_statement(trimmed);
+            return Command::script_statement(trimmed);
         }
     }
 
