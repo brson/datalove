@@ -9,6 +9,12 @@ edition.workspace = true
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
+termcolor = "1.4.1"
 datalove-rt.path = "../datalove-rt"
 datalove-rtdt.path = "../datalove-rtdt"
 datalove-datalit.path = "../datalove-datalit"
+
+[[test]]
+name = "roundtrip_tests"
+path = "tests/roundtrip_tests.rs"
+harness = false

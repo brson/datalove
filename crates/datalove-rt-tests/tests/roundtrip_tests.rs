@@ -1,0 +1,313 @@
+use rmx::prelude::*;
+use std::path::{Path, PathBuf};
+use std::io::Write;
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use datalove_datalit as datalit;
+use datalove_rt as rt;
+
+fn find_test_fixtures() -> Vec<PathBuf> {
+    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("roundtrip");
+
+    let mut fixtures = Vec::new();
+    if !fixtures_dir.exists() {
+        return fixtures;
+    }
+
+    for entry in std::fs::read_dir(&fixtures_dir).X() {
+        let entry = entry.X();
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("dlt") {
+            fixtures.push(path);
+        }
+    }
+
+    fixtures.sort();
+    fixtures
+}
+
+/// Compile and instantiate a datalit value.
+fn compile_and_instantiate<'db>(
+    db: &'db datalit::Database,
+    source_text: &str,
+) -> Result<(datalit::instantiate::TyDescTable<'db>, datalit::instantiate::ValueHeap, datalit::instantiate::InstantiatedValue<'static>), String> {
+    let source = bct::input::Source::new(db, source_text.S());
+    let parsed = datalit::parser::parse(db, source);
+    let resolved = datalit::resolve::resolve_names(db, parsed);
+    let typechecked = datalit::tycheck::type_check(db, parsed, resolved);
+
+    // Check if we have a root type.
+    if typechecked.root_type(db).is_none() {
+        return Err(format!("No root type for source: {}", source_text));
+    }
+
+    // Check for typecheck errors.
+    let errors = typechecked.errors(db);
+    if !errors.is_empty() {
+        return Err(format!("Type check errors: {} error(s)", errors.len()));
+    }
+
+    datalit::instantiate::instantiate_value(db, typechecked)
+        .map_err(|e| format!("Instantiation error: {}", e))
+}
+
+/// Pretty-print a runtime value to a string.
+fn rt_pretty_print(
+    value_ref: *const u8,
+    tydesc_ref: *const rt::rtdt::TyDesc,
+) -> Result<String, String> {
+    unsafe {
+        // Initialize runtime.
+        let rt_handle = rt::dtlv_rti_init();
+        if rt_handle.is_null() {
+            return Err("Failed to initialize runtime".to_string());
+        }
+
+        // Create string tydesc.
+        let string_tydesc = rt::rtdt::TyDesc {
+            type_tag: rt::rtdt::TyTag::String,
+            size: std::mem::size_of::<rt::rtdt::String>() as u32,
+            align: std::mem::align_of::<rt::rtdt::String>() as u32,
+            type_info: rt::rtdt::TyInfo {
+                nothing: rt::rtdt::TyInfoNothing,
+            },
+        };
+
+        // Create output string.
+        let mut output_string = std::mem::MaybeUninit::<rt::rtdt::String>::uninit();
+        let status = rt::dtlv_rti_string_create_local(
+            rt_handle,
+            output_string.as_mut_ptr() as *mut u8,
+            &string_tydesc,
+        );
+
+        if status != rt::RtStatus::Ok {
+            rt::dtlv_rti_shutdown(rt_handle);
+            return Err("Failed to create output string".to_string());
+        }
+
+        let mut output_string = output_string.assume_init();
+
+        // Pretty-print value.
+        let status = rt::dtlv_rti_pretty_print_local(
+            rt_handle,
+            value_ref,
+            tydesc_ref,
+            &mut output_string as *mut rt::rtdt::String as *mut u8,
+            &string_tydesc,
+        );
+
+        if status != rt::RtStatus::Ok {
+            rt::dtlv_rti_string_destroy_local(
+                rt_handle,
+                &mut output_string as *mut rt::rtdt::String as *mut u8,
+                &string_tydesc,
+            );
+            rt::dtlv_rti_shutdown(rt_handle);
+            return Err("Failed to pretty-print value".to_string());
+        }
+
+        // Extract string contents.
+        let result = if output_string.data.is_null() || output_string.size == 0 {
+            String::new()
+        } else {
+            let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
+            String::from_utf8_lossy(bytes).to_string()
+        };
+
+        // Cleanup.
+        rt::dtlv_rti_string_destroy_local(
+            rt_handle,
+            &mut output_string as *mut rt::rtdt::String as *mut u8,
+            &string_tydesc,
+        );
+        rt::dtlv_rti_shutdown(rt_handle);
+
+        Ok(result)
+    }
+}
+
+/// Round-trip test: parse -> instantiate -> rt pretty-print -> parse -> instantiate -> rt pretty-print.
+///
+/// Both pretty-prints should be identical.
+fn analyze_file(path: &Path) -> Result<String, String> {
+    let source_text = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // Step 1: Parse, type check, and instantiate the original datalit.
+    let db = datalit::Database::default();
+    let (_tydesc_table1, _value_heap1, inst1) = compile_and_instantiate(&db, &source_text)?;
+
+    // Step 2: Pretty-print using runtime pretty printer.
+    let pretty1 = rt_pretty_print(inst1.value, inst1.tydesc)?;
+
+    // Step 3: Parse, type check, and instantiate the pretty-printed output.
+    let (_tydesc_table2, _value_heap2, inst2) = compile_and_instantiate(&db, &pretty1)?;
+
+    // Step 4: Pretty-print again.
+    let pretty2 = rt_pretty_print(inst2.value, inst2.tydesc)?;
+
+    // Step 5: Check that both pretty-prints are identical.
+    if pretty1 != pretty2 {
+        return Err(format!(
+            "Pretty-prints differ:\nFirst:  {}\nSecond: {}",
+            pretty1, pretty2
+        ));
+    }
+
+    Ok(pretty1)
+}
+
+enum TestResult {
+    Passed,
+    Failed { expected: String, actual: String },
+    Blessed,
+    NoExpected,
+    Error(String),
+}
+
+fn run_test_case(dlt_path: &Path) -> TestResult {
+    let base_path = dlt_path.with_extension("");
+    let actual_path = PathBuf::from(format!("{}.out.actual", base_path.display()));
+    let expected_path = PathBuf::from(format!("{}.out.expected", base_path.display()));
+
+    let analysis = match analyze_file(dlt_path) {
+        Ok(result) => result,
+        Err(error) => return TestResult::Error(error),
+    };
+
+    std::fs::write(&actual_path, &analysis).X();
+
+    let bless = std::env::var("BLESS").is_ok();
+
+    if bless {
+        std::fs::copy(&actual_path, &expected_path).X();
+        TestResult::Blessed
+    } else if expected_path.exists() {
+        let expected = std::fs::read_to_string(&expected_path).X();
+        if analysis != expected {
+            TestResult::Failed { expected, actual: analysis }
+        } else {
+            TestResult::Passed
+        }
+    } else {
+        TestResult::NoExpected
+    }
+}
+
+fn main() {
+    let fixtures = find_test_fixtures();
+
+    if fixtures.is_empty() {
+        eprintln!("No test fixtures found in tests/fixtures/roundtrip/");
+        std::process::exit(1);
+    }
+
+    let mut stdout = StandardStream::stdout(ColorChoice::Auto);
+    let mut stderr = StandardStream::stderr(ColorChoice::Auto);
+
+    let mut passed = 0;
+    let mut failed = 0;
+    let mut blessed = 0;
+    let mut no_expected = 0;
+    let mut errors = 0;
+
+    for fixture in &fixtures {
+        let test_name = fixture.file_stem().X().to_str().X();
+        match run_test_case(fixture) {
+            TestResult::Passed => {
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true)).X();
+                write!(&mut stdout, "  PASS ").X();
+                stdout.reset().X();
+                writeln!(&mut stdout, " {}", test_name).X();
+                passed += 1;
+            }
+            TestResult::Failed { expected, actual } => {
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true)).X();
+                write!(&mut stdout, "  FAIL ").X();
+                stdout.reset().X();
+                writeln!(&mut stdout, " {}", test_name).X();
+
+                stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+                writeln!(&mut stderr, "\nExpected:").X();
+                stderr.reset().X();
+                writeln!(&mut stderr, "{}", expected).X();
+                stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+                writeln!(&mut stderr, "Actual:").X();
+                stderr.reset().X();
+                writeln!(&mut stderr, "{}", actual).X();
+                failed += 1;
+            }
+            TestResult::Blessed => {
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true)).X();
+                write!(&mut stdout, "  BLESS").X();
+                stdout.reset().X();
+                writeln!(&mut stdout, " {}", test_name).X();
+                blessed += 1;
+            }
+            TestResult::NoExpected => {
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true)).X();
+                write!(&mut stdout, "  WARN ").X();
+                stdout.reset().X();
+                writeln!(&mut stdout, " {} (no expected file)", test_name).X();
+                no_expected += 1;
+            }
+            TestResult::Error(error) => {
+                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true)).X();
+                write!(&mut stdout, "  ERROR").X();
+                stdout.reset().X();
+                writeln!(&mut stdout, " {}", test_name).X();
+
+                stderr.set_color(ColorSpec::new().set_fg(Some(Color::Red))).X();
+                writeln!(&mut stderr, "\nError:").X();
+                stderr.reset().X();
+                writeln!(&mut stderr, "{}", error).X();
+                errors += 1;
+            }
+        }
+    }
+
+    writeln!(&mut stdout).X();
+    write!(&mut stdout, "Results: ").X();
+
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).X();
+    write!(&mut stdout, "{} passed", passed).X();
+    stdout.reset().X();
+    write!(&mut stdout, ", ").X();
+
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).X();
+    write!(&mut stdout, "{} failed", failed).X();
+    stdout.reset().X();
+    write!(&mut stdout, ", ").X();
+
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).X();
+    write!(&mut stdout, "{} errors", errors).X();
+    stdout.reset().X();
+    write!(&mut stdout, ", ").X();
+
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan))).X();
+    write!(&mut stdout, "{} blessed", blessed).X();
+    stdout.reset().X();
+    write!(&mut stdout, ", ").X();
+
+    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+    write!(&mut stdout, "{} no expected", no_expected).X();
+    stdout.reset().X();
+    writeln!(&mut stdout).X();
+
+    if failed > 0 || errors > 0 {
+        stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+        writeln!(&mut stderr, "\nRun with BLESS=1 to update expected output.").X();
+        stderr.reset().X();
+        std::process::exit(1);
+    }
+
+    if no_expected > 0 {
+        stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).X();
+        writeln!(&mut stderr, "\nRun with BLESS=1 to create expected files.").X();
+        stderr.reset().X();
+        std::process::exit(1);
+    }
+}

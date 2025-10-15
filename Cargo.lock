@@ -1410,6 +1410,7 @@ dependencies = [
  "datalove-rtdt",
  "rustmax",
  "salsa",
+ "termcolor",
 ]
 
 [[package]]

@@ -84,9 +84,9 @@ unsafe fn pretty_bool(
     unsafe {
         let b = &*(value_ref as *const rtdt::Bool);
         if b.0 != 0 {
-            push_str(rt, string_mut, string_tydesc, b"true")
+            push_str(rt, string_mut, string_tydesc, b"@true")
         } else {
-            push_str(rt, string_mut, string_tydesc, b"false")
+            push_str(rt, string_mut, string_tydesc, b"@false")
         }
     }
 }
@@ -99,6 +99,7 @@ unsafe fn pretty_u32(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U32);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -112,6 +113,7 @@ unsafe fn pretty_f32(
 ) -> Result<(), ()> {
     unsafe {
         let f = &*(value_ref as *const rtdt::F32);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = if f.0.is_nan() {
             "nan".to_string()
         } else if f.0.is_infinite() {
@@ -147,7 +149,7 @@ unsafe fn pretty_string(
 ) -> Result<(), ()> {
     unsafe {
         let s = &*(value_ref as *const rtdt::String);
-        push_str(rt, string_mut, string_tydesc, b"\"")?;
+        push_str(rt, string_mut, string_tydesc, b"@\"")?;
         if !s.data.is_null() && s.size > 0 {
             let bytes = std::slice::from_raw_parts(s.data, s.size as usize);
             for &byte in bytes {
@@ -174,7 +176,7 @@ unsafe fn pretty_tuple(
 ) -> Result<(), ()> {
     unsafe {
         let info = &tydesc.type_info.tuple;
-        push_str(rt, string_mut, string_tydesc, b"(")?;
+        push_str(rt, string_mut, string_tydesc, b"@(")?;
 
         for i in 0..info.num_fields {
             if i > 0 {
@@ -201,7 +203,7 @@ unsafe fn pretty_struct(
 ) -> Result<(), ()> {
     unsafe {
         let info = &tydesc.type_info.struct_;
-        push_str(rt, string_mut, string_tydesc, b"{")?;
+        push_str(rt, string_mut, string_tydesc, b"@{")?;
 
         for i in 0..info.num_fields {
             if i > 0 {
@@ -244,7 +246,7 @@ unsafe fn pretty_enum(
         let variant = &*info.variants.add(discriminant as usize);
         let variant_name = std::slice::from_raw_parts(variant.name, variant.name_len as usize);
 
-        push_str(rt, string_mut, string_tydesc, b"enum ")?;
+        push_str(rt, string_mut, string_tydesc, b"@enum ")?;
         push_str(rt, string_mut, string_tydesc, variant_name)?;
 
         if !variant.payload.is_null() {
@@ -271,7 +273,7 @@ unsafe fn pretty_list(
         let info = &tydesc.type_info.list;
         let elem_tydesc = &*info.element_tydesc;
 
-        push_str(rt, string_mut, string_tydesc, b"[")?;
+        push_str(rt, string_mut, string_tydesc, b"@[")?;
 
         if !list.data.is_null() && list.size > 0 {
             for i in 0..list.size {
@@ -297,7 +299,7 @@ unsafe fn pretty_map(
 ) -> Result<(), ()> {
     // TODO: Implement map pretty printing.
     unsafe {
-        push_str(rt, string_mut, string_tydesc, b"map {}")
+        push_str(rt, string_mut, string_tydesc, b"@map {}")
     }
 }
 
@@ -310,7 +312,7 @@ unsafe fn pretty_set(
 ) -> Result<(), ()> {
     // TODO: Implement set pretty printing.
     unsafe {
-        push_str(rt, string_mut, string_tydesc, b"set {}")
+        push_str(rt, string_mut, string_tydesc, b"@set {}")
     }
 }
 
@@ -325,7 +327,7 @@ unsafe fn pretty_option(
         let option = &*(value_ref as *const rtdt::Option);
         match option.tag {
             rtdt::OptionTag::None => {
-                push_str(rt, string_mut, string_tydesc, b"none")
+                push_str(rt, string_mut, string_tydesc, b"@none")
             }
             rtdt::OptionTag::Some => {
                 let info = &tydesc.type_info.option;
@@ -507,7 +509,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "true");
+            assert_eq!(get_string_contents(&output_string), "@true");
 
             crate::string::string_destroy_local(
                 rt_handle,
@@ -545,7 +547,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "42");
+            assert_eq!(get_string_contents(&output_string), "@42");
 
             crate::string::string_destroy_local(
                 rt_handle,
@@ -583,7 +585,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "3.14");
+            assert_eq!(get_string_contents(&output_string), "@3.14");
 
             crate::string::string_destroy_local(
                 rt_handle,
@@ -631,7 +633,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "\"hello\"");
+            assert_eq!(get_string_contents(&output_string), "@\"hello\"");
 
             crate::string::string_destroy_local(
                 rt_handle,
@@ -684,7 +686,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "\"hello\\nworld\"");
+            assert_eq!(get_string_contents(&output_string), "@\"hello\\nworld\"");
 
             crate::string::string_destroy_local(
                 rt_handle,
