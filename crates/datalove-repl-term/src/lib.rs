@@ -13,12 +13,32 @@ use ratatui::{
     backend::CrosstermBackend,
     Terminal,
 };
-use std::io;
+use std::io::{self, Write};
+use std::fs::File;
+use std::path::PathBuf;
 
 const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
 
 /// Run the ratatui-based REPL.
 pub fn run() -> AnyResult<()> {
+    // Redirect stderr to a log file in temp directory to avoid corrupting terminal in raw mode.
+    let stderr_log_path = std::env::temp_dir().join("datalove-repl.stderr");
+    let stderr_file = File::create(&stderr_log_path)
+        .context("failed to create stderr log file")?;
+
+    // Redirect stderr using platform-specific dup2.
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+        // dup2 duplicates file descriptor to stderr (fd 2).
+        let result = unsafe {
+            libc::dup2(stderr_file.as_raw_fd(), 2)
+        };
+        if result == -1 {
+            bail!("failed to redirect stderr");
+        }
+    }
+
     // Setup terminal.
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -26,8 +46,8 @@ pub fn run() -> AnyResult<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create app and run it.
-    let mut app = datalove_repl_rat::App::new();
+    // Create app and run it, passing the stderr log path.
+    let mut app = datalove_repl_rat::App::new_with_stderr_log(stderr_log_path);
     let res = run_app(&mut terminal, &mut app);
 
     // Restore terminal.
@@ -116,7 +136,13 @@ fn handle_key_event<E: datalove_repl_rat::ReplExecutor>(
         return;
     }
 
-    if app.menu_is_open() {
+    if app.crash_modal_is_open() {
+        // Crash modal is open - wait for Enter to dismiss.
+        match key.code {
+            KeyCode::Enter => app.dismiss_crash_modal(),
+            _ => {}
+        }
+    } else if app.menu_is_open() {
         // Menu is open - handle menu navigation.
         match key.code {
             KeyCode::Up => app.menu_up(),

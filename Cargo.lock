@@ -1386,6 +1386,7 @@ dependencies = [
  "crossterm",
  "datalove-repl",
  "datalove-repl-rat",
+ "libc",
  "ratatui",
  "rustmax",
 ]

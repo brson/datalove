@@ -103,6 +103,10 @@ pub struct App<E: ReplExecutor> {
     menu_selection: usize,
     /// Whether to exit the app.
     should_exit: bool,
+    /// Crash modal state (contains crash message if open).
+    crash_modal: Option<String>,
+    /// Path to stderr log file (for displaying in crash modal).
+    stderr_log_path: Option<std::path::PathBuf>,
 }
 
 impl<E: ReplExecutor> App<E> {
@@ -119,6 +123,24 @@ impl<E: ReplExecutor> App<E> {
             menu_open: false,
             menu_selection: 0,
             should_exit: false,
+            crash_modal: None,
+            stderr_log_path: None,
+        }
+    }
+
+    pub fn with_executor_and_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
+        Self {
+            executor: E::new(),
+            next_id: 0,
+            textarea: TextArea::default(),
+            history: Vec::new(),
+            environment: Vec::new(),
+            multiline_mode: false,
+            menu_open: false,
+            menu_selection: 0,
+            should_exit: false,
+            crash_modal: None,
+            stderr_log_path: Some(stderr_log_path),
         }
     }
 
@@ -205,6 +227,14 @@ impl<E: ReplExecutor> App<E> {
         self.should_exit = val;
     }
 
+    pub fn crash_modal_is_open(&self) -> bool {
+        self.crash_modal.is_some()
+    }
+
+    pub fn dismiss_crash_modal(&mut self) {
+        self.crash_modal = None;
+    }
+
     /// Get the history entries for testing.
     pub fn history(&self) -> &[HistoryEntry] {
         &self.history
@@ -233,6 +263,11 @@ impl App<ThreadedExecutor> {
     /// Create a new app using the threaded executor (native platforms).
     pub fn new() -> Self {
         Self::with_executor()
+    }
+
+    /// Create a new app with stderr log path (for crash reporting).
+    pub fn new_with_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
+        Self::with_executor_and_stderr_log(stderr_log_path)
     }
 }
 
@@ -286,6 +321,11 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
     // Render menu if open.
     if app.menu_open {
         render_menu(f, app);
+    }
+
+    // Render crash modal if present (takes priority over menu).
+    if let Some(msg) = &app.crash_modal {
+        render_crash_modal(f, app, msg);
     }
 }
 
@@ -378,6 +418,18 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
                                     ]));
                                 }
                             }
+                        }
+                        repl::Eval::CrashReset(msg) => {
+                            lines.push(Line::from(vec![
+                                ratatui::text::Span::styled(
+                                    "  💥 ",
+                                    Style::default().fg(Color::Red),
+                                ),
+                                ratatui::text::Span::styled(
+                                    "crash reset",
+                                    Style::default().fg(Color::Red),
+                                ),
+                            ]));
                         }
                     }
                 }
@@ -540,6 +592,43 @@ pub fn render_menu<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
     f.render_widget(menu, area);
 }
 
+/// Render the crash modal popup.
+pub fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, app: &App<E>, msg: &str) {
+    let area = centered_rect(60, 40, f.area());
+
+    // Clear the background.
+    f.render_widget(Clear, area);
+
+    // Crash modal block.
+    let modal_block = Block::default()
+        .borders(Borders::ALL)
+        .title("💥 Engine Crash - Press Enter to Continue")
+        .style(Style::default().fg(Color::Red));
+
+    let mut lines = vec![
+        Line::from(""),
+        Line::from("The REPL engine encountered a panic and has been reset."),
+        Line::from("All history and environment has been cleared."),
+        Line::from(""),
+        Line::from("Crash details:"),
+        Line::from(""),
+        Line::from(msg).style(Style::default().fg(Color::Yellow)),
+    ];
+
+    // Add stderr log path if available.
+    if let Some(log_path) = &app.stderr_log_path {
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Full panic trace written to:"));
+        lines.push(Line::from(log_path.display().to_string()).style(Style::default().fg(Color::Cyan)));
+    }
+
+    let modal = Paragraph::new(lines)
+        .block(modal_block);
+
+    f.render_widget(modal, area);
+}
+
 /// Create a centered rectangle.
 pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
@@ -641,6 +730,18 @@ impl<E: ReplExecutor> App<E> {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Evaluating { command };
             }
+            repl::InputParse::CrashReset(msg) => {
+                // Engine crashed and reset during parse.
+                // Set the entry status before clearing history.
+                entry.parse_result = Some(parse);
+                entry.status = EntryStatus::Error;
+                // Drop the mutable reference to entry.
+                let _ = entry;
+                // Now we can clear history and set the modal.
+                self.history.clear();
+                self.environment.clear();
+                self.crash_modal = Some(msg);
+            }
         }
     }
 
@@ -660,6 +761,17 @@ impl<E: ReplExecutor> App<E> {
             }
             repl::Eval::CallerInterpret(cmd) => {
                 self.handle_caller_interpret(id, cmd);
+            }
+            repl::Eval::CrashReset(msg) => {
+                // Engine crashed and reset during eval.
+                // Set the entry status before clearing history.
+                entry.status = EntryStatus::Error;
+                // Drop the mutable reference to entry.
+                let _ = entry;
+                // Now we can clear history and set the modal.
+                self.history.clear();
+                self.environment.clear();
+                self.crash_modal = Some(msg.clone());
             }
         }
 

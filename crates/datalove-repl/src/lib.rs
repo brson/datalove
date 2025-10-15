@@ -21,6 +21,7 @@ pub enum InputParse {
     Empty,
     ReadMultiline(String),
     Command(Command),
+    CrashReset(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +46,7 @@ pub enum Eval {
     Nothing,
     Error(String),
     CallerInterpret(ReplCommand),
+    CrashReset(String),
 }
 
 pub struct Engine {
@@ -85,7 +87,34 @@ impl Engine {
         })
     }
 
+    /// Reset the engine to a clean state.
+    fn reset(&mut self) {
+        self.db = datafun::Database::default();
+        self.script = None;
+    }
+
     pub fn parse_input(&mut self, input: Input) -> InputParse {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.parse_input_impl(input.clone())
+        }));
+
+        match result {
+            Ok(parse_result) => parse_result,
+            Err(panic_info) => {
+                self.reset();
+                let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                InputParse::CrashReset(format!("Parse panic: {}", panic_msg))
+            }
+        }
+    }
+
+    fn parse_input_impl(&mut self, input: Input) -> InputParse {
         match input {
             Input::Input(s) => self.parse_input_oneline(&s),
             Input::Multiline(s) => self.parse_input_multiline(&s),
@@ -115,6 +144,27 @@ impl Engine {
     }
 
     pub fn eval(&mut self, command: Command) -> Eval {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.eval_impl(command.clone())
+        }));
+
+        match result {
+            Ok(eval_result) => eval_result,
+            Err(panic_info) => {
+                self.reset();
+                let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                Eval::CrashReset(format!("Eval panic: {}", panic_msg))
+            }
+        }
+    }
+
+    fn eval_impl(&mut self, command: Command) -> Eval {
         match command {
             Command::ReplCommand(command) => {
                 self.eval_repl_command(command)
