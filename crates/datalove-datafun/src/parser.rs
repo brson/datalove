@@ -69,7 +69,7 @@ fn parse_bracer<'db>(
 
             while let Some(token) = iter.next() {
                 match token {
-                    TreeToken::Token(t) if is_newline(db, t) => {
+                    TreeToken::Token(t) if is_line_separator(db, t) => {
                         found_newline = true;
                         break;
                     }
@@ -94,9 +94,14 @@ fn parse_bracer<'db>(
     ast::Script::new(db, statements)
 }
 
-fn is_newline<'db>(db: &'db dyn crate::Db, token: Token<'db>) -> bool {
-    matches!(token.kind(db), TokenKind::Whitespace) &&
-        token.text(db).as_str(db).contains("\n")
+/// Check if a token acts as a line separator.
+/// Line separators are newlines or semicolons.
+fn is_line_separator<'db>(db: &'db dyn crate::Db, token: Token<'db>) -> bool {
+    match token.kind(db) {
+        TokenKind::Whitespace => token.text(db).as_str(db).contains("\n"),
+        TokenKind::Sigil(Sigil::Semicolon) => true,
+        _ => false,
+    }
 }
 
 struct Parser<'db> {
@@ -1184,6 +1189,76 @@ mod tests {
                 }
             }
             _ => panic!("expected fun statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_multiple_statements_with_semicolon() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @1; let y = @2"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 2);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+            }
+            _ => panic!("expected let statement"),
+        }
+        match &statements[1] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "y");
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_semicolon_with_newline_mix() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @1; let y = @2\nlet z = @3"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 3);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+            }
+            _ => panic!("expected let statement"),
+        }
+        match &statements[1] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "y");
+            }
+            _ => panic!("expected let statement"),
+        }
+        match &statements[2] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "z");
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_require_with_semicolon() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("require module std; let x = @42"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 2);
+        match &statements[0] {
+            ast::Statement::Require(stmt) => {
+                assert_eq!(stmt.kind(db), ast::RequireKind::Module);
+                assert_eq!(stmt.name(db).as_str(db), "std");
+            }
+            _ => panic!("expected require statement"),
+        }
+        match &statements[1] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+            }
+            _ => panic!("expected let statement"),
         }
     }
 }

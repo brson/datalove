@@ -1,0 +1,69 @@
+{
+  "statements": [
+    {
+      "kind": "Let",
+      "name": "x",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "Datalit",
+          "value": {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "Let",
+      "name": "y",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "Datalit",
+          "value": {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Int": {
+                  "value": "2"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "Let",
+      "name": "z",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "BinOp",
+          "op": "Add",
+          "lhs": {
+            "expr": {
+              "kind": "Name",
+              "name": "x"
+            }
+          },
+          "rhs": {
+            "expr": {
+              "kind": "Name",
+              "name": "y"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

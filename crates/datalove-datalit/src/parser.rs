@@ -1331,3 +1331,29 @@ fn test_parse_enum_variant_with_extra_tokens_error() {
         _ => panic!("expected anonymous enum type hint"),
     }
 }
+
+#[test]
+fn test_parse_list_multiline() {
+    // Datalit parser doesn't split on newlines, but newlines in whitespace are fine.
+    let ref db = crate::Database::default();
+    let source = Source::new(db, S("@[\n@1,\n@2,\n@3\n]"));
+    let ast = parse(db, source);
+    let expr = ast.expr(db).expr(db);
+    match expr {
+        ast::Expr::List(e) => assert_eq!(e.elements(db).len(), 3),
+        _ => panic!("expected list"),
+    }
+}
+
+#[test]
+fn test_parse_tuple_multiline() {
+    // Datalit parser doesn't split on newlines, but newlines in whitespace are fine.
+    let ref db = crate::Database::default();
+    let source = Source::new(db, S("@(\n@true,\n@1\n)"));
+    let ast = parse(db, source);
+    let expr = ast.expr(db).expr(db);
+    match expr {
+        ast::Expr::AnonTuple(e) => assert_eq!(e.elements(db).len(), 2),
+        _ => panic!("expected tuple"),
+    }
+}

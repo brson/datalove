@@ -1,0 +1,81 @@
+{
+  "statements": [
+    {
+      "kind": "Require",
+      "kind": "Module",
+      "name": "std",
+      "type_hint": null
+    },
+    {
+      "kind": "Require",
+      "kind": "Data",
+      "name": "values",
+      "type_hint": null
+    },
+    {
+      "kind": "Let",
+      "name": "x",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "Datalit",
+          "value": {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Int": {
+                  "value": "42"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "Let",
+      "name": "y",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "Datalit",
+          "value": {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Int": {
+                  "value": "100"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "Let",
+      "name": "sum",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "BinOp",
+          "op": "AddChecked",
+          "lhs": {
+            "expr": {
+              "kind": "Name",
+              "name": "x"
+            }
+          },
+          "rhs": {
+            "expr": {
+              "kind": "Name",
+              "name": "y"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
