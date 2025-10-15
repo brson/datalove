@@ -13,6 +13,7 @@ mod cmp;
 pub mod alloc;
 pub mod clone;
 pub mod string;
+pub mod pretty;
 
 /// A runtime handle. Needed for all calls.
 ///
@@ -259,9 +260,11 @@ pub unsafe extern "C" fn dtlv_rti_pretty_print_local(
     arg_tydesc_ref: *const rtdt::TyDesc,
     // String previously allocated by string_create_local
     string_value_mut: *mut u8,
-    string_value_ref: *const rtdt::TyDesc,
+    string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        pretty::pretty_print_local(rt, arg_value_ref, arg_tydesc_ref, string_value_mut, string_tydesc)
+    }
 }
 
 
