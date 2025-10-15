@@ -28,8 +28,3 @@ termcolor = "1.4"
 crossterm = "0.28"
 ratatui = { version = "0.29", features = ["crossterm"] }
 datalove-repl-term.path = "../datalove-repl-term"
-
-[[test]]
-name = "repl_tests"
-path = "tests/repl_tests.rs"
-harness = false
