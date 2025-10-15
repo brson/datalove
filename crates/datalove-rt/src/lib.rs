@@ -12,6 +12,7 @@ pub use datalove_rtdt as rtdt;
 mod cmp;
 pub mod alloc;
 pub mod clone;
+pub mod string;
 
 /// A runtime handle. Needed for all calls.
 ///
@@ -210,7 +211,9 @@ pub unsafe extern "C" fn dtlv_rti_string_create_local(
     value_out: *mut u8,
     tydesc_in: *const rtdt::TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        string::string_create_local(rt, value_out, tydesc_in)
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -220,27 +223,33 @@ pub unsafe extern "C" fn dtlv_rti_string_destroy_local(
     value_in: *mut u8,
     tydesc_in: *const rtdt::TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        string::string_destroy_local(rt, value_in, tydesc_in)
+    }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_string_push_bytes_local(
     rt: LocalRtHandle,
     string_value_mut: *mut u8,
-    string_value_ref: *const rtdt::TyDesc,
+    string_tydesc: *const rtdt::TyDesc,
     bytes_ref: *const u8,
     bytes_len: u32,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        string::string_push_bytes_local(rt, string_value_mut, string_tydesc, bytes_ref, bytes_len)
+    }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_string_clear_local(
     rt: LocalRtHandle,
     string_value_mut: *mut u8,
-    string_value_ref: *const rtdt::TyDesc,
+    string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        string::string_clear_local(rt, string_value_mut, string_tydesc)
+    }
 }
 
 #[unsafe(no_mangle)]
