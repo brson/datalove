@@ -281,6 +281,29 @@ impl Value {
         }
     }
 
+    /// Get a mutable pointer to the value's data.
+    ///
+    /// This is used as the destination for clone operations.
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        match self {
+            Value::Bool(b) => b as *mut bool as *mut u8,
+            Value::U32(n) => n as *mut u32 as *mut u8,
+            Value::F32(f) => f as *mut f32 as *mut u8,
+            Value::Int { ptr, .. } => *ptr as *mut u8,
+            Value::String { ptr, .. } => *ptr as *mut u8,
+            Value::Tuple { ptr, .. } => *ptr,
+            Value::Struct { ptr, .. } => *ptr,
+            Value::Enum { ptr, .. } => *ptr,
+            Value::List { ptr, .. } => *ptr as *mut u8,
+            Value::Map { ptr, .. } => *ptr as *mut u8,
+            Value::Set { ptr, .. } => *ptr as *mut u8,
+            Value::Option { ptr, .. } => *ptr,
+            Value::Result { ptr, .. } => *ptr,
+            Value::Data { ptr, .. } => *ptr as *mut u8,
+            Value::Error { ptr, .. } => *ptr as *mut u8,
+        }
+    }
+
     /// Free this value using the runtime allocator.
     pub unsafe fn free(&mut self, rt: &mut rt::alloc::LocalRt) {
         match self {

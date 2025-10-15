@@ -30,16 +30,161 @@ fn eval_name<'db>(
     ctx: &mut InterpContext<'db>,
     name: bct::text::InternedText<'db>,
 ) -> InterpResult {
-    // Look up the variable.
-    ctx.lookup_variable(name)
-        .map(|v| {
-            // TODO: We need to clone the value here, but we don't have a
-            // proper clone implementation yet. For now, return an error.
+    use datalove_rt as rt;
+
+    // Look up the variable and extract the necessary information.
+    // We need to do this in two stages to avoid borrow checker issues.
+
+    // Stage 1: Determine the value type and extract ptr/tydesc if needed.
+    enum ValueCloneInfo {
+        Bool(bool),
+        U32(u32),
+        F32(f32),
+        HeapAllocated {
+            ptr: *const u8,
+            tydesc: *const datalove_rtdt::TyDesc,
+            kind: HeapValueKind,
+        },
+        Unimplemented,
+    }
+
+    #[derive(Debug)]
+    enum HeapValueKind {
+        Int,
+        String,
+        Tuple,
+        Struct,
+        Enum,
+        List,
+        Map,
+        Set,
+        Option,
+        Result,
+    }
+
+    let value_info = {
+        let value = ctx.lookup_variable(name)?;
+
+        match value {
+            Value::Bool(b) => ValueCloneInfo::Bool(*b),
+            Value::U32(n) => ValueCloneInfo::U32(*n),
+            Value::F32(f) => ValueCloneInfo::F32(*f),
+
+            Value::Int { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::Int,
+            },
+
+            Value::String { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::String,
+            },
+
+            Value::Tuple { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::Tuple,
+            },
+
+            Value::Struct { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::Struct,
+            },
+
+            Value::Enum { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::Enum,
+            },
+
+            Value::List { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::List,
+            },
+
+            Value::Map { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::Map,
+            },
+
+            Value::Set { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::Set,
+            },
+
+            Value::Option { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::Option,
+            },
+
+            Value::Result { ptr, tydesc } => ValueCloneInfo::HeapAllocated {
+                ptr: *ptr as *const u8,
+                tydesc: *tydesc,
+                kind: HeapValueKind::Result,
+            },
+
+            Value::Data { .. } | Value::Error { .. } => ValueCloneInfo::Unimplemented,
+        }
+    };
+
+    // Stage 2: Clone the value.
+    match value_info {
+        ValueCloneInfo::Bool(b) => Ok(Value::Bool(b)),
+        ValueCloneInfo::U32(n) => Ok(Value::U32(n)),
+        ValueCloneInfo::F32(f) => Ok(Value::F32(f)),
+
+        ValueCloneInfo::HeapAllocated { ptr, tydesc, kind } => {
+            // Allocate new value based on kind.
+            let mut new_value = unsafe {
+                match kind {
+                    HeapValueKind::Int => Value::alloc_int(&mut ctx.rt, tydesc),
+                    HeapValueKind::String => Value::alloc_string(&mut ctx.rt, tydesc),
+                    HeapValueKind::Tuple => Value::alloc_tuple(&mut ctx.rt, tydesc),
+                    HeapValueKind::Struct => Value::alloc_struct(&mut ctx.rt, tydesc),
+                    HeapValueKind::Enum => Value::alloc_enum(&mut ctx.rt, tydesc),
+                    HeapValueKind::List => Value::alloc_list(&mut ctx.rt, tydesc),
+                    HeapValueKind::Map => Value::alloc_map(&mut ctx.rt, tydesc),
+                    HeapValueKind::Set => Value::alloc_set(&mut ctx.rt, tydesc),
+                    HeapValueKind::Option => Value::alloc_option(&mut ctx.rt, tydesc),
+                    HeapValueKind::Result => Value::alloc_result(&mut ctx.rt, tydesc),
+                }
+            };
+
+            // Get handle to runtime.
+            let rt_handle = Box::as_mut(&mut ctx.rt) as *mut _ as rt::LocalRtHandle;
+
+            // Clone the value.
+            let status = unsafe {
+                rt::dtlv_rti_clone_local(
+                    rt_handle,
+                    ptr,
+                    tydesc,
+                    new_value.as_mut_ptr(),
+                )
+            };
+
+            if status != rt::RtStatus::Ok {
+                return Err(InterpError::RuntimeError(
+                    format!("Failed to clone {:?} value", kind),
+                ));
+            }
+
+            Ok(new_value)
+        }
+
+        ValueCloneInfo::Unimplemented => {
             Err(InterpError::NotImplemented(
-                "variable reference (value cloning)".to_string(),
+                "cloning Data/Error values".to_string(),
             ))
-        })
-        .unwrap_or_else(|e| Err(e))
+        }
+    }
 }
 
 /// Evaluate a binary operation.
@@ -316,5 +461,116 @@ fn eval_ne(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
         _ => Err(InterpError::TypeError(
             "Unsupported types for inequality".to_string(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::type_table::TypeTable;
+    use crate::tycheck::type_check;
+    use rmx::prelude::*;
+
+    #[test]
+    fn test_variable_reference_u32() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @42\nlet y = x"));
+        let script = crate::parser::parse(&db, source);
+
+        // Type check the script.
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        // Build type table.
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        // Create interpreter context.
+        let mut ctx = InterpContext::new(&db, type_table);
+
+        // Execute the script.
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        // Verify that y has the same value as x.
+        let x_name = bct::text::InternedText::new(&db, S("x"));
+        let y_name = bct::text::InternedText::new(&db, S("y"));
+
+        let x_value = ctx.lookup_variable(x_name).expect("x not found");
+        let y_value = ctx.lookup_variable(y_name).expect("y not found");
+
+        match (x_value, y_value) {
+            (Value::U32(x), Value::U32(y)) => {
+                assert_eq!(x, y, "x and y should have the same value");
+                assert_eq!(*x, 42);
+            }
+            _ => panic!("Expected U32 values for x and y"),
+        }
+    }
+
+    #[test]
+    fn test_variable_reference_in_expression() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @10\nlet y = x + @5"));
+        let script = crate::parser::parse(&db, source);
+
+        // Type check the script.
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        // Build type table.
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        // Create interpreter context.
+        let mut ctx = InterpContext::new(&db, type_table);
+
+        // Execute the script.
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        // Verify that y = x + 5 = 15.
+        let y_name = bct::text::InternedText::new(&db, S("y"));
+        let y_value = ctx.lookup_variable(y_name).expect("y not found");
+
+        match y_value {
+            Value::U32(y) => {
+                assert_eq!(*y, 15);
+            }
+            _ => panic!("Expected U32 value for y"),
+        }
+    }
+
+    #[test]
+    fn test_multiple_variable_references() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let a = @100\nlet b = a\nlet c = a + b"));
+        let script = crate::parser::parse(&db, source);
+
+        // Type check the script.
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        // Build type table.
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        // Create interpreter context.
+        let mut ctx = InterpContext::new(&db, type_table);
+
+        // Execute the script.
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        // Verify that c = a + b = 100 + 100 = 200.
+        let c_name = bct::text::InternedText::new(&db, S("c"));
+        let c_value = ctx.lookup_variable(c_name).expect("c not found");
+
+        match c_value {
+            Value::U32(c) => {
+                assert_eq!(*c, 200);
+            }
+            _ => panic!("Expected U32 value for c"),
+        }
     }
 }
