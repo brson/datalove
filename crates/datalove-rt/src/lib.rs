@@ -210,10 +210,10 @@ pub unsafe extern "C" fn dtlv_rti_string_create_local(
     rt: LocalRtHandle,
     // Destination will be overwritten.
     value_out: *mut u8,
-    tydesc_in: *const rtdt::TyDesc,
+    tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        string::string_create_local(rt, value_out, tydesc_in)
+        string::string_create_local(rt, value_out, tydesc)
     }
 }
 
@@ -222,10 +222,10 @@ pub unsafe extern "C" fn dtlv_rti_string_destroy_local(
     rt: LocalRtHandle,
     // Pointer will be freed.
     value_in: *mut u8,
-    tydesc_in: *const rtdt::TyDesc,
+    tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        string::string_destroy_local(rt, value_in, tydesc_in)
+        string::string_destroy_local(rt, value_in, tydesc)
     }
 }
 
@@ -267,6 +267,80 @@ pub unsafe extern "C" fn dtlv_rti_pretty_print_local(
     }
 }
 
+
+
+
+
+
+
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreemap_create_local(
+    rt: LocalRtHandle,
+    // Destination will be overwritten.
+    value_out: *mut u8,
+    // BTreeMap type.
+    tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        todo!()
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreemap_clone_from_slice_local(
+    rt: LocalRtHandle,
+    // Destination will be overwritten.
+    btreemap_value_out: *mut u8,
+    // BTreeMap type.
+    btreemap_tydesc: *const rtdt::TyDesc,
+    // Values will be cloned.
+    slice_ptr_ref: *const u8,
+    slice_ptr_len: u32,
+    slice_element_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        todo!()
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreemap_destroy_local(
+    rt: LocalRtHandle,
+    // Pointer will be freed.
+    value_in: *mut u8,
+    // BTreMap type.
+    tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        todo!()
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreemap_insert_local(
+    rt: LocalRtHandle,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    // Value is moved.
+    value_in: *mut u8,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        todo!()
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
+    rt: LocalRtHandle,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        todo!()
+    }
+}
 
 
 
