@@ -62,7 +62,7 @@ pub struct Engine {
 ///
 /// This creates Salsa input structs (Script, ScriptUnit, Source)
 /// which don't require being in a tracked function context.
-fn eval_script_statement_impl(
+fn prepare_new_script(
     db: &dyn datafun::Db,
     current_script: Option<datafun::script::Script>,
     source_text: String,
@@ -148,7 +148,7 @@ fn create_expression_script(
     let let_statement = format!("let {} = {}", temp_var, expression);
 
     // Create the new script with the let statement.
-    let new_script = eval_script_statement_impl(db, current_script, let_statement);
+    let new_script = prepare_new_script(db, current_script, let_statement);
 
     (new_script, temp_var)
 }
@@ -293,7 +293,7 @@ impl Engine {
         let db = &self.db;
 
         // Create the new script with the statement.
-        let new_script = eval_script_statement_impl(
+        let new_script = prepare_new_script(
             db,
             self.script,
             source_text,
