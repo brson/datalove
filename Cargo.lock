@@ -1337,6 +1337,7 @@ dependencies = [
  "rustmax",
  "serde",
  "serde_json",
+ "termcolor",
 ]
 
 [[package]]

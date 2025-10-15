@@ -1,0 +1,14 @@
+[
+  {
+    "id": 0,
+    "input": "/help",
+    "parse_result": {
+      "Command": {
+        "ReplCommand": "Help"
+      }
+    },
+    "eval_result": {
+      "CallerInterpret": "Help"
+    }
+  }
+]

@@ -301,20 +301,14 @@ impl Engine {
             .context("failed to read script file")?;
 
         for line in contents.lines() {
-            // Skip empty lines.
-            if line.trim().is_empty() {
-                continue;
-            }
-
-            let input = line.to_string();
-            let parse_result = Command::parse(&input);
+            let parse_result = engine.parse_line(line);
             let eval_result = match &parse_result {
                 CommandParse::Command(cmd) => Some(engine.eval(cmd.clone())),
                 _ => None,
             };
 
             let output = serde_json::json!({
-                "input": input,
+                "input": line,
                 "parse": parse_result,
                 "eval": eval_result,
             });
@@ -324,5 +318,4 @@ impl Engine {
 
         Ok(())
     }
-
 }

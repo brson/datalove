@@ -1,0 +1,18 @@
+[
+  {
+    "id": 0,
+    "input": "fun foo() = @42",
+    "parse_result": "ReadAnotherLine",
+    "eval_result": null
+  },
+  {
+    "id": 1,
+    "input": "end fun",
+    "parse_result": {
+      "Command": {
+        "ScriptStatement": "fun foo() = @42\nend fun"
+      }
+    },
+    "eval_result": "Nothing"
+  }
+]
