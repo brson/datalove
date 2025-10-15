@@ -202,6 +202,49 @@ pub unsafe extern "C" fn dtlv_rti_cmp_total(
 
 
 
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_string_create_local(
+    rt: LocalRtHandle,
+    // Destination will be overwritten.
+    value_out: *mut u8,
+    tydesc_in: *const rtdt::TyDesc,
+) -> RtStatus {
+    todo!()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_string_destroy_local(
+    rt: LocalRtHandle,
+    // Pointer will be freed.
+    value_in: *mut u8,
+    tydesc_in: *const rtdt::TyDesc,
+) -> RtStatus {
+    todo!()
+}
+
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_pretty_print_local(
+    rt: LocalRtHandle,
+    arg_value_ref: *const u8,
+    arg_tydesc_ref: *const rtdt::TyDesc,
+    // String previously allocated by string_create_local
+    string_value_mut: *mut u8,
+    string_value_ref: *const rtdt::TyDesc,
+) -> RtStatus {
+    todo!()
+}
+
+
+
+
+
+
+
+
+
+
 /// Hypothetical language-accessible runtime call.
 ///
 /// Note it's using ByRefArg and ReturnArg.
