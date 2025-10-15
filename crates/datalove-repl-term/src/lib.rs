@@ -132,12 +132,21 @@ fn handle_key_event<E: datalove_repl_rat::ReplExecutor>(
                 app.set_should_exit(true);
             }
             KeyCode::Enter => {
-                // In multiline mode, Shift+Enter inserts a newline, Enter submits.
-                // In single-line mode, Enter submits.
-                if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    app.handle_input_key(key);
+                // In single-line mode: Enter submits.
+                // In multiline mode: Enter inserts newline, Alt+Enter submits.
+                let is_multiline = app.multiline_mode();
+                let has_alt = key.modifiers.contains(KeyModifiers::ALT);
+
+                let should_submit = if is_multiline {
+                    has_alt  // In multiline: Alt+Enter submits
                 } else {
+                    true // In single-line: Enter submits
+                };
+
+                if should_submit {
                     app.submit_input();
+                } else {
+                    app.handle_input_key(key);
                 }
             }
             KeyCode::Esc => app.open_menu(),

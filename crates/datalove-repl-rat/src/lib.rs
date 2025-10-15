@@ -172,6 +172,10 @@ impl<E: ReplExecutor> App<E> {
         self.menu_open
     }
 
+    pub fn multiline_mode(&self) -> bool {
+        self.multiline_mode
+    }
+
     pub fn should_exit(&self) -> bool {
         self.should_exit
     }
@@ -428,7 +432,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
 /// Render the input panel with multiline indicators.
 fn render_input<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
     let title = if app.multiline_mode {
-        "Input [Shift+Enter]"
+        "Input [Alt+Enter to submit]"
     } else {
         "Input [Enter]"
     };
@@ -550,8 +554,9 @@ impl<E: ReplExecutor> App<E> {
             todo!(); // need to do something smart here
         }
 
-        // Clear the textarea.
+        // Clear the textarea and reset multiline mode.
         self.textarea = TextArea::default();
+        self.multiline_mode = false;
 
         // Assign a request ID.
         let id = self.next_id;
@@ -596,8 +601,13 @@ impl<E: ReplExecutor> App<E> {
                 entry.status = EntryStatus::KeepReading;
 
                 // Restore input with newline and enter multiline mode.
-                let restored_text = entry.input.C() + "\n";
-                self.textarea = TextArea::from(restored_text.lines().map(|s| s.to_string()));
+                let mut lines: Vec<String> = entry.input.lines().map(|s| s.to_string()).collect();
+                lines.push(String::new()); // Add empty second line.
+                self.textarea = TextArea::from(lines);
+
+                // Move cursor to end of second line (which is empty, so start of line).
+                self.textarea.move_cursor(tui_textarea::CursorMove::Bottom);
+
                 self.multiline_mode = true;
             }
             repl::CommandParse::Command(command) => {
