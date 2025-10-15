@@ -289,35 +289,36 @@ pub struct TyDesc {
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum TyTag {
-    Bool = 1,
-    U32 = 2,
-    F32 = 3,
-    Int = 4,
+    Bool = 0x01,
 
-    U8 = 5,
-    I8 = 6,
-    U16 = 7,
-    I16 = 8,
-    I32 = 9,
+    U8 = 0x10,
+    I8 = 0x11,
+    U16 = 0x12,
+    I16 = 0x13,
+    U32 = 0x14,
+    I32 = 0x15,
+    U64 = 0x16,
+    I64 = 0x17,
 
-    Tuple = 10,
-    Struct = 11,
-    Enum = 12,
+    F32 = 0x20,
+    F64 = 0x21,
 
-    List = 20,
-    String = 21,
-    Map = 22,
-    Set = 23,
+    Int = 0x30,
 
-    Option = 30,
-    Result = 31,
+    Tuple = 0x40,
+    Struct = 0x41,
+    Enum = 0x42,
 
-    Data = 40,
-    Error = 41,
+    List = 0x50,
+    String = 0x51,
+    Map = 0x52,
+    Set = 0x53,
 
-    U64 = 50,
-    I64 = 51,
-    F64 = 52,
+    Option = 0x60,
+    Result = 0x61,
+
+    Data = 0x70,
+    Error = 0x71,
 }
 
 #[repr(C)]
