@@ -112,7 +112,7 @@ A simple pure-functional language that feels like an imperative language,
 built on the datalit type system.
 †
 
-```
+```datalove
 fun increment(
   accum: int, amount: u8,
 ): int
@@ -123,7 +123,7 @@ end fun
 That's with bigints. Here's the one with fixed ints,
 handling that pesky overflow:
 
-```
+```datalove
 fun increment(
   accum: u64, amount: u8,
 ): ?u64
@@ -169,8 +169,9 @@ It is a simple language.
 
 
 
-## Features
 
+
+## Features
 
 
 ### A massive and battle-tested standard library.
@@ -200,51 +201,16 @@ like a dynamic scripting language.
 
 
 
+## Novelties
 
-## Datalove Literals
+- brace-tree and newline-sensitivity
+- reactive repl
+- linear types with explicit destructors
+- undo/redo, rewind/replay
+- virtualized I/O
+- zipper heaps
+- multi-determinism, choice-points, and logic programming
 
-For storage and transmission of structured and optionally typed data ala JSON.
-It is a subset of the expression language in Datalove Script.
-
-The types are all plain old data without cycles.
-We call these types "pure types",
-and if you understand these types you will understand most of the type system.
-
-Also known as "the data language",
-or "data expressions",
-since datalove script also has expressions
-with a superset syntax and types.
-
-Extension `.dlt`.
-
-See [`demo-data.dlt`] for an example.
-
-
-## Datalove Script
-
-The scripting language,
-dynamically and incrementally interpreted or compiled.
-Read-eval-print loop.
-Strongly typed with lightweight coercions.
-Task oriented, non-async, local heaps.
-Global heap can transfer ownership of plain-old-data.
-Additional pointer, GC/RC, I/O, and interior-mutable types.
-Distinct functions (plain-data, comptime)
-and procedures (I/O, interior mutation).
-Fast incremental whole-program compilation, no eval.
-Introspection and reflection.
-
-The syntax is a strict superset of Datalove Modules.
-Extension `.dls`.
-
-See [`demo-script.dls`] for an example.
-
-## Datalove Modules
-
-The syntax is a strict superset of Datalove Expressions.
-Extension `.dlm`.
-
-See [`demo-module.dlm`] for an example.
 
 
 ## Design notes
