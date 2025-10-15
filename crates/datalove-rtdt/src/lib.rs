@@ -88,17 +88,32 @@ pub struct Map {
     pub len: u32,
 }
 
-// B+tree node with variable-sized data following the fixed header.
-// Memory layout depends on node type:
-// - Internal nodes: n keys → n+1 child pointers
-// - Leaf nodes: n keys → n values (matching key-value pairs)
-// Arrays are not interleaved for cache locality and alignment efficiency.
+/// B-tree order parameter for Map nodes.
+///
+/// Following Rust's BTreeMap design with B = 6.
+pub const MAP_NODE_B: u32 = 6;
+
+/// Node capacity for Map nodes.
+///
+/// All Map nodes use this fixed capacity: CAPACITY = 2 * B - 1 = 11.
+/// Nodes allocate space for CAPACITY elements but only use `len` elements.
+pub const MAP_NODE_CAPACITY: u32 = 2 * MAP_NODE_B - 1;
+
+/// B+tree node with fixed-capacity variable-sized data following the fixed header.
+///
+/// Memory layout depends on node type:
+/// - Internal nodes: CAPACITY keys → CAPACITY+1 child pointers
+/// - Leaf nodes: CAPACITY keys → CAPACITY values (matching key-value pairs)
+///
+/// Arrays are not interleaved for cache locality and alignment efficiency.
+/// All nodes use MAP_NODE_CAPACITY = 11 elements.
 #[repr(C)]
 pub struct MapNode {
     pub tag: MapNodeTag,
+    pub len: u32,
     // Variable-sized data follows (use compute_map_*_node_layout to determine offsets):
-    // Internal: num_keys (u32), padding, keys[num_keys], padding, child_ptrs[num_keys+1]
-    // Leaf: num_keys (u32), next_leaf (*const MapNode), padding, keys[num_keys], padding, values[num_keys]
+    // Internal: padding, keys[CAPACITY], padding, child_ptrs[CAPACITY+1]
+    // Leaf: next_leaf (*const MapNode), padding, keys[CAPACITY], padding, values[CAPACITY]
 }
 
 #[repr(u8)]
@@ -113,17 +128,32 @@ pub struct Set {
     pub len: u32,
 }
 
-// B+tree node with variable-sized data following the fixed header.
-// Memory layout depends on node type:
-// - Internal nodes: n keys → n+1 child pointers
-// - Leaf nodes: n keys (set elements stored as keys)
-// Arrays are not interleaved for cache locality and alignment efficiency.
+/// B-tree order parameter for Set nodes.
+///
+/// Following Rust's BTreeMap design with B = 6.
+pub const SET_NODE_B: u32 = 6;
+
+/// Node capacity for Set nodes.
+///
+/// All Set nodes use this fixed capacity: CAPACITY = 2 * B - 1 = 11.
+/// Nodes allocate space for CAPACITY elements but only use `len` elements.
+pub const SET_NODE_CAPACITY: u32 = 2 * SET_NODE_B - 1;
+
+/// B+tree node with fixed-capacity variable-sized data following the fixed header.
+///
+/// Memory layout depends on node type:
+/// - Internal nodes: CAPACITY keys → CAPACITY+1 child pointers
+/// - Leaf nodes: CAPACITY keys (set elements stored as keys)
+///
+/// Arrays are not interleaved for cache locality and alignment efficiency.
+/// All nodes use SET_NODE_CAPACITY = 11 elements.
 #[repr(C)]
 pub struct SetNode {
     pub tag: SetNodeTag,
+    pub len: u32,
     // Variable-sized data follows (use compute_set_*_node_layout to determine offsets):
-    // Internal: num_keys (u32), padding, keys[num_keys], padding, child_ptrs[num_keys+1]
-    // Leaf: num_keys (u32), next_leaf (*const SetNode), padding, keys[num_keys]
+    // Internal: padding, keys[CAPACITY], padding, child_ptrs[CAPACITY+1]
+    // Leaf: next_leaf (*const SetNode), padding, keys[CAPACITY]
 }
 
 #[repr(u8)]
@@ -136,7 +166,6 @@ pub enum SetNodeTag {
 pub struct MapNodeInternalLayout {
     pub size: u32,
     pub align: u32,
-    pub num_keys_offset: u32,
     pub keys_offset: u32,
     pub child_ptrs_offset: u32,
 }
@@ -145,7 +174,6 @@ pub struct MapNodeInternalLayout {
 pub struct MapNodeLeafLayout {
     pub size: u32,
     pub align: u32,
-    pub num_keys_offset: u32,
     pub next_leaf_offset: u32,
     pub keys_offset: u32,
     pub values_offset: u32,
@@ -155,7 +183,6 @@ pub struct MapNodeLeafLayout {
 pub struct SetNodeInternalLayout {
     pub size: u32,
     pub align: u32,
-    pub num_keys_offset: u32,
     pub keys_offset: u32,
     pub child_ptrs_offset: u32,
 }
@@ -164,7 +191,6 @@ pub struct SetNodeInternalLayout {
 pub struct SetNodeLeafLayout {
     pub size: u32,
     pub align: u32,
-    pub num_keys_offset: u32,
     pub next_leaf_offset: u32,
     pub keys_offset: u32,
 }

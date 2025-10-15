@@ -268,21 +268,19 @@ pub unsafe fn compute_result_layout(tydesc: *const TyDesc) -> ResultLayout {
 ///
 /// Internal node layout:
 /// 1. tag (u8) - MapNodeTag::Internal
-/// 2. padding to align num_keys
-/// 3. num_keys (u32)
+/// 2. padding to align len
+/// 3. len (u32) - actual keys currently stored (0 <= len <= CAPACITY)
 /// 4. padding to align keys array
-/// 5. keys[num_keys] array
+/// 5. keys[CAPACITY] array - space for MAP_NODE_CAPACITY = 11 keys
 /// 6. padding to align child_ptrs array
-/// 7. child_ptrs[num_keys+1] array (one more child than keys)
+/// 7. child_ptrs[CAPACITY+1] array - 12 child pointers
 ///
 /// # Parameters
-/// - `num_keys`: Number of keys in this node
 /// - `key_tydesc`: Type descriptor for the key type
 ///
 /// # Safety
 /// The key_tydesc must point to a valid TyDesc.
 pub unsafe fn compute_map_internal_node_layout(
-    num_keys: u32,
     key_tydesc: *const TyDesc,
 ) -> MapNodeInternalLayout {
     unsafe {
@@ -296,21 +294,20 @@ pub unsafe fn compute_map_internal_node_layout(
         // Start after tag.
         let mut offset = tag_size;
 
-        // num_keys (u32) at 4-byte aligned offset.
+        // len (u32) at 4-byte aligned offset.
         offset = align_up(offset, 4);
-        let num_keys_offset = offset;
         offset += 4; // sizeof(u32)
 
         // keys array at key-aligned offset.
         offset = align_up(offset, key_align);
         let keys_offset = offset;
-        offset += key_size * num_keys;
+        offset += key_size * MAP_NODE_CAPACITY;
 
         // child_ptrs array at pointer-aligned offset.
-        // Internal nodes have num_keys+1 child pointers.
+        // Internal nodes have CAPACITY+1 child pointers.
         offset = align_up(offset, ptr_align);
         let child_ptrs_offset = offset;
-        offset += ptr_size * (num_keys + 1);
+        offset += ptr_size * (MAP_NODE_CAPACITY + 1);
 
         // Overall alignment is max of all components.
         let overall_align = 1u32.max(4).max(key_align).max(ptr_align);
@@ -321,7 +318,6 @@ pub unsafe fn compute_map_internal_node_layout(
         MapNodeInternalLayout {
             size: total_size,
             align: overall_align,
-            num_keys_offset,
             keys_offset,
             child_ptrs_offset,
         }
@@ -332,23 +328,21 @@ pub unsafe fn compute_map_internal_node_layout(
 ///
 /// Leaf node layout:
 /// 1. tag (u8) - MapNodeTag::Leaf
-/// 2. padding to align num_keys
-/// 3. num_keys (u32)
+/// 2. padding to align len
+/// 3. len (u32) - actual key-value pairs currently stored (0 <= len <= CAPACITY)
 /// 4. next_leaf (*const MapNode) - pointer to next leaf in chain
 /// 5. padding to align keys array
-/// 6. keys[num_keys] array
+/// 6. keys[CAPACITY] array - space for MAP_NODE_CAPACITY = 11 keys
 /// 7. padding to align values array
-/// 8. values[num_keys] array (matching key-value pairs)
+/// 8. values[CAPACITY] array - space for MAP_NODE_CAPACITY = 11 values
 ///
 /// # Parameters
-/// - `num_keys`: Number of key-value pairs in this node
 /// - `key_tydesc`: Type descriptor for the key type
 /// - `value_tydesc`: Type descriptor for the value type
 ///
 /// # Safety
 /// The key_tydesc and value_tydesc must point to valid TyDesc.
 pub unsafe fn compute_map_leaf_node_layout(
-    num_keys: u32,
     key_tydesc: *const TyDesc,
     value_tydesc: *const TyDesc,
 ) -> MapNodeLeafLayout {
@@ -365,9 +359,8 @@ pub unsafe fn compute_map_leaf_node_layout(
         // Start after tag.
         let mut offset = tag_size;
 
-        // num_keys (u32) at 4-byte aligned offset.
+        // len (u32) at 4-byte aligned offset.
         offset = align_up(offset, 4);
-        let num_keys_offset = offset;
         offset += 4; // sizeof(u32)
 
         // next_leaf pointer at pointer-aligned offset.
@@ -378,12 +371,12 @@ pub unsafe fn compute_map_leaf_node_layout(
         // keys array at key-aligned offset.
         offset = align_up(offset, key_align);
         let keys_offset = offset;
-        offset += key_size * num_keys;
+        offset += key_size * MAP_NODE_CAPACITY;
 
         // values array at value-aligned offset.
         offset = align_up(offset, value_align);
         let values_offset = offset;
-        offset += value_size * num_keys;
+        offset += value_size * MAP_NODE_CAPACITY;
 
         // Overall alignment is max of all components.
         let overall_align = 1u32.max(4).max(ptr_align).max(key_align).max(value_align);
@@ -394,7 +387,6 @@ pub unsafe fn compute_map_leaf_node_layout(
         MapNodeLeafLayout {
             size: total_size,
             align: overall_align,
-            num_keys_offset,
             next_leaf_offset,
             keys_offset,
             values_offset,
@@ -406,21 +398,19 @@ pub unsafe fn compute_map_leaf_node_layout(
 ///
 /// Internal node layout:
 /// 1. tag (u8) - SetNodeTag::Internal
-/// 2. padding to align num_keys
-/// 3. num_keys (u32)
+/// 2. padding to align len
+/// 3. len (u32) - actual keys currently stored (0 <= len <= CAPACITY)
 /// 4. padding to align keys array
-/// 5. keys[num_keys] array
+/// 5. keys[CAPACITY] array - space for SET_NODE_CAPACITY = 11 keys
 /// 6. padding to align child_ptrs array
-/// 7. child_ptrs[num_keys+1] array (one more child than keys)
+/// 7. child_ptrs[CAPACITY+1] array - 12 child pointers
 ///
 /// # Parameters
-/// - `num_keys`: Number of keys in this node
 /// - `key_tydesc`: Type descriptor for the element type
 ///
 /// # Safety
 /// The key_tydesc must point to a valid TyDesc.
 pub unsafe fn compute_set_internal_node_layout(
-    num_keys: u32,
     key_tydesc: *const TyDesc,
 ) -> SetNodeInternalLayout {
     unsafe {
@@ -434,21 +424,20 @@ pub unsafe fn compute_set_internal_node_layout(
         // Start after tag.
         let mut offset = tag_size;
 
-        // num_keys (u32) at 4-byte aligned offset.
+        // len (u32) at 4-byte aligned offset.
         offset = align_up(offset, 4);
-        let num_keys_offset = offset;
         offset += 4; // sizeof(u32)
 
         // keys array at key-aligned offset.
         offset = align_up(offset, key_align);
         let keys_offset = offset;
-        offset += key_size * num_keys;
+        offset += key_size * SET_NODE_CAPACITY;
 
         // child_ptrs array at pointer-aligned offset.
-        // Internal nodes have num_keys+1 child pointers.
+        // Internal nodes have CAPACITY+1 child pointers.
         offset = align_up(offset, ptr_align);
         let child_ptrs_offset = offset;
-        offset += ptr_size * (num_keys + 1);
+        offset += ptr_size * (SET_NODE_CAPACITY + 1);
 
         // Overall alignment is max of all components.
         let overall_align = 1u32.max(4).max(key_align).max(ptr_align);
@@ -459,7 +448,6 @@ pub unsafe fn compute_set_internal_node_layout(
         SetNodeInternalLayout {
             size: total_size,
             align: overall_align,
-            num_keys_offset,
             keys_offset,
             child_ptrs_offset,
         }
@@ -470,20 +458,18 @@ pub unsafe fn compute_set_internal_node_layout(
 ///
 /// Leaf node layout:
 /// 1. tag (u8) - SetNodeTag::Leaf
-/// 2. padding to align num_keys
-/// 3. num_keys (u32)
+/// 2. padding to align len
+/// 3. len (u32) - actual elements currently stored (0 <= len <= CAPACITY)
 /// 4. next_leaf (*const SetNode) - pointer to next leaf in chain
 /// 5. padding to align keys array
-/// 6. keys[num_keys] array (set elements stored as keys)
+/// 6. keys[CAPACITY] array - space for SET_NODE_CAPACITY = 11 keys (set elements)
 ///
 /// # Parameters
-/// - `num_keys`: Number of elements in this node
 /// - `key_tydesc`: Type descriptor for the element type
 ///
 /// # Safety
 /// The key_tydesc must point to a valid TyDesc.
 pub unsafe fn compute_set_leaf_node_layout(
-    num_keys: u32,
     key_tydesc: *const TyDesc,
 ) -> SetNodeLeafLayout {
     unsafe {
@@ -497,9 +483,8 @@ pub unsafe fn compute_set_leaf_node_layout(
         // Start after tag.
         let mut offset = tag_size;
 
-        // num_keys (u32) at 4-byte aligned offset.
+        // len (u32) at 4-byte aligned offset.
         offset = align_up(offset, 4);
-        let num_keys_offset = offset;
         offset += 4; // sizeof(u32)
 
         // next_leaf pointer at pointer-aligned offset.
@@ -510,7 +495,7 @@ pub unsafe fn compute_set_leaf_node_layout(
         // keys array at key-aligned offset.
         offset = align_up(offset, key_align);
         let keys_offset = offset;
-        offset += key_size * num_keys;
+        offset += key_size * SET_NODE_CAPACITY;
 
         // Overall alignment is max of all components.
         let overall_align = 1u32.max(4).max(ptr_align).max(key_align);
@@ -521,7 +506,6 @@ pub unsafe fn compute_set_leaf_node_layout(
         SetNodeLeafLayout {
             size: total_size,
             align: overall_align,
-            num_keys_offset,
             next_leaf_offset,
             keys_offset,
         }

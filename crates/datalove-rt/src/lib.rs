@@ -14,6 +14,7 @@ pub mod alloc;
 pub mod clone;
 pub mod string;
 pub mod pretty;
+pub mod btreemap;
 
 /// A runtime handle. Needed for all calls.
 ///
@@ -283,7 +284,12 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_create_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        todo!()
+        if rt.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        btreemap::btreemap_create_impl(rt_ref, value_out, tydesc)
     }
 }
 
@@ -300,7 +306,19 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clone_from_slice_local(
     slice_element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        todo!()
+        if rt.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        btreemap::btreemap_clone_from_slice_impl(
+            rt_ref,
+            btreemap_value_out,
+            btreemap_tydesc,
+            slice_ptr_ref,
+            slice_ptr_len,
+            slice_element_tydesc,
+        )
     }
 }
 
@@ -313,7 +331,12 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_destroy_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        todo!()
+        if rt.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        btreemap::btreemap_destroy_impl(rt_ref, value_in, tydesc)
     }
 }
 
@@ -327,7 +350,18 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_insert_local(
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        todo!()
+        if rt.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        btreemap::btreemap_insert_impl(
+            rt_ref,
+            btreemap_value_mut,
+            btreemap_tydesc,
+            value_in,
+            value_tydesc,
+        )
     }
 }
 
@@ -340,7 +374,18 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_remove_local(
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        todo!()
+        if rt.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        btreemap::btreemap_remove_impl(
+            rt_ref,
+            btreemap_value_mut,
+            btreemap_tydesc,
+            value_ref,
+            value_tydesc,
+        )
     }
 }
 
@@ -351,7 +396,12 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
     btreemap_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        todo!()
+        if rt.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        btreemap::btreemap_clear_impl(rt_ref, btreemap_value_mut, btreemap_tydesc)
     }
 }
 
