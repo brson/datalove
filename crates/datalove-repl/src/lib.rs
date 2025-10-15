@@ -49,15 +49,6 @@ pub struct Engine {
 }
 
 impl Command {
-    pub fn parse(command: &str) -> CommandParse {
-        let command = command.trim();
-        if command.chars().next() == Some(REPL_COMMAND_SIGIL) {
-            Self::repl_command(command)
-        } else {
-            Self::script_statement(command)
-        }
-    }
-
     fn repl_command(command: &str) -> CommandParse {
         let command = command[1..].trim();
         let c = match command {
