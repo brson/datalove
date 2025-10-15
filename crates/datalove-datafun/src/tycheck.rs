@@ -121,6 +121,26 @@ pub fn type_check<'db>(
     TypecheckResult::new(db, script, errors)
 }
 
+/// Look up the type of a variable after typechecking.
+///
+/// This re-runs typechecking to get the variable type.
+/// Since typechecking is memoized by Salsa, this is efficient.
+#[salsa::tracked]
+pub fn lookup_variable_type<'db>(
+    db: &'db dyn crate::Db,
+    script: Script<'db>,
+    name: InternedText<'db>,
+) -> Option<TypeAndHeap<'db>> {
+    let mut ctx = TypeContext::new(db);
+
+    // Type check each statement in order.
+    for statement in script.statements(db) {
+        check_statement(&mut ctx, statement);
+    }
+
+    ctx.lookup_variable(name)
+}
+
 /// Check a statement.
 fn check_statement<'db>(
     ctx: &mut TypeContext<'db>,
@@ -469,7 +489,7 @@ fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>)
 }
 
 /// Convert a type to a string for error messages.
-fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
+pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
     match ty {
         Type::Datalit(datalit_ty) => datalit::tycheck::type_to_string(db, datalit_ty),
         Type::Function(func) => {

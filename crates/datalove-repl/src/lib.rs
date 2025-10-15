@@ -43,8 +43,16 @@ pub enum ReplCommand {
 pub struct ScriptStatement(String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalLet {
+    pub name: String,
+    pub ty: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Eval {
     Nothing,
+    SuccessLet(EvalLet),
     Error(String),
     CallerInterpret(ReplCommand),
     CrashReset(String),
@@ -326,14 +334,53 @@ impl Engine {
         let let_resolution = datafun::resolution::resolve_let_statement(db, new_script, unit_index);
         //todo check resolution
 
-        // todo run typechecker
+        // Check if this is a let statement.
+        let is_let_stmt = statements.iter().any(|stmt| matches!(stmt, datafun::ast::Statement::Let(_)));
+
+        // Parse the full script for typechecking.
+        let parsed_script = parse_full_script(db, new_script);
+
+        // Type check the script.
+        let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
+        if !tycheck_result.errors(db).is_empty() {
+            let errors: Vec<_> = tycheck_result.errors(db)
+                .iter()
+                .map(|e| format!("{:?}", e.error(db)))
+                .collect();
+            return Eval::Error(format!("type error(s): {}", errors.join(", ")));
+        }
 
         // Execute the statement using the interpreter.
-        // The context is dropped after execution, which frees all values.
-        // For persistent state, we'd need to store the context or its components.
         let result = execute_with_interpreter_impl(db, new_script);
         match result {
-            Ok(_ctx) => Eval::Nothing,
+            Ok(mut ctx) => {
+                // If it's a let statement, extract and return structured info.
+                if is_let_stmt {
+                    if let Some(datafun::ast::Statement::Let(let_stmt)) = statements.first() {
+                        let name = let_stmt.name(db);
+                        let name_str = name.as_str(db).to_string();
+
+                        // Get the type from the typechecker.
+                        let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
+                            datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
+                        } else {
+                            "unknown".to_string()
+                        };
+
+                        // Get the value by pretty-printing.
+                        let value_str = ctx.pretty_print_variable(name)
+                            .unwrap_or_else(|e| format!("error: {:?}", e));
+
+                        return Eval::SuccessLet(EvalLet {
+                            name: name_str,
+                            ty: ty_str,
+                            value: value_str,
+                        });
+                    }
+                }
+
+                Eval::Nothing
+            }
             Err(e) => Eval::Error(format!("execution error: {:?}", e)),
         }
     }
@@ -502,10 +549,12 @@ mod tests {
             InputParse::Command(cmd) => {
                 let eval_result = engine.eval(cmd);
                 match eval_result {
-                    Eval::Nothing => {
+                    Eval::SuccessLet(eval_let) => {
                         // Success - the statement was executed.
+                        assert_eq!(eval_let.name, "x");
+                        assert!(eval_let.value.contains("42"));
                     }
-                    other => panic!("Expected Eval::Nothing, got {:?}", other),
+                    other => panic!("Expected Eval::SuccessLet, got {:?}", other),
                 }
             }
             other => panic!("Expected Command, got {:?}", other),
@@ -528,7 +577,9 @@ mod tests {
         let parse_result = engine.parse_input(Input::Input("let x = @42".to_string()));
         match parse_result {
             InputParse::Command(cmd) => {
-                engine.eval(cmd);
+                let eval_result = engine.eval(cmd);
+                // Should return SuccessLet for let statement.
+                assert!(matches!(eval_result, Eval::SuccessLet(_)));
             }
             _ => panic!("Expected Command"),
         }
@@ -562,7 +613,9 @@ mod tests {
         let parse_result = engine.parse_input(Input::Input("let x = 10".to_string()));
         match parse_result {
             InputParse::Command(cmd) => {
-                engine.eval(cmd);
+                let eval_result = engine.eval(cmd);
+                // Should return SuccessLet for let statement.
+                assert!(matches!(eval_result, Eval::SuccessLet(_)));
             }
             _ => panic!("Expected Command"),
         }
