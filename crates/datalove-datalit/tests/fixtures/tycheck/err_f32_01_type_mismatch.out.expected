@@ -1,0 +1,20 @@
+{
+  "ast": {
+    "expr": {
+      "expr": "True",
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "F32"
+    }
+  },
+  "errors": [
+    {
+      "actual": "bool",
+      "expected": "f32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

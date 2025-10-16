@@ -1,0 +1,18 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Float": {
+          "value": "0.0"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "F32"
+    }
+  },
+  "errors": [],
+  "root_type": "@f32"
+}
