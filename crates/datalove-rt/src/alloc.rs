@@ -32,7 +32,8 @@ impl LeakCheckMode {
         match std::env::var("DATALOVE_LEAK_CHECK").as_deref() {
             Ok("warn") => LeakCheckMode::Warn,
             Ok("panic") => LeakCheckMode::Panic,
-            _ => LeakCheckMode::Ignore,
+            Ok("ignore") => LeakCheckMode::Panic,
+            _ => LeakCheckMode::Panic,
         }
     }
 }
