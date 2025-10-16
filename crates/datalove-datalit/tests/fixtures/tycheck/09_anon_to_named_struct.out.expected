@@ -2,8 +2,37 @@
   "ast": {
     "expr": {
       "expr": {
-        "ParseError": {
-          "message": "expected heap sigil @ or # before expression"
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "x",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "name": "y",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            }
+          ]
         }
       },
       "heap": "Omitted"
@@ -33,10 +62,20 @@
       }
     }
   },
-  "errors": [
-    {
-      "kind": "CannotSynthesize"
-    }
-  ],
-  "root_type": null
+  "errors": [],
+  "root_type": {
+    "fields": [
+      {
+        "name": "x",
+        "type": "@u32"
+      },
+      {
+        "name": "y",
+        "type": "@u32"
+      }
+    ],
+    "heap": "@",
+    "kind": "NamedStruct",
+    "name": "Point"
+  }
 }
