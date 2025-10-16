@@ -15,6 +15,7 @@ pub mod clone;
 pub mod string;
 pub mod pretty;
 pub mod btreemap;
+pub mod destroy;
 
 /// A runtime handle. Needed for all calls.
 ///
@@ -201,6 +202,22 @@ pub unsafe extern "C" fn dtlv_rti_cmp_total(
         cmp::cmp_total(value_a, tydesc_a, value_b, tydesc_b)
     }
 }
+
+
+
+
+/// Destroys any type of value, freeing allocations recursively.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_any_destroy_local(
+    rt: LocalRtHandle,
+    value_in: *mut u8,
+    tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        destroy::any_destroy_local(rt, value_in, tydesc)
+    }
+}
+
 
 
 
