@@ -5,6 +5,7 @@
 
 use rmx::prelude::*;
 use std::ptr;
+use std::collections::HashMap;
 
 /// Size of a memory page (4KB).
 const PAGE_SIZE: usize = 4096;
@@ -13,6 +14,28 @@ const PAGE_SIZE: usize = 4096;
 const SIZE_CLASSES: &[usize] = &[8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const MAX_SMALL_SIZE: usize = 4096;
 const NUM_SIZE_CLASSES: usize = SIZE_CLASSES.len();
+
+/// Leak detection mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeakCheckMode {
+    /// Silent cleanup, no leak detection.
+    Ignore,
+    /// Print leak warnings to stderr.
+    Warn,
+    /// Panic on detected leaks.
+    Panic,
+}
+
+impl LeakCheckMode {
+    /// Read leak check mode from environment variable.
+    fn from_env() -> Self {
+        match std::env::var("DATALOVE_LEAK_CHECK").as_deref() {
+            Ok("warn") => LeakCheckMode::Warn,
+            Ok("panic") => LeakCheckMode::Panic,
+            _ => LeakCheckMode::Ignore,
+        }
+    }
+}
 
 // ============================================================================
 // Unix (non-wasm32) implementation using mmap
@@ -42,6 +65,10 @@ mod unix_impl {
         small_pages: Vec<Page>,
         /// Large allocations (each is its own mmap).
         large_pages: Vec<Page>,
+        /// Active allocations for leak detection: ptr -> (size, align, count).
+        active_allocations: HashMap<*mut u8, (u32, u32, u32)>,
+        /// Leak detection mode.
+        leak_check_mode: LeakCheckMode,
     }
 
     impl LocalRt {
@@ -50,6 +77,18 @@ mod unix_impl {
                 free_lists: [ptr::null_mut(); NUM_SIZE_CLASSES],
                 small_pages: Vec::new(),
                 large_pages: Vec::new(),
+                active_allocations: HashMap::new(),
+                leak_check_mode: LeakCheckMode::from_env(),
+            })
+        }
+
+        pub fn with_leak_check_mode(mode: LeakCheckMode) -> Box<LocalRt> {
+            Box::new(LocalRt {
+                free_lists: [ptr::null_mut(); NUM_SIZE_CLASSES],
+                small_pages: Vec::new(),
+                large_pages: Vec::new(),
+                active_allocations: HashMap::new(),
+                leak_check_mode: mode,
             })
         }
 
@@ -61,11 +100,18 @@ mod unix_impl {
             let align = align.max(std::mem::align_of::<*mut u8>() as u32) as usize;
 
             unsafe {
-                if total_size > MAX_SMALL_SIZE {
+                let ptr = if total_size > MAX_SMALL_SIZE {
                     self.alloc_large(total_size, align)
                 } else {
                     self.alloc_small(total_size, align)
+                };
+
+                // Track allocation for leak detection.
+                if !ptr.is_null() {
+                    self.active_allocations.insert(ptr, (size, align as u32, count));
                 }
+
+                ptr
             }
         }
 
@@ -79,6 +125,32 @@ mod unix_impl {
                 .expect("deallocation size overflow");
 
             let align = align.max(std::mem::align_of::<*mut u8>() as u32) as usize;
+
+            // Remove from tracking and optionally validate.
+            if let Some((tracked_size, tracked_align, tracked_count)) = self.active_allocations.remove(&ptr) {
+                // Validate parameters match (in warn/panic modes).
+                if self.leak_check_mode != LeakCheckMode::Ignore {
+                    if tracked_size != size || tracked_align != align as u32 || tracked_count != count {
+                        let msg = format!(
+                            "free() parameter mismatch: ptr={:p}, expected (size={}, align={}, count={}), got (size={}, align={}, count={})",
+                            ptr, tracked_size, tracked_align, tracked_count, size, align, count
+                        );
+                        match self.leak_check_mode {
+                            LeakCheckMode::Warn => eprintln!("WARNING: {}", msg),
+                            LeakCheckMode::Panic => panic!("{}", msg),
+                            LeakCheckMode::Ignore => {}
+                        }
+                    }
+                }
+            } else if self.leak_check_mode != LeakCheckMode::Ignore {
+                // Pointer not found in tracking - possible double-free or invalid pointer.
+                let msg = format!("free() called on untracked pointer: {:p}", ptr);
+                match self.leak_check_mode {
+                    LeakCheckMode::Warn => eprintln!("WARNING: {}", msg),
+                    LeakCheckMode::Panic => panic!("{}", msg),
+                    LeakCheckMode::Ignore => {}
+                }
+            }
 
             unsafe {
                 if total_size > MAX_SMALL_SIZE {
@@ -213,6 +285,49 @@ mod unix_impl {
         }
 
         pub unsafe fn shutdown(mut self: Box<Self>) {
+            // Check for leaks before cleanup.
+            if !self.active_allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
+                let leaked_count = self.active_allocations.len();
+                let leaked_bytes: usize = self.active_allocations
+                    .values()
+                    .map(|(size, _align, count)| (*size as usize) * (*count as usize))
+                    .sum();
+
+                let report = format!(
+                    "\nDATALOVE RUNTIME LEAK DETECTED\n\
+                     ==============================\n\
+                     Leaked allocations: {}\n\
+                     Total leaked bytes: {}\n\n\
+                     Details:",
+                    leaked_count, leaked_bytes
+                );
+
+                let mut details = String::new();
+                for (ptr, (size, align, count)) in self.active_allocations.iter().take(10) {
+                    let bytes = (*size as usize) * (*count as usize);
+                    details.push_str(&format!(
+                        "\n  {:p} : size={}, align={}, count={} ({} bytes)",
+                        ptr, size, align, count, bytes
+                    ));
+                }
+
+                if self.active_allocations.len() > 10 {
+                    details.push_str(&format!("\n  ... and {} more", self.active_allocations.len() - 10));
+                }
+
+                let full_report = format!("{}{}\n", report, details);
+
+                match self.leak_check_mode {
+                    LeakCheckMode::Warn => {
+                        eprintln!("{}", full_report);
+                    }
+                    LeakCheckMode::Panic => {
+                        panic!("{}", full_report);
+                    }
+                    LeakCheckMode::Ignore => {}
+                }
+            }
+
             unsafe {
                 for page in self.small_pages.drain(..) {
                     let result = libc::munmap(page.ptr as *mut libc::c_void, page.size);
@@ -265,12 +380,21 @@ mod wasm_impl {
     /// Runtime state for the wasm32 allocator.
     pub struct LocalRt {
         allocations: Vec<Allocation>,
+        leak_check_mode: LeakCheckMode,
     }
 
     impl LocalRt {
         pub fn new() -> Box<LocalRt> {
             Box::new(LocalRt {
                 allocations: Vec::new(),
+                leak_check_mode: LeakCheckMode::from_env(),
+            })
+        }
+
+        pub fn with_leak_check_mode(mode: LeakCheckMode) -> Box<LocalRt> {
+            Box::new(LocalRt {
+                allocations: Vec::new(),
+                leak_check_mode: mode,
             })
         }
 
@@ -316,6 +440,48 @@ mod wasm_impl {
         }
 
         pub unsafe fn shutdown(mut self: Box<Self>) {
+            // Check for leaks before cleanup.
+            if !self.allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
+                let leaked_count = self.allocations.len();
+                let leaked_bytes: usize = self.allocations
+                    .iter()
+                    .map(|a| a.layout.size())
+                    .sum();
+
+                let report = format!(
+                    "\nDATALOVE RUNTIME LEAK DETECTED\n\
+                     ==============================\n\
+                     Leaked allocations: {}\n\
+                     Total leaked bytes: {}\n\n\
+                     Details:",
+                    leaked_count, leaked_bytes
+                );
+
+                let mut details = String::new();
+                for alloc in self.allocations.iter().take(10) {
+                    details.push_str(&format!(
+                        "\n  {:p} : size={}, align={}",
+                        alloc.ptr, alloc.layout.size(), alloc.layout.align()
+                    ));
+                }
+
+                if self.allocations.len() > 10 {
+                    details.push_str(&format!("\n  ... and {} more", self.allocations.len() - 10));
+                }
+
+                let full_report = format!("{}{}\n", report, details);
+
+                match self.leak_check_mode {
+                    LeakCheckMode::Warn => {
+                        eprintln!("{}", full_report);
+                    }
+                    LeakCheckMode::Panic => {
+                        panic!("{}", full_report);
+                    }
+                    LeakCheckMode::Ignore => {}
+                }
+            }
+
             // Clean up any remaining allocations.
             for alloc in self.allocations.drain(..) {
                 unsafe {
@@ -593,7 +759,8 @@ mod tests {
 
     #[test]
     fn test_shutdown_cleanup() {
-        let mut rt = LocalRt::new();
+        // This test intentionally leaks to verify shutdown cleanup.
+        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Ignore);
         unsafe {
             let _small1 = rt.alloc(128, 8, 1);
             let _small2 = rt.alloc(256, 8, 1);
@@ -789,6 +956,90 @@ mod tests {
                 }
 
                 rt.shutdown();
+            }
+        }
+    }
+
+    // Leak detection tests.
+
+    #[test]
+    fn test_leak_detection_ignore_mode() {
+        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Ignore);
+        unsafe {
+            let _leak1 = rt.alloc(128, 8, 1);
+            let _leak2 = rt.alloc(256, 8, 1);
+
+            // Should not panic in Ignore mode.
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "DATALOVE RUNTIME LEAK DETECTED")]
+    fn test_leak_detection_panic_mode_small() {
+        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let _leak = rt.alloc(128, 8, 1);
+            rt.shutdown(); // Should panic.
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "DATALOVE RUNTIME LEAK DETECTED")]
+    fn test_leak_detection_panic_mode_large() {
+        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let _leak = rt.alloc(8192, 16, 1);
+            rt.shutdown(); // Should panic.
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "DATALOVE RUNTIME LEAK DETECTED")]
+    fn test_leak_detection_panic_mode_multiple() {
+        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let _leak1 = rt.alloc(128, 8, 1);
+            let _leak2 = rt.alloc(256, 8, 1);
+            let _leak3 = rt.alloc(8192, 16, 1);
+            rt.shutdown(); // Should panic with 3 leaks.
+        }
+    }
+
+    #[test]
+    fn test_no_leak_no_panic() {
+        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let ptr1 = rt.alloc(128, 8, 1);
+            let ptr2 = rt.alloc(256, 8, 1);
+            let ptr3 = rt.alloc(8192, 16, 1);
+
+            rt.free(128, 8, 1, ptr1);
+            rt.free(256, 8, 1, ptr2);
+            rt.free(8192, 16, 1, ptr3);
+
+            // Should not panic - all allocations freed.
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_leak_detection_counts_bytes_correctly() {
+        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let _leak1 = rt.alloc(100, 8, 1);  // 100 bytes.
+            let _leak2 = rt.alloc(50, 8, 2);   // 100 bytes.
+            let _leak3 = rt.alloc(25, 8, 4);   // 100 bytes.
+
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                rt.shutdown();
+            }));
+
+            assert!(result.is_err());
+            if let Err(e) = result {
+                let msg = e.downcast_ref::<String>().unwrap();
+                assert!(msg.contains("Total leaked bytes: 300"));
+                assert!(msg.contains("Leaked allocations: 3"));
             }
         }
     }
