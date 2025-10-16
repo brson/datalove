@@ -710,6 +710,71 @@ impl<'db> DynParser<'db> {
             Some("string") => { self.eat_word("string"); ast::TypeHint::String }
             Some("data") => { self.eat_word("data"); ast::TypeHint::Data }
             Some("error") => { self.eat_word("error"); ast::TypeHint::Error }
+            Some("map") => {
+                self.eat_word("map");
+                // Expect angle bracket with key and value types.
+                match self.peek() {
+                    Some(TreeToken::Branch(Sigil::AngleOpen, iter)) => {
+                        self.next(); // Consume the branch.
+                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                        let mut sub_parser = DynParser {
+                            db: self.db,
+                            tokens,
+                            pos: 0,
+                        };
+                        let key_type = sub_parser.parse_type_hint_and_heap();
+                        sub_parser.need_sigil(Sigil::Comma);
+                        let value_type = sub_parser.parse_type_hint_and_heap();
+                        ast::TypeHint::Map(ast::TypeHintMap::new(self.db, key_type, value_type))
+                    }
+                    _ => {
+                        let message = InternedText::new(self.db, "expected <> after map keyword".S());
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                    }
+                }
+            }
+            Some("set") => {
+                self.eat_word("set");
+                // Expect angle bracket with element type.
+                match self.peek() {
+                    Some(TreeToken::Branch(Sigil::AngleOpen, iter)) => {
+                        self.next(); // Consume the branch.
+                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                        let mut sub_parser = DynParser {
+                            db: self.db,
+                            tokens,
+                            pos: 0,
+                        };
+                        let element_type = sub_parser.parse_type_hint_and_heap();
+                        ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
+                    }
+                    _ => {
+                        let message = InternedText::new(self.db, "expected <> after set keyword".S());
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                    }
+                }
+            }
+            Some("list") => {
+                self.eat_word("list");
+                // Expect angle bracket with element type.
+                match self.peek() {
+                    Some(TreeToken::Branch(Sigil::AngleOpen, iter)) => {
+                        self.next(); // Consume the branch.
+                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                        let mut sub_parser = DynParser {
+                            db: self.db,
+                            tokens,
+                            pos: 0,
+                        };
+                        let element_type = sub_parser.parse_type_hint_and_heap();
+                        ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
+                    }
+                    _ => {
+                        let message = InternedText::new(self.db, "expected <> after list keyword".S());
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                    }
+                }
+            }
             _ => {
                 // Check for branches: parentheses for tuples, brackets for lists, braces for structs.
                 match self.peek() {
