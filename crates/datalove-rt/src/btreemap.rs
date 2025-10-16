@@ -7,6 +7,9 @@ use crate::alloc::LocalRt;
 use crate::rtdt::{self, *};
 use crate::RtStatus;
 
+// B-tree constants.
+const MAP_NODE_B: u32 = rtdt::MAP_NODE_B;
+
 // Offset constants for MapNode header fields.
 const TAG_OFFSET: u32 = 0;
 const LEN_OFFSET: u32 = 4;  // Aligned to u32.
@@ -1131,16 +1134,681 @@ pub unsafe fn btreemap_get_impl(
     }
 }
 
+/// Minimum number of keys a non-root node must have.
+const MIN_KEYS: u32 = MAP_NODE_B - 1;
+
+/// Result of removing from a node.
+#[derive(Debug, PartialEq, Eq)]
+enum RemoveResult {
+    /// Key was successfully removed.
+    Removed,
+    /// Key was not found.
+    NotFound,
+    /// Node underflowed after removal.
+    Underflow,
+}
+
+/// Remove a key from a leaf node.
+unsafe fn leaf_remove(
+    rt: &mut LocalRt,
+    leaf: *mut MapNode,
+    key: *const u8,
+    key_tydesc: *const TyDesc,
+    value_tydesc: *const TyDesc,
+) -> RemoveResult {
+    unsafe {
+        let len = read_node_len(leaf);
+        let keys_ptr = leaf_keys_ptr(leaf, key_tydesc, value_tydesc);
+        let values_ptr = leaf_values_ptr(leaf, key_tydesc, value_tydesc);
+        let key_size = (*key_tydesc).size as usize;
+        let value_size = (*value_tydesc).size as usize;
+
+        // Find the key in the leaf.
+        for i in 0..len as usize {
+            let node_key = keys_ptr.add(i * key_size);
+            let cmp_result = crate::cmp::cmp_total(key, key_tydesc, node_key, key_tydesc);
+
+            match cmp_result {
+                crate::RtOrdering::Equal => {
+                    // Found the key, destroy it and the value.
+                    let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+                    let value_slot = values_ptr.add(i * value_size);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, node_key as *mut u8, key_tydesc);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc);
+
+                    // Shift remaining elements left.
+                    if i < (len - 1) as usize {
+                        let shift_count = (len - 1) as usize - i;
+                        let src_key = keys_ptr.add((i + 1) * key_size);
+                        let dst_key = keys_ptr.add(i * key_size);
+                        std::ptr::copy(src_key, dst_key, shift_count * key_size);
+
+                        let src_val = values_ptr.add((i + 1) * value_size);
+                        let dst_val = values_ptr.add(i * value_size);
+                        std::ptr::copy(src_val, dst_val, shift_count * value_size);
+                    }
+
+                    write_node_len(leaf, len - 1);
+
+                    // Check if the leaf underflows.
+                    if len - 1 < MIN_KEYS {
+                        return RemoveResult::Underflow;
+                    } else {
+                        return RemoveResult::Removed;
+                    }
+                }
+                crate::RtOrdering::Greater => continue,
+                crate::RtOrdering::Less | crate::RtOrdering::Error => break,
+            }
+        }
+
+        RemoveResult::NotFound
+    }
+}
+
+/// Borrow a key from the left sibling.
+unsafe fn borrow_from_left_leaf(
+    rt: &mut LocalRt,
+    parent: *mut MapNode,
+    parent_key_idx: usize,
+    left: *mut MapNode,
+    node: *mut MapNode,
+    key_tydesc: *const TyDesc,
+    value_tydesc: *const TyDesc,
+) {
+    unsafe {
+        let left_len = read_node_len(left);
+        let node_len = read_node_len(node);
+
+        let key_size = (*key_tydesc).size as usize;
+        let value_size = (*value_tydesc).size as usize;
+
+        let left_keys_ptr = leaf_keys_ptr(left, key_tydesc, value_tydesc);
+        let left_values_ptr = leaf_values_ptr(left, key_tydesc, value_tydesc);
+        let node_keys_ptr = leaf_keys_ptr(node, key_tydesc, value_tydesc);
+        let node_values_ptr = leaf_values_ptr(node, key_tydesc, value_tydesc);
+
+        // Shift node's elements right to make room.
+        if node_len > 0 {
+            std::ptr::copy(
+                node_keys_ptr,
+                node_keys_ptr.add(key_size),
+                node_len as usize * key_size,
+            );
+            std::ptr::copy(
+                node_values_ptr,
+                node_values_ptr.add(value_size),
+                node_len as usize * value_size,
+            );
+        }
+
+        // Move the last element from left to node.
+        let borrow_idx = (left_len - 1) as usize;
+        std::ptr::copy_nonoverlapping(
+            left_keys_ptr.add(borrow_idx * key_size),
+            node_keys_ptr,
+            key_size,
+        );
+        std::ptr::copy_nonoverlapping(
+            left_values_ptr.add(borrow_idx * value_size),
+            node_values_ptr,
+            value_size,
+        );
+
+        write_node_len(left, left_len - 1);
+        write_node_len(node, node_len + 1);
+
+        // Update parent separator.
+        let parent_keys_ptr = internal_keys_ptr(parent, key_tydesc);
+        let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
+
+        // Destroy old separator.
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let _ = crate::destroy::any_destroy_local(rt_handle, parent_key, key_tydesc);
+
+        // Clone new separator (first key of node).
+        let _ = crate::clone::clone_value(rt_handle, node_keys_ptr, key_tydesc, parent_key);
+    }
+}
+
+/// Borrow a key from the left sibling (internal node).
+unsafe fn borrow_from_left_internal(
+    rt: &mut LocalRt,
+    parent: *mut MapNode,
+    parent_key_idx: usize,
+    left: *mut MapNode,
+    node: *mut MapNode,
+    key_tydesc: *const TyDesc,
+) {
+    unsafe {
+        let left_len = read_node_len(left);
+        let node_len = read_node_len(node);
+        let key_size = (*key_tydesc).size as usize;
+
+        let left_keys_ptr = internal_keys_ptr(left, key_tydesc);
+        let left_children_ptr = internal_child_ptrs_ptr(left, key_tydesc);
+        let node_keys_ptr = internal_keys_ptr(node, key_tydesc);
+        let node_children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
+        let parent_keys_ptr = internal_keys_ptr(parent, key_tydesc);
+
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+
+        // Shift node's keys and children right to make room.
+        if node_len > 0 {
+            std::ptr::copy(
+                node_keys_ptr,
+                node_keys_ptr.add(key_size),
+                node_len as usize * key_size,
+            );
+            std::ptr::copy(
+                node_children_ptr,
+                node_children_ptr.add(1),
+                (node_len as usize + 1),
+            );
+        }
+
+        // Move parent separator down to node.
+        let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
+        std::ptr::copy_nonoverlapping(parent_key, node_keys_ptr, key_size);
+
+        // Move last key from left to parent.
+        let left_last_key = left_keys_ptr.add((left_len - 1) as usize * key_size);
+        std::ptr::copy_nonoverlapping(left_last_key, parent_key, key_size);
+
+        // Move last child pointer from left to node.
+        let left_last_child = *left_children_ptr.add(left_len as usize);
+        *node_children_ptr.add(0) = left_last_child;
+
+        write_node_len(left, left_len - 1);
+        write_node_len(node, node_len + 1);
+    }
+}
+
+/// Borrow a key from the right sibling (internal node).
+unsafe fn borrow_from_right_internal(
+    rt: &mut LocalRt,
+    parent: *mut MapNode,
+    parent_key_idx: usize,
+    node: *mut MapNode,
+    right: *mut MapNode,
+    key_tydesc: *const TyDesc,
+) {
+    unsafe {
+        let node_len = read_node_len(node);
+        let right_len = read_node_len(right);
+        let key_size = (*key_tydesc).size as usize;
+
+        let node_keys_ptr = internal_keys_ptr(node, key_tydesc);
+        let node_children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
+        let right_keys_ptr = internal_keys_ptr(right, key_tydesc);
+        let right_children_ptr = internal_child_ptrs_ptr(right, key_tydesc);
+        let parent_keys_ptr = internal_keys_ptr(parent, key_tydesc);
+
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+
+        // Move parent separator down to node.
+        let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
+        std::ptr::copy_nonoverlapping(parent_key, node_keys_ptr.add(node_len as usize * key_size), key_size);
+
+        // Move first child pointer from right to node.
+        let right_first_child = *right_children_ptr.add(0);
+        *node_children_ptr.add((node_len as usize + 1)) = right_first_child;
+
+        // Move first key from right to parent.
+        std::ptr::copy_nonoverlapping(right_keys_ptr, parent_key, key_size);
+
+        // Shift right's keys and children left.
+        if right_len > 1 {
+            std::ptr::copy(
+                right_keys_ptr.add(key_size),
+                right_keys_ptr,
+                (right_len - 1) as usize * key_size,
+            );
+            std::ptr::copy(
+                right_children_ptr.add(1),
+                right_children_ptr,
+                right_len as usize,
+            );
+        }
+
+        write_node_len(node, node_len + 1);
+        write_node_len(right, right_len - 1);
+    }
+}
+
+/// Borrow a key from the right sibling.
+unsafe fn borrow_from_right_leaf(
+    rt: &mut LocalRt,
+    parent: *mut MapNode,
+    parent_key_idx: usize,
+    node: *mut MapNode,
+    right: *mut MapNode,
+    key_tydesc: *const TyDesc,
+    value_tydesc: *const TyDesc,
+) {
+    unsafe {
+        let node_len = read_node_len(node);
+        let right_len = read_node_len(right);
+
+        let key_size = (*key_tydesc).size as usize;
+        let value_size = (*value_tydesc).size as usize;
+
+        let node_keys_ptr = leaf_keys_ptr(node, key_tydesc, value_tydesc);
+        let node_values_ptr = leaf_values_ptr(node, key_tydesc, value_tydesc);
+        let right_keys_ptr = leaf_keys_ptr(right, key_tydesc, value_tydesc);
+        let right_values_ptr = leaf_values_ptr(right, key_tydesc, value_tydesc);
+
+        // Move first element from right to node.
+        std::ptr::copy_nonoverlapping(
+            right_keys_ptr,
+            node_keys_ptr.add(node_len as usize * key_size),
+            key_size,
+        );
+        std::ptr::copy_nonoverlapping(
+            right_values_ptr,
+            node_values_ptr.add(node_len as usize * value_size),
+            value_size,
+        );
+
+        // Shift right's elements left.
+        if right_len > 1 {
+            std::ptr::copy(
+                right_keys_ptr.add(key_size),
+                right_keys_ptr,
+                (right_len - 1) as usize * key_size,
+            );
+            std::ptr::copy(
+                right_values_ptr.add(value_size),
+                right_values_ptr,
+                (right_len - 1) as usize * value_size,
+            );
+        }
+
+        write_node_len(node, node_len + 1);
+        write_node_len(right, right_len - 1);
+
+        // Update parent separator.
+        let parent_keys_ptr = internal_keys_ptr(parent, key_tydesc);
+        let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
+
+        // Destroy old separator.
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let _ = crate::destroy::any_destroy_local(rt_handle, parent_key, key_tydesc);
+
+        // Clone new separator (first key of right).
+        let _ = crate::clone::clone_value(rt_handle, right_keys_ptr, key_tydesc, parent_key);
+    }
+}
+
+/// Merge node with its left sibling (internal node).
+unsafe fn merge_with_left_internal(
+    rt: &mut LocalRt,
+    parent: *mut MapNode,
+    parent_key_idx: usize,
+    left: *mut MapNode,
+    node: *mut MapNode,
+    key_tydesc: *const TyDesc,
+) {
+    unsafe {
+        let left_len = read_node_len(left);
+        let node_len = read_node_len(node);
+        let key_size = (*key_tydesc).size as usize;
+
+        let left_keys_ptr = internal_keys_ptr(left, key_tydesc);
+        let left_children_ptr = internal_child_ptrs_ptr(left, key_tydesc);
+        let node_keys_ptr = internal_keys_ptr(node, key_tydesc);
+        let node_children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
+        let parent_keys_ptr = internal_keys_ptr(parent, key_tydesc);
+
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+
+        // Clone parent separator down to left.
+        let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
+        let left_separator_slot = left_keys_ptr.add(left_len as usize * key_size);
+        let _ = crate::clone::clone_value(rt_handle, parent_key, key_tydesc, left_separator_slot);
+
+        // Copy all keys from node to left.
+        if node_len > 0 {
+            std::ptr::copy_nonoverlapping(
+                node_keys_ptr,
+                left_keys_ptr.add((left_len + 1) as usize * key_size),
+                node_len as usize * key_size,
+            );
+        }
+
+        // Copy all child pointers from node to left.
+        std::ptr::copy_nonoverlapping(
+            node_children_ptr,
+            left_children_ptr.add((left_len + 1) as usize),
+            (node_len + 1) as usize,
+        );
+
+        write_node_len(left, left_len + 1 + node_len);
+
+        // Free the merged node (but don't destroy keys/values, they're now in left).
+        free_node(rt, node, key_tydesc, std::ptr::null());
+    }
+}
+
+/// Merge node with its left sibling.
+unsafe fn merge_with_left_leaf(
+    rt: &mut LocalRt,
+    left: *mut MapNode,
+    node: *mut MapNode,
+    key_tydesc: *const TyDesc,
+    value_tydesc: *const TyDesc,
+) {
+    unsafe {
+        let left_len = read_node_len(left);
+        let node_len = read_node_len(node);
+
+        let key_size = (*key_tydesc).size as usize;
+        let value_size = (*value_tydesc).size as usize;
+
+        let left_keys_ptr = leaf_keys_ptr(left, key_tydesc, value_tydesc);
+        let left_values_ptr = leaf_values_ptr(left, key_tydesc, value_tydesc);
+        let node_keys_ptr = leaf_keys_ptr(node, key_tydesc, value_tydesc);
+        let node_values_ptr = leaf_values_ptr(node, key_tydesc, value_tydesc);
+
+        // Copy all elements from node to left.
+        std::ptr::copy_nonoverlapping(
+            node_keys_ptr,
+            left_keys_ptr.add(left_len as usize * key_size),
+            node_len as usize * key_size,
+        );
+        std::ptr::copy_nonoverlapping(
+            node_values_ptr,
+            left_values_ptr.add(left_len as usize * value_size),
+            node_len as usize * value_size,
+        );
+
+        write_node_len(left, left_len + node_len);
+
+        // Update next_leaf pointer.
+        let node_next = *leaf_next_ptr_mut(node, key_tydesc, value_tydesc);
+        *leaf_next_ptr_mut(left, key_tydesc, value_tydesc) = node_next;
+
+        // Free the merged node.
+        free_node(rt, node, key_tydesc, value_tydesc);
+    }
+}
+
+/// Remove a key from an internal node.
+unsafe fn internal_remove_key(
+    rt: &mut LocalRt,
+    node: *mut MapNode,
+    key_idx: usize,
+    key_tydesc: *const TyDesc,
+) {
+    unsafe {
+        let len = read_node_len(node);
+        let keys_ptr = internal_keys_ptr(node, key_tydesc);
+        let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
+        let key_size = (*key_tydesc).size as usize;
+
+        // Destroy the key.
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let key_slot = keys_ptr.add(key_idx * key_size);
+        let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
+
+        // Shift keys left.
+        if key_idx < (len - 1) as usize {
+            std::ptr::copy(
+                keys_ptr.add((key_idx + 1) * key_size),
+                keys_ptr.add(key_idx * key_size),
+                (len - 1 - key_idx as u32) as usize * key_size,
+            );
+        }
+
+        // Shift child pointers left.
+        if key_idx + 1 < len as usize {
+            std::ptr::copy(
+                children_ptr.add(key_idx + 2),
+                children_ptr.add(key_idx + 1),
+                (len - 1 - key_idx as u32) as usize,
+            );
+        }
+
+        write_node_len(node, len - 1);
+    }
+}
+
+/// Fix underflow in a child of an internal node.
+unsafe fn fix_underflow(
+    rt: &mut LocalRt,
+    parent: *mut MapNode,
+    child_idx: usize,
+    key_tydesc: *const TyDesc,
+    value_tydesc: *const TyDesc,
+) -> RemoveResult {
+    unsafe {
+        let parent_len = read_node_len(parent);
+        let children_ptr = internal_child_ptrs_ptr(parent, key_tydesc);
+        let child = *children_ptr.add(child_idx);
+        let child_tag = read_node_tag(child);
+
+        // Try to borrow from left sibling.
+        if child_idx > 0 {
+            let left = *children_ptr.add(child_idx - 1);
+            let left_len = read_node_len(left);
+
+            if left_len > MIN_KEYS {
+                match child_tag {
+                    MapNodeTag::Leaf => {
+                        borrow_from_left_leaf(
+                            rt,
+                            parent,
+                            child_idx - 1,
+                            left,
+                            child,
+                            key_tydesc,
+                            value_tydesc,
+                        );
+                    }
+                    MapNodeTag::Internal => {
+                        borrow_from_left_internal(
+                            rt,
+                            parent,
+                            child_idx - 1,
+                            left,
+                            child,
+                            key_tydesc,
+                        );
+                    }
+                }
+                return RemoveResult::Removed;
+            }
+        }
+
+        // Try to borrow from right sibling.
+        if child_idx < parent_len as usize {
+            let right = *children_ptr.add(child_idx + 1);
+            let right_len = read_node_len(right);
+
+            if right_len > MIN_KEYS {
+                match child_tag {
+                    MapNodeTag::Leaf => {
+                        borrow_from_right_leaf(
+                            rt,
+                            parent,
+                            child_idx,
+                            child,
+                            right,
+                            key_tydesc,
+                            value_tydesc,
+                        );
+                    }
+                    MapNodeTag::Internal => {
+                        borrow_from_right_internal(
+                            rt,
+                            parent,
+                            child_idx,
+                            child,
+                            right,
+                            key_tydesc,
+                        );
+                    }
+                }
+                return RemoveResult::Removed;
+            }
+        }
+
+        // Must merge.
+        if child_idx > 0 {
+            // Merge with left sibling.
+            let left = *children_ptr.add(child_idx - 1);
+            match child_tag {
+                MapNodeTag::Leaf => {
+                    merge_with_left_leaf(rt, left, child, key_tydesc, value_tydesc);
+                }
+                MapNodeTag::Internal => {
+                    merge_with_left_internal(rt, parent, child_idx - 1, left, child, key_tydesc);
+                }
+            }
+            internal_remove_key(rt, parent, child_idx - 1, key_tydesc);
+        } else {
+            // Merge with right sibling.
+            let right = *children_ptr.add(child_idx + 1);
+            match child_tag {
+                MapNodeTag::Leaf => {
+                    merge_with_left_leaf(rt, child, right, key_tydesc, value_tydesc);
+                }
+                MapNodeTag::Internal => {
+                    merge_with_left_internal(rt, parent, child_idx, child, right, key_tydesc);
+                }
+            }
+            internal_remove_key(rt, parent, child_idx, key_tydesc);
+        }
+
+        // Check if parent underflows.
+        let new_parent_len = read_node_len(parent);
+        if new_parent_len < MIN_KEYS {
+            RemoveResult::Underflow
+        } else {
+            RemoveResult::Removed
+        }
+    }
+}
+
+/// Remove a key from the subtree rooted at node.
+unsafe fn remove_recursive(
+    rt: &mut LocalRt,
+    node: *mut MapNode,
+    key: *const u8,
+    key_tydesc: *const TyDesc,
+    value_tydesc: *const TyDesc,
+) -> RemoveResult {
+    unsafe {
+        let tag = read_node_tag(node);
+        match tag {
+            MapNodeTag::Leaf => leaf_remove(rt, node, key, key_tydesc, value_tydesc),
+            MapNodeTag::Internal => {
+                let len = read_node_len(node);
+                let keys_ptr = internal_keys_ptr(node, key_tydesc);
+                let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
+                let key_size = (*key_tydesc).size as usize;
+
+                // Find the child to descend into.
+                let mut child_idx = 0;
+                for i in 0..len as usize {
+                    let node_key = keys_ptr.add(i * key_size);
+                    let cmp_result =
+                        crate::cmp::cmp_total(key, key_tydesc, node_key, key_tydesc);
+                    match cmp_result {
+                        crate::RtOrdering::Less => break,
+                        crate::RtOrdering::Equal => {
+                            child_idx = i + 1;
+                            break;
+                        }
+                        crate::RtOrdering::Greater => {
+                            child_idx = i + 1;
+                        }
+                        crate::RtOrdering::Error => break,
+                    }
+                }
+
+                let child = *children_ptr.add(child_idx);
+                let result = remove_recursive(rt, child, key, key_tydesc, value_tydesc);
+
+                match result {
+                    RemoveResult::Underflow => {
+                        fix_underflow(rt, node, child_idx, key_tydesc, value_tydesc)
+                    }
+                    other => other,
+                }
+            }
+        }
+    }
+}
+
 /// Remove a key from the BTreeMap.
 pub unsafe fn btreemap_remove_impl(
-    _rt: &mut LocalRt,
-    _btreemap_value_mut: *mut u8,
-    _btreemap_tydesc: *const TyDesc,
-    _key_ref: *const u8,
-    _key_tydesc: *const TyDesc,
+    rt: &mut LocalRt,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: *const TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const TyDesc,
 ) -> RtStatus {
     unsafe {
-        todo!("btreemap_remove_impl")
+        if btreemap_value_mut.is_null()
+            || btreemap_tydesc.is_null()
+            || key_ref.is_null()
+            || key_tydesc.is_null()
+        {
+            return RtStatus::Error;
+        }
+
+        let map_info = (*btreemap_tydesc).type_info.map;
+        let map_key_tydesc = map_info.key_tydesc;
+        let map_value_tydesc = map_info.value_tydesc;
+
+        let map_ptr = btreemap_value_mut as *mut Map;
+        let root = (*map_ptr).root as *mut MapNode;
+
+        // If map is empty, nothing to remove.
+        if root.is_null() {
+            return RtStatus::Ok;
+        }
+
+        let result = remove_recursive(rt, root, key_ref, map_key_tydesc, map_value_tydesc);
+
+        match result {
+            RemoveResult::NotFound => {
+                // Key wasn't found, but that's not an error.
+                RtStatus::Ok
+            }
+            RemoveResult::Removed => {
+                (*map_ptr).len -= 1;
+                RtStatus::Ok
+            }
+            RemoveResult::Underflow => {
+                // Root underflowed.
+                (*map_ptr).len -= 1;
+
+                let root_len = read_node_len(root);
+                if root_len == 0 {
+                    // Root is empty.
+                    let root_tag = read_node_tag(root);
+                    match root_tag {
+                        MapNodeTag::Internal => {
+                            // Root is internal with 0 keys, so it has 1 child.
+                            // Make that child the new root.
+                            let children_ptr = internal_child_ptrs_ptr(root, map_key_tydesc);
+                            let new_root = *children_ptr.add(0);
+                            free_node(rt, root, map_key_tydesc, map_value_tydesc);
+                            (*map_ptr).root = new_root;
+                        }
+                        MapNodeTag::Leaf => {
+                            // Root is leaf with 0 keys, map is now empty.
+                            free_node(rt, root, map_key_tydesc, map_value_tydesc);
+                            (*map_ptr).root = std::ptr::null();
+                        }
+                    }
+                }
+
+                RtStatus::Ok
+            }
+        }
     }
 }
 

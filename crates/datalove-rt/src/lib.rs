@@ -477,6 +477,36 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreemap_get_local(
+    rt: LocalRtHandle,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    option_value_out: *mut u8,
+    option_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || btreemap_value_ref.is_null() || btreemap_tydesc.is_null()
+            || key_ref.is_null() || key_tydesc.is_null()
+            || option_value_out.is_null() || option_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        btreemap::btreemap_get_impl(
+            rt_ref,
+            btreemap_value_ref,
+            btreemap_tydesc,
+            key_ref,
+            key_tydesc,
+            option_value_out,
+            option_tydesc,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
     rt: LocalRtHandle,
     btreemap_value_mut: *mut u8,
