@@ -1,0 +1,28 @@
+{
+  "statements": [
+    {
+      "kind": "Let",
+      "name": "msg",
+      "type_hint": {
+        "heap": "Local",
+        "type_hint": "String"
+      },
+      "value": {
+        "expr": {
+          "kind": "Datalit",
+          "value": {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "String": {
+                  "value": "\"hello world\""
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -444,6 +444,17 @@ impl Value {
             }
             Value::String { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
+                    // First, destroy the string's internal buffer.
+                    let rt_handle = rt as *mut _ as rt::LocalRtHandle;
+                    unsafe {
+                        rt::dtlv_rti_string_destroy_local(
+                            rt_handle,
+                            *ptr as *mut u8,
+                            *tydesc,
+                        );
+                    }
+
+                    // Then free the String struct itself.
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
                     unsafe { rt.free(size, align, 1, *ptr as *mut u8) };

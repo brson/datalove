@@ -1,0 +1,25 @@
+{
+  "statements": [
+    {
+      "kind": "Let",
+      "name": "x",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "Datalit",
+          "value": {
+            "type_hint": null,
+            "expr": {
+              "heap": "Omitted",
+              "expr": {
+                "String": {
+                  "value": "\"hello\""
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

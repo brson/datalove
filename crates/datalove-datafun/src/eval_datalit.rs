@@ -1,6 +1,7 @@
 //! Evaluators for datalit expressions.
 
 use rmx::prelude::*;
+use datalove_rt;
 use datalove_rtdt as rtdt;
 use crate::datalit;
 use crate::interp::{InterpContext, InterpResult, InterpError};
@@ -25,7 +26,7 @@ pub fn eval_datalit<'db>(
 
         Expr::Float(float_expr) => eval_float(ctx, float_expr),
 
-        Expr::String(string_expr) => eval_string(ctx, string_expr),
+        Expr::String(string_expr) => eval_string(ctx, string_expr, expr),
 
         Expr::AnonTuple(tuple_expr) => eval_anon_tuple(ctx, tuple_expr, expr),
 
@@ -96,11 +97,83 @@ fn eval_float<'db>(
 fn eval_string<'db>(
     ctx: &mut InterpContext<'db>,
     string_expr: datalit::ast::ExprString<'db>,
+    full_expr: datalit::ast::ExprFull<'db>,
 ) -> InterpResult {
-    let _value_str = string_expr.value(ctx.db).as_str(ctx.db);
+    let value_str = string_expr.value(ctx.db).as_str(ctx.db);
 
-    // TODO: Implement string allocation.
-    Err(InterpError::NotImplemented("string literals".to_string()))
+    // Get the type descriptor for this string.
+    let tydesc = ctx.type_table.get_expr_type(full_expr);
+    if tydesc.is_null() {
+        return Err(InterpError::TypeError("No type for string".to_string()));
+    }
+
+    // Parse the string literal to remove quotes and handle escape sequences.
+    // The value_str includes the quotes, e.g., "\"hello\"".
+    let unquoted = if value_str.len() >= 2 && value_str.starts_with('"') && value_str.ends_with('"') {
+        &value_str[1..value_str.len()-1]
+    } else {
+        value_str
+    };
+
+    unsafe {
+        // Allocate heap storage for the string struct.
+        let ptr = ctx.rt.alloc(
+            std::mem::size_of::<rtdt::String>() as u32,
+            std::mem::align_of::<rtdt::String>() as u32,
+            1,
+        ) as *mut rtdt::String;
+
+        let rt_handle = &mut ctx.rt as *mut _ as datalove_rt::LocalRtHandle;
+
+        // Initialize the string.
+        let status = datalove_rt::dtlv_rti_string_create_local(
+            rt_handle,
+            ptr as *mut u8,
+            tydesc,
+        );
+
+        if status != datalove_rt::RtStatus::Ok {
+            ctx.rt.free(
+                std::mem::size_of::<rtdt::String>() as u32,
+                std::mem::align_of::<rtdt::String>() as u32,
+                1,
+                ptr as *mut u8,
+            );
+            return Err(InterpError::RuntimeError(
+                "Failed to create string".to_string(),
+            ));
+        }
+
+        // Push bytes into the string.
+        let bytes = unquoted.as_bytes();
+        let status = datalove_rt::dtlv_rti_string_push_bytes_local(
+            rt_handle,
+            ptr as *mut u8,
+            tydesc,
+            bytes.as_ptr(),
+            bytes.len() as u32,
+        );
+
+        if status != datalove_rt::RtStatus::Ok {
+            // Call destroy_local to free the string's buffer before freeing the struct.
+            datalove_rt::dtlv_rti_string_destroy_local(
+                rt_handle,
+                ptr as *mut u8,
+                tydesc,
+            );
+            ctx.rt.free(
+                std::mem::size_of::<rtdt::String>() as u32,
+                std::mem::align_of::<rtdt::String>() as u32,
+                1,
+                ptr as *mut u8,
+            );
+            return Err(InterpError::RuntimeError(
+                "Failed to push bytes to string".to_string(),
+            ));
+        }
+
+        Ok(Value::String { ptr, tydesc })
+    }
 }
 
 /// Evaluate an anonymous tuple.
