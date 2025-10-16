@@ -417,6 +417,42 @@ code {
     line-height: 1.6;
 }
 
+/* Syntax highlighting */
+.hl-keyword {
+    color: #E6B85C;
+    font-weight: 600;
+}
+
+.hl-type {
+    color: #5B9A9E;
+    font-weight: 500;
+}
+
+.hl-constructor {
+    color: #D97451;
+}
+
+.hl-string {
+    color: #9CAF60;
+}
+
+.hl-number {
+    color: #C78283;
+}
+
+.hl-comment {
+    color: #888;
+    font-style: italic;
+}
+
+.hl-operator {
+    color: #E6B85C;
+}
+
+.hl-punct {
+    color: #aaa;
+}
+
 /* Get Started Section */
 .get-started {
     background-color: var(--cream);
