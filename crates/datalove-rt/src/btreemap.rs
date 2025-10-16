@@ -370,6 +370,8 @@ unsafe fn find_leaf_for_key(
                     let key_size = (*key_tydesc).size as usize;
 
                     // Find the child to descend into.
+                    // In a B+tree, separators represent the minimum key in the right subtree,
+                    // so Equal should go right.
                     let mut child_idx = 0;
                     for i in 0..len as usize {
                         let node_key = keys_ptr.add(i * key_size);
@@ -381,7 +383,11 @@ unsafe fn find_leaf_for_key(
                         );
                         match cmp_result {
                             crate::RtOrdering::Less => break,
-                            crate::RtOrdering::Equal => break,
+                            crate::RtOrdering::Equal => {
+                                // Go to right child (separator is min of right subtree).
+                                child_idx = i + 1;
+                                break;
+                            }
                             crate::RtOrdering::Greater => {
                                 child_idx = i + 1;
                             }
@@ -528,57 +534,25 @@ unsafe fn split_leaf(
         *leaf_next_ptr_mut(new_leaf, key_tydesc, value_tydesc) = old_next;
 
         // Copy the separator key (first key of new_leaf) into a buffer.
+        // In a B+tree, the separator stays in the leaf - it's just copied to internal nodes for routing.
         let mut separator_key_buf = vec![0u8; key_size];
         std::ptr::copy_nonoverlapping(new_keys_ptr, separator_key_buf.as_mut_ptr(), key_size);
 
-        // Check if the pending key equals the separator.
-        let cmp_result = crate::cmp::cmp_total(key, key_tydesc, separator_key_buf.as_ptr(), key_tydesc);
-        let pending_key_is_separator = matches!(cmp_result, crate::RtOrdering::Equal);
-
-        // Destroy the separator's old value before removing it, unless the pending key
-        // equals the separator (in which case we'll overwrite it).
-        if !pending_key_is_separator {
-            let separator_value_slot = new_values_ptr;
-            let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
-            let _ = crate::destroy::any_destroy_local(rt_handle, separator_value_slot, value_tydesc);
-        }
-
-        // Remove the separator key from new_leaf by shifting remaining elements down.
-        let new_len = read_node_len(new_leaf);
-        if new_len > 1 {
-            // Shift keys down.
-            std::ptr::copy(
-                new_keys_ptr.add(key_size),
-                new_keys_ptr,
-                (new_len as usize - 1) * key_size,
-            );
-            // Shift values down.
-            std::ptr::copy(
-                new_values_ptr.add(value_size),
-                new_values_ptr,
-                (new_len as usize - 1) * value_size,
-            );
-        }
-        write_node_len(new_leaf, new_len - 1);
-
         // Determine which leaf should receive the new key.
+        let cmp_result = crate::cmp::cmp_total(key, key_tydesc, separator_key_buf.as_ptr(), key_tydesc);
         let mut insert_result = match cmp_result {
             crate::RtOrdering::Less => {
+                // Key goes in left leaf.
                 leaf_insert_or_update(rt, leaf, key, value, key_tydesc, value_tydesc)
             }
-            crate::RtOrdering::Equal => {
-                // Key equals separator. We removed it from new_leaf, so re-inserting
-                // it is really an update (replacing the separator's value).
-                let result = leaf_insert_or_update(rt, new_leaf, key, value, key_tydesc, value_tydesc);
-                // Treat insertion as update since we're replacing the separator.
-                match result {
-                    LeafInsertResult::Inserted => LeafInsertResult::Updated,
-                    other => other,
-                }
-            }
-            _ => {
-                // Key is > separator, so it goes into new_leaf.
+            crate::RtOrdering::Equal | crate::RtOrdering::Greater => {
+                // Key goes in right leaf (new_leaf).
+                // Equal goes right because separator represents min key of right subtree.
                 leaf_insert_or_update(rt, new_leaf, key, value, key_tydesc, value_tydesc)
+            }
+            crate::RtOrdering::Error => {
+                // Should not happen.
+                return Err(RtStatus::Error);
             }
         };
 
@@ -875,6 +849,8 @@ unsafe fn find_leaf_with_path(
                     let key_size = (*key_tydesc).size as usize;
 
                     // Find the child to descend into.
+                    // In a B+tree, separators represent the minimum key in the right subtree,
+                    // so Equal should go right.
                     let mut child_idx = 0;
                     for i in 0..len as usize {
                         let node_key = keys_ptr.add(i * key_size);
@@ -886,7 +862,11 @@ unsafe fn find_leaf_with_path(
                         );
                         match cmp_result {
                             crate::RtOrdering::Less => break,
-                            crate::RtOrdering::Equal => break,
+                            crate::RtOrdering::Equal => {
+                                // Go to right child (separator is min of right subtree).
+                                child_idx = i + 1;
+                                break;
+                            }
                             crate::RtOrdering::Greater => {
                                 child_idx = i + 1;
                             }
@@ -983,6 +963,106 @@ unsafe fn propagate_split_up(
         write_node_len(new_root, 1);
         *root_ptr = new_root;
 
+        RtStatus::Ok
+    }
+}
+
+/// Get a value from the BTreeMap by key.
+///
+/// Returns the value as an Option<V>:
+/// - If the key is found, sets the option to Some and clones the value.
+/// - If the key is not found, sets the option to None.
+pub unsafe fn btreemap_get_impl(
+    rt: &mut LocalRt,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: *const TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const TyDesc,
+    option_value_out: *mut u8,
+    option_tydesc: *const TyDesc,
+) -> RtStatus {
+    unsafe {
+        if btreemap_value_ref.is_null() || btreemap_tydesc.is_null()
+            || key_ref.is_null() || key_tydesc.is_null()
+            || option_value_out.is_null() || option_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Get key and value type descriptors from map type.
+        let map_info = (*btreemap_tydesc).type_info.map;
+        let map_key_tydesc = map_info.key_tydesc;
+        let map_value_tydesc = map_info.value_tydesc;
+
+        // Get the option inner type (which should be V).
+        let option_info = (*option_tydesc).type_info.option;
+        let inner_value_tydesc = option_info.inner_tydesc;
+
+        let map_ptr = btreemap_value_ref as *const Map;
+        let root = (*map_ptr).root as *mut MapNode;
+
+        // Compute option layout.
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_tag_ptr = option_value_out as *mut u8;
+        let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
+
+        // If map is empty, return None.
+        if root.is_null() {
+            *option_tag_ptr = rtdt::OptionTag::None as u8;
+            return RtStatus::Ok;
+        }
+
+        // Find the leaf node where the key would be.
+        let leaf = find_leaf_for_key(root, key_ref, map_key_tydesc, map_value_tydesc);
+
+        let len = read_node_len(leaf);
+        let keys_ptr = leaf_keys_ptr(leaf, map_key_tydesc, map_value_tydesc);
+        let values_ptr = leaf_values_ptr(leaf, map_key_tydesc, map_value_tydesc);
+        let key_size = (*map_key_tydesc).size as usize;
+        let value_size = (*map_value_tydesc).size as usize;
+
+        // Search for the key in the leaf.
+        for i in 0..len as usize {
+            let node_key = keys_ptr.add(i * key_size);
+            let cmp_result = crate::cmp::cmp_total(
+                key_ref,
+                key_tydesc,
+                node_key,
+                map_key_tydesc,
+            );
+
+            match cmp_result {
+                crate::RtOrdering::Equal => {
+                    // Key found! Clone the value into the option payload.
+                    let value_slot = values_ptr.add(i * value_size);
+                    let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+                    let status = crate::clone::clone_value(
+                        rt_handle,
+                        value_slot,
+                        map_value_tydesc,
+                        option_payload_ptr,
+                    );
+
+                    if status != RtStatus::Ok {
+                        return status;
+                    }
+
+                    // Set option tag to Some.
+                    *option_tag_ptr = rtdt::OptionTag::Some as u8;
+                    return RtStatus::Ok;
+                }
+                crate::RtOrdering::Greater => {
+                    // Continue searching.
+                    continue;
+                }
+                crate::RtOrdering::Less | crate::RtOrdering::Error => {
+                    // Key not found (keys are sorted, so we've passed where it would be).
+                    break;
+                }
+            }
+        }
+
+        // Key not found, return None.
+        *option_tag_ptr = rtdt::OptionTag::None as u8;
         RtStatus::Ok
     }
 }

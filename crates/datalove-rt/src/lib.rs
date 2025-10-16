@@ -417,14 +417,31 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get(
     rt: LocalRtHandle,
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: *const rtdt::TyDesc,
-    // Value is moved.
+    // Key is searched (read-only).
     key_ref: *const u8,
     key_tydesc: *const rtdt::TyDesc,
     // Value is cloned. This is an _option<V>_.
     value_out: *mut u8,
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if rt.is_null() || btreemap_value_mut.is_null() || btreemap_tydesc.is_null()
+            || key_ref.is_null() || key_tydesc.is_null()
+            || value_out.is_null() || value_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        btreemap::btreemap_get_impl(
+            rt_ref,
+            btreemap_value_mut,
+            btreemap_tydesc,
+            key_ref,
+            key_tydesc,
+            value_out,
+            value_tydesc,
+        )
+    }
 }
 
 #[unsafe(no_mangle)]

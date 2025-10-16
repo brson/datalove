@@ -4,25 +4,50 @@ use rmx::prelude::*;
 use datalove_rt::rtdt;
 use std::ptr;
 
-/// Create a Map<u32, u32> type descriptor.
-fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
-    let key_tydesc = Box::new(rtdt::TyDesc {
+/// Create a u32 type descriptor.
+fn create_u32_tydesc() -> Box<rtdt::TyDesc> {
+    Box::new(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
             nothing: rtdt::TyInfoNothing,
+        },
+    })
+}
+
+/// Create an Option<u32> type descriptor.
+fn create_option_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
+    let inner_tydesc = create_u32_tydesc();
+
+    // Create the option tydesc first with placeholder size/align.
+    let mut option_tydesc = Box::new(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::Option,
+        size: 0,
+        align: 0,
+        type_info: rtdt::TyInfo {
+            option: rtdt::TyInfoOption {
+                inner_tydesc: &*inner_tydesc as *const rtdt::TyDesc,
+            },
         },
     });
 
-    let value_tydesc = Box::new(rtdt::TyDesc {
-        type_tag: rtdt::TyTag::U32,
-        size: 4,
-        align: 4,
-        type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
-        },
-    });
+    // Now compute the layout.
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+
+    // Update size and align.
+    option_tydesc.size = option_layout.size;
+    option_tydesc.align = option_layout.align;
+
+    (option_tydesc, inner_tydesc)
+}
+
+/// Create a Map<u32, u32> type descriptor.
+fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
+    let key_tydesc = create_u32_tydesc();
+    let value_tydesc = create_u32_tydesc();
 
     let map_tydesc = Box::new(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Map,
@@ -1356,6 +1381,564 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
     }
 
     assert_eq!(map.len, 50);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+// ==================== btreemap_get tests ====================
+
+/// Test getting from an empty map returns None.
+#[test]
+fn test_btreemap_get_empty() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Try to get a key from empty map.
+    let key = 42u32;
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+    let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_get(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &key as *const u32 as *const u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Check that we got None.
+    let tag = option_buffer[0];
+    assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test getting an existing key returns Some with correct value.
+#[test]
+fn test_btreemap_get_existing_key() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert (42, 100).
+    let mut key = 42u32;
+    let mut value = 100u32;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_insert_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &mut key as *mut u32 as *mut u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            &mut value as *mut u32 as *mut u8,
+            &*value_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Get the key.
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+    let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_get(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &key as *const u32 as *const u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Check that we got Some.
+    let tag = option_buffer[0];
+    assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+    // Check the value.
+    let value_ptr = unsafe {
+        option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+    };
+    let retrieved_value = unsafe { *value_ptr };
+    assert_eq!(retrieved_value, 100);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test getting a non-existent key returns None.
+#[test]
+fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert (10, 100), (20, 200), (30, 300).
+    for i in 1u32..=3 {
+        let mut key = i * 10;
+        let mut value = i * 100;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &mut key as *mut u32 as *mut u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*value_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    // Try to get a key that doesn't exist.
+    let key = 42u32;
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+    let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_get(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &key as *const u32 as *const u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Check that we got None.
+    let tag = option_buffer[0];
+    assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test getting multiple keys from map.
+#[test]
+fn test_btreemap_get_multiple() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert 5 entries.
+    for i in 0u32..5 {
+        let mut key = i * 10;
+        let mut value = i * 100;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &mut key as *mut u32 as *mut u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*value_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+
+    // Get each key and verify value.
+    for i in 0u32..5 {
+        let key = i * 10;
+        let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_get(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &key as *const u32 as *const u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+                option_buffer.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+        let tag = option_buffer[0];
+        assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+        let value_ptr = unsafe {
+            option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+        };
+        let retrieved_value = unsafe { *value_ptr };
+        assert_eq!(retrieved_value, i * 100);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test that get returns updated value after update.
+#[test]
+fn test_btreemap_get_after_update() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert (42, 100).
+    let mut key = 42u32;
+    let mut value = 100u32;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_insert_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &mut key as *mut u32 as *mut u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            &mut value as *mut u32 as *mut u8,
+            &*value_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+
+    // Get and verify initial value.
+    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_get(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &key as *const u32 as *const u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let tag = option_buffer[0];
+    assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+    let value_ptr = unsafe {
+        option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+    };
+    let retrieved_value = unsafe { *value_ptr };
+    assert_eq!(retrieved_value, 100);
+
+    // Update (42, 200).
+    let mut value2 = 200u32;
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_insert_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &mut key as *mut u32 as *mut u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            &mut value2 as *mut u32 as *mut u8,
+            &*value_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Get and verify updated value.
+    let mut option_buffer2 = vec![0u8; option_layout.size as usize];
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_get(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &key as *const u32 as *const u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            option_buffer2.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let tag2 = option_buffer2[0];
+    assert_eq!(tag2, rtdt::OptionTag::Some as u8);
+
+    let value_ptr2 = unsafe {
+        option_buffer2.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+    };
+    let retrieved_value2 = unsafe { *value_ptr2 };
+    assert_eq!(retrieved_value2, 200);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test getting keys from a map with many elements (splits).
+#[test]
+fn test_btreemap_get_with_splits() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert 50 entries.
+    for i in 0u32..50 {
+        let mut key = i;
+        let mut value = i * 10;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &mut key as *mut u32 as *mut u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*value_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+
+    // Get each key and verify value.
+    for i in 0u32..50 {
+        let key = i;
+        let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_get(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &key as *const u32 as *const u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+                option_buffer.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+        let tag = option_buffer[0];
+        assert_eq!(tag, rtdt::OptionTag::Some as u8, "Key {} should exist", i);
+
+        let value_ptr = unsafe {
+            option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+        };
+        let retrieved_value = unsafe { *value_ptr };
+        assert_eq!(retrieved_value, i * 10, "Key {} value mismatch", i);
+    }
+
+    // Try to get non-existent keys.
+    for i in 50u32..55 {
+        let key = i;
+        let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_get(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &key as *const u32 as *const u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+                option_buffer.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+        let tag = option_buffer[0];
+        assert_eq!(tag, rtdt::OptionTag::None as u8, "Key {} should not exist", i);
+    }
 
     let status = unsafe {
         datalove_rt::dtlv_rti_btreemap_destroy_local(
