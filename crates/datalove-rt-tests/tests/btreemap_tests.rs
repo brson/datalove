@@ -783,3 +783,756 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
 
     Ok(())
 }
+
+// ==================== String type helpers ====================
+
+/// Create a String type descriptor.
+fn create_string_tydesc() -> Box<rtdt::TyDesc> {
+    Box::new(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::String,
+        size: std::mem::size_of::<rtdt::String>() as u32,
+        align: std::mem::align_of::<rtdt::String>() as u32,
+        type_info: rtdt::TyInfo {
+            nothing: rtdt::TyInfoNothing,
+        },
+    })
+}
+
+/// Create a Map<String, String> type descriptor.
+fn create_map_string_string_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
+    let key_tydesc = create_string_tydesc();
+    let value_tydesc = create_string_tydesc();
+
+    let map_tydesc = Box::new(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::Map,
+        size: std::mem::size_of::<rtdt::Map>() as u32,
+        align: std::mem::align_of::<rtdt::Map>() as u32,
+        type_info: rtdt::TyInfo {
+            map: rtdt::TyInfoMap {
+                key_tydesc: &*key_tydesc as *const rtdt::TyDesc,
+                value_tydesc: &*value_tydesc as *const rtdt::TyDesc,
+            },
+        },
+    });
+
+    (map_tydesc, key_tydesc, value_tydesc)
+}
+
+/// Create a tuple (String, String) type descriptor for map entry.
+fn create_tuple_string_string_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
+    let key_tydesc = create_string_tydesc();
+    let value_tydesc = create_string_tydesc();
+
+    #[repr(C)]
+    struct TupleStringString {
+        _field0: rtdt::String,
+        _field1: rtdt::String,
+    }
+
+    let field0_offset = std::mem::offset_of!(TupleStringString, _field0) as u32;
+    let field1_offset = std::mem::offset_of!(TupleStringString, _field1) as u32;
+
+    let fields = vec![
+        rtdt::TyInfoTupleField {
+            offset: field0_offset,
+            tydesc: &*key_tydesc as *const rtdt::TyDesc,
+        },
+        rtdt::TyInfoTupleField {
+            offset: field1_offset,
+            tydesc: &*value_tydesc as *const rtdt::TyDesc,
+        },
+    ].into_boxed_slice();
+
+    let fields_ptr = fields.as_ptr();
+    std::mem::forget(fields);
+
+    let tuple_tydesc = Box::new(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::Tuple,
+        size: std::mem::size_of::<TupleStringString>() as u32,
+        align: std::mem::align_of::<TupleStringString>() as u32,
+        type_info: rtdt::TyInfo {
+            tuple: rtdt::TyInfoTuple {
+                num_fields: 2,
+                fields: fields_ptr,
+            },
+        },
+    });
+
+    (tuple_tydesc, key_tydesc, value_tydesc)
+}
+
+/// Helper to create a String from a &str using the runtime.
+unsafe fn create_runtime_string(
+    rt: datalove_rt::LocalRtHandle,
+    s: &str,
+    string_tydesc: *const rtdt::TyDesc,
+) -> rtdt::String {
+    unsafe {
+        let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
+        datalove_rt::dtlv_rti_string_create_local(
+            rt,
+            string.as_mut_ptr() as *mut u8,
+            string_tydesc,
+        );
+        let mut string = string.assume_init();
+
+        if !s.is_empty() {
+            datalove_rt::dtlv_rti_string_push_bytes_local(
+                rt,
+                &mut string as *mut rtdt::String as *mut u8,
+                string_tydesc,
+                s.as_ptr(),
+                s.len() as u32,
+            );
+        }
+
+        string
+    }
+}
+
+// ==================== String tests ====================
+
+/// Test creating an empty btreemap with String keys and values.
+#[test]
+fn test_btreemap_create_empty_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    assert!(map.root.is_null());
+    assert_eq!(map.len, 0);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test destroying an empty btreemap with String keys and values.
+#[test]
+fn test_btreemap_destroy_empty_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    assert!(map.root.is_null());
+    assert_eq!(map.len, 0);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test clearing an empty btreemap with String keys and values.
+#[test]
+fn test_btreemap_clear_empty_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_clear_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    assert!(map.root.is_null());
+    assert_eq!(map.len, 0);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting a single String element into an empty map.
+#[test]
+fn test_btreemap_insert_single_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc();
+    let (tuple_tydesc, tuple_key_tydesc, tuple_value_tydesc) = create_tuple_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    #[repr(C)]
+    struct TupleStringString {
+        field0: rtdt::String,
+        field1: rtdt::String,
+    }
+
+    unsafe {
+        let key_str = create_runtime_string(rt, "hello", &*tuple_key_tydesc);
+        let value_str = create_runtime_string(rt, "world", &*tuple_value_tydesc);
+
+        let mut entry = TupleStringString {
+            field0: key_str,
+            field1: value_str,
+        };
+        let entry_ptr = &mut entry as *mut TupleStringString as *mut u8;
+
+        let status = datalove_rt::dtlv_rti_btreemap_insert_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            entry_ptr,
+            &*tuple_tydesc as *const rtdt::TyDesc,
+        );
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+        assert_eq!(map.len, 1);
+        assert!(!map.root.is_null());
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting multiple String elements.
+#[test]
+fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _, _) = create_map_string_string_tydesc();
+    let (tuple_tydesc, tuple_key_tydesc, tuple_value_tydesc) = create_tuple_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    #[repr(C)]
+    struct TupleStringString {
+        field0: rtdt::String,
+        field1: rtdt::String,
+    }
+
+    let keys = ["key0", "key1", "key2", "key3", "key4"];
+    let values = ["val0", "val1", "val2", "val3", "val4"];
+
+    for i in 0..5 {
+        unsafe {
+            let key_str = create_runtime_string(rt, keys[i], &*tuple_key_tydesc);
+            let value_str = create_runtime_string(rt, values[i], &*tuple_value_tydesc);
+
+            let mut entry = TupleStringString {
+                field0: key_str,
+                field1: value_str,
+            };
+            let entry_ptr = &mut entry as *mut TupleStringString as *mut u8;
+
+            let status = datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                entry_ptr,
+                &*tuple_tydesc as *const rtdt::TyDesc,
+            );
+            assert_eq!(status, datalove_rt::RtStatus::Ok);
+        }
+    }
+
+    assert_eq!(map.len, 5);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test updating an existing String key.
+#[test]
+fn test_btreemap_insert_update_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _, _) = create_map_string_string_tydesc();
+    let (tuple_tydesc, tuple_key_tydesc, tuple_value_tydesc) = create_tuple_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    #[repr(C)]
+    struct TupleStringString {
+        field0: rtdt::String,
+        field1: rtdt::String,
+    }
+
+    unsafe {
+        let key_str = create_runtime_string(rt, "mykey", &*tuple_key_tydesc);
+        let value_str = create_runtime_string(rt, "value1", &*tuple_value_tydesc);
+
+        let mut entry = TupleStringString {
+            field0: key_str,
+            field1: value_str,
+        };
+        let entry_ptr = &mut entry as *mut TupleStringString as *mut u8;
+
+        let status = datalove_rt::dtlv_rti_btreemap_insert_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            entry_ptr,
+            &*tuple_tydesc as *const rtdt::TyDesc,
+        );
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(map.len, 1);
+
+        let key_str2 = create_runtime_string(rt, "mykey", &*tuple_key_tydesc);
+        let value_str2 = create_runtime_string(rt, "value2", &*tuple_value_tydesc);
+
+        let mut entry2 = TupleStringString {
+            field0: key_str2,
+            field1: value_str2,
+        };
+        let entry2_ptr = &mut entry2 as *mut TupleStringString as *mut u8;
+
+        let status = datalove_rt::dtlv_rti_btreemap_insert_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            entry2_ptr,
+            &*tuple_tydesc as *const rtdt::TyDesc,
+        );
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(map.len, 1);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting enough String elements to trigger a leaf split.
+#[test]
+fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _, _) = create_map_string_string_tydesc();
+    let (tuple_tydesc, tuple_key_tydesc, tuple_value_tydesc) = create_tuple_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    #[repr(C)]
+    struct TupleStringString {
+        field0: rtdt::String,
+        field1: rtdt::String,
+    }
+
+    for i in 0..15 {
+        unsafe {
+            let key = format!("key{:03}", i);
+            let value = format!("value{:03}", i);
+
+            let key_str = create_runtime_string(rt, &key, &*tuple_key_tydesc);
+            let value_str = create_runtime_string(rt, &value, &*tuple_value_tydesc);
+
+            let mut entry = TupleStringString {
+                field0: key_str,
+                field1: value_str,
+            };
+            let entry_ptr = &mut entry as *mut TupleStringString as *mut u8;
+
+            let status = datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                entry_ptr,
+                &*tuple_tydesc as *const rtdt::TyDesc,
+            );
+            assert_eq!(status, datalove_rt::RtStatus::Ok);
+        }
+    }
+
+    assert_eq!(map.len, 15);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting enough String elements to trigger multi-level splits.
+#[test]
+fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _, _) = create_map_string_string_tydesc();
+    let (tuple_tydesc, tuple_key_tydesc, tuple_value_tydesc) = create_tuple_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    #[repr(C)]
+    struct TupleStringString {
+        field0: rtdt::String,
+        field1: rtdt::String,
+    }
+
+    for i in 0..30 {
+        unsafe {
+            let key = format!("key{:03}", i);
+            let value = format!("value{:03}", i);
+
+            let key_str = create_runtime_string(rt, &key, &*tuple_key_tydesc);
+            let value_str = create_runtime_string(rt, &value, &*tuple_value_tydesc);
+
+            let mut entry = TupleStringString {
+                field0: key_str,
+                field1: value_str,
+            };
+            let entry_ptr = &mut entry as *mut TupleStringString as *mut u8;
+
+            let status = datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                entry_ptr,
+                &*tuple_tydesc as *const rtdt::TyDesc,
+            );
+            assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", key);
+        }
+    }
+
+    assert_eq!(map.len, 30);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting many String elements to create a deep tree.
+#[test]
+fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _, _) = create_map_string_string_tydesc();
+    let (tuple_tydesc, tuple_key_tydesc, tuple_value_tydesc) = create_tuple_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    #[repr(C)]
+    struct TupleStringString {
+        field0: rtdt::String,
+        field1: rtdt::String,
+    }
+
+    for i in 0..100 {
+        unsafe {
+            let key = format!("key{:04}", i);
+            let value = format!("value{:04}", i);
+
+            let key_str = create_runtime_string(rt, &key, &*tuple_key_tydesc);
+            let value_str = create_runtime_string(rt, &value, &*tuple_value_tydesc);
+
+            let mut entry = TupleStringString {
+                field0: key_str,
+                field1: value_str,
+            };
+            let entry_ptr = &mut entry as *mut TupleStringString as *mut u8;
+
+            let status = datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                entry_ptr,
+                &*tuple_tydesc as *const rtdt::TyDesc,
+            );
+            assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", key);
+        }
+    }
+
+    assert_eq!(map.len, 100);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting String elements in reverse order.
+#[test]
+fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _, _) = create_map_string_string_tydesc();
+    let (tuple_tydesc, tuple_key_tydesc, tuple_value_tydesc) = create_tuple_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    #[repr(C)]
+    struct TupleStringString {
+        field0: rtdt::String,
+        field1: rtdt::String,
+    }
+
+    for i in (0..50).rev() {
+        unsafe {
+            let key = format!("key{:04}", i);
+            let value = format!("value{:04}", i);
+
+            let key_str = create_runtime_string(rt, &key, &*tuple_key_tydesc);
+            let value_str = create_runtime_string(rt, &value, &*tuple_value_tydesc);
+
+            let mut entry = TupleStringString {
+                field0: key_str,
+                field1: value_str,
+            };
+            let entry_ptr = &mut entry as *mut TupleStringString as *mut u8;
+
+            let status = datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                entry_ptr,
+                &*tuple_tydesc as *const rtdt::TyDesc,
+            );
+            assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", key);
+        }
+    }
+
+    assert_eq!(map.len, 50);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
