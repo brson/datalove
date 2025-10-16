@@ -1561,6 +1561,16 @@ fn test_list_push_pop_string() -> AnyResult<()> {
 
     assert_eq!(list.size, 0);
 
+    // Clean up the cloned option value.
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
     let status = unsafe {
         datalove_rt::dtlv_rti_list_destroy_local(
             rt,
@@ -1696,6 +1706,16 @@ fn test_list_get_valid_string() -> AnyResult<()> {
 
     let tag = option_buffer[0];
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+    // Clean up the cloned option value.
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
 
     let status = unsafe {
         datalove_rt::dtlv_rti_list_destroy_local(
@@ -2054,6 +2074,16 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     assert_eq!(list.size, 4);
+
+    // Clean up the cloned option value.
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
 
     let status = unsafe {
         datalove_rt::dtlv_rti_list_destroy_local(

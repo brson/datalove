@@ -108,7 +108,7 @@ pub unsafe fn any_destroy_local(
 
                 if tag == rtdt::OptionTag::Some {
                     let option_info = ty.type_info.option;
-                    let layout = rtdt::layout::compute_option_layout(option_info.inner_tydesc);
+                    let layout = rtdt::layout::compute_option_layout(tydesc);
                     let payload_ptr = value_in.add(layout.payload_offset as usize);
                     any_destroy_local(rt, payload_ptr, option_info.inner_tydesc)
                 } else {
@@ -122,7 +122,7 @@ pub unsafe fn any_destroy_local(
                 let tag = (*result_ptr).tag;
 
                 let result_info = ty.type_info.result;
-                let layout = rtdt::layout::compute_result_layout(result_info.ok_tydesc);
+                let layout = rtdt::layout::compute_result_layout(tydesc);
                 let payload_ptr = value_in.add(layout.payload_offset as usize);
 
                 match tag {
