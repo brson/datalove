@@ -603,3 +603,183 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
 
     Ok(())
 }
+
+/// Test inserting enough elements to trigger multi-level splits (deeper tree).
+#[test]
+fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _, _) = create_map_u32_u32_tydesc();
+    let (tuple_tydesc, _tuple_key_tydesc, _tuple_value_tydesc) = create_tuple_u32_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert 30 entries - this should trigger multiple splits including internal node splits
+    for i in 0u32..30 {
+        let mut entry = (i * 10, i * 100);
+        let entry_ptr = &mut entry as *mut (u32, u32) as *mut u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                entry_ptr,
+                &*tuple_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", i * 10);
+    }
+
+    // Verify map len
+    assert_eq!(map.len, 30);
+
+    // Clean up
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting many elements to create a deep tree.
+#[test]
+fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _, _) = create_map_u32_u32_tydesc();
+    let (tuple_tydesc, _tuple_key_tydesc, _tuple_value_tydesc) = create_tuple_u32_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert 100 entries to create a deeper tree structure
+    for i in 0u32..100 {
+        let mut entry = (i, i * 10);
+        let entry_ptr = &mut entry as *mut (u32, u32) as *mut u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                entry_ptr,
+                &*tuple_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", i);
+    }
+
+    // Verify map len
+    assert_eq!(map.len, 100);
+
+    // Clean up
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting in reverse order (stress test for tree balancing).
+#[test]
+fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _, _) = create_map_u32_u32_tydesc();
+    let (tuple_tydesc, _tuple_key_tydesc, _tuple_value_tydesc) = create_tuple_u32_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert 50 entries in reverse order
+    for i in (0u32..50).rev() {
+        let mut entry = (i, i * 10);
+        let entry_ptr = &mut entry as *mut (u32, u32) as *mut u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                entry_ptr,
+                &*tuple_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", i);
+    }
+
+    // Verify map len
+    assert_eq!(map.len, 50);
+
+    // Clean up
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}

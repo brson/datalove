@@ -319,6 +319,14 @@ enum LeafInsertResult {
     NeedsSplit,
 }
 
+/// Information about a node split.
+struct SplitInfo {
+    /// The separator key to insert into parent.
+    separator_key_buf: Vec<u8>,
+    /// The new right sibling node created by the split.
+    new_node: *mut MapNode,
+}
+
 /// Find the leaf node where a key should be inserted.
 unsafe fn find_leaf_for_key(
     mut node: *mut MapNode,
@@ -441,21 +449,22 @@ unsafe fn leaf_insert_or_update(
     }
 }
 
-/// Split a full leaf and propagate the split up the tree.
-unsafe fn split_leaf_and_propagate(
+/// Split a full leaf node and insert the pending key-value pair.
+///
+/// Returns split info for parent update.
+unsafe fn split_leaf(
     rt: &mut LocalRt,
-    root_ptr: &mut *const MapNode,
     leaf: *mut MapNode,
     key: *const u8,
     value: *const u8,
     key_tydesc: *const TyDesc,
     value_tydesc: *const TyDesc,
-) -> RtStatus {
+) -> core::result::Result<SplitInfo, RtStatus> {
     unsafe {
         // Allocate a new sibling leaf.
         let new_leaf = alloc_leaf_node(rt, key_tydesc, value_tydesc);
         if new_leaf.is_null() {
-            return RtStatus::Error;
+            return Err(RtStatus::Error);
         }
 
         let capacity = rtdt::MAP_NODE_CAPACITY;
@@ -505,38 +514,171 @@ unsafe fn split_leaf_and_propagate(
 
         if insert_result == LeafInsertResult::NeedsSplit {
             // Still needs split - this shouldn't happen with proper split point.
-            return RtStatus::Error;
+            return Err(RtStatus::Error);
         }
 
-        // Get the separator key (first key of new_leaf).
-        let separator_key = new_keys_ptr;
+        // Copy the separator key (first key of new_leaf) into a buffer.
+        let mut separator_key_buf = vec![0u8; key_size];
+        std::ptr::copy_nonoverlapping(new_keys_ptr, separator_key_buf.as_mut_ptr(), key_size);
 
-        // If root is a leaf, create new internal root.
-        if *root_ptr == leaf as *const MapNode {
-            let new_root = alloc_internal_node(rt, key_tydesc);
-            if new_root.is_null() {
-                return RtStatus::Error;
+        Ok(SplitInfo {
+            separator_key_buf,
+            new_node: new_leaf,
+        })
+    }
+}
+
+/// Insert a separator key and child pointer into an internal node.
+///
+/// Returns Ok if successful, Err(SplitInfo) if the node was full and had to split.
+unsafe fn insert_into_internal(
+    rt: &mut LocalRt,
+    node: *mut MapNode,
+    separator_key: &[u8],
+    right_child: *mut MapNode,
+    key_tydesc: *const TyDesc,
+) -> core::result::Result<(), SplitInfo> {
+    unsafe {
+        let len = read_node_len(node);
+        let capacity = rtdt::MAP_NODE_CAPACITY;
+
+        if len >= capacity {
+            // Node is full, need to split.
+            return Err(split_internal_node(rt, node, separator_key, right_child, key_tydesc));
+        }
+
+        let keys_ptr = internal_keys_ptr(node, key_tydesc);
+        let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
+        let key_size = (*key_tydesc).size as usize;
+
+        // Find insertion position.
+        let mut insert_pos = len as usize;
+        for i in 0..len as usize {
+            let node_key = keys_ptr.add(i * key_size);
+            let cmp_result = crate::cmp::cmp_total(
+                separator_key.as_ptr(),
+                key_tydesc,
+                node_key,
+                key_tydesc,
+            );
+            match cmp_result {
+                crate::RtOrdering::Less => {
+                    insert_pos = i;
+                    break;
+                }
+                crate::RtOrdering::Equal => {
+                    // Duplicate separator key shouldn't happen.
+                    insert_pos = i;
+                    break;
+                }
+                crate::RtOrdering::Greater => continue,
+                crate::RtOrdering::Error => {
+                    insert_pos = i;
+                    break;
+                }
             }
-
-            let root_keys_ptr = internal_keys_ptr(new_root, key_tydesc);
-            let root_children_ptr = internal_child_ptrs_ptr(new_root, key_tydesc);
-
-            // Copy separator key.
-            std::ptr::copy_nonoverlapping(separator_key, root_keys_ptr, key_size);
-
-            // Set children.
-            *root_children_ptr.add(0) = leaf;
-            *root_children_ptr.add(1) = new_leaf;
-
-            write_node_len(new_root, 1);
-            *root_ptr = new_root;
-
-            return RtStatus::Ok;
         }
 
-        // TODO: Handle propagating split to internal nodes.
-        // For now, this only handles single-level trees.
-        RtStatus::Ok
+        // Shift keys and child pointers to make room.
+        if insert_pos < len as usize {
+            let shift_count = len as usize - insert_pos;
+            let src_key = keys_ptr.add(insert_pos * key_size);
+            let dst_key = keys_ptr.add((insert_pos + 1) * key_size);
+            std::ptr::copy(src_key, dst_key, shift_count * key_size);
+
+            let src_child = children_ptr.add(insert_pos + 1);
+            let dst_child = children_ptr.add(insert_pos + 2);
+            std::ptr::copy(src_child, dst_child, shift_count);
+        }
+
+        // Insert the separator key.
+        let key_slot = keys_ptr.add(insert_pos * key_size);
+        std::ptr::copy_nonoverlapping(separator_key.as_ptr(), key_slot, key_size);
+
+        // Insert the right child pointer.
+        *children_ptr.add(insert_pos + 1) = right_child;
+
+        write_node_len(node, len + 1);
+        Ok(())
+    }
+}
+
+/// Split a full internal node.
+unsafe fn split_internal_node(
+    rt: &mut LocalRt,
+    node: *mut MapNode,
+    pending_key: &[u8],
+    pending_child: *mut MapNode,
+    key_tydesc: *const TyDesc,
+) -> SplitInfo {
+    unsafe {
+        // Allocate a new sibling internal node.
+        let new_node = alloc_internal_node(rt, key_tydesc);
+        assert!(!new_node.is_null(), "Failed to allocate internal node");
+
+        let capacity = rtdt::MAP_NODE_CAPACITY;
+        let split_point = (capacity / 2) as usize;
+
+        let keys_ptr = internal_keys_ptr(node, key_tydesc);
+        let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
+        let new_keys_ptr = internal_keys_ptr(new_node, key_tydesc);
+        let new_children_ptr = internal_child_ptrs_ptr(new_node, key_tydesc);
+
+        let key_size = (*key_tydesc).size as usize;
+
+        // The middle key becomes the separator to push up.
+        let mut separator_key_buf = vec![0u8; key_size];
+        std::ptr::copy_nonoverlapping(
+            keys_ptr.add(split_point * key_size),
+            separator_key_buf.as_mut_ptr(),
+            key_size,
+        );
+
+        // Move keys after split_point (excluding the separator) to new node.
+        let keys_to_move = capacity as usize - split_point - 1;
+        if keys_to_move > 0 {
+            std::ptr::copy_nonoverlapping(
+                keys_ptr.add((split_point + 1) * key_size),
+                new_keys_ptr,
+                keys_to_move * key_size,
+            );
+        }
+
+        // Move child pointers (split_point+1 onwards) to new node.
+        let children_to_move = capacity as usize - split_point;
+        std::ptr::copy_nonoverlapping(
+            children_ptr.add(split_point + 1),
+            new_children_ptr,
+            children_to_move,
+        );
+
+        write_node_len(node, split_point as u32);
+        write_node_len(new_node, keys_to_move as u32);
+
+        // Now insert the pending key/child into the appropriate node.
+        let cmp_result = crate::cmp::cmp_total(
+            pending_key.as_ptr(),
+            key_tydesc,
+            separator_key_buf.as_ptr(),
+            key_tydesc,
+        );
+
+        let insert_result = match cmp_result {
+            crate::RtOrdering::Less => {
+                insert_into_internal(rt, node, pending_key, pending_child, key_tydesc)
+            }
+            _ => {
+                insert_into_internal(rt, new_node, pending_key, pending_child, key_tydesc)
+            }
+        };
+
+        // After split, there should be room - if not, something is very wrong.
+        assert!(insert_result.is_ok(), "Split didn't make room for insertion");
+
+        SplitInfo {
+            separator_key_buf,
+            new_node,
+        }
     }
 }
 
@@ -597,8 +739,9 @@ pub unsafe fn btreemap_insert_impl(
             return RtStatus::Ok;
         }
 
-        // Find the leaf where the key should be inserted.
-        let leaf = find_leaf_for_key(root, key_ptr, map_key_tydesc, map_value_tydesc);
+        // Find the leaf where the key should be inserted, keeping track of the path.
+        let mut path: Vec<*mut MapNode> = Vec::new();
+        let leaf = find_leaf_with_path(root, key_ptr, map_key_tydesc, map_value_tydesc, &mut path);
 
         // Try to insert into the leaf.
         let result = leaf_insert_or_update(
@@ -620,23 +763,162 @@ pub unsafe fn btreemap_insert_impl(
                 RtStatus::Ok
             }
             LeafInsertResult::NeedsSplit => {
-                // Leaf is full, need to split.
-                let split_result = split_leaf_and_propagate(
+                // Leaf is full, need to split and propagate up.
+                let split_info = match split_leaf(rt, leaf, key_ptr, val_ptr, map_key_tydesc, map_value_tydesc) {
+                    Ok(info) => info,
+                    Err(status) => return status,
+                };
+
+                // Propagate split up the tree.
+                let status = propagate_split_up(
                     rt,
                     &mut (*map_ptr).root,
                     leaf,
-                    key_ptr,
-                    val_ptr,
+                    split_info,
+                    &path,
                     map_key_tydesc,
-                    map_value_tydesc,
                 );
 
-                if split_result == RtStatus::Ok {
+                if status == RtStatus::Ok {
                     (*map_ptr).len += 1;
                 }
-                split_result
+                status
             }
         }
+    }
+}
+
+/// Find the leaf node where a key should be inserted, tracking the path.
+unsafe fn find_leaf_with_path(
+    mut node: *mut MapNode,
+    key: *const u8,
+    key_tydesc: *const TyDesc,
+    value_tydesc: *const TyDesc,
+    path: &mut Vec<*mut MapNode>,
+) -> *mut MapNode {
+    unsafe {
+        loop {
+            let tag = read_node_tag(node);
+            match tag {
+                MapNodeTag::Leaf => return node,
+                MapNodeTag::Internal => {
+                    path.push(node);
+
+                    let len = read_node_len(node);
+                    let keys_ptr = internal_keys_ptr(node, key_tydesc);
+                    let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
+                    let key_size = (*key_tydesc).size as usize;
+
+                    // Find the child to descend into.
+                    let mut child_idx = 0;
+                    for i in 0..len as usize {
+                        let node_key = keys_ptr.add(i * key_size);
+                        let cmp_result = crate::cmp::cmp_total(
+                            key,
+                            key_tydesc,
+                            node_key,
+                            key_tydesc,
+                        );
+                        match cmp_result {
+                            crate::RtOrdering::Less => break,
+                            crate::RtOrdering::Equal => break,
+                            crate::RtOrdering::Greater => {
+                                child_idx = i + 1;
+                            }
+                            crate::RtOrdering::Error => break,
+                        }
+                    }
+
+                    node = *children_ptr.add(child_idx);
+                }
+            }
+        }
+    }
+}
+
+/// Propagate a split up the tree.
+unsafe fn propagate_split_up(
+    rt: &mut LocalRt,
+    root_ptr: &mut *const MapNode,
+    mut child: *mut MapNode,
+    mut split_info: SplitInfo,
+    path: &[*mut MapNode],
+    key_tydesc: *const TyDesc,
+) -> RtStatus {
+    unsafe {
+        // If there's no parent, child must be the root.
+        if path.is_empty() {
+            // Create new internal root.
+            let new_root = alloc_internal_node(rt, key_tydesc);
+            if new_root.is_null() {
+                return RtStatus::Error;
+            }
+
+            let root_keys_ptr = internal_keys_ptr(new_root, key_tydesc);
+            let root_children_ptr = internal_child_ptrs_ptr(new_root, key_tydesc);
+            let key_size = (*key_tydesc).size as usize;
+
+            // Copy separator key.
+            std::ptr::copy_nonoverlapping(
+                split_info.separator_key_buf.as_ptr(),
+                root_keys_ptr,
+                key_size,
+            );
+
+            // Set children.
+            *root_children_ptr.add(0) = child;
+            *root_children_ptr.add(1) = split_info.new_node;
+
+            write_node_len(new_root, 1);
+            *root_ptr = new_root;
+
+            return RtStatus::Ok;
+        }
+
+        // Walk up the path, inserting separators into parents.
+        for &parent in path.iter().rev() {
+            match insert_into_internal(
+                rt,
+                parent,
+                &split_info.separator_key_buf,
+                split_info.new_node,
+                key_tydesc,
+            ) {
+                Ok(()) => {
+                    // Successfully inserted into parent, done!
+                    return RtStatus::Ok;
+                }
+                Err(new_split_info) => {
+                    // Parent split, continue propagating up.
+                    child = parent;
+                    split_info = new_split_info;
+                }
+            }
+        }
+
+        // If we get here, the root split.
+        let new_root = alloc_internal_node(rt, key_tydesc);
+        if new_root.is_null() {
+            return RtStatus::Error;
+        }
+
+        let root_keys_ptr = internal_keys_ptr(new_root, key_tydesc);
+        let root_children_ptr = internal_child_ptrs_ptr(new_root, key_tydesc);
+        let key_size = (*key_tydesc).size as usize;
+
+        std::ptr::copy_nonoverlapping(
+            split_info.separator_key_buf.as_ptr(),
+            root_keys_ptr,
+            key_size,
+        );
+
+        *root_children_ptr.add(0) = child;
+        *root_children_ptr.add(1) = split_info.new_node;
+
+        write_node_len(new_root, 1);
+        *root_ptr = new_root;
+
+        RtStatus::Ok
     }
 }
 
