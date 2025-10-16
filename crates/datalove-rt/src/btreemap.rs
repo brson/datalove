@@ -463,11 +463,10 @@ unsafe fn leaf_insert_or_update(
                     let value_slot = values_ptr.add(i * value_size);
                     let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
                     let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc);
-                    // Clone the new value.
-                    let status = crate::clone::clone_value(rt_handle, value, value_tydesc, value_slot);
-                    if status != RtStatus::Ok {
-                        return LeafInsertResult::NeedsSplit; // Error handling.
-                    }
+                    // Move the new value (by-move semantics).
+                    std::ptr::copy_nonoverlapping(value, value_slot, value_size);
+                    // Destroy the input key since we're not using it (key already exists in tree).
+                    let _ = crate::destroy::any_destroy_local(rt_handle, key as *mut u8, key_tydesc);
                     return LeafInsertResult::Updated;
                 }
                 crate::RtOrdering::Greater => continue,
@@ -491,20 +490,11 @@ unsafe fn leaf_insert_or_update(
             std::ptr::copy(src_val, dst_val, shift_count * value_size);
         }
 
-        // Clone the new key-value pair into the node.
+        // Move the new key-value pair into the node (by-move semantics).
         let key_slot = keys_ptr.add(insert_pos * key_size);
         let value_slot = values_ptr.add(insert_pos * value_size);
-        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
-        let status = crate::clone::clone_value(rt_handle, key, key_tydesc, key_slot);
-        if status != RtStatus::Ok {
-            return LeafInsertResult::NeedsSplit; // Error handling - treat as if node is full.
-        }
-        let status = crate::clone::clone_value(rt_handle, value, value_tydesc, value_slot);
-        if status != RtStatus::Ok {
-            // Need to clean up the key we just cloned.
-            let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
-            return LeafInsertResult::NeedsSplit; // Error handling.
-        }
+        std::ptr::copy_nonoverlapping(key, key_slot, key_size);
+        std::ptr::copy_nonoverlapping(value, value_slot, value_size);
 
         write_node_len(leaf, len + 1);
         LeafInsertResult::Inserted
@@ -822,16 +812,11 @@ pub unsafe fn btreemap_insert_impl(
             let keys_ptr = leaf_keys_ptr(leaf, map_key_tydesc, map_value_tydesc);
             let values_ptr = leaf_values_ptr(leaf, map_key_tydesc, map_value_tydesc);
 
-            // Clone key and value (not just copy, as they may have heap allocations).
-            let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
-            let status = crate::clone::clone_value(rt_handle, key_ptr, map_key_tydesc, keys_ptr);
-            if status != RtStatus::Ok {
-                return status;
-            }
-            let status = crate::clone::clone_value(rt_handle, val_ptr, map_value_tydesc, values_ptr);
-            if status != RtStatus::Ok {
-                return status;
-            }
+            // Move key and value from the input pointers (by-move semantics).
+            let key_size = (*map_key_tydesc).size as usize;
+            let value_size = (*map_value_tydesc).size as usize;
+            std::ptr::copy_nonoverlapping(key_ptr, keys_ptr, key_size);
+            std::ptr::copy_nonoverlapping(val_ptr, values_ptr, value_size);
 
             write_node_len(leaf, 1);
             (*map_ptr).root = leaf as *const MapNode;

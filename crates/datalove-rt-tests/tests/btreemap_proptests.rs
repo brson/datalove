@@ -582,17 +582,8 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-                // Destroy the string objects after insertion (the map has cloned them).
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
-                    &*_key_tydesc,
-                );
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
-                    &*_value_tydesc,
-                );
+                // Note: key_rt and value_rt have been moved into the btreemap.
+                // We must NOT destroy them here - the btreemap now owns them.
             }
 
             prop_assert_eq!(map.len, unique_keys.len() as u32);
@@ -642,17 +633,8 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-                // Destroy the string objects after insertion (the map has cloned them).
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
-                    &*_key_tydesc,
-                );
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
-                    &*_value_tydesc,
-                );
+                // Note: key_rt and value_rt have been moved into the btreemap.
+                // We must NOT destroy them here - the btreemap now owns them.
             }
         }
 
@@ -685,17 +667,8 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-                // Destroy the string objects after insertion (the map has cloned them).
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
-                    &*_key_tydesc,
-                );
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
-                    &*_value_tydesc,
-                );
+                // Note: key_rt and value_rt have been moved into the btreemap.
+                // We must NOT destroy them here - the btreemap now owns them.
             }
         }
 
@@ -752,17 +725,8 @@ proptest! {
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
                 prop_assert_eq!(map.len, 1);
 
-                // Destroy the string objects after insertion (the map has cloned them).
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
-                    &*_key_tydesc,
-                );
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
-                    &*_value_tydesc,
-                );
+                // Note: key_rt and value_rt have been moved into the btreemap.
+                // We must NOT destroy them here - the btreemap now owns them.
             }
 
             let status = datalove_rt::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
@@ -808,17 +772,8 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-                // Destroy the string objects after insertion (the map has cloned them).
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
-                    &*_key_tydesc,
-                );
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
-                    &*_value_tydesc,
-                );
+                // Note: key_rt and value_rt have been moved into the btreemap.
+                // We must NOT destroy them here - the btreemap now owns them.
             }
 
             prop_assert_eq!(map.len, num_entries as u32);
@@ -866,17 +821,8 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-                // Destroy the string objects after insertion (the map has cloned them).
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
-                    &*_key_tydesc,
-                );
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
-                    &*_value_tydesc,
-                );
+                // Note: key_rt and value_rt have been moved into the btreemap.
+                // We must NOT destroy them here - the btreemap now owns them.
             }
 
             let len_before_clear = map.len;
@@ -934,17 +880,8 @@ proptest! {
                     );
                     prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-                    // Destroy the string objects after insertion (the map has cloned them).
-                    let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                        rt,
-                        &mut key_rt as *mut rtdt::String as *mut u8,
-                        &*_key_tydesc,
-                    );
-                    let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                        rt,
-                        &mut value_rt as *mut rtdt::String as *mut u8,
-                        &*_value_tydesc,
-                    );
+                    // Note: key_rt and value_rt have been moved into the btreemap.
+                    // We must NOT destroy them here - the btreemap now owns them.
                 } else {
                     let status = datalove_rt::dtlv_rti_btreemap_clear_local(rt, map_ptr, &*map_tydesc);
                     prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
@@ -1000,17 +937,8 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-                // Destroy the string objects after insertion (the map has cloned them).
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
-                    &*_key_tydesc,
-                );
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
-                    &*_value_tydesc,
-                );
+                // Note: key_rt and value_rt have been moved into the btreemap.
+                // We must NOT destroy them here - the btreemap now owns them.
             }
 
             for (key, value) in &other_entries {
@@ -1031,17 +959,8 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-                // Destroy the string objects after insertion (the map has cloned them).
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut key_rt as *mut rtdt::String as *mut u8,
-                    &*_key_tydesc,
-                );
-                let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                    rt,
-                    &mut value_rt as *mut rtdt::String as *mut u8,
-                    &*_value_tydesc,
-                );
+                // Note: key_rt and value_rt have been moved into the btreemap.
+                // We must NOT destroy them here - the btreemap now owns them.
             }
 
             let mut unique_keys = std::collections::HashSet::new();

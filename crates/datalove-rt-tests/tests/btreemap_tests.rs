@@ -1006,17 +1006,8 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
         assert_eq!(map.len, 1);
         assert!(!map.root.is_null());
 
-        // Destroy the string objects after insertion (the map has cloned them).
-        let _ = datalove_rt::dtlv_rti_string_destroy_local(
-            rt,
-            &mut key_str as *mut rtdt::String as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
-        );
-        let _ = datalove_rt::dtlv_rti_string_destroy_local(
-            rt,
-            &mut value_str as *mut rtdt::String as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
-        );
+        // Note: key_str and value_str have been moved into the btreemap.
+        // We must NOT destroy them here - the btreemap now owns them.
     }
 
     let status = unsafe {
@@ -1076,17 +1067,8 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
             );
             assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-            // Destroy the string objects after insertion (the map has cloned them).
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
-            );
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
-            );
+            // Note: key_str and value_str have been moved into the btreemap.
+            // We must NOT destroy them here - the btreemap now owns them.
         }
     }
 
@@ -1146,17 +1128,8 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::RtStatus::Ok);
         assert_eq!(map.len, 1);
 
-        // Destroy the first set of strings.
-        let _ = datalove_rt::dtlv_rti_string_destroy_local(
-            rt,
-            &mut key_str as *mut rtdt::String as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
-        );
-        let _ = datalove_rt::dtlv_rti_string_destroy_local(
-            rt,
-            &mut value_str as *mut rtdt::String as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
-        );
+        // Note: key_str and value_str have been moved into the btreemap.
+        // We must NOT destroy them here.
 
         let mut key_str2 = create_runtime_string(rt, "mykey", &*key_tydesc);
         let mut value_str2 = create_runtime_string(rt, "value2", &*value_tydesc);
@@ -1173,17 +1146,9 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::RtStatus::Ok);
         assert_eq!(map.len, 1);
 
-        // Destroy the second set of strings.
-        let _ = datalove_rt::dtlv_rti_string_destroy_local(
-            rt,
-            &mut key_str2 as *mut rtdt::String as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
-        );
-        let _ = datalove_rt::dtlv_rti_string_destroy_local(
-            rt,
-            &mut value_str2 as *mut rtdt::String as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
-        );
+        // Note: key_str2 was destroyed by the update operation (since the key already existed).
+        // value_str2 was moved into the btreemap, replacing the old value.
+        // We must NOT destroy either of them here.
     }
 
     let status = unsafe {
@@ -1243,17 +1208,8 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
             );
             assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-            // Destroy the string objects after insertion (the map has cloned them).
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
-            );
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
-            );
+            // Note: key_str and value_str have been moved into the btreemap.
+            // We must NOT destroy them here - the btreemap now owns them.
         }
     }
 
@@ -1316,17 +1272,8 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
             );
             assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", key);
 
-            // Destroy the string objects after insertion (the map has cloned them).
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
-            );
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
-            );
+            // Note: key_str and value_str have been moved into the btreemap.
+            // We must NOT destroy them here - the btreemap now owns them.
         }
     }
 
@@ -1389,17 +1336,8 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
             );
             assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", key);
 
-            // Destroy the string objects after insertion (the map has cloned them).
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
-            );
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
-            );
+            // Note: key_str and value_str have been moved into the btreemap.
+            // We must NOT destroy them here - the btreemap now owns them.
         }
     }
 
@@ -1462,17 +1400,8 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
             );
             assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", key);
 
-            // Destroy the string objects after insertion (the map has cloned them).
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
-            );
-            let _ = datalove_rt::dtlv_rti_string_destroy_local(
-                rt,
-                &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
-            );
+            // Note: key_str and value_str have been moved into the btreemap.
+            // We must NOT destroy them here - the btreemap now owns them.
         }
     }
 
