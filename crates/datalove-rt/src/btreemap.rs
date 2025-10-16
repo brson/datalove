@@ -752,17 +752,18 @@ unsafe fn split_internal_node(
 }
 
 /// Insert a key-value pair into the BTreeMap.
-///
-/// The `value_in` parameter should point to a tuple (K, V) containing the key-value pair.
 pub unsafe fn btreemap_insert_impl(
     rt: &mut LocalRt,
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: *const TyDesc,
+    key_in: *mut u8,
+    key_tydesc: *const TyDesc,
     value_in: *mut u8,
     value_tydesc: *const TyDesc,
 ) -> RtStatus {
     unsafe {
         if btreemap_value_mut.is_null() || btreemap_tydesc.is_null()
+            || key_in.is_null() || key_tydesc.is_null()
             || value_in.is_null() || value_tydesc.is_null() {
             return RtStatus::Error;
         }
@@ -772,16 +773,8 @@ pub unsafe fn btreemap_insert_impl(
         let map_key_tydesc = map_info.key_tydesc;
         let map_value_tydesc = map_info.value_tydesc;
 
-        // Extract key and value from tuple.
-        // The value_in should be a tuple (K, V).
-        let tuple_info = (*value_tydesc).type_info.tuple;
-        if tuple_info.num_fields != 2 {
-            return RtStatus::Error;
-        }
-
-        let fields = std::slice::from_raw_parts(tuple_info.fields, 2);
-        let key_ptr = value_in.add(fields[0].offset as usize);
-        let val_ptr = value_in.add(fields[1].offset as usize);
+        let key_ptr = key_in;
+        let val_ptr = value_in;
 
         let map_ptr = btreemap_value_mut as *mut Map;
         let root = (*map_ptr).root as *mut MapNode;
@@ -999,8 +992,8 @@ pub unsafe fn btreemap_remove_impl(
     _rt: &mut LocalRt,
     _btreemap_value_mut: *mut u8,
     _btreemap_tydesc: *const TyDesc,
-    _value_ref: *const u8,
-    _value_tydesc: *const TyDesc,
+    _key_ref: *const u8,
+    _key_tydesc: *const TyDesc,
 ) -> RtStatus {
     unsafe {
         todo!("btreemap_remove_impl")

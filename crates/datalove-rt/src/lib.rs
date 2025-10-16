@@ -320,6 +320,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clone_from_slice_local(
     // Values will be cloned.
     slice_ptr_ref: *const u8,
     slice_ptr_len: u32,
+    // Should be a tuple of key/value I guess.
     slice_element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
@@ -363,6 +364,9 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_insert_local(
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: *const rtdt::TyDesc,
     // Value is moved.
+    key_in: *mut u8,
+    key_tydesc: *const rtdt::TyDesc,
+    // Value is moved.
     value_in: *mut u8,
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -376,6 +380,8 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_insert_local(
             rt_ref,
             btreemap_value_mut,
             btreemap_tydesc,
+            key_in,
+            key_tydesc,
             value_in,
             value_tydesc,
         )
@@ -387,8 +393,8 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_remove_local(
     rt: LocalRtHandle,
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: *const rtdt::TyDesc,
-    value_ref: *const u8,
-    value_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         if rt.is_null() {
@@ -400,8 +406,8 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_remove_local(
             rt_ref,
             btreemap_value_mut,
             btreemap_tydesc,
-            value_ref,
-            value_tydesc,
+            key_ref,
+            key_tydesc,
         )
     }
 }
