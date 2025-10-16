@@ -12,7 +12,14 @@
         "ty": "u32",
         "value": "@42"
       }
-    }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "u32",
+        "value": "@42"
+      }
+    ]
   },
   {
     "input": "x",
@@ -23,7 +30,19 @@
     },
     "eval": {
       "Error": "@42"
-    }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "u32",
+        "value": "@42"
+      },
+      {
+        "name": "_expr_result",
+        "ty": "u32",
+        "value": "@42"
+      }
+    ]
   },
   {
     "input": "let y = x + 10",
@@ -38,7 +57,24 @@
         "ty": "u32",
         "value": "@52"
       }
-    }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "u32",
+        "value": "@42"
+      },
+      {
+        "name": "_expr_result",
+        "ty": "u32",
+        "value": "@42"
+      },
+      {
+        "name": "y",
+        "ty": "u32",
+        "value": "@52"
+      }
+    ]
   },
   {
     "input": "y",
@@ -49,6 +85,28 @@
     },
     "eval": {
       "Error": "@52"
-    }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "u32",
+        "value": "@42"
+      },
+      {
+        "name": "_expr_result",
+        "ty": "u32",
+        "value": "@52"
+      },
+      {
+        "name": "y",
+        "ty": "u32",
+        "value": "@52"
+      },
+      {
+        "name": "_expr_result",
+        "ty": "u32",
+        "value": "@52"
+      }
+    ]
   }
 ]

@@ -28,12 +28,21 @@ fn find_test_fixtures() -> Vec<PathBuf> {
     fixtures
 }
 
+/// Environment binding (name, type, value).
+#[derive(serde::Serialize)]
+struct EnvBinding {
+    name: String,
+    ty: String,
+    value: String,
+}
+
 /// Test output for a single input to the REPL engine.
 #[derive(serde::Serialize)]
 struct InputResult {
     input: String,
     parse: repl::InputParse,
     eval: Option<repl::Eval>,
+    environment: Vec<EnvBinding>,
 }
 
 /// Process a REPL fixture file.
@@ -67,10 +76,16 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             _ => None,
         };
 
+        let environment = engine.get_environment()
+            .into_iter()
+            .map(|(name, ty, value)| EnvBinding { name, ty, value })
+            .collect();
+
         results.push(InputResult {
             input: input.to_string(),
             parse: parse_result,
             eval: eval_result,
+            environment,
         });
     }
 

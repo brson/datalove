@@ -8,7 +8,14 @@
     },
     "eval": {
       "Error": "type error(s): CannotSynthesize"
-    }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "error",
+        "value": ""
+      }
+    ]
   },
   {
     "input": "let x = 42",
@@ -19,7 +26,19 @@
     },
     "eval": {
       "Error": "type error(s): CannotSynthesize"
-    }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "x",
+        "ty": "error",
+        "value": ""
+      }
+    ]
   },
   {
     "input": "x + y",
@@ -30,6 +49,23 @@
     },
     "eval": {
       "Error": "execution error: TypeError(\"2 type error(s)\")"
-    }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "x",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "_expr_result",
+        "ty": "error",
+        "value": ""
+      }
+    ]
   }
 ]

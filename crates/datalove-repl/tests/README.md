@@ -38,6 +38,7 @@ For each input, the test records:
 - The input string
 - The parse result (InputParse)
 - The eval result (Eval), if applicable
+- The environment after the step (list of name, type, value bindings)
 
 Output is serialized as JSON in `.out.expected` files.
 

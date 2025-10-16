@@ -12,7 +12,14 @@
         "ty": "u32",
         "value": "@100"
       }
-    }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "u32",
+        "value": "@100"
+      }
+    ]
   },
   {
     "input": "let b = 200",
@@ -27,7 +34,19 @@
         "ty": "u32",
         "value": "@200"
       }
-    }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "u32",
+        "value": "@100"
+      },
+      {
+        "name": "b",
+        "ty": "u32",
+        "value": "@200"
+      }
+    ]
   },
   {
     "input": "a + b",
@@ -38,6 +57,23 @@
     },
     "eval": {
       "Error": "@300"
-    }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "u32",
+        "value": "@100"
+      },
+      {
+        "name": "b",
+        "ty": "u32",
+        "value": "@200"
+      },
+      {
+        "name": "_expr_result",
+        "ty": "u32",
+        "value": "@300"
+      }
+    ]
   }
 ]
