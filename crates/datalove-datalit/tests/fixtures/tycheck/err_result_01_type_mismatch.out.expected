@@ -1,0 +1,31 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "String": {
+          "value": "\"wrong type\""
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "Result": {
+          "inner_type": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "actual": "string",
+      "expected": "@!@u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

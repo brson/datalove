@@ -1,0 +1,29 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Set": {
+          "elements": []
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "Set": {
+          "element_type": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "element_type": "@u32",
+    "heap": "@",
+    "kind": "Set"
+  }
+}

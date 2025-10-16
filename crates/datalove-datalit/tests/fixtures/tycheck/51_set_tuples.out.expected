@@ -1,0 +1,118 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Set": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "AnonTuple": {
+                    "elements": [
+                      {
+                        "expr": {
+                          "expr": {
+                            "Int": {
+                              "value": "1"
+                            }
+                          },
+                          "heap": "Local"
+                        },
+                        "type_hint": null
+                      },
+                      {
+                        "expr": {
+                          "expr": {
+                            "String": {
+                              "value": "\"a\""
+                            }
+                          },
+                          "heap": "Local"
+                        },
+                        "type_hint": null
+                      }
+                    ]
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "AnonTuple": {
+                    "elements": [
+                      {
+                        "expr": {
+                          "expr": {
+                            "Int": {
+                              "value": "2"
+                            }
+                          },
+                          "heap": "Local"
+                        },
+                        "type_hint": null
+                      },
+                      {
+                        "expr": {
+                          "expr": {
+                            "String": {
+                              "value": "\"b\""
+                            }
+                          },
+                          "heap": "Local"
+                        },
+                        "type_hint": null
+                      }
+                    ]
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "Set": {
+          "element_type": {
+            "heap": "Local",
+            "type_hint": {
+              "AnonTuple": {
+                "fields": [
+                  {
+                    "heap": "Local",
+                    "type_hint": "U32"
+                  },
+                  {
+                    "heap": "Local",
+                    "type_hint": "String"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "element_type": {
+      "fields": [
+        "@u32",
+        "@string"
+      ],
+      "heap": "@",
+      "kind": "AnonTuple"
+    },
+    "heap": "@",
+    "kind": "Set"
+  }
+}

@@ -1,0 +1,1 @@
+: @map <@u32, @string> / @map { @1 = @"hello", @2 = @"world" }

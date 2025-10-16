@@ -1,0 +1,63 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Set": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "String": {
+                    "value": "\"a\""
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "String": {
+                    "value": "\"b\""
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "String": {
+                    "value": "\"c\""
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "Set": {
+          "element_type": {
+            "heap": "Local",
+            "type_hint": "String"
+          }
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "element_type": "@string",
+    "heap": "@",
+    "kind": "Set"
+  }
+}
