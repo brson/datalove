@@ -2655,3 +2655,199 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
 
     Ok(())
 }
+
+/// Test btreemap removal with string keys and values.
+/// This tests that allocated memory is properly freed during removal.
+#[test]
+fn test_btreemap_remove_string() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert multiple string key-value pairs.
+    for i in 0..20 {
+        let key_str = format!("key_{:03}", i);
+        let value_str = format!("value_{:03}", i);
+
+        let mut key = unsafe {
+            create_runtime_string(rt, &key_str, &*key_tydesc as *const rtdt::TyDesc)
+        };
+        let mut value = unsafe {
+            create_runtime_string(rt, &value_str, &*value_tydesc as *const rtdt::TyDesc)
+        };
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &mut key as *mut rtdt::String as *mut u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut rtdt::String as *mut u8,
+                &*value_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+    assert_eq!(map.len, 20);
+
+    // Remove every other key.
+    for i in (0..20).step_by(2) {
+        let key_str = format!("key_{:03}", i);
+        let key = unsafe {
+            create_runtime_string(rt, &key_str, &*key_tydesc as *const rtdt::TyDesc)
+        };
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_remove_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &key as *const rtdt::String as *const u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+        // Clean up the temporary key.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_string_destroy_local(
+                rt,
+                &key as *const rtdt::String as *mut u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+    assert_eq!(map.len, 10);
+
+    // Clean up.
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test btreemap removal with string keys that forces rebalancing.
+/// This ensures that borrowed/merged string keys are properly managed.
+#[test]
+fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_create_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Insert enough strings to create a multi-level tree.
+    for i in 0..50 {
+        let key_str = format!("key_{:03}", i);
+        let value_str = format!("value_{:03}", i);
+
+        let mut key = unsafe {
+            create_runtime_string(rt, &key_str, &*key_tydesc as *const rtdt::TyDesc)
+        };
+        let mut value = unsafe {
+            create_runtime_string(rt, &value_str, &*value_tydesc as *const rtdt::TyDesc)
+        };
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_insert_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &mut key as *mut rtdt::String as *mut u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut rtdt::String as *mut u8,
+                &*value_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+    assert_eq!(map.len, 50);
+
+    // Remove keys in a pattern that forces rebalancing.
+    for i in (0..50).step_by(3) {
+        let key_str = format!("key_{:03}", i);
+        let key = unsafe {
+            create_runtime_string(rt, &key_str, &*key_tydesc as *const rtdt::TyDesc)
+        };
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_remove_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &key as *const rtdt::String as *const u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+        // Clean up the temporary key.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_string_destroy_local(
+                rt,
+                &key as *const rtdt::String as *mut u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    let expected_remaining = 50 - (50 / 3 + 1);
+    assert_eq!(map.len, expected_remaining);
+
+    // Clean up.
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
