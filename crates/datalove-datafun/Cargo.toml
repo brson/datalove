@@ -15,7 +15,7 @@ datalove-rt.path = "../datalove-rt"
 datalove-rtdt.path = "../datalove-rtdt"
 
 [dev-dependencies]
-termcolor = "1.4.1"
+datalove-exampletest.path = "../datalove-exampletest"
 
 [[test]]
 name = "parser_tests"

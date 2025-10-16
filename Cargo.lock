@@ -1307,12 +1307,12 @@ version = "0.1.0"
 dependencies = [
  "bct",
  "datalove-datalit",
+ "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
  "rustmax",
  "salsa",
  "serde",
- "termcolor",
 ]
 
 [[package]]
@@ -1320,10 +1320,18 @@ name = "datalove-datalit"
 version = "0.1.0"
 dependencies = [
  "bct",
+ "datalove-exampletest",
  "datalove-rtdt",
  "rustmax",
  "salsa",
  "serde",
+]
+
+[[package]]
+name = "datalove-exampletest"
+version = "0.1.0"
+dependencies = [
+ "rustmax",
  "termcolor",
 ]
 

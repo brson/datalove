@@ -13,7 +13,7 @@ serde = { version = "1", features = ["derive"] }
 datalove-rtdt.path = "../datalove-rtdt"
 
 [dev-dependencies]
-termcolor = "1.4.1"
+datalove-exampletest.path = "../datalove-exampletest"
 
 [[test]]
 name = "parser_tests"
