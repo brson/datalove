@@ -529,49 +529,36 @@ impl<'db> Parser<'db> {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> ast::ExprFun<'db> {
-        // Check if it starts with a heap sigil (@ or #) - if so, it's a datalit expression
+        // Check if it starts with a heap sigil (@ or #) - if so, it's definitely a datalit expression.
         if self.peek_sigil(tokens, Sigil::At) || self.peek_sigil(tokens, Sigil::Hash) {
-            // Parse as datalit expression
-            let remaining: Vec<TreeToken<'db>> = tokens.collect();
-            let mut datalit_parser = DatalitParser {
-                db: self.db,
-                tokens: remaining,
-                pos: 0,
-            };
-            let datalit_expr = datalit_parser.parse_expr_full();
-            return ast::ExprFun::new(
-                self.db,
-                ast::ExprFunKind::Datalit(datalit_expr)
-            );
+            return self.parse_datalit_expr(tokens);
         }
 
-        // Check if it's a bare name/identifier
+        // Peek the next token to determine how to parse this expression.
         match tokens.peek() {
             Some(TreeToken::Token(token)) => {
+                // If it's a word token, check if it's a datalit keyword or a datafun name.
                 match token.kind(self.db) {
                     TokenKind::Word => {
                         if let Some(word) = token.word_str(self.db) {
-                            // Check if it's a number literal - parse as datalit with omitted heap
-                            if word.chars().all(|c| c.is_ascii_digit()) {
-                                let remaining: Vec<TreeToken<'db>> = tokens.collect();
-                                let mut datalit_parser = DatalitParser {
-                                    db: self.db,
-                                    tokens: remaining,
-                                    pos: 0,
-                                };
-                                let datalit_expr = datalit_parser.parse_expr_full();
-                                ast::ExprFun::new(
-                                    self.db,
-                                    ast::ExprFunKind::Datalit(datalit_expr)
-                                )
-                            } else {
-                                // It's a bare name/identifier
-                                tokens.next(); // consume the token
-                                let name = InternedText::new(self.db, word.S());
-                                ast::ExprFun::new(
-                                    self.db,
-                                    ast::ExprFunKind::Name(name)
-                                )
+                            // Check against datalit keywords.
+                            match word {
+                                "true" | "false" | "tuple" | "struct" | "enum" |
+                                "option" | "result" | "error" | "map" | "set" | "none" | "data" => {
+                                    self.parse_datalit_expr(tokens)
+                                }
+                                num if num.chars().all(|c| char::is_ascii_digit(&c)) => {
+                                    self.parse_datalit_expr(tokens)
+                                }
+                                _ => {
+                                    // It's a datafun name.
+                                    tokens.next(); // consume the token
+                                    let name = InternedText::new(self.db, word.S());
+                                    ast::ExprFun::new(
+                                        self.db,
+                                        ast::ExprFunKind::Name(name)
+                                    )
+                                }
                             }
                         } else {
                             tokens.next();
@@ -583,28 +570,14 @@ impl<'db> Parser<'db> {
                         }
                     }
                     _ => {
-                        tokens.next();
-                        let message = InternedText::new(self.db, "unexpected token in expression".S());
-                        ast::ExprFun::new(
-                            self.db,
-                            ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, message))
-                        )
+                        // Not a word, parse as datalit (might be a number literal, string, etc.).
+                        self.parse_datalit_expr(tokens)
                     }
                 }
             }
             Some(TreeToken::Branch(..)) => {
-                // Could be tuple, struct, etc - parse as datalit
-                let remaining: Vec<TreeToken<'db>> = tokens.collect();
-                let mut datalit_parser = DatalitParser {
-                    db: self.db,
-                    tokens: remaining,
-                    pos: 0,
-                };
-                let datalit_expr = datalit_parser.parse_expr_full();
-                ast::ExprFun::new(
-                    self.db,
-                    ast::ExprFunKind::Datalit(datalit_expr)
-                )
+                // Branches like (), {}, [] are datalit expressions.
+                self.parse_datalit_expr(tokens)
             }
             None => {
                 let message = InternedText::new(self.db, "expected expression".S());
@@ -614,6 +587,59 @@ impl<'db> Parser<'db> {
                 )
             }
         }
+    }
+
+    // Helper to parse a datalit expression by delegating to the real datalit parser.
+    fn parse_datalit_expr(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> ast::ExprFun<'db> {
+        // Collect remaining tokens and reconstruct source text to parse.
+        let remaining_tokens: Vec<TreeToken<'db>> = tokens.collect();
+
+        // Reconstruct the source text from the tokens.
+        // We need to convert the TreeTokens back into text that can be parsed.
+        let mut source_text = String::new();
+        for tree_token in &remaining_tokens {
+            match tree_token {
+                TreeToken::Token(token) => {
+                    source_text.push_str(token.text(self.db).as_str(self.db));
+                }
+                TreeToken::Branch(open_sigil, iter) => {
+                    // Add opening sigil.
+                    source_text.push_str(open_sigil.as_str());
+                    // Recursively add branch contents.
+                    for inner_token in iter.clone() {
+                        match inner_token {
+                            TreeToken::Token(token) => {
+                                source_text.push_str(token.text(self.db).as_str(self.db));
+                            }
+                            // For nested branches, we need to handle them recursively.
+                            // This is getting complex, so we'll simplify by using a helper.
+                            _ => {}
+                        }
+                    }
+                    // Add closing sigil.
+                    let close_sigil = match open_sigil {
+                        Sigil::ParenOpen => ")",
+                        Sigil::BraceOpen => "}",
+                        Sigil::BracketOpen => "]",
+                        Sigil::AngleOpen => ">",
+                        _ => "",
+                    };
+                    source_text.push_str(close_sigil);
+                }
+            }
+        }
+
+        // Parse the source text using the real datalit parser.
+        let source = Source::new(self.db, source_text.S());
+        let datalit_expr = datalit::parser::parse(self.db, source);
+
+        ast::ExprFun::new(
+            self.db,
+            ast::ExprFunKind::Datalit(datalit_expr)
+        )
     }
 
     // Token manipulation helpers
@@ -700,185 +726,6 @@ impl<'db> Parser<'db> {
     }
 }
 
-// Helper struct to reuse datalit parsers
-struct DatalitParser<'db> {
-    db: &'db dyn crate::Db,
-    tokens: Vec<TreeToken<'db>>,
-    pos: usize,
-}
-
-impl<'db> DatalitParser<'db> {
-    fn parse_type_hint_and_heap(&mut self) -> datalit::ast::TypeHintAndHeap<'db> {
-        // Heap sigils: @ for local, # for global.
-        let heap = if self.peek_sigil(Sigil::At) {
-            self.eat_sigil(Sigil::At);
-            datalit::ast::Heap::Local
-        } else if self.peek_sigil(Sigil::Hash) {
-            self.eat_sigil(Sigil::Hash);
-            datalit::ast::Heap::Global
-        } else {
-            // For result/option types, we might see ! or ? first
-            if self.peek_sigil(Sigil::Exclamation) || self.peek_sigil(Sigil::Question) {
-                datalit::ast::Heap::Omitted
-            } else {
-                let message = InternedText::new(self.db, "expected heap sigil @ or # before type".S());
-                let error_node = datalit::ast::TypeHint::ParseError(
-                    datalit::ast::TypeHintParseError::new(self.db, message)
-                );
-                return datalit::ast::TypeHintAndHeap::new(self.db, datalit::ast::Heap::Omitted, error_node);
-            }
-        };
-        let type_hint = self.parse_type_hint();
-        datalit::ast::TypeHintAndHeap::new(self.db, heap, type_hint)
-    }
-
-    fn parse_type_hint(&mut self) -> datalit::ast::TypeHint<'db> {
-        // Check for ? or ! prefix for Option/Result types.
-        if self.peek_sigil(Sigil::Question) {
-            self.eat_sigil(Sigil::Question);
-            let inner_type = self.parse_type_hint_and_heap();
-            return datalit::ast::TypeHint::Option(datalit::ast::TypeHintOption::new(self.db, inner_type));
-        } else if self.peek_sigil(Sigil::Exclamation) {
-            self.eat_sigil(Sigil::Exclamation);
-            let inner_type = self.parse_type_hint_and_heap();
-            return datalit::ast::TypeHint::Result(datalit::ast::TypeHintResult::new(self.db, inner_type));
-        }
-
-        // Parse base type.
-        match self.peek_word() {
-            Some("bool") => { self.eat_word("bool"); datalit::ast::TypeHint::Bool }
-            Some("u32") => { self.eat_word("u32"); datalit::ast::TypeHint::U32 }
-            Some("u64") => { self.eat_word("u64"); datalit::ast::TypeHint::U32 } // TODO: add U64
-            Some("u8") => { self.eat_word("u8"); datalit::ast::TypeHint::U32 } // TODO: add U8
-            Some("f32") => { self.eat_word("f32"); datalit::ast::TypeHint::F32 }
-            Some("int") => { self.eat_word("int"); datalit::ast::TypeHint::Int }
-            Some("string") => { self.eat_word("string"); datalit::ast::TypeHint::String }
-            Some("data") => { self.eat_word("data"); datalit::ast::TypeHint::Data }
-            Some("error") => { self.eat_word("error"); datalit::ast::TypeHint::Error }
-            _ => {
-                let message = InternedText::new(self.db, "unknown type hint".S());
-                datalit::ast::TypeHint::ParseError(datalit::ast::TypeHintParseError::new(self.db, message))
-            }
-        }
-    }
-
-    fn parse_expr_full(&mut self) -> datalit::ast::ExprFull<'db> {
-        // Check for `: type / expr` pattern.
-        if self.peek_sigil(Sigil::Colon) {
-            self.eat_sigil(Sigil::Colon);
-            let type_hint = self.parse_type_hint_and_heap();
-            self.need_sigil(Sigil::SlashForward);
-            let expr = self.parse_expr_and_heap();
-            datalit::ast::ExprFull::new(self.db, Some(type_hint), expr)
-        } else {
-            // No type hint, just parse expression.
-            let expr = self.parse_expr_and_heap();
-            datalit::ast::ExprFull::new(self.db, None, expr)
-        }
-    }
-
-    fn parse_expr_and_heap(&mut self) -> datalit::ast::ExprAndHeap<'db> {
-        // For now, just parse simple expressions
-        // In reality, we'd delegate to the full datalit parser
-        let heap = if self.peek_sigil(Sigil::At) {
-            self.eat_sigil(Sigil::At);
-            datalit::ast::Heap::Local
-        } else if self.peek_sigil(Sigil::Hash) {
-            self.eat_sigil(Sigil::Hash);
-            datalit::ast::Heap::Global
-        } else {
-            datalit::ast::Heap::Omitted
-        };
-
-        // Parse a simple literal or identifier
-        let expr = match self.peek() {
-            Some(TreeToken::Token(token)) => {
-                match token.kind(self.db) {
-                    TokenKind::Word => {
-                        self.next();
-                        let word = token.word_str(self.db).X();
-                        if word.chars().all(|c| c.is_ascii_digit()) {
-                            let value = InternedText::new(self.db, word.S());
-                            datalit::ast::Expr::Int(datalit::ast::ExprInt::new(self.db, value))
-                        } else {
-                            let message = InternedText::new(self.db, "unexpected identifier in expression".S());
-                            datalit::ast::Expr::ParseError(datalit::ast::ExprParseError::new(self.db, message))
-                        }
-                    }
-                    _ => {
-                        let message = InternedText::new(self.db, "unexpected token in expression".S());
-                        datalit::ast::Expr::ParseError(datalit::ast::ExprParseError::new(self.db, message))
-                    }
-                }
-            }
-            _ => {
-                let message = InternedText::new(self.db, "unexpected token in expression".S());
-                datalit::ast::Expr::ParseError(datalit::ast::ExprParseError::new(self.db, message))
-            }
-        };
-
-        datalit::ast::ExprAndHeap::new(self.db, heap, expr)
-    }
-
-    // Token manipulation helpers
-    fn peek(&self) -> Option<TreeToken<'db>> {
-        self.tokens.get(self.pos).cloned()
-    }
-
-    fn next(&mut self) -> Option<TreeToken<'db>> {
-        let token = self.tokens.get(self.pos).cloned();
-        if token.is_some() {
-            self.pos += 1;
-        }
-        token
-    }
-
-    fn peek_word(&self) -> Option<&'db str> {
-        match self.peek() {
-            Some(TreeToken::Token(token)) => token.word_str(self.db),
-            _ => None,
-        }
-    }
-
-    fn eat_word(&mut self, word: &str) {
-        match self.next() {
-            Some(TreeToken::Token(token)) => {
-                match token.word_str(self.db) {
-                    Some(w) if w == word => return,
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-        panic!("expected word '{}'", word);
-    }
-
-    fn peek_sigil(&self, sigil: Sigil) -> bool {
-        match self.peek() {
-            Some(TreeToken::Token(token)) => {
-                matches!(token.kind(self.db), TokenKind::Sigil(s) if s == sigil)
-            }
-            _ => false,
-        }
-    }
-
-    fn eat_sigil(&mut self, sigil: Sigil) {
-        match self.next() {
-            Some(TreeToken::Token(token)) => {
-                match token.kind(self.db) {
-                    TokenKind::Sigil(s) if s == sigil => return,
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-        panic!("expected sigil {}", sigil.as_str());
-    }
-
-    fn need_sigil(&mut self, sigil: Sigil) {
-        self.eat_sigil(sigil)
-    }
-}
 
 #[cfg(test)]
 mod tests {
