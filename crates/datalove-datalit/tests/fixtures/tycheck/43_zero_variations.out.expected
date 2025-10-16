@@ -1,0 +1,109 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonTuple": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "0"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "0"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "0"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "0"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Float": {
+                    "value": "0.0"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "AnonTuple": {
+          "fields": [
+            {
+              "heap": "Local",
+              "type_hint": "U32"
+            },
+            {
+              "heap": "Local",
+              "type_hint": "I32"
+            },
+            {
+              "heap": "Local",
+              "type_hint": "U64"
+            },
+            {
+              "heap": "Local",
+              "type_hint": "I64"
+            },
+            {
+              "heap": "Local",
+              "type_hint": "F32"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "fields": [
+      "@u32",
+      "@i32",
+      "@u64",
+      "@i64",
+      "@f32"
+    ],
+    "heap": "@",
+    "kind": "AnonTuple"
+  }
+}
