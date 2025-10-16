@@ -37,9 +37,16 @@ fn type_hint_to_string(db: &dyn datalove_datafun::Db, type_hint: datalove_datali
     };
 
     let base_type = match type_hint.type_hint(db) {
-        TypeHint::U32 => "u32",
-        TypeHint::F32 => "f32",
         TypeHint::Bool => "bool",
+        TypeHint::U8 => "u8",
+        TypeHint::I8 => "i8",
+        TypeHint::U16 => "u16",
+        TypeHint::I16 => "i16",
+        TypeHint::U32 => "u32",
+        TypeHint::I32 => "i32",
+        TypeHint::U64 => "u64",
+        TypeHint::I64 => "i64",
+        TypeHint::F32 => "f32",
         TypeHint::String => "string",
         TypeHint::Int => "int",
         TypeHint::Result(inner) => {
