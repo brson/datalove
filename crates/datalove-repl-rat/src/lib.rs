@@ -404,6 +404,9 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
                                 ratatui::text::Span::raw(&eval_let.value),
                             ]));
                         }
+                        repl::Eval::SuccessExpr(eval_expr) => {
+                            // todo
+                        }
                         repl::Eval::Error(e) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(
@@ -798,6 +801,9 @@ impl<E: ReplExecutor> App<E> {
                 entry.status = EntryStatus::Success;
             }
             repl::Eval::SuccessLet(_) => {
+                entry.status = EntryStatus::Success;
+            }
+            repl::Eval::SuccessExpr(_) => {
                 entry.status = EntryStatus::Success;
             }
             repl::Eval::CallerInterpret(cmd) => {

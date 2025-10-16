@@ -29,16 +29,15 @@
       }
     },
     "eval": {
-      "Error": "@42"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@42"
+      }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
-        "value": "@42"
-      },
-      {
-        "name": "_expr_result",
         "ty": "u32",
         "value": "@42"
       }
@@ -65,11 +64,6 @@
         "value": "@42"
       },
       {
-        "name": "_expr_result",
-        "ty": "u32",
-        "value": "@42"
-      },
-      {
         "name": "y",
         "ty": "u32",
         "value": "@52"
@@ -84,7 +78,11 @@
       }
     },
     "eval": {
-      "Error": "@52"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@52"
+      }
     },
     "environment": [
       {
@@ -93,17 +91,7 @@
         "value": "@42"
       },
       {
-        "name": "_expr_result",
-        "ty": "u32",
-        "value": "@52"
-      },
-      {
         "name": "y",
-        "ty": "u32",
-        "value": "@52"
-      },
-      {
-        "name": "_expr_result",
         "ty": "u32",
         "value": "@52"
       }

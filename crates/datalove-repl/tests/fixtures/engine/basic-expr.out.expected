@@ -1,0 +1,46 @@
+[
+  {
+    "input": "let x = 42",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let x = 42"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "x",
+        "ty": "u32",
+        "value": "@42"
+      }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "u32",
+        "value": "@42"
+      }
+    ]
+  },
+  {
+    "input": "x",
+    "parse": {
+      "Command": {
+        "Expression": "x"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@42"
+      }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "u32",
+        "value": "@42"
+      }
+    ]
+  }
+]

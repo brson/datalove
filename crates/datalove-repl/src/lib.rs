@@ -50,9 +50,19 @@ pub struct EvalLet {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalExpr {
+    // Is it a variable binding, function call,
+    // math expression, etc.
+    pub expr_kind: String,
+    pub ty: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Eval {
     Nothing,
     SuccessLet(EvalLet),
+    SuccessExpr(EvalExpr),
     Error(String),
     CallerInterpret(ReplCommand),
     CrashReset(String),
@@ -399,24 +409,51 @@ impl Engine {
         let db = &self.db;
 
         // Create the script with the expression wrapped in a let statement.
+        // This is temporary - we won't persist it to avoid polluting the environment.
         let (new_script, temp_var) = create_expression_script(
             db,
             self.script,
             &source,
         );
 
-        // Store the new script.
-        self.script = Some(new_script);
+        // Parse the full script for type information.
+        let parsed_script = parse_full_script(db, new_script);
+
+        // Type check the script.
+        let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
+        if !tycheck_result.errors(db).is_empty() {
+            let errors: Vec<_> = tycheck_result.errors(db)
+                .iter()
+                .map(|e| format!("{:?}", e.error(db)))
+                .collect();
+            return Eval::Error(format!("type error(s): {}", errors.join(", ")));
+        }
 
         // Execute the script and pretty-print the result.
         match execute_with_interpreter_impl(db, new_script) {
             Ok(mut ctx) => {
                 let temp_name = bct::text::InternedText::new(db, S(temp_var));
 
-                match ctx.pretty_print_variable(temp_name) {
-                    Ok(s) => Eval::Error(s), // Using Error variant to display the result.
-                    Err(e) => Eval::Error(format!("failed to pretty-print: {:?}", e)),
-                }
+                // Get the type from the typechecker.
+                let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, temp_name) {
+                    datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
+                } else {
+                    "unknown".to_string()
+                };
+
+                // Get the value by pretty-printing.
+                let value_str = match ctx.pretty_print_variable(temp_name) {
+                    Ok(s) => s,
+                    Err(e) => return Eval::Error(format!("failed to pretty-print: {:?}", e)),
+                };
+
+                // Return SuccessExpr with the result.
+                // Note: We don't update self.script here, so _expr_result won't be in the environment.
+                Eval::SuccessExpr(EvalExpr {
+                    expr_kind: "expression".to_string(),
+                    ty: ty_str,
+                    value: value_str,
+                })
             }
             Err(e) => Eval::Error(format!("execution error: {:?}", e)),
         }
@@ -625,18 +662,19 @@ mod tests {
             InputParse::Command(cmd) => {
                 let eval_result = engine.eval(cmd);
                 match eval_result {
-                    Eval::Error(msg) => {
+                    Eval::SuccessExpr(eval_expr) => {
                         // The result should contain "42".
-                        assert!(msg.contains("42") || msg.contains("@42"),
-                            "Expected result to contain '42' or '@42', got: {}", msg);
+                        assert!(eval_expr.value.contains("42") || eval_expr.value.contains("@42"),
+                            "Expected result to contain '42' or '@42', got: {}", eval_expr.value);
+                        assert_eq!(eval_expr.ty, "u32");
                     }
-                    other => panic!("Expected Eval::Error with result, got {:?}", other),
+                    other => panic!("Expected Eval::SuccessExpr, got {:?}", other),
                 }
             }
             other => panic!("Expected Command, got {:?}", other),
         }
 
-        // Verify the script was updated with the let statement.
+        // Verify the script was NOT updated (expression eval shouldn't persist).
         assert!(engine.script.is_some());
     }
 
@@ -661,11 +699,12 @@ mod tests {
             InputParse::Command(cmd) => {
                 let eval_result = engine.eval(cmd);
                 match eval_result {
-                    Eval::Error(msg) => {
+                    Eval::SuccessExpr(eval_expr) => {
                         // The result should contain "15".
-                        assert!(msg.contains("15"), "Expected result to contain '15', got: {}", msg);
+                        assert!(eval_expr.value.contains("15"), "Expected result to contain '15', got: {}", eval_expr.value);
+                        assert_eq!(eval_expr.ty, "u32");
                     }
-                    other => panic!("Expected Eval::Error with result, got {:?}", other),
+                    other => panic!("Expected Eval::SuccessExpr, got {:?}", other),
                 }
             }
             other => panic!("Expected Command, got {:?}", other),

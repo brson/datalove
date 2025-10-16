@@ -56,7 +56,11 @@
       }
     },
     "eval": {
-      "Error": "@300"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@300"
+      }
     },
     "environment": [
       {
@@ -68,11 +72,6 @@
         "name": "b",
         "ty": "u32",
         "value": "@200"
-      },
-      {
-        "name": "_expr_result",
-        "ty": "u32",
-        "value": "@300"
       }
     ]
   }
