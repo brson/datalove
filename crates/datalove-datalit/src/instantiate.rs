@@ -299,14 +299,6 @@ fn instantiate_expr<'db>(
             let list_tydesc = tydesc_table.get_or_create(ty);
             instantiate_list(db, &list_expr.elements(db), list_ty.element_type(db), tydesc_table, value_heap, list_tydesc)
         }
-        (Expr::Map(map_expr), Type::Map(_map_ty)) => {
-            let map_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_map(db, map_expr, tydesc_table, value_heap, map_tydesc)
-        }
-        (Expr::Set(set_expr), Type::Set(_set_ty)) => {
-            let set_tydesc = tydesc_table.get_or_create(ty);
-            instantiate_set(db, set_expr, tydesc_table, value_heap, set_tydesc)
-        }
         (Expr::None, Type::Option(opt)) => {
             let option_tydesc = tydesc_table.get_or_create(ty);
             instantiate_option(db, false, None, opt.inner_type(db), tydesc_table, value_heap, option_tydesc)
@@ -460,62 +452,6 @@ fn instantiate_enum<'db>(
     }
 
     Ok(enum_ptr as *const u8)
-}
-
-/// Instantiate a map value.
-fn instantiate_map<'db>(
-    db: &'db dyn crate::Db,
-    map_expr: ExprMap<'db>,
-    tydesc_table: &mut TyDescTable<'db>,
-    value_heap: &mut ValueHeap,
-    map_tydesc: *const rtdt::TyDesc,
-) -> AnyResult<*const u8> {
-    let entries = map_expr.entries(db);
-
-    // For now, only support empty maps.
-    if !entries.is_empty() {
-        bail!("Non-empty maps not yet supported in instantiation");
-    }
-
-    // Allocate space for Map struct.
-    let map_size = std::mem::size_of::<rtdt::Map>();
-    let map_align = std::mem::align_of::<rtdt::Map>();
-    let map_ptr = value_heap.alloc(map_size, map_align) as *mut rtdt::Map;
-
-    unsafe {
-        (*map_ptr).root = std::ptr::null();
-        (*map_ptr).len = 0;
-    }
-
-    Ok(map_ptr as *const u8)
-}
-
-/// Instantiate a set value.
-fn instantiate_set<'db>(
-    db: &'db dyn crate::Db,
-    set_expr: ExprSet<'db>,
-    tydesc_table: &mut TyDescTable<'db>,
-    value_heap: &mut ValueHeap,
-    set_tydesc: *const rtdt::TyDesc,
-) -> AnyResult<*const u8> {
-    let elements = set_expr.elements(db);
-
-    // For now, only support empty sets.
-    if !elements.is_empty() {
-        bail!("Non-empty sets not yet supported in instantiation");
-    }
-
-    // Allocate space for Set struct.
-    let set_size = std::mem::size_of::<rtdt::Set>();
-    let set_align = std::mem::align_of::<rtdt::Set>();
-    let set_ptr = value_heap.alloc(set_size, set_align) as *mut rtdt::Set;
-
-    unsafe {
-        (*set_ptr).root = std::ptr::null();
-        (*set_ptr).len = 0;
-    }
-
-    Ok(set_ptr as *const u8)
 }
 
 /// Instantiate a list value.
@@ -1769,38 +1705,6 @@ mod tests {
             let bool_value = *(inner_payload_ptr.add(tuple_fields[1].offset as usize) as *const u8);
             assert_eq!(u32_value, 5);
             assert_eq!(bool_value, 1);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_empty_map() -> AnyResult<()> {
-        let db = Database::default();
-        // Empty maps need type hint.
-        let typechecked = compile(&db, ": @map <@u32, @string> / @map {}")?;
-        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
-
-        unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Map);
-            let map = &*(inst.value as *const rtdt::Map);
-            assert_eq!(map.len, 0);
-            assert!(map.root.is_null());
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_empty_set() -> AnyResult<()> {
-        let db = Database::default();
-        // Empty sets need type hint.
-        let typechecked = compile(&db, ": @set <@u32> / @set {}")?;
-        let (tydesc_table, value_heap, inst) = instantiate_value(&db, typechecked)?;
-
-        unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Set);
-            let set = &*(inst.value as *const rtdt::Set);
-            assert_eq!(set.len, 0);
-            assert!(set.root.is_null());
         }
         Ok(())
     }
