@@ -5,6 +5,8 @@ use rmx::prelude::*;
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
+mod docs;
+
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
 
@@ -34,6 +36,8 @@ enum Command {
     LitOp(LitOpCommand),
     /// Start an interactive REPL.
     Repl(ReplCommand),
+    /// Documentation tools.
+    Docs(docs::DocsCommand),
 }
 
 #[derive(clap::Args)]
@@ -83,6 +87,7 @@ impl Cli {
             Command::LitPretty(cmd) => cmd.run(&self.args),
             Command::LitOp(cmd) => cmd.run(&self.args),
             Command::Repl(cmd) => cmd.run(&self.args),
+            Command::Docs(cmd) => cmd.run(),
         }
     }
 }

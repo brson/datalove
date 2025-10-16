@@ -26,3 +26,7 @@ serve-wasm-repl:
 
 run-egui-repl:
     cargo run -p datalove-repl-egui
+
+docs:
+    cargo run -- docs build
+

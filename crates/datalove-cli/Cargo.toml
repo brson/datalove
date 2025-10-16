@@ -13,6 +13,9 @@ datalove-datalit.path = "../datalove-datalit"
 datalove-rt.path = "../datalove-rt"
 datalove-repl.path = "../datalove-repl"
 datalove-repl-term.path = "../datalove-repl-term"
+pulldown-cmark = "0.12"
+syntect = "5.2"
+comrak = "0.32"
 
 [[bin]]
 name = "datalove"
