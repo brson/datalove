@@ -993,4 +993,561 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn test_instantiate_named_tuple() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @tuple Point(@u32, @u32) / @tuple Point(@1, @2)")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
+            let tuple_info = &(*inst.tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+
+            let fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let u32_value_1 = *(inst.ptr.add(fields[0].offset as usize) as *const u32);
+            assert_eq!(u32_value_1, 1);
+
+            let u32_value_2 = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
+            assert_eq!(u32_value_2, 2);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_int_large() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @int / @1234567890123456789")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
+            let int = &*(inst.ptr as *const rtdt::Int);
+            assert!(int.size_and_sign > 0);
+            let num_limbs = int.size_and_sign as usize;
+            let limbs = std::slice::from_raw_parts(int.data, num_limbs);
+
+            let mut reconstructed: u64 = 0;
+            for (i, &limb) in limbs.iter().enumerate() {
+                reconstructed |= (limb as u64) << (32 * i);
+            }
+            assert_eq!(reconstructed, 1234567890123456789);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_named_struct() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @struct Point {x = @10, y = @20}")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
+            let struct_info = &(*inst.tydesc).type_info.struct_;
+            assert_eq!(struct_info.num_fields, 2);
+
+            let fields = std::slice::from_raw_parts(struct_info.fields, 2);
+            let x_value = *(inst.ptr.add(fields[0].offset as usize) as *const u32);
+            assert_eq!(x_value, 10);
+
+            let y_value = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
+            assert_eq!(y_value, 20);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_anon_to_named_struct() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @{x = @5, y = @15}")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
+            let struct_info = &(*inst.tydesc).type_info.struct_;
+            assert_eq!(struct_info.num_fields, 2);
+
+            let fields = std::slice::from_raw_parts(struct_info.fields, 2);
+            let x_value = *(inst.ptr.add(fields[0].offset as usize) as *const u32);
+            assert_eq!(x_value, 5);
+
+            let y_value = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
+            assert_eq!(y_value, 15);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_enum_anon_to_named_coercion() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Error")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
+            let discriminant = *(inst.ptr as *const u32);
+            assert_eq!(discriminant, 1);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_enum_with_tuple_payload() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @enum { Ok(@(@u32, @u32)), Err(@string) } / @enum Ok(@(@10, @20))")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
+            let enum_info = &(*inst.tydesc).type_info.enum_;
+            assert_eq!(enum_info.num_variants, 2);
+
+            let discriminant = *(inst.ptr as *const u32);
+            assert_eq!(discriminant, 0);
+
+            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let payload_offset = variants[0].offset;
+            let payload_ptr = inst.ptr.add(payload_offset as usize);
+
+            let payload_tydesc = variants[0].payload;
+            assert!(!payload_tydesc.is_null());
+            assert_eq!((*payload_tydesc).type_tag, rtdt::TyTag::Tuple);
+
+            let tuple_info = &(*payload_tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+
+            let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let first_value = *(payload_ptr.add(tuple_fields[0].offset as usize) as *const u32);
+            let second_value = *(payload_ptr.add(tuple_fields[1].offset as usize) as *const u32);
+
+            assert_eq!(first_value, 10);
+            assert_eq!(second_value, 20);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_enum_with_struct_payload() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @enum { Data(@{x: @u32, y: @u32}), None } / @enum Data(@{x = @5, y = @15})")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
+            let enum_info = &(*inst.tydesc).type_info.enum_;
+            assert_eq!(enum_info.num_variants, 2);
+
+            let discriminant = *(inst.ptr as *const u32);
+            assert_eq!(discriminant, 0);
+
+            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let payload_offset = variants[0].offset;
+            let payload_ptr = inst.ptr.add(payload_offset as usize);
+
+            let payload_tydesc = variants[0].payload;
+            assert!(!payload_tydesc.is_null());
+            assert_eq!((*payload_tydesc).type_tag, rtdt::TyTag::Struct);
+
+            let struct_info = &(*payload_tydesc).type_info.struct_;
+            assert_eq!(struct_info.num_fields, 2);
+
+            let struct_fields = std::slice::from_raw_parts(struct_info.fields, 2);
+            let x_value = *(payload_ptr.add(struct_fields[0].offset as usize) as *const u32);
+            let y_value = *(payload_ptr.add(struct_fields[1].offset as usize) as *const u32);
+
+            assert_eq!(x_value, 5);
+            assert_eq!(y_value, 15);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_list_of_tuples() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, "@[@(@1, @2), @(@3, @4), @(@5, @6)]")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
+            let list = &*(inst.ptr as *const rtdt::List);
+            assert_eq!(list.size, 3);
+
+            let element_tydesc = (*inst.tydesc).type_info.list.element_tydesc;
+            assert!(!element_tydesc.is_null());
+            assert_eq!((*element_tydesc).type_tag, rtdt::TyTag::Tuple);
+
+            let tuple_info = &(*element_tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+
+            let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let tuple_size = (*element_tydesc).size as usize;
+
+            for i in 0..3 {
+                let tuple_ptr = list.data.add(i * tuple_size);
+                let first = *(tuple_ptr.add(tuple_fields[0].offset as usize) as *const u32);
+                let second = *(tuple_ptr.add(tuple_fields[1].offset as usize) as *const u32);
+
+                assert_eq!(first, (i * 2 + 1) as u32);
+                assert_eq!(second, (i * 2 + 2) as u32);
+            }
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_tuple_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@(@u32, @u32) / @none")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tuple);
+            let tuple_info = &(*inner_tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_tuple_some() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@(@u32, @u32) / @(@10, @20)")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
+
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tuple);
+            let tuple_info = &(*inner_tydesc).type_info.tuple;
+            let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+
+            let first = *(payload_ptr.add(tuple_fields[0].offset as usize) as *const u32);
+            let second = *(payload_ptr.add(tuple_fields[1].offset as usize) as *const u32);
+            assert_eq!(first, 10);
+            assert_eq!(second, 20);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_struct_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@{x: @u32, y: @u32} / @none")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Struct);
+            let struct_info = &(*inner_tydesc).type_info.struct_;
+            assert_eq!(struct_info.num_fields, 2);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_struct_some() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@{x: @u32, y: @u32} / @{x = @100, y = @200}")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
+
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Struct);
+            let struct_info = &(*inner_tydesc).type_info.struct_;
+            let struct_fields = std::slice::from_raw_parts(struct_info.fields, 2);
+
+            let x_value = *(payload_ptr.add(struct_fields[0].offset as usize) as *const u32);
+            let y_value = *(payload_ptr.add(struct_fields[1].offset as usize) as *const u32);
+            assert_eq!(x_value, 100);
+            assert_eq!(y_value, 200);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_list_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@[@u32] / @none")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::List);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_list_some_empty() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@[@u32] / @[]")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
+
+            let list = &*(payload_ptr as *const rtdt::List);
+            assert_eq!(list.size, 0);
+            assert_eq!(list.capacity, 0);
+            assert!(list.data.is_null());
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_list_some_nonempty() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@[@u32] / @[@1, @2, @3]")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
+
+            let list = &*(payload_ptr as *const rtdt::List);
+            assert_eq!(list.size, 3);
+            assert_eq!(list.capacity, 3);
+
+            let elements = std::slice::from_raw_parts(list.data as *const u32, list.size as usize);
+            assert_eq!(elements, &[1, 2, 3]);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_string_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@string / @none")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::String);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_enum_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@enum { Ok, Error } / @none")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Enum);
+            let enum_info = &(*inner_tydesc).type_info.enum_;
+            assert_eq!(enum_info.num_variants, 2);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_enum_some() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@enum { Ok, Error(@string) } / @enum Error(@\"failed\")")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
+
+            let discriminant = *(payload_ptr as *const u32);
+            assert_eq!(discriminant, 1);
+
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let enum_info = &(*inner_tydesc).type_info.enum_;
+            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let enum_layout = rtdt::layout::compute_enum_layout(inner_tydesc);
+
+            let enum_payload_ptr = payload_ptr.add(enum_layout.variant_offsets[1] as usize);
+            let string = &*(enum_payload_ptr as *const rtdt::String);
+            assert_eq!(string.size, 6);
+            let str_slice = std::slice::from_raw_parts(string.data, string.size as usize);
+            assert_eq!(str_slice, b"failed");
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_nested_option_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@?@u32 / @none")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Option);
+
+            let innermost_tydesc = (*inner_tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*innermost_tydesc).type_tag, rtdt::TyTag::U32);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_nested_option_some_none() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@?@u32 / @none")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::None as u8);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_option_of_tuple() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @?@?@(@u32, @bool) / @(@5, @true)")?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let outer_tag = *inst.ptr;
+            assert_eq!(outer_tag, rtdt::OptionTag::Some as u8);
+
+            let outer_layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let outer_payload_ptr = inst.ptr.add(outer_layout.payload_offset as usize);
+
+            let inner_opt_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_opt_tydesc).type_tag, rtdt::TyTag::Option);
+            let inner_tag = *outer_payload_ptr;
+            assert_eq!(inner_tag, rtdt::OptionTag::Some as u8);
+
+            let inner_layout = rtdt::layout::compute_option_layout(inner_opt_tydesc);
+            let inner_payload_ptr = outer_payload_ptr.add(inner_layout.payload_offset as usize);
+
+            let tuple_tydesc = (*inner_opt_tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*tuple_tydesc).type_tag, rtdt::TyTag::Tuple);
+            let tuple_info = &(*tuple_tydesc).type_info.tuple;
+            assert_eq!(tuple_info.num_fields, 2);
+
+            let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let u32_value = *(inner_payload_ptr.add(tuple_fields[0].offset as usize) as *const u32);
+            let bool_value = *(inner_payload_ptr.add(tuple_fields[1].offset as usize) as *const u8);
+            assert_eq!(u32_value, 5);
+            assert_eq!(bool_value, 1);
+            rt.shutdown();
+        }
+        Ok(())
+    }
 }
