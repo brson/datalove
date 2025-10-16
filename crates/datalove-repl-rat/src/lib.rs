@@ -405,7 +405,18 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
                             ]));
                         }
                         repl::Eval::SuccessExpr(eval_expr) => {
-                            // todo
+                            lines.push(Line::from(vec![
+                                ratatui::text::Span::styled(
+                                    "  ⇒ ",
+                                    Style::default().fg(Color::Green),
+                                ),
+                                ratatui::text::Span::styled(
+                                    &eval_expr.ty,
+                                    Style::default().fg(Color::Yellow),
+                                ),
+                                ratatui::text::Span::raw(" = "),
+                                ratatui::text::Span::raw(&eval_expr.value),
+                            ]));
                         }
                         repl::Eval::Error(e) => {
                             lines.push(Line::from(vec![
