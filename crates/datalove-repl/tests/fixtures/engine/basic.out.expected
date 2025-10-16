@@ -1,0 +1,54 @@
+[
+  {
+    "input": "let x = 42",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let x = 42"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "x",
+        "ty": "u32",
+        "value": "@42"
+      }
+    }
+  },
+  {
+    "input": "x",
+    "parse": {
+      "Command": {
+        "Expression": "x"
+      }
+    },
+    "eval": {
+      "Error": "@42"
+    }
+  },
+  {
+    "input": "let y = x + 10",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let y = x + 10"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "y",
+        "ty": "u32",
+        "value": "@52"
+      }
+    }
+  },
+  {
+    "input": "y",
+    "parse": {
+      "Command": {
+        "Expression": "y"
+      }
+    },
+    "eval": {
+      "Error": "@52"
+    }
+  }
+]

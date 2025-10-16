@@ -1,0 +1,43 @@
+[
+  {
+    "input": "let a = 100",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let a = 100"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "a",
+        "ty": "u32",
+        "value": "@100"
+      }
+    }
+  },
+  {
+    "input": "let b = 200",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let b = 200"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "b",
+        "ty": "u32",
+        "value": "@200"
+      }
+    }
+  },
+  {
+    "input": "a + b",
+    "parse": {
+      "Command": {
+        "Expression": "a + b"
+      }
+    },
+    "eval": {
+      "Error": "@300"
+    }
+  }
+]

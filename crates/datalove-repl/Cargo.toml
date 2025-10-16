@@ -16,3 +16,7 @@ serde_json = "1.0"
 
 [dev-dependencies]
 termcolor = "1.4"
+
+[[test]]
+name = "engine_tests"
+harness = false
