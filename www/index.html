@@ -22,7 +22,7 @@
     <header class="hero">
         <div class="hero-content">
             <h1 class="hero-title">datalove</h1>
-            <p class="hero-subtitle">A simple and expressive scripting language for efficient data modeling and transformation, with a batteries included standard library.</p>
+            <p class="hero-subtitle">An simple and expressive typed scripting language for efficient data modeling and transformation, with a batteries included standard library.</p>
             <div class="hero-cta">
                 <a href="#get-started" class="btn btn-primary">Get Started</a>
                 <a href="https://github.com/yourusername/datalove" class="btn btn-secondary">View on GitHub</a>
@@ -39,98 +39,109 @@
         <div class="container">
             <h2 class="section-title">A Tower of Love</h2>
             <p class="section-description">Datalove is built from three cleanly-scoped strict sublanguages of increasing power.</p>
-            <div class="components-layout">
-                <div class="component-block block-literals">
-                    <div class="component-header">
-                        <h3>Datalove Literals</h3>
-                    </div>
-                    <p>The tiny and comprehensible foundation. A strongly-typed pure-data language for expressing most typical data structures. A serialization format like JSON, but with rich types including tuples, structs, enums, sets, maps, option, and result.</p>
-                    <p class="component-understanding">If you understand Datalit you understand <strong>80%</strong> of Datalove.</p>
-                </div>
 
-                <div class="component-block block-modules">
-                    <div class="component-header">
-                        <h3>Datalove Functions</span></h3>
-                    </div>
-                    <p>A simple functional language built on the datalit type system.</p>
-                    <p class="component-understanding">If you understand Datafun you understand <strong>90%</strong> of Datalove.</p>
+            <div class="component-block block-literals">
+                <div class="component-header">
+                    <h3>Datalove Literals ("Datalit")</h3>
+                    <span class="component-ext">.dlt</span>
                 </div>
+                <p class="component-intro">The tiny and comprehensible foundation of Datalove, a strongly-typed and declarative pure-data language for expressing most typical data structures.</p>
+                <ul class="component-highlights">
+                    <li><strong>A serialization format:</strong> Like JSON but with rich types including tuples, structs, enums, sets, maps, option, and result.</li>
+                    <li><strong>Strongly typed with free coercions:</strong> Static typing with lightweight conversions and non-destructive coercions.</li>
+                    <li><strong>Runtime introspection:</strong> Type shapes and descriptors are fully specified at runtime, forming the basis of the Datalove runtime ABI.</li>
+                </ul>
+                <div class="code-example">
+                    <pre><code>% Personal info
+{
+  name = "Ada",
+  born = 1815,
+  interests = ["mathematics", "poetry", "music"],
+  address_book = set {
+    struct AddressEntry {
+      kind = enum Friend,
+      name = "Charles",
+    },
+    struct AddressEntry {
+      kind = enum Family,
+      name = "George",
+    },
+  },
+}</code></pre>
+                </div>
+                <p class="component-understanding">If you understand Datalit you understand <strong>80%</strong> of Datalove.</p>
+            </div>
 
-                <div class="component-block block-script">
-                    <div class="component-header">
-                        <h3>Full-on Datalove</h3>
-                    </div>
-                    <p>The complete language with procs, owned native pointers, and objects. The full scripting language. Dynamically interpreted or compiled. Strong typing with lightweight coercions. Task-oriented, non-async, with local heaps.</p>
-                    <p class="component-understanding">If you understand Datalove then <strong>objective achieved</strong>. It is a simple language.</p>
+            <div class="component-block block-modules">
+                <div class="component-header">
+                    <h3>Datalove Functions ("Datafun")</h3>
+                    <span class="component-ext">.dfs / .dfm</span>
                 </div>
+                <p class="component-intro">A simple pure-functional language that feels like an imperative language, built on the datalit type system.</p>
+                <ul class="component-highlights">
+                    <li><strong>Pure total functions:</strong> Functions on Datalit types that can't panic, always return a value.</li>
+                    <li><strong>Feels imperative:</strong> Familiar syntax with mutable-looking by-reference arguments, but purely functional underneath.</li>
+                    <li><strong>Enables powerful features:</strong> Total comptime evaluation, full or partial memoization, undo/redo, rewind/replay, and multi-determinism.</li>
+                </ul>
+                <div class="code-example">
+                    <pre><code>fun increment(
+  accum: u64, amount: u8,
+): ?u64
+  ret accum +? amount
+end fun</code></pre>
+                </div>
+                <p class="component-understanding">If you understand Datafun you understand <strong>90%</strong> of Datalove.</p>
+            </div>
+
+            <div class="component-block block-script">
+                <div class="component-header">
+                    <h3>Full-on Datalove</h3>
+                    <span class="component-ext">.dls / .dlm</span>
+                </div>
+                <p class="component-intro">The complete language with side effects, native pointers, and object abstractions.</p>
+                <ul class="component-highlights">
+                    <li><strong>Procs for side effects:</strong> <code>proc</code> functions that can perform I/O and modify state.</li>
+                    <li><strong>Owned native pointers:</strong> Linear, non-clonable tokens with provenance that the runtime can assume are unaliased.</li>
+                    <li><strong>Objects for abstraction:</strong> <code>obj</code> structs with object identity and encapsulation, the unit of abstraction in Datalove.</li>
+                </ul>
+                <div class="code-example">
+                    <pre><code>proc write_config(
+  config: Config, path: string,
+): !()
+  let file = open(path, "w")?
+  file.write(config.to_string())?
+  ret ok()
+end proc</code></pre>
+                </div>
+                <p class="component-understanding">If you understand Datalove then <strong>objective achieved</strong>. It is a simple language.</p>
             </div>
         </div>
     </section>
 
     <section id="features" class="features">
         <div class="container">
-            <h2 class="section-title">Why datalove?</h2>
+            <h2 class="section-title">Features</h2>
             <div class="features-grid">
                 <div class="feature-card">
-                    <div class="feature-icon">📚</div>
                     <h3>Massive Standard Library</h3>
                     <p>A battle-tested standard library with batteries included for all your data needs.</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
-                    <h3>Statically Typed</h3>
-                    <p>Ergonomic coercions and runtime reflection make it feel flexible and fast like a dynamic scripting language.</p>
+                    <h3>Statically Typed with Ergonomic Coercions</h3>
+                    <p>Feels flexible and fast like a dynamic scripting language, with runtime reflection.</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">🔄</div>
-                    <h3>Fast Incremental</h3>
-                    <p>Fast incremental compilation and execution with hot-reloading, rewind-and-replay, and rewind-and-rewrite-history.</p>
+                    <h3>Fast Incremental Compilation</h3>
+                    <p>Hot-reloading, rewind-and-replay, rewind-and-rewrite-history.</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">🎯</div>
-                    <h3>Flexible Execution</h3>
-                    <p>Interpreted or compiled, JIT or AOT. Fully WASM-compatible toolchain.</p>
+                    <h3>Interpreted or Compiled</h3>
+                    <p>JIT or AOT. Fully WASM-compatible toolchain.</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">💻</div>
                     <h3>REPL-First Design</h3>
                     <p>Built from the ground up for interactive development and exploration.</p>
                 </div>
-                <div class="feature-card">
-                    <div class="feature-icon">✨</div>
-                    <h3>First Class Types</h3>
-                    <p>Built-in option and result types for robust error handling.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section id="examples" class="examples">
-        <div class="container">
-            <h2 class="section-title">See It In Action</h2>
-            <div class="example-block">
-                <h4>Data Expressions</h4>
-                <pre><code>{
-  name: "datalove",
-  version: "0.1.0",
-  features: ["fast", "expressive", "typed"],
-  metadata: {
-    author: "You",
-    license: "MIT"
-  }
-}</code></pre>
-            </div>
-            <div class="example-block">
-                <h4>Type-Safe Scripting</h4>
-                <pre><code>let data = load("config.dlt");
-let result = transform(data)
-  |> validate()
-  |> process();
-
-match result {
-  Ok(value) => print("Success: {value}"),
-  Err(e) => print("Error: {e}")
-}</code></pre>
             </div>
         </div>
     </section>
