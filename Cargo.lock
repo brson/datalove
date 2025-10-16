@@ -1410,6 +1410,7 @@ dependencies = [
  "datalove-datalit",
  "datalove-rt",
  "datalove-rtdt",
+ "proptest",
  "rustmax",
  "salsa",
  "termcolor",
