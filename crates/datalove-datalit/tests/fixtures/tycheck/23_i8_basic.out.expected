@@ -2,8 +2,8 @@
   "ast": {
     "expr": {
       "expr": {
-        "ParseError": {
-          "message": "unexpected token in expression"
+        "Int": {
+          "value": "-42"
         }
       },
       "heap": "Local"
@@ -13,10 +13,6 @@
       "type_hint": "I8"
     }
   },
-  "errors": [
-    {
-      "kind": "CannotSynthesize"
-    }
-  ],
-  "root_type": null
+  "errors": [],
+  "root_type": "@i8"
 }

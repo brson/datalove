@@ -89,7 +89,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -117,7 +117,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i8_min\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i8_min\")"
     },
     "environment": [
       {
@@ -145,7 +145,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -178,7 +178,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, UnresolvedName(\"i8_max\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, UnresolvedName(\"i8_max\")"
     },
     "environment": [
       {
@@ -211,7 +211,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -249,7 +249,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_min\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_min\")"
     },
     "environment": [
       {
@@ -287,7 +287,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -330,7 +330,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_max\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_max\")"
     },
     "environment": [
       {
@@ -373,7 +373,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -421,7 +421,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i16_min\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i16_min\")"
     },
     "environment": [
       {
@@ -469,7 +469,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -522,7 +522,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, UnresolvedName(\"i16_max\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, UnresolvedName(\"i16_max\")"
     },
     "environment": [
       {
@@ -575,7 +575,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -633,7 +633,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -691,7 +691,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -754,7 +754,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -817,7 +817,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -885,7 +885,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i32_min\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i32_min\")"
     },
     "environment": [
       {
@@ -953,7 +953,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -1026,7 +1026,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, UnresolvedName(\"i32_max\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, UnresolvedName(\"i32_max\")"
     },
     "environment": [
       {
@@ -1099,7 +1099,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -1177,7 +1177,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, UnresolvedName(\"u64_min\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, UnresolvedName(\"u64_min\")"
     },
     "environment": [
       {
@@ -1255,7 +1255,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -1338,7 +1338,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"u64_max\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"u64_max\")"
     },
     "environment": [
       {
@@ -1421,7 +1421,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -1509,7 +1509,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i64_min\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i64_min\")"
     },
     "environment": [
       {
@@ -1597,7 +1597,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -1690,7 +1690,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i64_max\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i64_max\")"
     },
     "environment": [
       {
@@ -1783,7 +1783,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -1881,7 +1881,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, UnresolvedName(\"u8_add\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, UnresolvedName(\"u8_add\")"
     },
     "environment": [
       {
@@ -1979,7 +1979,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -2082,7 +2082,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i8_add\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i8_add\")"
     },
     "environment": [
       {
@@ -2185,7 +2185,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -2293,7 +2293,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_mul\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_mul\")"
     },
     "environment": [
       {
@@ -2401,7 +2401,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -2514,7 +2514,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, UnresolvedName(\"i16_sub\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, UnresolvedName(\"i16_sub\")"
     },
     "environment": [
       {
@@ -2627,7 +2627,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -2745,7 +2745,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -2863,7 +2863,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -2986,7 +2986,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i32_mul\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i32_mul\")"
     },
     "environment": [
       {
@@ -3109,7 +3109,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -3237,7 +3237,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"u64_add\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"u64_add\")"
     },
     "environment": [
       {
@@ -3365,7 +3365,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -3498,7 +3498,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i64_sub\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i64_sub\")"
     },
     "environment": [
       {

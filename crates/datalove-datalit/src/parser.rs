@@ -304,7 +304,52 @@ where I: Iterator<Item = TreeToken<'db>>
 
     fn parse_expr(&mut self) -> ast::Expr<'db> {
         // Heap sigil already consumed. Now parse keywords, literals, and structures.
-        // Check for keywords first.
+        // Check for negative number literals first (- followed by digits).
+        if self.peek_sigil(Sigil::Minus) {
+            // Peek ahead to see if this is a negative number.
+            self.eat_sigil(Sigil::Minus);
+            if let Some(TreeToken::Token(token)) = self.peek() {
+                if let Some(word) = token.word_str(self.db) {
+                    if word.chars().all(|c| c.is_ascii_digit()) {
+                        // It's a negative number! Consume the digits.
+                        self.next();
+                        // Check for float pattern (dot then more digits).
+                        let is_float = if self.peek_sigil(Sigil::Dot) {
+                            self.eat_sigil(Sigil::Dot);
+                            if let Some(TreeToken::Token(next_token)) = self.peek() {
+                                if let Some(decimal_part) = next_token.word_str(self.db) {
+                                    decimal_part.chars().all(|c| c.is_ascii_digit())
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        };
+
+                        if is_float {
+                            // Negative float: -number.number
+                            let decimal_word = self.need_name();
+                            let float_str = format!("-{}.{}", word, decimal_word.as_str(self.db));
+                            let value = InternedText::new(self.db, float_str.S());
+                            return ast::Expr::Float(ast::ExprFloat::new(self.db, value));
+                        } else {
+                            // Negative int: -number
+                            let int_str = format!("-{}", word);
+                            let value = InternedText::new(self.db, int_str.S());
+                            return ast::Expr::Int(ast::ExprInt::new(self.db, value));
+                        }
+                    }
+                }
+            }
+            // Not a negative number - this is an error (unexpected minus).
+            let message = InternedText::new(self.db, "unexpected minus sign".S());
+            return ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+        }
+
+        // Check for keywords.
         match self.peek_word() {
             Some("true") => {
                 self.eat_word("true");
@@ -827,7 +872,52 @@ impl<'db> DynParser<'db> {
 
     fn parse_expr(&mut self) -> ast::Expr<'db> {
         // Heap sigil already consumed. Now parse keywords, literals, and structures.
-        // Check for keywords first.
+        // Check for negative number literals first (- followed by digits).
+        if self.peek_sigil(Sigil::Minus) {
+            // Peek ahead to see if this is a negative number.
+            self.eat_sigil(Sigil::Minus);
+            if let Some(TreeToken::Token(token)) = self.peek() {
+                if let Some(word) = token.word_str(self.db) {
+                    if word.chars().all(|c| c.is_ascii_digit()) {
+                        // It's a negative number! Consume the digits.
+                        self.next();
+                        // Check for float pattern (dot then more digits).
+                        let is_float = if self.peek_sigil(Sigil::Dot) && self.pos + 1 < self.tokens.len() {
+                            if let Some(TreeToken::Token(next_token)) = self.tokens.get(self.pos + 1) {
+                                if let Some(decimal_part) = next_token.word_str(self.db) {
+                                    decimal_part.chars().all(|c| c.is_ascii_digit())
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        };
+
+                        if is_float {
+                            // Negative float: -number.number
+                            self.eat_sigil(Sigil::Dot);
+                            let decimal_word = self.need_name();
+                            let float_str = format!("-{}.{}", word, decimal_word.as_str(self.db));
+                            let value = InternedText::new(self.db, float_str.S());
+                            return ast::Expr::Float(ast::ExprFloat::new(self.db, value));
+                        } else {
+                            // Negative int: -number
+                            let int_str = format!("-{}", word);
+                            let value = InternedText::new(self.db, int_str.S());
+                            return ast::Expr::Int(ast::ExprInt::new(self.db, value));
+                        }
+                    }
+                }
+            }
+            // Not a negative number - this is an error (unexpected minus).
+            let message = InternedText::new(self.db, "unexpected minus sign".S());
+            return ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+        }
+
+        // Check for keywords.
         match self.peek_word() {
             Some("true") => { self.eat_word("true"); return ast::Expr::True; }
             Some("false") => { self.eat_word("false"); return ast::Expr::False; }

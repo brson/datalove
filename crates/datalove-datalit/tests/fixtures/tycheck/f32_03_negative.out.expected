@@ -2,8 +2,8 @@
   "ast": {
     "expr": {
       "expr": {
-        "ParseError": {
-          "message": "unexpected token in expression"
+        "Float": {
+          "value": "-3.14"
         }
       },
       "heap": "Local"
@@ -13,10 +13,6 @@
       "type_hint": "F32"
     }
   },
-  "errors": [
-    {
-      "kind": "CannotSynthesize"
-    }
-  ],
-  "root_type": null
+  "errors": [],
+  "root_type": "@f32"
 }
