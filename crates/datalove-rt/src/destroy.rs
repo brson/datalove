@@ -35,7 +35,21 @@ pub unsafe fn any_destroy_local(
 
             // Int has allocations.
             rtdt::TyTag::Int => {
-                todo!("Int destructor")
+                let int_ptr = value_in as *mut rtdt::Int;
+                let int = &*int_ptr;
+
+                // Free the limb buffer if it exists.
+                if !int.data.is_null() && int.capacity > 0 {
+                    // Each limb is a u32.
+                    rt_ref.free(4, 4, int.capacity, int.data as *mut u8);
+                }
+
+                // Clear the int fields.
+                (*int_ptr).data = std::ptr::null();
+                (*int_ptr).size_and_sign = 0;
+                (*int_ptr).capacity = 0;
+
+                RtStatus::Ok
             }
 
             // String has allocations.
@@ -50,12 +64,40 @@ pub unsafe fn any_destroy_local(
 
             // List has allocations.
             rtdt::TyTag::List => {
-                todo!("List destructor")
+                let list_ptr = value_in as *mut rtdt::List;
+                let list = &*list_ptr;
+                let list_info = ty.type_info.list;
+                let element_tydesc = list_info.element_tydesc;
+                let element_ty = &*element_tydesc;
+
+                // Recursively destroy each element.
+                if !list.data.is_null() && list.size > 0 {
+                    let element_size = element_ty.size as usize;
+                    for i in 0..list.size {
+                        let element_ptr = (list.data as *mut u8).add((i as usize) * element_size);
+                        let status = any_destroy_local(rt, element_ptr, element_tydesc);
+                        if status != RtStatus::Ok {
+                            return status;
+                        }
+                    }
+                }
+
+                // Free the list buffer if it exists.
+                if !list.data.is_null() && list.capacity > 0 {
+                    rt_ref.free(element_ty.size, element_ty.align, list.capacity, list.data as *mut u8);
+                }
+
+                // Clear the list fields.
+                (*list_ptr).data = std::ptr::null();
+                (*list_ptr).size = 0;
+                (*list_ptr).capacity = 0;
+
+                RtStatus::Ok
             }
 
             // Set has allocations.
             rtdt::TyTag::Set => {
-                todo!("Set destructor")
+                crate::set::set_destroy_impl(rt_ref, value_in, tydesc)
             }
 
             // Tuple - recursively destroy fields.
@@ -98,7 +140,33 @@ pub unsafe fn any_destroy_local(
 
             // Enum - check tag and destroy payload.
             rtdt::TyTag::Enum => {
-                todo!("Enum destructor")
+                let enum_info = ty.type_info.enum_;
+                let layout = rtdt::layout::compute_enum_layout(tydesc);
+
+                // Read the discriminant (u32 at offset 0).
+                let discriminant_ptr = value_in as *const u32;
+                let discriminant = *discriminant_ptr;
+
+                // Find the variant.
+                if discriminant < enum_info.num_variants {
+                    let variants = std::slice::from_raw_parts(
+                        enum_info.variants,
+                        enum_info.num_variants as usize,
+                    );
+                    let variant = &variants[discriminant as usize];
+
+                    // If variant has payload, destroy it.
+                    if !variant.payload.is_null() {
+                        let payload_offset = layout.variant_offsets[discriminant as usize];
+                        let payload_ptr = value_in.add(payload_offset as usize);
+                        let status = any_destroy_local(rt, payload_ptr, variant.payload);
+                        if status != RtStatus::Ok {
+                            return status;
+                        }
+                    }
+                }
+
+                RtStatus::Ok
             }
 
             // Option - check tag and destroy Some value.

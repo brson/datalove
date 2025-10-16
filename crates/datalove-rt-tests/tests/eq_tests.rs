@@ -542,6 +542,213 @@ fn test_eq_enum_with_payload_not_equals() -> AnyResult<()> {
 }
 
 #[test]
+fn test_eq_option_none_equals() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@none : @option @u32")?;
+    let typechecked_b = compile(&db, "@none : @option @u32")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    Ok(())
+}
+
+#[test]
+fn test_eq_option_some_equals() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@some @42 : @option @u32")?;
+    let typechecked_b = compile(&db, "@some @42 : @option @u32")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    Ok(())
+}
+
+#[test]
+fn test_eq_option_none_vs_some() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@none : @option @u32")?;
+    let typechecked_b = compile(&db, "@some @42 : @option @u32")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    Ok(())
+}
+
+#[test]
+fn test_eq_option_some_not_equals() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@some @42 : @option @u32")?;
+    let typechecked_b = compile(&db, "@some @99 : @option @u32")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    Ok(())
+}
+
+#[test]
+fn test_eq_result_ok_equals() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@ok @42 : @result @u32")?;
+    let typechecked_b = compile(&db, "@ok @42 : @result @u32")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    Ok(())
+}
+
+#[test]
+fn test_eq_result_ok_not_equals() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@ok @42 : @result @u32")?;
+    let typechecked_b = compile(&db, "@ok @99 : @result @u32")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    Ok(())
+}
+
+#[test]
+fn test_eq_result_err_equals() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@err @errFromU32 @5 : @result @u32")?;
+    let typechecked_b = compile(&db, "@err @errFromU32 @5 : @result @u32")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    Ok(())
+}
+
+#[test]
+fn test_eq_result_err_not_equals() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@err @errFromU32 @5 : @result @u32")?;
+    let typechecked_b = compile(&db, "@err @errFromU32 @10 : @result @u32")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    Ok(())
+}
+
+#[test]
+fn test_eq_result_ok_vs_err() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@ok @42 : @result @u32")?;
+    let typechecked_b = compile(&db, "@err @errFromU32 @5 : @result @u32")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    Ok(())
+}
+
+#[test]
 fn test_eq_type_mismatch() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile(&db, "@42")?;

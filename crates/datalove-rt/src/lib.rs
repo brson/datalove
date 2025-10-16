@@ -45,6 +45,7 @@ pub mod clone;
 pub mod string;
 pub mod pretty;
 pub mod btreemap;
+pub mod set;
 pub mod list;
 pub mod destroy;
 

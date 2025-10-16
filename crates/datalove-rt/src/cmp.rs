@@ -423,7 +423,55 @@ unsafe fn eq_value(
                 }
                 true
             }
-            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Option | rtdt::TyTag::Result | rtdt::TyTag::Data | rtdt::TyTag::Error => {
+            rtdt::TyTag::Option => {
+                let option_a = &*(value_a as *const rtdt::Option);
+                let option_b = &*(value_b as *const rtdt::Option);
+
+                // Compare tags first.
+                if option_a.tag != option_b.tag {
+                    return false;
+                }
+
+                // If both are Some, compare inner values.
+                if option_a.tag == rtdt::OptionTag::Some {
+                    let option_info = &td.type_info.option;
+                    let layout = rtdt::layout::compute_option_layout(tydesc);
+                    let payload_a = value_a.add(layout.payload_offset as usize);
+                    let payload_b = value_b.add(layout.payload_offset as usize);
+                    return eq_value(payload_a, payload_b, option_info.inner_tydesc, float_policy);
+                }
+
+                true
+            }
+            rtdt::TyTag::Result => {
+                let result_a = &*(value_a as *const rtdt::Result);
+                let result_b = &*(value_b as *const rtdt::Result);
+
+                // Compare tags first.
+                if result_a.tag != result_b.tag {
+                    return false;
+                }
+
+                let result_info = &td.type_info.result;
+                let layout = rtdt::layout::compute_result_layout(tydesc);
+                let payload_a = value_a.add(layout.payload_offset as usize);
+                let payload_b = value_b.add(layout.payload_offset as usize);
+
+                match result_a.tag {
+                    rtdt::ResultTag::Ok => {
+                        eq_value(payload_a, payload_b, result_info.ok_tydesc, float_policy)
+                    }
+                    rtdt::ResultTag::Err => {
+                        // Compare Error values.
+                        // Error is a dynamic type with primary and secondary fields.
+                        // For now, use bitwise comparison of Error struct.
+                        let err_a = std::ptr::read(payload_a as *const (u64, u64));
+                        let err_b = std::ptr::read(payload_b as *const (u64, u64));
+                        err_a == err_b
+                    }
+                }
+            }
+            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
                 unimplemented!("eq_value for {:?}", td.type_tag)
             }
@@ -785,7 +833,58 @@ unsafe fn cmp_value(
                     crate::RtOrdering::Equal
                 }
             }
-            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Option | rtdt::TyTag::Result | rtdt::TyTag::Data | rtdt::TyTag::Error => {
+            rtdt::TyTag::Option => {
+                let option_a = &*(value_a as *const rtdt::Option);
+                let option_b = &*(value_b as *const rtdt::Option);
+
+                // None < Some.
+                match (option_a.tag, option_b.tag) {
+                    (rtdt::OptionTag::None, rtdt::OptionTag::None) => crate::RtOrdering::Equal,
+                    (rtdt::OptionTag::None, rtdt::OptionTag::Some) => crate::RtOrdering::Less,
+                    (rtdt::OptionTag::Some, rtdt::OptionTag::None) => crate::RtOrdering::Greater,
+                    (rtdt::OptionTag::Some, rtdt::OptionTag::Some) => {
+                        let option_info = &td.type_info.option;
+                        let layout = rtdt::layout::compute_option_layout(tydesc);
+                        let payload_a = value_a.add(layout.payload_offset as usize);
+                        let payload_b = value_b.add(layout.payload_offset as usize);
+                        cmp_value(payload_a, payload_b, option_info.inner_tydesc, float_policy)
+                    }
+                }
+            }
+            rtdt::TyTag::Result => {
+                let result_a = &*(value_a as *const rtdt::Result);
+                let result_b = &*(value_b as *const rtdt::Result);
+
+                // Err < Ok (conventional).
+                match (result_a.tag, result_b.tag) {
+                    (rtdt::ResultTag::Err, rtdt::ResultTag::Ok) => crate::RtOrdering::Less,
+                    (rtdt::ResultTag::Ok, rtdt::ResultTag::Err) => crate::RtOrdering::Greater,
+                    _ => {
+                        let result_info = &td.type_info.result;
+                        let layout = rtdt::layout::compute_result_layout(tydesc);
+                        let payload_a = value_a.add(layout.payload_offset as usize);
+                        let payload_b = value_b.add(layout.payload_offset as usize);
+
+                        match result_a.tag {
+                            rtdt::ResultTag::Ok => {
+                                cmp_value(payload_a, payload_b, result_info.ok_tydesc, float_policy)
+                            }
+                            rtdt::ResultTag::Err => {
+                                // Compare Error values.
+                                // For now, use bitwise comparison.
+                                let err_a = std::ptr::read(payload_a as *const (u64, u64));
+                                let err_b = std::ptr::read(payload_b as *const (u64, u64));
+                                match err_a.cmp(&err_b) {
+                                    std::cmp::Ordering::Less => crate::RtOrdering::Less,
+                                    std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
+                                    std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
                 unimplemented!("cmp_value for {:?}", td.type_tag)
             }

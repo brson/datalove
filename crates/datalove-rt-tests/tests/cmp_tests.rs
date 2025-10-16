@@ -542,6 +542,265 @@ fn test_cmp_enum_with_payload_less() -> AnyResult<()> {
 }
 
 #[test]
+fn test_cmp_option_none_vs_none() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @?@u32 / @none")?;
+    let typechecked_b = compile(&db, ": @?@u32 / @none")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_option_none_less_than_some() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @?@u32 / @none")?;
+    let typechecked_b = compile(&db, ": @?@u32 / @42")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_option_some_greater_than_none() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @?@u32 / @42")?;
+    let typechecked_b = compile(&db, ": @?@u32 / @none")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Greater));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_option_some_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @?@u32 / @42")?;
+    let typechecked_b = compile(&db, ": @?@u32 / @42")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_option_some_less() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @?@u32 / @10")?;
+    let typechecked_b = compile(&db, ": @?@u32 / @20")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+#[ignore] // Result type instantiation not yet implemented
+fn test_cmp_result_err_less_than_ok() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @!@u32 / @err")?;
+    let typechecked_b = compile(&db, ": @!@u32 / @42")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+#[ignore] // Result type instantiation not yet implemented
+fn test_cmp_result_ok_greater_than_err() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @!@u32 / @42")?;
+    let typechecked_b = compile(&db, ": @!@u32 / @err")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Greater));
+    Ok(())
+}
+
+#[test]
+#[ignore] // Result type instantiation not yet implemented
+fn test_cmp_result_ok_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @!@u32 / @42")?;
+    let typechecked_b = compile(&db, ": @!@u32 / @42")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+#[ignore] // Result type instantiation not yet implemented
+fn test_cmp_result_ok_less() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @!@u32 / @10")?;
+    let typechecked_b = compile(&db, ": @!@u32 / @20")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+#[ignore] // Result type instantiation not yet implemented
+fn test_cmp_result_err_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @!@u32 / @err")?;
+    let typechecked_b = compile(&db, ": @!@u32 / @err")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+#[ignore] // Result type instantiation not yet implemented
+fn test_cmp_result_err_less() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @!@u32 / @err")?;
+    let typechecked_b = compile(&db, ": @!@u32 / @err")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
 fn test_cmp_type_mismatch() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile(&db, "@42")?;

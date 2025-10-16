@@ -236,9 +236,26 @@ unsafe fn clone_impl(
                 map_out.root = std::ptr::null();
                 map_out.len = 0;
             } else {
-                // TODO: Implement map tree cloning.
-                // This requires recursively cloning the B+tree structure.
-                return RtStatus::Error;
+                let map_info = unsafe { ty.type_info.map };
+                let key_tydesc = map_info.key_tydesc;
+                let value_tydesc = map_info.value_tydesc;
+                let rt_ref = unsafe { &mut *(rt as *mut alloc::LocalRt) };
+
+                let new_root = unsafe {
+                    crate::btreemap::btreemap_clone_tree(
+                        rt_ref,
+                        map_in.root,
+                        key_tydesc,
+                        value_tydesc,
+                    )
+                };
+
+                if new_root.is_null() {
+                    return RtStatus::Error;
+                }
+
+                map_out.root = new_root;
+                map_out.len = map_in.len;
             }
 
             RtStatus::Ok
@@ -253,9 +270,24 @@ unsafe fn clone_impl(
                 set_out.root = std::ptr::null();
                 set_out.len = 0;
             } else {
-                // TODO: Implement set tree cloning.
-                // This requires recursively cloning the B+tree structure.
-                return RtStatus::Error;
+                let set_info = unsafe { ty.type_info.set };
+                let element_tydesc = set_info.element_tydesc;
+                let rt_ref = unsafe { &mut *(rt as *mut alloc::LocalRt) };
+
+                let new_root = unsafe {
+                    crate::set::set_clone_tree(
+                        rt_ref,
+                        set_in.root,
+                        element_tydesc,
+                    )
+                };
+
+                if new_root.is_null() {
+                    return RtStatus::Error;
+                }
+
+                set_out.root = new_root;
+                set_out.len = set_in.len;
             }
 
             RtStatus::Ok

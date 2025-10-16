@@ -312,6 +312,14 @@ fn instantiate_expr<'db>(
             let data_tydesc = tydesc_table.get_or_create(ty);
             instantiate_data(db, data_expr.value(db), tydesc_table, value_heap, data_tydesc)
         }
+        (Expr::Map(map_expr), Type::Map(map_ty)) => {
+            let map_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_map(db, &map_expr.entries(db), map_ty.key_type(db), map_ty.value_type(db), tydesc_table, value_heap, map_tydesc)
+        }
+        (Expr::Set(set_expr), Type::Set(set_ty)) => {
+            let set_tydesc = tydesc_table.get_or_create(ty);
+            instantiate_set(db, &set_expr.elements(db), set_ty.element_type(db), tydesc_table, value_heap, set_tydesc)
+        }
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
@@ -575,6 +583,174 @@ fn instantiate_data<'db>(
     }
 
     Ok(data_ptr as *const u8)
+}
+
+/// Instantiate a map value.
+fn instantiate_map<'db>(
+    db: &'db dyn crate::Db,
+    entries: &[ExprMapEntry<'db>],
+    key_type: TypeAndHeap<'db>,
+    value_type: TypeAndHeap<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    value_heap: &mut ValueHeap,
+    map_tydesc: *const rtdt::TyDesc,
+) -> AnyResult<*const u8> {
+    // Allocate space for Map struct.
+    let map_size = std::mem::size_of::<rtdt::Map>();
+    let map_align = std::mem::align_of::<rtdt::Map>();
+    let map_ptr = value_heap.alloc(map_size, map_align) as *mut rtdt::Map;
+
+    if entries.is_empty() {
+        // Empty map: null root, zero length.
+        unsafe {
+            (*map_ptr).root = std::ptr::null();
+            (*map_ptr).len = 0;
+        }
+        return Ok(map_ptr as *const u8);
+    }
+
+    // Non-empty map: build a single leaf node.
+    //
+    // For simplicity, we only support maps that fit in one leaf node
+    // (up to MAP_NODE_CAPACITY entries).
+    if entries.len() > rtdt::MAP_NODE_CAPACITY as usize {
+        bail!("Map instantiation limited to {} entries", rtdt::MAP_NODE_CAPACITY);
+    }
+
+    // Get type descriptors.
+    let key_tydesc = tydesc_table.get_or_create(key_type.ty(db));
+    let value_tydesc = tydesc_table.get_or_create(value_type.ty(db));
+
+    // Compute leaf node layout.
+    let leaf_layout = unsafe { rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc) };
+
+    // Allocate leaf node.
+    let leaf_node = value_heap.alloc(leaf_layout.size as usize, leaf_layout.align as usize);
+
+    // Initialize node header: tag = Leaf (2), len = entries.len().
+    unsafe {
+        *leaf_node = rtdt::MapNodeTag::Leaf as u8;  // tag at offset 0
+        *(leaf_node.add(4) as *mut u32) = entries.len() as u32;  // len at offset 4
+    }
+
+    // Initialize next_leaf pointer to null.
+    unsafe {
+        let next_leaf_ptr = leaf_node.add(leaf_layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+        *next_leaf_ptr = std::ptr::null_mut();
+    }
+
+    // Get pointers to keys and values arrays.
+    let keys_array = unsafe { leaf_node.add(leaf_layout.keys_offset as usize) };
+    let values_array = unsafe { leaf_node.add(leaf_layout.values_offset as usize) };
+
+    let key_size = unsafe { (*key_tydesc).size as usize };
+    let value_size = unsafe { (*value_tydesc).size as usize };
+
+    // Instantiate and copy each key-value pair.
+    for (i, entry) in entries.iter().enumerate() {
+        let key_expr = entry.key(db);
+        let value_expr = entry.value(db);
+
+        let key_value = instantiate_expr(db, key_expr, key_type.ty(db), tydesc_table, value_heap)?;
+        let value_value = instantiate_expr(db, value_expr, value_type.ty(db), tydesc_table, value_heap)?;
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                key_value,
+                keys_array.add(i * key_size),
+                key_size,
+            );
+            std::ptr::copy_nonoverlapping(
+                value_value,
+                values_array.add(i * value_size),
+                value_size,
+            );
+        }
+    }
+
+    // Initialize Map struct.
+    unsafe {
+        (*map_ptr).root = leaf_node as *const rtdt::MapNode;
+        (*map_ptr).len = entries.len() as u32;
+    }
+
+    Ok(map_ptr as *const u8)
+}
+
+/// Instantiate a set value.
+fn instantiate_set<'db>(
+    db: &'db dyn crate::Db,
+    elements: &[ExprFull<'db>],
+    element_type: TypeAndHeap<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    value_heap: &mut ValueHeap,
+    set_tydesc: *const rtdt::TyDesc,
+) -> AnyResult<*const u8> {
+    // Allocate space for Set struct.
+    let set_size = std::mem::size_of::<rtdt::Set>();
+    let set_align = std::mem::align_of::<rtdt::Set>();
+    let set_ptr = value_heap.alloc(set_size, set_align) as *mut rtdt::Set;
+
+    if elements.is_empty() {
+        // Empty set: null root, zero length.
+        unsafe {
+            (*set_ptr).root = std::ptr::null();
+            (*set_ptr).len = 0;
+        }
+        return Ok(set_ptr as *const u8);
+    }
+
+    // Non-empty set: build a single leaf node.
+    //
+    // For simplicity, we only support sets that fit in one leaf node
+    // (up to SET_NODE_CAPACITY elements).
+    if elements.len() > rtdt::SET_NODE_CAPACITY as usize {
+        bail!("Set instantiation limited to {} elements", rtdt::SET_NODE_CAPACITY);
+    }
+
+    // Get type descriptor.
+    let element_tydesc = tydesc_table.get_or_create(element_type.ty(db));
+
+    // Compute leaf node layout.
+    let leaf_layout = unsafe { rtdt::layout::compute_set_leaf_node_layout(element_tydesc) };
+
+    // Allocate leaf node.
+    let leaf_node = value_heap.alloc(leaf_layout.size as usize, leaf_layout.align as usize);
+
+    // Initialize node header (SetNode struct).
+    //
+    // SetNode has: tag (u8 at offset 0), padding, len (u32 at offset 4).
+    unsafe {
+        let set_node_ptr = leaf_node as *mut rtdt::SetNode;
+        (*set_node_ptr).tag = rtdt::SetNodeTag::Leaf;
+        (*set_node_ptr).len = elements.len() as u32;
+    }
+
+    // Get pointer to keys array.
+    let keys_array = unsafe { leaf_node.add(leaf_layout.keys_offset as usize) };
+
+    let element_size = unsafe { (*element_tydesc).size as usize };
+
+    // Instantiate and copy each element.
+    for (i, elem_expr) in elements.iter().enumerate() {
+        let elem_value = instantiate_expr(db, *elem_expr, element_type.ty(db), tydesc_table, value_heap)?;
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                elem_value,
+                keys_array.add(i * element_size),
+                element_size,
+            );
+        }
+    }
+
+    // Initialize Set struct.
+    unsafe {
+        (*set_ptr).root = leaf_node as *const rtdt::SetNode;
+        (*set_ptr).len = elements.len() as u32;
+    }
+
+    Ok(set_ptr as *const u8)
 }
 
 /// Instantiate a value from a typechecked AST.
