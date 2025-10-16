@@ -112,9 +112,37 @@ where I: Iterator<Item = TreeToken<'db>>
                 self.eat_word("bool");
                 ast::TypeHint::Bool
             }
+            Some("u8") => {
+                self.eat_word("u8");
+                ast::TypeHint::U8
+            }
+            Some("i8") => {
+                self.eat_word("i8");
+                ast::TypeHint::I8
+            }
+            Some("u16") => {
+                self.eat_word("u16");
+                ast::TypeHint::U16
+            }
+            Some("i16") => {
+                self.eat_word("i16");
+                ast::TypeHint::I16
+            }
             Some("u32") => {
                 self.eat_word("u32");
                 ast::TypeHint::U32
+            }
+            Some("i32") => {
+                self.eat_word("i32");
+                ast::TypeHint::I32
+            }
+            Some("u64") => {
+                self.eat_word("u64");
+                ast::TypeHint::U64
+            }
+            Some("i64") => {
+                self.eat_word("i64");
+                ast::TypeHint::I64
             }
             Some("f32") => {
                 self.eat_word("f32");
@@ -624,7 +652,14 @@ impl<'db> DynParser<'db> {
         // Parse base type.
         match self.peek_word() {
             Some("bool") => { self.eat_word("bool"); ast::TypeHint::Bool }
+            Some("u8") => { self.eat_word("u8"); ast::TypeHint::U8 }
+            Some("i8") => { self.eat_word("i8"); ast::TypeHint::I8 }
+            Some("u16") => { self.eat_word("u16"); ast::TypeHint::U16 }
+            Some("i16") => { self.eat_word("i16"); ast::TypeHint::I16 }
             Some("u32") => { self.eat_word("u32"); ast::TypeHint::U32 }
+            Some("i32") => { self.eat_word("i32"); ast::TypeHint::I32 }
+            Some("u64") => { self.eat_word("u64"); ast::TypeHint::U64 }
+            Some("i64") => { self.eat_word("i64"); ast::TypeHint::I64 }
             Some("f32") => { self.eat_word("f32"); ast::TypeHint::F32 }
             Some("int") => { self.eat_word("int"); ast::TypeHint::Int }
             Some("string") => { self.eat_word("string"); ast::TypeHint::String }

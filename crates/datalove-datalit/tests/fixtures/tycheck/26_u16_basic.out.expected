@@ -1,0 +1,18 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Int": {
+          "value": "1000"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "U16"
+    }
+  },
+  "errors": [],
+  "root_type": "@u16"
+}

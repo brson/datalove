@@ -78,7 +78,14 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
 
     match ty_inner {
         Type::Bool => json!(format!("{}bool", heap_str)),
+        Type::U8 => json!(format!("{}u8", heap_str)),
+        Type::I8 => json!(format!("{}i8", heap_str)),
+        Type::U16 => json!(format!("{}u16", heap_str)),
+        Type::I16 => json!(format!("{}i16", heap_str)),
         Type::U32 => json!(format!("{}u32", heap_str)),
+        Type::I32 => json!(format!("{}i32", heap_str)),
+        Type::U64 => json!(format!("{}u64", heap_str)),
+        Type::I64 => json!(format!("{}i64", heap_str)),
         Type::F32 => json!(format!("{}f32", heap_str)),
         Type::Int => json!(format!("{}int", heap_str)),
         Type::String => json!(format!("{}string", heap_str)),

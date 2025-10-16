@@ -63,11 +63,81 @@ impl<'db> TyDescTable<'db> {
                     },
                 })
             }
+            Type::U8 => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::U8,
+                    size: 1,
+                    align: 1,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
+            Type::I8 => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::I8,
+                    size: 1,
+                    align: 1,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
+            Type::U16 => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::U16,
+                    size: 2,
+                    align: 2,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
+            Type::I16 => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::I16,
+                    size: 2,
+                    align: 2,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
             Type::U32 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::U32,
                     size: 4,
                     align: 4,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
+            Type::I32 => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::I32,
+                    size: 4,
+                    align: 4,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
+            Type::U64 => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::U64,
+                    size: 8,
+                    align: 8,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
+            Type::I64 => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::I64,
+                    size: 8,
+                    align: 8,
                     type_info: rtdt::TyInfo {
                         nothing: rtdt::TyInfoNothing,
                     },

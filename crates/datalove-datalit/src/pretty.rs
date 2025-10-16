@@ -55,7 +55,14 @@ fn pretty_type_hint<'db>(
 ) {
     match th {
         TypeHint::Bool => out.push_str("bool"),
+        TypeHint::U8 => out.push_str("u8"),
+        TypeHint::I8 => out.push_str("i8"),
+        TypeHint::U16 => out.push_str("u16"),
+        TypeHint::I16 => out.push_str("i16"),
         TypeHint::U32 => out.push_str("u32"),
+        TypeHint::I32 => out.push_str("i32"),
+        TypeHint::U64 => out.push_str("u64"),
+        TypeHint::I64 => out.push_str("i64"),
         TypeHint::F32 => out.push_str("f32"),
         TypeHint::Int => out.push_str("int"),
         TypeHint::String => out.push_str("string"),

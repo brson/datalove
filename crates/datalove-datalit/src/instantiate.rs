@@ -94,11 +94,67 @@ fn instantiate_expr<'db>(
             unsafe { *ptr = 0 };
             Ok(ptr as *const u8)
         }
+        (Expr::Int(int_expr), Type::U8) => {
+            let value_str = int_expr.value(db).as_str(db);
+            let value: u8 = value_str.parse()?;
+
+            let ptr = value_heap.alloc(1, 1) as *mut u8;
+            unsafe { *ptr = value };
+            Ok(ptr as *const u8)
+        }
+        (Expr::Int(int_expr), Type::I8) => {
+            let value_str = int_expr.value(db).as_str(db);
+            let value: i8 = value_str.parse()?;
+
+            let ptr = value_heap.alloc(1, 1) as *mut i8;
+            unsafe { *ptr = value };
+            Ok(ptr as *const u8)
+        }
+        (Expr::Int(int_expr), Type::U16) => {
+            let value_str = int_expr.value(db).as_str(db);
+            let value: u16 = value_str.parse()?;
+
+            let ptr = value_heap.alloc(2, 2) as *mut u16;
+            unsafe { *ptr = value };
+            Ok(ptr as *const u8)
+        }
+        (Expr::Int(int_expr), Type::I16) => {
+            let value_str = int_expr.value(db).as_str(db);
+            let value: i16 = value_str.parse()?;
+
+            let ptr = value_heap.alloc(2, 2) as *mut i16;
+            unsafe { *ptr = value };
+            Ok(ptr as *const u8)
+        }
         (Expr::Int(int_expr), Type::U32) => {
             let value_str = int_expr.value(db).as_str(db);
             let value: u32 = value_str.parse()?;
 
             let ptr = value_heap.alloc(4, 4) as *mut u32;
+            unsafe { *ptr = value };
+            Ok(ptr as *const u8)
+        }
+        (Expr::Int(int_expr), Type::I32) => {
+            let value_str = int_expr.value(db).as_str(db);
+            let value: i32 = value_str.parse()?;
+
+            let ptr = value_heap.alloc(4, 4) as *mut i32;
+            unsafe { *ptr = value };
+            Ok(ptr as *const u8)
+        }
+        (Expr::Int(int_expr), Type::U64) => {
+            let value_str = int_expr.value(db).as_str(db);
+            let value: u64 = value_str.parse()?;
+
+            let ptr = value_heap.alloc(8, 8) as *mut u64;
+            unsafe { *ptr = value };
+            Ok(ptr as *const u8)
+        }
+        (Expr::Int(int_expr), Type::I64) => {
+            let value_str = int_expr.value(db).as_str(db);
+            let value: i64 = value_str.parse()?;
+
+            let ptr = value_heap.alloc(8, 8) as *mut i64;
             unsafe { *ptr = value };
             Ok(ptr as *const u8)
         }

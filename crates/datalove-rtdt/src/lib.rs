@@ -11,7 +11,28 @@ pub mod anypack;
 pub struct Bool(pub u8);
 
 #[repr(transparent)]
+pub struct U8(pub u8);
+
+#[repr(transparent)]
+pub struct I8(pub i8);
+
+#[repr(transparent)]
+pub struct U16(pub u16);
+
+#[repr(transparent)]
+pub struct I16(pub i16);
+
+#[repr(transparent)]
 pub struct U32(pub u32);
+
+#[repr(transparent)]
+pub struct I32(pub i32);
+
+#[repr(transparent)]
+pub struct U64(pub u64);
+
+#[repr(transparent)]
+pub struct I64(pub i64);
 
 #[repr(transparent)]
 pub struct F32(pub f32);

@@ -241,7 +241,14 @@ fn collect_type_hint_names_inner<'db>(
             collect_type_hint_names(db, r.inner_type(db), scope, next_id);
         }
         TypeHint::Bool
+        | TypeHint::U8
+        | TypeHint::I8
+        | TypeHint::U16
+        | TypeHint::I16
         | TypeHint::U32
+        | TypeHint::I32
+        | TypeHint::U64
+        | TypeHint::I64
         | TypeHint::F32
         | TypeHint::Int
         | TypeHint::String

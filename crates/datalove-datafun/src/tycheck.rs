@@ -416,7 +416,14 @@ fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
         Type::Datalit(datalit_ty) => {
             matches!(
                 datalit_ty,
+                datalit::tycheck::Type::U8 |
+                datalit::tycheck::Type::I8 |
+                datalit::tycheck::Type::U16 |
+                datalit::tycheck::Type::I16 |
                 datalit::tycheck::Type::U32 |
+                datalit::tycheck::Type::I32 |
+                datalit::tycheck::Type::U64 |
+                datalit::tycheck::Type::I64 |
                 datalit::tycheck::Type::F32 |
                 datalit::tycheck::Type::Int
             )

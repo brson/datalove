@@ -1,0 +1,22 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Int": {
+          "value": "32768"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "I16"
+    }
+  },
+  "errors": [
+    {
+      "kind": "IntOutOfRange"
+    }
+  ],
+  "root_type": null
+}

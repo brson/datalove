@@ -9,7 +9,14 @@ use crate::resolve::{ResolvedExpr, Resolution};
 #[derive(salsa::Update)]
 pub enum Type<'db> {
     Bool,
+    U8,
+    I8,
+    U16,
+    I16,
     U32,
+    I32,
+    U64,
+    I64,
     F32,
     Int,
     String,
@@ -479,10 +486,72 @@ fn check<'db>(
         }
 
         // Rule: Check-Int
+        (Expr::Int(i), Type::U8) => {
+            let value_str = i.value(db).as_str(db);
+            if value_str.parse::<u8>().is_ok() {
+                Ok(())
+            } else {
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+
+        (Expr::Int(i), Type::I8) => {
+            let value_str = i.value(db).as_str(db);
+            if value_str.parse::<i8>().is_ok() {
+                Ok(())
+            } else {
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+
+        (Expr::Int(i), Type::U16) => {
+            let value_str = i.value(db).as_str(db);
+            if value_str.parse::<u16>().is_ok() {
+                Ok(())
+            } else {
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+
+        (Expr::Int(i), Type::I16) => {
+            let value_str = i.value(db).as_str(db);
+            if value_str.parse::<i16>().is_ok() {
+                Ok(())
+            } else {
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+
         (Expr::Int(i), Type::U32) => {
             let value_str = i.value(db).as_str(db);
-            // Check if value fits in u32 range.
             if value_str.parse::<u32>().is_ok() {
+                Ok(())
+            } else {
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+
+        (Expr::Int(i), Type::I32) => {
+            let value_str = i.value(db).as_str(db);
+            if value_str.parse::<i32>().is_ok() {
+                Ok(())
+            } else {
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+
+        (Expr::Int(i), Type::U64) => {
+            let value_str = i.value(db).as_str(db);
+            if value_str.parse::<u64>().is_ok() {
+                Ok(())
+            } else {
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+
+        (Expr::Int(i), Type::I64) => {
+            let value_str = i.value(db).as_str(db);
+            if value_str.parse::<i64>().is_ok() {
                 Ok(())
             } else {
                 Err(TypeError::IntOutOfRange)
@@ -814,7 +883,14 @@ pub fn convert_type_hint<'db>(
 
     let ty = match type_hint {
         TypeHint::Bool => Type::Bool,
+        TypeHint::U8 => Type::U8,
+        TypeHint::I8 => Type::I8,
+        TypeHint::U16 => Type::U16,
+        TypeHint::I16 => Type::I16,
         TypeHint::U32 => Type::U32,
+        TypeHint::I32 => Type::I32,
+        TypeHint::U64 => Type::U64,
+        TypeHint::I64 => Type::I64,
         TypeHint::F32 => Type::F32,
         TypeHint::Int => Type::Int,
         TypeHint::String => Type::String,
@@ -948,7 +1024,14 @@ fn heaps_compatible(h1: Heap, h2: Heap) -> bool {
 pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
     match (t1, t2) {
         (Type::Bool, Type::Bool) => true,
+        (Type::U8, Type::U8) => true,
+        (Type::I8, Type::I8) => true,
+        (Type::U16, Type::U16) => true,
+        (Type::I16, Type::I16) => true,
         (Type::U32, Type::U32) => true,
+        (Type::I32, Type::I32) => true,
+        (Type::U64, Type::U64) => true,
+        (Type::I64, Type::I64) => true,
         (Type::F32, Type::F32) => true,
         (Type::Int, Type::Int) => true,
         (Type::String, Type::String) => true,
@@ -1070,7 +1153,14 @@ fn heap_to_string(heap: Heap) -> String {
 pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
     match ty {
         Type::Bool => "bool".to_string(),
+        Type::U8 => "u8".to_string(),
+        Type::I8 => "i8".to_string(),
+        Type::U16 => "u16".to_string(),
+        Type::I16 => "i16".to_string(),
         Type::U32 => "u32".to_string(),
+        Type::I32 => "i32".to_string(),
+        Type::U64 => "u64".to_string(),
+        Type::I64 => "i64".to_string(),
         Type::F32 => "f32".to_string(),
         Type::Int => "int".to_string(),
         Type::String => "string".to_string(),

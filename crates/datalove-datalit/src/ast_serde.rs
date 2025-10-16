@@ -28,7 +28,14 @@ pub struct TypeHintAndHeap {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TypeHint {
     Bool,
+    U8,
+    I8,
+    U16,
+    I16,
     U32,
+    I32,
+    U64,
+    I64,
     F32,
     Int,
     String,
@@ -277,7 +284,14 @@ impl TypeHint {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHint<'db>) -> Self {
         match ast {
             crate::ast::TypeHint::Bool => TypeHint::Bool,
+            crate::ast::TypeHint::U8 => TypeHint::U8,
+            crate::ast::TypeHint::I8 => TypeHint::I8,
+            crate::ast::TypeHint::U16 => TypeHint::U16,
+            crate::ast::TypeHint::I16 => TypeHint::I16,
             crate::ast::TypeHint::U32 => TypeHint::U32,
+            crate::ast::TypeHint::I32 => TypeHint::I32,
+            crate::ast::TypeHint::U64 => TypeHint::U64,
+            crate::ast::TypeHint::I64 => TypeHint::I64,
             crate::ast::TypeHint::F32 => TypeHint::F32,
             crate::ast::TypeHint::Int => TypeHint::Int,
             crate::ast::TypeHint::String => TypeHint::String,
