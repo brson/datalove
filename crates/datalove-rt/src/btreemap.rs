@@ -351,6 +351,21 @@ struct SplitInfo {
     insert_result: LeafInsertResult,
 }
 
+impl SplitInfo {
+    /// Destroy the separator key and clean up.
+    unsafe fn destroy(mut self, rt: &mut LocalRt, key_tydesc: *const TyDesc) {
+        unsafe {
+            let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+            let _ = crate::destroy::any_destroy_local(
+                rt_handle,
+                self.separator_key_buf.as_mut_ptr(),
+                key_tydesc,
+            );
+            // Vec will be dropped automatically after key is destroyed.
+        }
+    }
+}
+
 /// Find the leaf node where a key should be inserted.
 unsafe fn find_leaf_for_key(
     mut node: *mut MapNode,
@@ -448,7 +463,11 @@ unsafe fn leaf_insert_or_update(
                     let value_slot = values_ptr.add(i * value_size);
                     let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
                     let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc);
-                    std::ptr::copy_nonoverlapping(value, value_slot, value_size);
+                    // Clone the new value.
+                    let status = crate::clone::clone_value(rt_handle, value, value_tydesc, value_slot);
+                    if status != RtStatus::Ok {
+                        return LeafInsertResult::NeedsSplit; // Error handling.
+                    }
                     return LeafInsertResult::Updated;
                 }
                 crate::RtOrdering::Greater => continue,
@@ -472,11 +491,20 @@ unsafe fn leaf_insert_or_update(
             std::ptr::copy(src_val, dst_val, shift_count * value_size);
         }
 
-        // Insert the new key-value pair.
+        // Clone the new key-value pair into the node.
         let key_slot = keys_ptr.add(insert_pos * key_size);
         let value_slot = values_ptr.add(insert_pos * value_size);
-        std::ptr::copy_nonoverlapping(key, key_slot, key_size);
-        std::ptr::copy_nonoverlapping(value, value_slot, value_size);
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let status = crate::clone::clone_value(rt_handle, key, key_tydesc, key_slot);
+        if status != RtStatus::Ok {
+            return LeafInsertResult::NeedsSplit; // Error handling - treat as if node is full.
+        }
+        let status = crate::clone::clone_value(rt_handle, value, value_tydesc, value_slot);
+        if status != RtStatus::Ok {
+            // Need to clean up the key we just cloned.
+            let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
+            return LeafInsertResult::NeedsSplit; // Error handling.
+        }
 
         write_node_len(leaf, len + 1);
         LeafInsertResult::Inserted
@@ -533,10 +561,19 @@ unsafe fn split_leaf(
         *leaf_next_ptr_mut(leaf, key_tydesc, value_tydesc) = new_leaf;
         *leaf_next_ptr_mut(new_leaf, key_tydesc, value_tydesc) = old_next;
 
-        // Copy the separator key (first key of new_leaf) into a buffer.
-        // In a B+tree, the separator stays in the leaf - it's just copied to internal nodes for routing.
+        // Clone the separator key (first key of new_leaf) into a buffer.
+        // In a B+tree, the separator stays in the leaf, but internal nodes need their own copy.
         let mut separator_key_buf = vec![0u8; key_size];
-        std::ptr::copy_nonoverlapping(new_keys_ptr, separator_key_buf.as_mut_ptr(), key_size);
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let status = crate::clone::clone_value(
+            rt_handle,
+            new_keys_ptr,
+            key_tydesc,
+            separator_key_buf.as_mut_ptr(),
+        );
+        if status != RtStatus::Ok {
+            return Err(status);
+        }
 
         // Determine which leaf should receive the new key.
         let cmp_result = crate::cmp::cmp_total(key, key_tydesc, separator_key_buf.as_ptr(), key_tydesc);
@@ -632,9 +669,18 @@ unsafe fn insert_into_internal(
             std::ptr::copy(src_child, dst_child, shift_count);
         }
 
-        // Insert the separator key.
+        // Clone the separator key into the node.
         let key_slot = keys_ptr.add(insert_pos * key_size);
-        std::ptr::copy_nonoverlapping(separator_key.as_ptr(), key_slot, key_size);
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let status = crate::clone::clone_value(
+            rt_handle,
+            separator_key.as_ptr(),
+            key_tydesc,
+            key_slot,
+        );
+        if status != RtStatus::Ok {
+            panic!("Failed to clone separator key during insert_into_internal");
+        }
 
         // Insert the right child pointer.
         *children_ptr.add(insert_pos + 1) = right_child;
@@ -667,12 +713,24 @@ unsafe fn split_internal_node(
 
         let key_size = (*key_tydesc).size as usize;
 
-        // The middle key becomes the separator to push up.
+        // Clone the middle key as the separator to push up.
         let mut separator_key_buf = vec![0u8; key_size];
-        std::ptr::copy_nonoverlapping(
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let status = crate::clone::clone_value(
+            rt_handle,
             keys_ptr.add(split_point * key_size),
+            key_tydesc,
             separator_key_buf.as_mut_ptr(),
-            key_size,
+        );
+        if status != RtStatus::Ok {
+            panic!("Failed to clone separator key during internal node split");
+        }
+
+        // Destroy the separator key in the old node since we've cloned it out.
+        let _ = crate::destroy::any_destroy_local(
+            rt_handle,
+            keys_ptr.add(split_point * key_size),
+            key_tydesc,
         );
 
         // Move keys after split_point (excluding the separator) to new node.
@@ -764,9 +822,16 @@ pub unsafe fn btreemap_insert_impl(
             let keys_ptr = leaf_keys_ptr(leaf, map_key_tydesc, map_value_tydesc);
             let values_ptr = leaf_values_ptr(leaf, map_key_tydesc, map_value_tydesc);
 
-            // Copy key and value.
-            std::ptr::copy_nonoverlapping(key_ptr, keys_ptr, (*map_key_tydesc).size as usize);
-            std::ptr::copy_nonoverlapping(val_ptr, values_ptr, (*map_value_tydesc).size as usize);
+            // Clone key and value (not just copy, as they may have heap allocations).
+            let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+            let status = crate::clone::clone_value(rt_handle, key_ptr, map_key_tydesc, keys_ptr);
+            if status != RtStatus::Ok {
+                return status;
+            }
+            let status = crate::clone::clone_value(rt_handle, val_ptr, map_value_tydesc, values_ptr);
+            if status != RtStatus::Ok {
+                return status;
+            }
 
             write_node_len(leaf, 1);
             (*map_ptr).root = leaf as *const MapNode;
@@ -901,14 +966,18 @@ unsafe fn propagate_split_up(
 
             let root_keys_ptr = internal_keys_ptr(new_root, key_tydesc);
             let root_children_ptr = internal_child_ptrs_ptr(new_root, key_tydesc);
-            let key_size = (*key_tydesc).size as usize;
 
-            // Copy separator key.
-            std::ptr::copy_nonoverlapping(
+            // Clone separator key into new root.
+            let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+            let status = crate::clone::clone_value(
+                rt_handle,
                 split_info.separator_key_buf.as_ptr(),
+                key_tydesc,
                 root_keys_ptr,
-                key_size,
             );
+            if status != RtStatus::Ok {
+                return RtStatus::Error;
+            }
 
             // Set children.
             *root_children_ptr.add(0) = child;
@@ -917,6 +986,7 @@ unsafe fn propagate_split_up(
             write_node_len(new_root, 1);
             *root_ptr = new_root;
 
+            split_info.destroy(rt, key_tydesc);
             return RtStatus::Ok;
         }
 
@@ -931,10 +1001,13 @@ unsafe fn propagate_split_up(
             ) {
                 Ok(()) => {
                     // Successfully inserted into parent, done!
+                    split_info.destroy(rt, key_tydesc);
                     return RtStatus::Ok;
                 }
                 Err(new_split_info) => {
                     // Parent split, continue propagating up.
+                    // Destroy the old split_info before replacing it.
+                    split_info.destroy(rt, key_tydesc);
                     child = parent;
                     split_info = new_split_info;
                 }
@@ -949,13 +1022,18 @@ unsafe fn propagate_split_up(
 
         let root_keys_ptr = internal_keys_ptr(new_root, key_tydesc);
         let root_children_ptr = internal_child_ptrs_ptr(new_root, key_tydesc);
-        let key_size = (*key_tydesc).size as usize;
 
-        std::ptr::copy_nonoverlapping(
+        // Clone separator key into new root.
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let status = crate::clone::clone_value(
+            rt_handle,
             split_info.separator_key_buf.as_ptr(),
+            key_tydesc,
             root_keys_ptr,
-            key_size,
         );
+        if status != RtStatus::Ok {
+            return RtStatus::Error;
+        }
 
         *root_children_ptr.add(0) = child;
         *root_children_ptr.add(1) = split_info.new_node;
@@ -963,6 +1041,7 @@ unsafe fn propagate_split_up(
         write_node_len(new_root, 1);
         *root_ptr = new_root;
 
+        split_info.destroy(rt, key_tydesc);
         RtStatus::Ok
     }
 }

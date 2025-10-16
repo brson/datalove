@@ -581,6 +581,18 @@ proptest! {
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+                // Destroy the string objects after insertion (the map has cloned them).
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    &*_key_tydesc,
+                );
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    &*_value_tydesc,
+                );
             }
 
             prop_assert_eq!(map.len, unique_keys.len() as u32);
@@ -629,6 +641,18 @@ proptest! {
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+                // Destroy the string objects after insertion (the map has cloned them).
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    &*_key_tydesc,
+                );
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    &*_value_tydesc,
+                );
             }
         }
 
@@ -660,6 +684,18 @@ proptest! {
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+                // Destroy the string objects after insertion (the map has cloned them).
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    &*_key_tydesc,
+                );
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    &*_value_tydesc,
+                );
             }
         }
 
@@ -715,6 +751,18 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
                 prop_assert_eq!(map.len, 1);
+
+                // Destroy the string objects after insertion (the map has cloned them).
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    &*_key_tydesc,
+                );
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    &*_value_tydesc,
+                );
             }
 
             let status = datalove_rt::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
@@ -759,6 +807,18 @@ proptest! {
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+                // Destroy the string objects after insertion (the map has cloned them).
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    &*_key_tydesc,
+                );
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    &*_value_tydesc,
+                );
             }
 
             prop_assert_eq!(map.len, num_entries as u32);
@@ -805,6 +865,18 @@ proptest! {
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+                // Destroy the string objects after insertion (the map has cloned them).
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    &*_key_tydesc,
+                );
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    &*_value_tydesc,
+                );
             }
 
             let len_before_clear = map.len;
@@ -861,6 +933,18 @@ proptest! {
                         &*_value_tydesc,
                     );
                     prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+                    // Destroy the string objects after insertion (the map has cloned them).
+                    let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                        rt,
+                        &mut key_rt as *mut rtdt::String as *mut u8,
+                        &*_key_tydesc,
+                    );
+                    let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                        rt,
+                        &mut value_rt as *mut rtdt::String as *mut u8,
+                        &*_value_tydesc,
+                    );
                 } else {
                     let status = datalove_rt::dtlv_rti_btreemap_clear_local(rt, map_ptr, &*map_tydesc);
                     prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
@@ -915,6 +999,18 @@ proptest! {
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+                // Destroy the string objects after insertion (the map has cloned them).
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    &*_key_tydesc,
+                );
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    &*_value_tydesc,
+                );
             }
 
             for (key, value) in &other_entries {
@@ -934,6 +1030,18 @@ proptest! {
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+                // Destroy the string objects after insertion (the map has cloned them).
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut key_rt as *mut rtdt::String as *mut u8,
+                    &*_key_tydesc,
+                );
+                let _ = datalove_rt::dtlv_rti_string_destroy_local(
+                    rt,
+                    &mut value_rt as *mut rtdt::String as *mut u8,
+                    &*_value_tydesc,
+                );
             }
 
             let mut unique_keys = std::collections::HashSet::new();
