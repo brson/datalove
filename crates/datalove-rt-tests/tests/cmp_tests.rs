@@ -822,3 +822,325 @@ fn test_cmp_type_mismatch() -> AnyResult<()> {
     assert!(matches!(result, datalove_rt::RtOrdering::Error));
     Ok(())
 }
+
+#[test]
+fn test_cmp_map_empty_vs_empty() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @map<@string, @u32> / @map{}")?;
+    let typechecked_b = compile(&db, ": @map<@string, @u32> / @map{}")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_map_empty_vs_nonempty() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @map<@string, @u32> / @map{}")?;
+    let typechecked_b = compile(&db, r#"@map{"a" = @1}"#)?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_map_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
+    let typechecked_b = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_map_less_by_key() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
+    let typechecked_b = compile(&db, r#"@map{"a" = @1, "c" = @2}"#)?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_map_less_by_value() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
+    let typechecked_b = compile(&db, r#"@map{"a" = @1, "b" = @3}"#)?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_map_less_by_length() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, r#"@map{"a" = @1}"#)?;
+    let typechecked_b = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_map_greater_by_key() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, r#"@map{"a" = @1, "c" = @2}"#)?;
+    let typechecked_b = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Greater));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_set_empty_vs_empty() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @set<@u32> / @set{}")?;
+    let typechecked_b = compile(&db, ": @set<@u32> / @set{}")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_set_empty_vs_nonempty() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @set<@u32> / @set{}")?;
+    let typechecked_b = compile(&db, "@set{@1}")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_set_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@set{@1, @2, @3}")?;
+    let typechecked_b = compile(&db, "@set{@1, @2, @3}")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_set_less_by_element() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@set{@1, @2}")?;
+    let typechecked_b = compile(&db, "@set{@1, @3}")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_set_less_by_length() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@set{@1, @2}")?;
+    let typechecked_b = compile(&db, "@set{@1, @2, @3}")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_set_greater_by_element() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@set{@1, @3}")?;
+    let typechecked_b = compile(&db, "@set{@1, @2}")?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Greater));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_set_with_strings() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, r#"@set{"apple", "banana"}"#)?;
+    let typechecked_b = compile(&db, r#"@set{"apple", "cherry"}"#)?;
+
+    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
+    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp(
+            std::ptr::null_mut(),
+            inst_a.value,
+            inst_a.tydesc,
+            inst_b.value,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}

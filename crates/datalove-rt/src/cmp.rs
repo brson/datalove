@@ -471,7 +471,59 @@ unsafe fn eq_value(
                     }
                 }
             }
-            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Data | rtdt::TyTag::Error => {
+            rtdt::TyTag::Map => {
+                let map_a = &*(value_a as *const rtdt::Map);
+                let map_b = &*(value_b as *const rtdt::Map);
+
+                // Compare lengths first (fast path).
+                if map_a.len != map_b.len {
+                    return false;
+                }
+
+                // Both empty.
+                if map_a.len == 0 {
+                    return true;
+                }
+
+                let map_info = &td.type_info.map;
+                let key_tydesc = map_info.key_tydesc;
+                let value_tydesc = map_info.value_tydesc;
+
+                // Walk both trees in sorted order using leaf chains.
+                eq_map_trees(
+                    map_a.root as *mut rtdt::MapNode,
+                    map_b.root as *mut rtdt::MapNode,
+                    key_tydesc,
+                    value_tydesc,
+                    float_policy,
+                )
+            }
+            rtdt::TyTag::Set => {
+                let set_a = &*(value_a as *const rtdt::Set);
+                let set_b = &*(value_b as *const rtdt::Set);
+
+                // Compare lengths first (fast path).
+                if set_a.len != set_b.len {
+                    return false;
+                }
+
+                // Both empty.
+                if set_a.len == 0 {
+                    return true;
+                }
+
+                let set_info = &td.type_info.set;
+                let element_tydesc = set_info.element_tydesc;
+
+                // Walk both trees in sorted order using leaf chains.
+                eq_set_trees(
+                    set_a.root as *mut rtdt::SetNode,
+                    set_b.root as *mut rtdt::SetNode,
+                    element_tydesc,
+                    float_policy,
+                )
+            }
+            rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
                 unimplemented!("eq_value for {:?}", td.type_tag)
             }
@@ -884,9 +936,465 @@ unsafe fn cmp_value(
                     }
                 }
             }
-            rtdt::TyTag::Map | rtdt::TyTag::Set | rtdt::TyTag::Data | rtdt::TyTag::Error => {
+            rtdt::TyTag::Map => {
+                let map_a = &*(value_a as *const rtdt::Map);
+                let map_b = &*(value_b as *const rtdt::Map);
+
+                let map_info = &td.type_info.map;
+                let key_tydesc = map_info.key_tydesc;
+                let value_tydesc = map_info.value_tydesc;
+
+                // Lexicographic comparison by sorted key-value pairs.
+                cmp_map_trees(
+                    map_a.root as *mut rtdt::MapNode,
+                    map_b.root as *mut rtdt::MapNode,
+                    key_tydesc,
+                    value_tydesc,
+                    float_policy,
+                )
+            }
+            rtdt::TyTag::Set => {
+                let set_a = &*(value_a as *const rtdt::Set);
+                let set_b = &*(value_b as *const rtdt::Set);
+
+                let set_info = &td.type_info.set;
+                let element_tydesc = set_info.element_tydesc;
+
+                // Lexicographic comparison by sorted elements.
+                cmp_set_trees(
+                    set_a.root as *mut rtdt::SetNode,
+                    set_b.root as *mut rtdt::SetNode,
+                    element_tydesc,
+                    float_policy,
+                )
+            }
+            rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
                 unimplemented!("cmp_value for {:?}", td.type_tag)
+            }
+        }
+    }
+}
+
+/// Helper to find the leftmost leaf in a map tree.
+unsafe fn find_leftmost_map_leaf(mut node: *mut rtdt::MapNode, key_tydesc: *const rtdt::TyDesc) -> *mut rtdt::MapNode {
+    unsafe {
+        loop {
+            let tag = read_map_node_tag(node);
+            match tag {
+                rtdt::MapNodeTag::Leaf => return node,
+                rtdt::MapNodeTag::Internal => {
+                    let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
+                    let children_ptr = (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut rtdt::MapNode;
+                    node = *children_ptr;
+                }
+            }
+        }
+    }
+}
+
+/// Helper to find the leftmost leaf in a set tree.
+unsafe fn find_leftmost_set_leaf(mut node: *mut rtdt::SetNode, key_tydesc: *const rtdt::TyDesc) -> *mut rtdt::SetNode {
+    unsafe {
+        loop {
+            let tag = read_set_node_tag(node);
+            match tag {
+                rtdt::SetNodeTag::Leaf => return node,
+                rtdt::SetNodeTag::Internal => {
+                    let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc);
+                    let children_ptr = (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut rtdt::SetNode;
+                    node = *children_ptr;
+                }
+            }
+        }
+    }
+}
+
+/// Read map node tag.
+unsafe fn read_map_node_tag(node: *const rtdt::MapNode) -> rtdt::MapNodeTag {
+    unsafe {
+        let tag_byte = *(node as *const u8);
+        match tag_byte {
+            1 => rtdt::MapNodeTag::Internal,
+            2 => rtdt::MapNodeTag::Leaf,
+            _ => panic!("Invalid MapNodeTag: {}", tag_byte),
+        }
+    }
+}
+
+/// Read map node length.
+unsafe fn read_map_node_len(node: *const rtdt::MapNode) -> u32 {
+    unsafe {
+        let len_ptr = (node as *const u8).add(4) as *const u32;
+        *len_ptr
+    }
+}
+
+/// Read set node tag.
+unsafe fn read_set_node_tag(node: *const rtdt::SetNode) -> rtdt::SetNodeTag {
+    unsafe {
+        let tag_byte = *(node as *const u8);
+        match tag_byte {
+            1 => rtdt::SetNodeTag::Internal,
+            2 => rtdt::SetNodeTag::Leaf,
+            _ => panic!("Invalid SetNodeTag: {}", tag_byte),
+        }
+    }
+}
+
+/// Read set node length.
+unsafe fn read_set_node_len(node: *const rtdt::SetNode) -> u32 {
+    unsafe {
+        let len_ptr = (node as *const u8).add(4) as *const u32;
+        *len_ptr
+    }
+}
+
+/// Compare two map trees for equality by walking leaf chains.
+unsafe fn eq_map_trees(
+    root_a: *mut rtdt::MapNode,
+    root_b: *mut rtdt::MapNode,
+    key_tydesc: *const rtdt::TyDesc,
+    value_tydesc: *const rtdt::TyDesc,
+    float_policy: FloatEqPolicy,
+) -> bool {
+    unsafe {
+        // Find leftmost leaves.
+        let mut leaf_a = find_leftmost_map_leaf(root_a, key_tydesc);
+        let mut leaf_b = find_leftmost_map_leaf(root_b, key_tydesc);
+
+        let key_size = (*key_tydesc).size as usize;
+        let value_size = (*value_tydesc).size as usize;
+
+        let mut idx_a = 0u32;
+        let mut idx_b = 0u32;
+        let mut len_a = read_map_node_len(leaf_a);
+        let mut len_b = read_map_node_len(leaf_b);
+
+        loop {
+            // If both exhausted their current leaves, move to next.
+            if idx_a >= len_a {
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+                leaf_a = *next_ptr;
+                if leaf_a.is_null() {
+                    break;
+                }
+                idx_a = 0;
+                len_a = read_map_node_len(leaf_a);
+            }
+
+            if idx_b >= len_b {
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+                leaf_b = *next_ptr;
+                if leaf_b.is_null() {
+                    break;
+                }
+                idx_b = 0;
+                len_b = read_map_node_len(leaf_b);
+            }
+
+            // Get key and value pointers.
+            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+            let keys_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
+            let values_a = (leaf_a as *mut u8).add(layout_a.values_offset as usize);
+            let key_a = keys_a.add((idx_a as usize) * key_size);
+            let value_a = values_a.add((idx_a as usize) * value_size);
+
+            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+            let keys_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
+            let values_b = (leaf_b as *mut u8).add(layout_b.values_offset as usize);
+            let key_b = keys_b.add((idx_b as usize) * key_size);
+            let value_b = values_b.add((idx_b as usize) * value_size);
+
+            // Compare keys.
+            if !eq_value(key_a, key_b, key_tydesc, float_policy) {
+                return false;
+            }
+
+            // Compare values.
+            if !eq_value(value_a, value_b, value_tydesc, float_policy) {
+                return false;
+            }
+
+            idx_a += 1;
+            idx_b += 1;
+        }
+
+        // Both should be exhausted at the same time.
+        leaf_a.is_null() && leaf_b.is_null()
+    }
+}
+
+/// Compare two set trees for equality by walking leaf chains.
+unsafe fn eq_set_trees(
+    root_a: *mut rtdt::SetNode,
+    root_b: *mut rtdt::SetNode,
+    element_tydesc: *const rtdt::TyDesc,
+    float_policy: FloatEqPolicy,
+) -> bool {
+    unsafe {
+        // Find leftmost leaves.
+        let mut leaf_a = find_leftmost_set_leaf(root_a, element_tydesc);
+        let mut leaf_b = find_leftmost_set_leaf(root_b, element_tydesc);
+
+        let element_size = (*element_tydesc).size as usize;
+
+        let mut idx_a = 0u32;
+        let mut idx_b = 0u32;
+        let mut len_a = read_set_node_len(leaf_a);
+        let mut len_b = read_set_node_len(leaf_b);
+
+        loop {
+            // If both exhausted their current leaves, move to next.
+            if idx_a >= len_a {
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+                leaf_a = *next_ptr;
+                if leaf_a.is_null() {
+                    break;
+                }
+                idx_a = 0;
+                len_a = read_set_node_len(leaf_a);
+            }
+
+            if idx_b >= len_b {
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+                leaf_b = *next_ptr;
+                if leaf_b.is_null() {
+                    break;
+                }
+                idx_b = 0;
+                len_b = read_set_node_len(leaf_b);
+            }
+
+            // Get element pointers.
+            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+            let elements_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
+            let element_a = elements_a.add((idx_a as usize) * element_size);
+
+            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+            let elements_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
+            let element_b = elements_b.add((idx_b as usize) * element_size);
+
+            // Compare elements.
+            if !eq_value(element_a, element_b, element_tydesc, float_policy) {
+                return false;
+            }
+
+            idx_a += 1;
+            idx_b += 1;
+        }
+
+        // Both should be exhausted at the same time.
+        leaf_a.is_null() && leaf_b.is_null()
+    }
+}
+
+/// Compare two map trees lexicographically by walking leaf chains.
+unsafe fn cmp_map_trees(
+    root_a: *mut rtdt::MapNode,
+    root_b: *mut rtdt::MapNode,
+    key_tydesc: *const rtdt::TyDesc,
+    value_tydesc: *const rtdt::TyDesc,
+    float_policy: FloatOrdPolicy,
+) -> crate::RtOrdering {
+    unsafe {
+        // Handle null roots.
+        if root_a.is_null() && root_b.is_null() {
+            return crate::RtOrdering::Equal;
+        }
+        if root_a.is_null() {
+            return crate::RtOrdering::Less;
+        }
+        if root_b.is_null() {
+            return crate::RtOrdering::Greater;
+        }
+
+        // Find leftmost leaves.
+        let mut leaf_a = find_leftmost_map_leaf(root_a, key_tydesc);
+        let mut leaf_b = find_leftmost_map_leaf(root_b, key_tydesc);
+
+        let key_size = (*key_tydesc).size as usize;
+        let value_size = (*value_tydesc).size as usize;
+
+        let mut idx_a = 0u32;
+        let mut idx_b = 0u32;
+        let mut len_a = read_map_node_len(leaf_a);
+        let mut len_b = read_map_node_len(leaf_b);
+
+        loop {
+            // Check if we've exhausted leaves.
+            let exhausted_a = idx_a >= len_a && {
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+                (*next_ptr).is_null()
+            };
+
+            let exhausted_b = idx_b >= len_b && {
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+                (*next_ptr).is_null()
+            };
+
+            if exhausted_a && exhausted_b {
+                return crate::RtOrdering::Equal;
+            }
+            if exhausted_a {
+                return crate::RtOrdering::Less;
+            }
+            if exhausted_b {
+                return crate::RtOrdering::Greater;
+            }
+
+            // Move to next leaf if needed.
+            if idx_a >= len_a {
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+                leaf_a = *next_ptr;
+                idx_a = 0;
+                len_a = read_map_node_len(leaf_a);
+            }
+
+            if idx_b >= len_b {
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+                leaf_b = *next_ptr;
+                idx_b = 0;
+                len_b = read_map_node_len(leaf_b);
+            }
+
+            // Get key and value pointers.
+            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+            let keys_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
+            let values_a = (leaf_a as *mut u8).add(layout_a.values_offset as usize);
+            let key_a = keys_a.add((idx_a as usize) * key_size);
+            let value_a = values_a.add((idx_a as usize) * value_size);
+
+            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+            let keys_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
+            let values_b = (leaf_b as *mut u8).add(layout_b.values_offset as usize);
+            let key_b = keys_b.add((idx_b as usize) * key_size);
+            let value_b = values_b.add((idx_b as usize) * value_size);
+
+            // Compare keys first.
+            let key_cmp = cmp_value(key_a, key_b, key_tydesc, float_policy);
+            match key_cmp {
+                crate::RtOrdering::Less => return crate::RtOrdering::Less,
+                crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
+                crate::RtOrdering::Error => return crate::RtOrdering::Error,
+                crate::RtOrdering::Equal => {
+                    // Keys equal, compare values.
+                    let value_cmp = cmp_value(value_a, value_b, value_tydesc, float_policy);
+                    match value_cmp {
+                        crate::RtOrdering::Less => return crate::RtOrdering::Less,
+                        crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
+                        crate::RtOrdering::Error => return crate::RtOrdering::Error,
+                        crate::RtOrdering::Equal => {
+                            // This pair equal, continue to next.
+                            idx_a += 1;
+                            idx_b += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Compare two set trees lexicographically by walking leaf chains.
+unsafe fn cmp_set_trees(
+    root_a: *mut rtdt::SetNode,
+    root_b: *mut rtdt::SetNode,
+    element_tydesc: *const rtdt::TyDesc,
+    float_policy: FloatOrdPolicy,
+) -> crate::RtOrdering {
+    unsafe {
+        // Handle null roots.
+        if root_a.is_null() && root_b.is_null() {
+            return crate::RtOrdering::Equal;
+        }
+        if root_a.is_null() {
+            return crate::RtOrdering::Less;
+        }
+        if root_b.is_null() {
+            return crate::RtOrdering::Greater;
+        }
+
+        // Find leftmost leaves.
+        let mut leaf_a = find_leftmost_set_leaf(root_a, element_tydesc);
+        let mut leaf_b = find_leftmost_set_leaf(root_b, element_tydesc);
+
+        let element_size = (*element_tydesc).size as usize;
+
+        let mut idx_a = 0u32;
+        let mut idx_b = 0u32;
+        let mut len_a = read_set_node_len(leaf_a);
+        let mut len_b = read_set_node_len(leaf_b);
+
+        loop {
+            // Check if we've exhausted leaves.
+            let exhausted_a = idx_a >= len_a && {
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+                (*next_ptr).is_null()
+            };
+
+            let exhausted_b = idx_b >= len_b && {
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+                (*next_ptr).is_null()
+            };
+
+            if exhausted_a && exhausted_b {
+                return crate::RtOrdering::Equal;
+            }
+            if exhausted_a {
+                return crate::RtOrdering::Less;
+            }
+            if exhausted_b {
+                return crate::RtOrdering::Greater;
+            }
+
+            // Move to next leaf if needed.
+            if idx_a >= len_a {
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+                leaf_a = *next_ptr;
+                idx_a = 0;
+                len_a = read_set_node_len(leaf_a);
+            }
+
+            if idx_b >= len_b {
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+                leaf_b = *next_ptr;
+                idx_b = 0;
+                len_b = read_set_node_len(leaf_b);
+            }
+
+            // Get element pointers.
+            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+            let elements_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
+            let element_a = elements_a.add((idx_a as usize) * element_size);
+
+            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+            let elements_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
+            let element_b = elements_b.add((idx_b as usize) * element_size);
+
+            // Compare elements.
+            let elem_cmp = cmp_value(element_a, element_b, element_tydesc, float_policy);
+            match elem_cmp {
+                crate::RtOrdering::Less => return crate::RtOrdering::Less,
+                crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
+                crate::RtOrdering::Error => return crate::RtOrdering::Error,
+                crate::RtOrdering::Equal => {
+                    // This element equal, continue to next.
+                    idx_a += 1;
+                    idx_b += 1;
+                }
             }
         }
     }
