@@ -94,7 +94,7 @@ pub struct App<E: ReplExecutor> {
     /// History of REPL entries (interactive cards).
     history: Vec<HistoryEntry>,
     /// Current environment variables (for debug pane).
-    environment: Vec<(String, String)>,
+    environment: Vec<(String, String, String)>,
     /// Whether we're in multiline mode.
     multiline_mode: bool,
     /// Whether the ESC menu is open.
@@ -570,22 +570,25 @@ fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
         let header = Row::new(vec![
             Cell::from("Name").style(Style::default().fg(Color::Yellow)),
             Cell::from("Type").style(Style::default().fg(Color::Yellow)),
+            Cell::from("Value").style(Style::default().fg(Color::Yellow)),
         ])
         .height(1);
 
         // Create data rows.
-        let rows = app.environment.iter().map(|(name, desc)| {
+        let rows = app.environment.iter().map(|(name, ty, value)| {
             Row::new(vec![
                 Cell::from(name.as_str()).style(Style::default().fg(Color::Cyan)),
-                Cell::from(desc.as_str()),
+                Cell::from(ty.as_str()).style(Style::default().fg(Color::Yellow)),
+                Cell::from(value.as_str()),
             ])
             .height(1)
         });
 
         // Create table with column constraints.
         let widths = [
-            Constraint::Percentage(30),
-            Constraint::Percentage(70),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(50),
         ];
 
         let table = Table::new(rows, widths)
