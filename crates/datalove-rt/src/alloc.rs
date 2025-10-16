@@ -69,7 +69,7 @@ mod unix_impl {
             }
         }
 
-        pub unsafe fn free(&mut self, size: u32, _align: u32, count: u32, ptr: *mut u8) {
+        pub unsafe fn free(&mut self, size: u32, align: u32, count: u32, ptr: *mut u8) {
             if ptr.is_null() {
                 return;
             }
@@ -78,11 +78,13 @@ mod unix_impl {
                 .checked_mul(count as usize)
                 .expect("deallocation size overflow");
 
+            let align = align.max(std::mem::align_of::<*mut u8>() as u32) as usize;
+
             unsafe {
                 if total_size > MAX_SMALL_SIZE {
                     self.free_large(ptr);
                 } else {
-                    self.free_small(total_size, ptr);
+                    self.free_small(total_size, align, ptr);
                 }
             }
         }
@@ -102,8 +104,8 @@ mod unix_impl {
             }
         }
 
-        unsafe fn free_small(&mut self, size: usize, ptr: *mut u8) {
-            let size_class_idx = size_to_class_index(size);
+        unsafe fn free_small(&mut self, size: usize, align: usize, ptr: *mut u8) {
+            let size_class_idx = size_to_class_index(size.max(align));
             unsafe {
                 self.push_free_list(size_class_idx, ptr);
             }

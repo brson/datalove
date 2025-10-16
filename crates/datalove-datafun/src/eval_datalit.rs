@@ -123,7 +123,7 @@ fn eval_string<'db>(
             1,
         ) as *mut rtdt::String;
 
-        let rt_handle = &mut ctx.rt as *mut _ as datalove_rt::LocalRtHandle;
+        let rt_handle = Box::as_mut(&mut ctx.rt) as *mut _ as datalove_rt::LocalRtHandle;
 
         // Initialize the string.
         let status = datalove_rt::dtlv_rti_string_create_local(
