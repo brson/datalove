@@ -511,8 +511,11 @@ fn instantiate_data<'db>(
     let data_ptr = value_heap.alloc(data_size, data_align) as *mut rtdt::Data;
 
     unsafe {
-        (*data_ptr).data = inner_value as usize;
-        (*data_ptr).tydesc = inner_tydesc;
+        // Use the from_pointers constructor to properly initialize the Data encoding.
+        std::ptr::write(
+            data_ptr,
+            rtdt::Data::from_pointers(inner_tydesc, inner_value)
+        );
     }
 
     Ok(data_ptr as *const u8)

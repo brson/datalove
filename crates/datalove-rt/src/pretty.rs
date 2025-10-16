@@ -382,13 +382,14 @@ unsafe fn pretty_data(
         let data = &*(value_ref as *const rtdt::Data);
         push_str(rt, string_mut, string_tydesc, b"data ")?;
 
-        if data.tydesc.is_null() {
+        let tydesc_ptr = data.tydesc();
+        if tydesc_ptr.is_null() {
             push_str(rt, string_mut, string_tydesc, b"<null>")?;
             return Ok(());
         }
 
-        let inner_tydesc = &*data.tydesc;
-        let inner_value = data.data as *const u8;
+        let inner_tydesc = &*tydesc_ptr;
+        let inner_value = data.value_ptr();
         pretty_value(rt, inner_value, inner_tydesc, string_mut, string_tydesc)
     }
 }
@@ -403,13 +404,14 @@ unsafe fn pretty_error(
         let error = &*(value_ref as *const rtdt::Error);
         push_str(rt, string_mut, string_tydesc, b"error ")?;
 
-        if error.tydesc.is_null() {
+        let tydesc_ptr = error.tydesc();
+        if tydesc_ptr.is_null() {
             push_str(rt, string_mut, string_tydesc, b"<null>")?;
             return Ok(());
         }
 
-        let inner_tydesc = &*error.tydesc;
-        let inner_value = error.data as *const u8;
+        let inner_tydesc = &*tydesc_ptr;
+        let inner_value = error.value_ptr();
         pretty_value(rt, inner_value, inner_tydesc, string_mut, string_tydesc)
     }
 }

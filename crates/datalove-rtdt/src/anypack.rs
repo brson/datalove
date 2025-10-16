@@ -10,16 +10,6 @@
 
 use crate::*;
 
-/// Dynamic type that can hold any Datalove value with runtime type information.
-///
-/// Layout: Two 64-bit words (primary and secondary).
-/// The bottom 3 bits of primary are used as a tag to determine encoding.
-#[repr(C)]
-pub struct Data {
-    primary: u64,
-    secondary: u64,
-}
-
 /// Tag values stored in bottom 3 bits of primary word.
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -549,6 +539,26 @@ impl Data {
 }
 
 // ============================================================================
+// Error Implementation
+// ============================================================================
+
+impl Error {
+    /// Get the type descriptor for this error value.
+    pub fn tydesc(&self) -> *const TyDesc {
+        // Error uses same encoding as Data - interpret primary/secondary as Data.
+        let as_data = unsafe { &*(self as *const Error as *const Data) };
+        as_data.tydesc()
+    }
+
+    /// Get pointer to error value.
+    pub fn value_ptr(&self) -> *const u8 {
+        // Error uses same encoding as Data - interpret primary/secondary as Data.
+        let as_data = unsafe { &*(self as *const Error as *const Data) };
+        as_data.value_ptr()
+    }
+}
+
+// ============================================================================
 // TyTag Extensions
 // ============================================================================
 
@@ -751,8 +761,8 @@ mod tests {
     #[test]
     fn test_error() {
         let error_val = Error {
-            data: 0,
-            tydesc: std::ptr::null(),
+            primary: 0,
+            secondary: 0,
         };
 
         let tydesc = make_tydesc(TyTag::Error);

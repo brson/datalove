@@ -258,18 +258,18 @@ pub struct ResultLayout {
 
 // ## Dynamic types
 
+// Encoding is described in anypack
 #[repr(C)]
 pub struct Data {
-    // Encoding tbd.
-    pub data: usize,
-    pub tydesc: *const TyDesc,
+    primary: u64,
+    secondary: u64,
 }
 
+// Encoding is described in anypack
 #[repr(C)]
 pub struct Error {
-    // Encoding tbd.
-    pub data: usize,
-    pub tydesc: *const TyDesc,
+    primary: u64,
+    secondary: u64,
 }
 
 
