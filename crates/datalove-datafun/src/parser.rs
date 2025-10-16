@@ -382,9 +382,14 @@ impl<'db> Parser<'db> {
             // Parse base type keyword
             match self.peek_word(tokens) {
                 Some("bool") => { self.eat_word(tokens, "bool"); datalit::ast::TypeHint::Bool }
+                Some("u8") => { self.eat_word(tokens, "u8"); datalit::ast::TypeHint::U8 }
+                Some("i8") => { self.eat_word(tokens, "i8"); datalit::ast::TypeHint::I8 }
+                Some("u16") => { self.eat_word(tokens, "u16"); datalit::ast::TypeHint::U16 }
+                Some("i16") => { self.eat_word(tokens, "i16"); datalit::ast::TypeHint::I16 }
                 Some("u32") => { self.eat_word(tokens, "u32"); datalit::ast::TypeHint::U32 }
-                Some("u64") => { self.eat_word(tokens, "u64"); datalit::ast::TypeHint::U32 } // TODO: add U64 to datalit
-                Some("u8") => { self.eat_word(tokens, "u8"); datalit::ast::TypeHint::U32 } // TODO: add U8 to datalit
+                Some("i32") => { self.eat_word(tokens, "i32"); datalit::ast::TypeHint::I32 }
+                Some("u64") => { self.eat_word(tokens, "u64"); datalit::ast::TypeHint::U64 }
+                Some("i64") => { self.eat_word(tokens, "i64"); datalit::ast::TypeHint::I64 }
                 Some("f32") => { self.eat_word(tokens, "f32"); datalit::ast::TypeHint::F32 }
                 Some("int") => { self.eat_word(tokens, "int"); datalit::ast::TypeHint::Int }
                 Some("string") => { self.eat_word(tokens, "string"); datalit::ast::TypeHint::String }

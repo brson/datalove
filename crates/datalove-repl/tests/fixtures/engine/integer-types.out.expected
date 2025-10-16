@@ -1,0 +1,3626 @@
+[
+  {
+    "input": "let u8_min: @u8 = @0",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u8_min: @u8 = @0"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u8_min",
+    "parse": {
+      "Command": {
+        "Expression": "u8_min"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, UnresolvedName(\"u8_min\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u8_max: @u8 = @255",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u8_max: @u8 = @255"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u8_max",
+    "parse": {
+      "Command": {
+        "Expression": "u8_max"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, UnresolvedName(\"u8_max\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i8_min: @i8 = @-128",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i8_min: @i8 = @-128"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i8_min",
+    "parse": {
+      "Command": {
+        "Expression": "i8_min"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i8_min\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i8_max: @i8 = @127",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i8_max: @i8 = @127"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i8_max",
+    "parse": {
+      "Command": {
+        "Expression": "i8_max"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, UnresolvedName(\"i8_max\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u16_min: @u16 = @0",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u16_min: @u16 = @0"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u16_min",
+    "parse": {
+      "Command": {
+        "Expression": "u16_min"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_min\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u16_max: @u16 = @65535",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u16_max: @u16 = @65535"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u16_max",
+    "parse": {
+      "Command": {
+        "Expression": "u16_max"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_max\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i16_min: @i16 = @-32768",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i16_min: @i16 = @-32768"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i16_min",
+    "parse": {
+      "Command": {
+        "Expression": "i16_min"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i16_min\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i16_max: @i16 = @32767",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i16_max: @i16 = @32767"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i16_max",
+    "parse": {
+      "Command": {
+        "Expression": "i16_max"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, UnresolvedName(\"i16_max\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u32_min: @u32 = @0",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u32_min: @u32 = @0"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u32_min",
+    "parse": {
+      "Command": {
+        "Expression": "u32_min"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u32_max: @u32 = @4294967295",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u32_max: @u32 = @4294967295"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u32_max",
+    "parse": {
+      "Command": {
+        "Expression": "u32_max"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i32_min: @i32 = @-2147483648",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i32_min: @i32 = @-2147483648"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i32_min",
+    "parse": {
+      "Command": {
+        "Expression": "i32_min"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i32_min\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i32_max: @i32 = @2147483647",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i32_max: @i32 = @2147483647"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i32_max",
+    "parse": {
+      "Command": {
+        "Expression": "i32_max"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, UnresolvedName(\"i32_max\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u64_min: @u64 = @0",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u64_min: @u64 = @0"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u64_min",
+    "parse": {
+      "Command": {
+        "Expression": "u64_min"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, UnresolvedName(\"u64_min\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u64_max: @u64 = @18446744073709551615",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u64_max: @u64 = @18446744073709551615"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u64_max",
+    "parse": {
+      "Command": {
+        "Expression": "u64_max"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"u64_max\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i64_min: @i64 = @-9223372036854775808",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i64_min: @i64 = @-9223372036854775808"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i64_min",
+    "parse": {
+      "Command": {
+        "Expression": "i64_min"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i64_min\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i64_max: @i64 = @9223372036854775807",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i64_max: @i64 = @9223372036854775807"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i64_max",
+    "parse": {
+      "Command": {
+        "Expression": "i64_max"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i64_max\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u8_add: @u8 = @100 + @50",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u8_add: @u8 = @100 + @50"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u8_add",
+    "parse": {
+      "Command": {
+        "Expression": "u8_add"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, UnresolvedName(\"u8_add\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i8_add: @i8 = @-50 + @25",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i8_add: @i8 = @-50 + @25"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i8_add",
+    "parse": {
+      "Command": {
+        "Expression": "i8_add"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i8_add\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u16_mul: @u16 = @100 * @200",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u16_mul: @u16 = @100 * @200"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u16_mul",
+    "parse": {
+      "Command": {
+        "Expression": "u16_mul"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_mul\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i16_sub: @i16 = @1000 - @500",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i16_sub: @i16 = @1000 - @500"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i16_sub",
+    "parse": {
+      "Command": {
+        "Expression": "i16_sub"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, UnresolvedName(\"i16_sub\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u32_div: @u32 = @1000 / @10",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u32_div: @u32 = @1000 / @10"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_div",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u32_div",
+    "parse": {
+      "Command": {
+        "Expression": "u32_div"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_div",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i32_mul: @i32 = @-100 * @50",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i32_mul: @i32 = @-100 * @50"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_div",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_mul",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i32_mul",
+    "parse": {
+      "Command": {
+        "Expression": "i32_mul"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i32_mul\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_div",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_mul",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u64_add: @u64 = @1000000000000 + @2000000000000",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u64_add: @u64 = @1000000000000 + @2000000000000"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_div",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_add",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "u64_add",
+    "parse": {
+      "Command": {
+        "Expression": "u64_add"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"u64_add\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_div",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_add",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i64_sub: @i64 = @-1000000000000 - @500000000000",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i64_sub: @i64 = @-1000000000000 - @500000000000"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_div",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_sub",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "i64_sub",
+    "parse": {
+      "Command": {
+        "Expression": "i64_sub"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), UnresolvedName(\"i64_sub\")"
+    },
+    "environment": [
+      {
+        "name": "u8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_min",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_max",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_sub",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_div",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_mul",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_add",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_sub",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  }
+]

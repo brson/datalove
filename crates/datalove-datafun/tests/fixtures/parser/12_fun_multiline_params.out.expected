@@ -9,7 +9,7 @@
           "mode": "In",
           "type_hint": {
             "heap": "Local",
-            "type_hint": "U32"
+            "type_hint": "U64"
           }
         },
         {
@@ -17,7 +17,7 @@
           "mode": "In",
           "type_hint": {
             "heap": "Local",
-            "type_hint": "U32"
+            "type_hint": "U8"
           }
         }
       ],
@@ -27,7 +27,7 @@
           "Result": {
             "inner_type": {
               "heap": "Local",
-              "type_hint": "U32"
+              "type_hint": "U64"
             }
           }
         }

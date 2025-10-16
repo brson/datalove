@@ -108,10 +108,73 @@ impl TyDescCache {
                 },
             },
 
+            DT::U8 => rtdt::TyDesc {
+                type_tag: rtdt::TyTag::U8,
+                size: 1,
+                align: 1,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            },
+
+            DT::I8 => rtdt::TyDesc {
+                type_tag: rtdt::TyTag::I8,
+                size: 1,
+                align: 1,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            },
+
+            DT::U16 => rtdt::TyDesc {
+                type_tag: rtdt::TyTag::U16,
+                size: 2,
+                align: 2,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            },
+
+            DT::I16 => rtdt::TyDesc {
+                type_tag: rtdt::TyTag::I16,
+                size: 2,
+                align: 2,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            },
+
             DT::U32 => rtdt::TyDesc {
                 type_tag: rtdt::TyTag::U32,
                 size: 4,
                 align: 4,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            },
+
+            DT::I32 => rtdt::TyDesc {
+                type_tag: rtdt::TyTag::I32,
+                size: 4,
+                align: 4,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            },
+
+            DT::U64 => rtdt::TyDesc {
+                type_tag: rtdt::TyTag::U64,
+                size: 8,
+                align: 8,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            },
+
+            DT::I64 => rtdt::TyDesc {
+                type_tag: rtdt::TyTag::I64,
+                size: 8,
+                align: 8,
                 type_info: rtdt::TyInfo {
                     nothing: rtdt::TyInfoNothing,
                 },
@@ -519,41 +582,48 @@ impl TyDescCache {
 
         match ty {
             DT::Bool => 0u8.hash(hasher),
-            DT::U32 => 1u8.hash(hasher),
-            DT::F32 => 2u8.hash(hasher),
-            DT::Int => 3u8.hash(hasher),
-            DT::String => 4u8.hash(hasher),
-            DT::Data => 5u8.hash(hasher),
-            DT::Error => 6u8.hash(hasher),
+            DT::U8 => 1u8.hash(hasher),
+            DT::I8 => 2u8.hash(hasher),
+            DT::U16 => 3u8.hash(hasher),
+            DT::I16 => 4u8.hash(hasher),
+            DT::U32 => 5u8.hash(hasher),
+            DT::I32 => 6u8.hash(hasher),
+            DT::U64 => 7u8.hash(hasher),
+            DT::I64 => 8u8.hash(hasher),
+            DT::F32 => 9u8.hash(hasher),
+            DT::Int => 10u8.hash(hasher),
+            DT::String => 11u8.hash(hasher),
+            DT::Data => 12u8.hash(hasher),
+            DT::Error => 13u8.hash(hasher),
             DT::AnonTuple(t) => {
-                7u8.hash(hasher);
+                14u8.hash(hasher);
                 t.fields(db).len().hash(hasher);
             }
             DT::NamedTuple(t) => {
-                8u8.hash(hasher);
+                15u8.hash(hasher);
                 t.name(db).as_str(db).hash(hasher);
             }
             DT::AnonStruct(s) => {
-                9u8.hash(hasher);
+                16u8.hash(hasher);
                 s.fields(db).len().hash(hasher);
             }
             DT::NamedStruct(s) => {
-                10u8.hash(hasher);
+                17u8.hash(hasher);
                 s.name(db).as_str(db).hash(hasher);
             }
             DT::AnonEnum(e) => {
-                11u8.hash(hasher);
+                18u8.hash(hasher);
                 e.variants(db).len().hash(hasher);
             }
             DT::NamedEnum(e) => {
-                12u8.hash(hasher);
+                19u8.hash(hasher);
                 e.name(db).as_str(db).hash(hasher);
             }
-            DT::List(_) => 13u8.hash(hasher),
-            DT::Map(_) => 14u8.hash(hasher),
-            DT::Set(_) => 15u8.hash(hasher),
-            DT::Option(_) => 16u8.hash(hasher),
-            DT::Result(_) => 17u8.hash(hasher),
+            DT::List(_) => 20u8.hash(hasher),
+            DT::Map(_) => 21u8.hash(hasher),
+            DT::Set(_) => 22u8.hash(hasher),
+            DT::Option(_) => 23u8.hash(hasher),
+            DT::Result(_) => 24u8.hash(hasher),
         }
     }
 }

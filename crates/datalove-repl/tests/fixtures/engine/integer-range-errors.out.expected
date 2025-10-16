@@ -1,0 +1,890 @@
+[
+  {
+    "input": "let u8_overflow: @u8 = @256",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u8_overflow: @u8 = @256"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u8_negative: @u8 = @-1",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u8_negative: @u8 = @-1"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i8_overflow: @i8 = @128",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i8_overflow: @i8 = @128"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i8_underflow: @i8 = @-129",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i8_underflow: @i8 = @-129"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u16_overflow: @u16 = @65536",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u16_overflow: @u16 = @65536"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u16_negative: @u16 = @-1",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u16_negative: @u16 = @-1"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i16_overflow: @i16 = @32768",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i16_overflow: @i16 = @32768"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i16_underflow: @i16 = @-32769",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i16_underflow: @i16 = @-32769"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_underflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u32_overflow: @u32 = @4294967296",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u32_overflow: @u32 = @4294967296"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_overflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u32_negative: @u32 = @-1",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u32_negative: @u32 = @-1"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_negative",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i32_overflow: @i32 = @2147483648",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i32_overflow: @i32 = @2147483648"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i32_underflow: @i32 = @-2147483649",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i32_underflow: @i32 = @-2147483649"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_underflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u64_overflow: @u64 = @18446744073709551616",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u64_overflow: @u64 = @18446744073709551616"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_overflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let u64_negative: @u64 = @-1",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let u64_negative: @u64 = @-1"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_negative",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i64_overflow: @i64 = @9223372036854775808",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i64_overflow: @i64 = @9223372036854775808"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_overflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let i64_underflow: @i64 = @-9223372036854775809",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let i64_underflow: @i64 = @-9223372036854775809"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u8_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i8_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u16_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i16_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u32_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i32_underflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "u64_negative",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_overflow",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "i64_underflow",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  }
+]
