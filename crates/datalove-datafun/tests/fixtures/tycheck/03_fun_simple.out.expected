@@ -1,3 +1,11 @@
 {
-  "errors": []
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "foo",
+      "params": [],
+      "return_type": "@u32"
+    }
+  ]
 }

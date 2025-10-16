@@ -1,3 +1,10 @@
 {
-  "errors": []
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "msg",
+      "type": "string"
+    }
+  ]
 }

@@ -448,7 +448,7 @@ fn check_expr<'db>(
 }
 
 /// Convert a datalit type hint to a datafun type.
-fn convert_type_hint<'db>(
+pub fn convert_type_hint<'db>(
     db: &'db dyn crate::Db,
     type_hint_and_heap: datalit::ast::TypeHintAndHeap<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {

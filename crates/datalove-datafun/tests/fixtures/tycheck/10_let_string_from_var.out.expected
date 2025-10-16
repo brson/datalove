@@ -1,3 +1,15 @@
 {
-  "errors": []
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "string"
+    },
+    {
+      "kind": "variable",
+      "name": "y",
+      "type": "string"
+    }
+  ]
 }
