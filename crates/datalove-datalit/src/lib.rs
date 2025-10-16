@@ -9,6 +9,7 @@ pub mod resolve;
 pub mod tycheck;
 pub mod tydesc_table;
 pub mod instantiate;
+pub mod instantiate2;
 pub mod pretty;
 
 pub use datalove_rtdt as rtdt;
