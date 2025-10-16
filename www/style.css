@@ -324,15 +324,9 @@ section {
     background-color: var(--cream);
 }
 
-.components-layout {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: var(--spacing-md);
-    margin-top: var(--spacing-lg);
-}
-
 .component-block {
     padding: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
     border-radius: var(--border-radius);
     position: relative;
     clip-path: polygon(
@@ -406,6 +400,7 @@ pre {
     background: var(--off-black);
     color: var(--cream);
     padding: var(--spacing-md);
+    margin: var(--spacing-md) 0;
     border-radius: var(--border-radius);
     overflow-x: auto;
     border-left: 4px solid var(--burnt-orange);
