@@ -1,0 +1,1 @@
+: @map<@string, @list<@u32>> / @map {@"a" = @list {@1, @2}, @"b" = @list {@3, @4}}

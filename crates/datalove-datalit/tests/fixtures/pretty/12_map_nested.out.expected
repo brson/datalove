@@ -1,0 +1,1 @@
+: @map<@string, @<parse-error: unknown type hint in DynParser>> / @map {@"a" = @<parse-error: Unexpected identifier: list>}
