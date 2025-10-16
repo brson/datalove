@@ -413,6 +413,21 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_remove_local(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreemap_get(
+    rt: LocalRtHandle,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    // Value is moved.
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    // Value is cloned. This is an _option<V>_.
+    value_out: *mut u8,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    todo!()
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
     rt: LocalRtHandle,
     btreemap_value_mut: *mut u8,
