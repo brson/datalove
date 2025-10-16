@@ -17,7 +17,19 @@ pub unsafe fn list_create_impl(
     value_out: *mut u8,
     tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if value_out.is_null() || tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Initialize an empty list (null data, zero size and capacity).
+        let list_ptr = value_out as *mut List;
+        (*list_ptr).data = std::ptr::null();
+        (*list_ptr).size = 0;
+        (*list_ptr).capacity = 0;
+
+        RtStatus::Ok
+    }
 }
 
 /// Destroy a List and free all elements and buffer.
@@ -26,7 +38,39 @@ pub unsafe fn list_destroy_impl(
     value_in: *mut u8,
     tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if value_in.is_null() || tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_info = (*tydesc).type_info.list;
+        let element_tydesc = list_info.element_tydesc;
+
+        let list_ptr = value_in as *mut List;
+        let data_ptr = (*list_ptr).data as *mut u8;
+        let size = (*list_ptr).size;
+        let capacity = (*list_ptr).capacity;
+
+        // Destroy all elements.
+        if !data_ptr.is_null() && size > 0 {
+            let status = destroy_elements(rt, data_ptr, element_tydesc, 0, size);
+            if status != RtStatus::Ok {
+                return status;
+            }
+        }
+
+        // Free the buffer.
+        if !data_ptr.is_null() && capacity > 0 {
+            rt.free((*element_tydesc).size, (*element_tydesc).align, capacity, data_ptr);
+        }
+
+        // Reset the list.
+        (*list_ptr).data = std::ptr::null();
+        (*list_ptr).size = 0;
+        (*list_ptr).capacity = 0;
+
+        RtStatus::Ok
+    }
 }
 
 /// Clear a List (destroy all elements and reset to empty, keeping buffer).
@@ -35,7 +79,31 @@ pub unsafe fn list_clear_impl(
     value_mut: *mut u8,
     tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if value_mut.is_null() || tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_info = (*tydesc).type_info.list;
+        let element_tydesc = list_info.element_tydesc;
+
+        let list_ptr = value_mut as *mut List;
+        let data_ptr = (*list_ptr).data as *mut u8;
+        let size = (*list_ptr).size;
+
+        // Destroy all elements.
+        if !data_ptr.is_null() && size > 0 {
+            let status = destroy_elements(rt, data_ptr, element_tydesc, 0, size);
+            if status != RtStatus::Ok {
+                return status;
+            }
+        }
+
+        // Reset size to 0, keeping capacity and buffer.
+        (*list_ptr).size = 0;
+
+        RtStatus::Ok
+    }
 }
 
 // ============================================================================
@@ -55,7 +123,49 @@ pub unsafe fn list_get_impl(
     option_value_out: *mut u8,
     option_tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_ref.is_null() || list_tydesc.is_null()
+            || option_value_out.is_null() || option_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_info = (*list_tydesc).type_info.list;
+        let element_tydesc = list_info.element_tydesc;
+
+        let list_ptr = list_value_ref as *const List;
+        let size = (*list_ptr).size;
+
+        // Compute option layout.
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_tag_ptr = option_value_out;
+        let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
+
+        // Check bounds.
+        if index >= size {
+            *option_tag_ptr = rtdt::OptionTag::None as u8;
+            return RtStatus::Ok;
+        }
+
+        // Clone element to option payload.
+        let data_ptr = (*list_ptr).data;
+        let element_size = (*element_tydesc).size as usize;
+        let element_ptr = (data_ptr as *const u8).add(index as usize * element_size);
+
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let status = crate::clone::clone_value(
+            rt_handle,
+            element_ptr,
+            element_tydesc,
+            option_payload_ptr,
+        );
+
+        if status != RtStatus::Ok {
+            return status;
+        }
+
+        *option_tag_ptr = rtdt::OptionTag::Some as u8;
+        RtStatus::Ok
+    }
 }
 
 /// Set an element at index (replace existing element).
@@ -69,7 +179,36 @@ pub unsafe fn list_set_impl(
     element_in: *mut u8,
     element_tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_mut.is_null() || list_tydesc.is_null()
+            || element_in.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_ptr = list_value_mut as *mut List;
+        let size = (*list_ptr).size;
+
+        // Check bounds.
+        if index >= size {
+            return RtStatus::Error;
+        }
+
+        // Destroy old element.
+        let data_ptr = (*list_ptr).data as *mut u8;
+        let element_size = (*element_tydesc).size as usize;
+        let element_ptr = data_ptr.add(index as usize * element_size);
+
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc);
+        if status != RtStatus::Ok {
+            return status;
+        }
+
+        // Copy new element.
+        std::ptr::copy_nonoverlapping(element_in, element_ptr, element_size);
+
+        RtStatus::Ok
+    }
 }
 
 // ============================================================================
@@ -86,7 +225,35 @@ pub unsafe fn list_push_impl(
     element_in: *mut u8,
     element_tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_mut.is_null() || list_tydesc.is_null()
+            || element_in.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_ptr = list_value_mut as *mut List;
+        let size = (*list_ptr).size;
+        let capacity = (*list_ptr).capacity;
+
+        // Grow if needed.
+        if size >= capacity {
+            let new_capacity = calculate_new_capacity(capacity, size + 1);
+            let status = grow_buffer(rt, list_ptr, element_tydesc, new_capacity);
+            if status != RtStatus::Ok {
+                return status;
+            }
+        }
+
+        // Copy element to end.
+        let data_ptr = (*list_ptr).data as *mut u8;
+        let element_size = (*element_tydesc).size as usize;
+        let dest_ptr = data_ptr.add(size as usize * element_size);
+        std::ptr::copy_nonoverlapping(element_in, dest_ptr, element_size);
+
+        (*list_ptr).size = size + 1;
+
+        RtStatus::Ok
+    }
 }
 
 /// Pop an element from the end of the list.
@@ -101,7 +268,40 @@ pub unsafe fn list_pop_impl(
     option_value_out: *mut u8,
     option_tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_mut.is_null() || list_tydesc.is_null()
+            || option_value_out.is_null() || option_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_info = (*list_tydesc).type_info.list;
+        let element_tydesc = list_info.element_tydesc;
+
+        let list_ptr = list_value_mut as *mut List;
+        let size = (*list_ptr).size;
+
+        // Compute option layout.
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_tag_ptr = option_value_out;
+        let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
+
+        // Check if empty.
+        if size == 0 {
+            *option_tag_ptr = rtdt::OptionTag::None as u8;
+            return RtStatus::Ok;
+        }
+
+        // Move last element to option payload.
+        let data_ptr = (*list_ptr).data as *mut u8;
+        let element_size = (*element_tydesc).size as usize;
+        let last_element_ptr = data_ptr.add((size - 1) as usize * element_size);
+        std::ptr::copy_nonoverlapping(last_element_ptr, option_payload_ptr, element_size);
+
+        (*list_ptr).size = size - 1;
+        *option_tag_ptr = rtdt::OptionTag::Some as u8;
+
+        RtStatus::Ok
+    }
 }
 
 // ============================================================================
@@ -120,7 +320,49 @@ pub unsafe fn list_insert_impl(
     element_in: *mut u8,
     element_tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_mut.is_null() || list_tydesc.is_null()
+            || element_in.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_ptr = list_value_mut as *mut List;
+        let size = (*list_ptr).size;
+        let capacity = (*list_ptr).capacity;
+
+        // Check bounds (can insert at size for push-like behavior).
+        if index > size {
+            return RtStatus::Error;
+        }
+
+        // Grow if needed.
+        if size >= capacity {
+            let new_capacity = calculate_new_capacity(capacity, size + 1);
+            let status = grow_buffer(rt, list_ptr, element_tydesc, new_capacity);
+            if status != RtStatus::Ok {
+                return status;
+            }
+        }
+
+        let data_ptr = (*list_ptr).data as *mut u8;
+        let element_size = (*element_tydesc).size as usize;
+
+        // Shift elements right.
+        if index < size {
+            let src = data_ptr.add(index as usize * element_size);
+            let dest = data_ptr.add((index + 1) as usize * element_size);
+            let count = (size - index) as usize * element_size;
+            std::ptr::copy(src, dest, count);
+        }
+
+        // Copy new element.
+        let dest_ptr = data_ptr.add(index as usize * element_size);
+        std::ptr::copy_nonoverlapping(element_in, dest_ptr, element_size);
+
+        (*list_ptr).size = size + 1;
+
+        RtStatus::Ok
+    }
 }
 
 /// Remove an element at index, shifting subsequent elements left.
@@ -136,7 +378,49 @@ pub unsafe fn list_remove_impl(
     option_value_out: *mut u8,
     option_tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_mut.is_null() || list_tydesc.is_null()
+            || option_value_out.is_null() || option_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_info = (*list_tydesc).type_info.list;
+        let element_tydesc = list_info.element_tydesc;
+
+        let list_ptr = list_value_mut as *mut List;
+        let size = (*list_ptr).size;
+
+        // Compute option layout.
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_tag_ptr = option_value_out;
+        let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
+
+        // Check bounds.
+        if index >= size {
+            *option_tag_ptr = rtdt::OptionTag::None as u8;
+            return RtStatus::Ok;
+        }
+
+        let data_ptr = (*list_ptr).data as *mut u8;
+        let element_size = (*element_tydesc).size as usize;
+        let element_ptr = data_ptr.add(index as usize * element_size);
+
+        // Move element to option payload.
+        std::ptr::copy_nonoverlapping(element_ptr, option_payload_ptr, element_size);
+
+        // Shift elements left.
+        if index < size - 1 {
+            let src = data_ptr.add((index + 1) as usize * element_size);
+            let dest = element_ptr;
+            let count = (size - index - 1) as usize * element_size;
+            std::ptr::copy(src, dest, count);
+        }
+
+        (*list_ptr).size = size - 1;
+        *option_tag_ptr = rtdt::OptionTag::Some as u8;
+
+        RtStatus::Ok
+    }
 }
 
 // ============================================================================
@@ -152,7 +436,26 @@ pub unsafe fn list_reserve_impl(
     list_tydesc: *const TyDesc,
     additional: u32,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_mut.is_null() || list_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_info = (*list_tydesc).type_info.list;
+        let element_tydesc = list_info.element_tydesc;
+
+        let list_ptr = list_value_mut as *mut List;
+        let size = (*list_ptr).size;
+        let capacity = (*list_ptr).capacity;
+
+        let required = size.saturating_add(additional);
+        if required <= capacity {
+            return RtStatus::Ok;
+        }
+
+        let new_capacity = calculate_new_capacity(capacity, required);
+        grow_buffer(rt, list_ptr, element_tydesc, new_capacity)
+    }
 }
 
 /// Shrink capacity to fit current size.
@@ -161,7 +464,55 @@ pub unsafe fn list_shrink_to_fit_impl(
     list_value_mut: *mut u8,
     list_tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_mut.is_null() || list_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_info = (*list_tydesc).type_info.list;
+        let element_tydesc = list_info.element_tydesc;
+
+        let list_ptr = list_value_mut as *mut List;
+        let size = (*list_ptr).size;
+        let capacity = (*list_ptr).capacity;
+
+        if size >= capacity {
+            return RtStatus::Ok;
+        }
+
+        let old_data = (*list_ptr).data as *mut u8;
+        let element_size = (*element_tydesc).size;
+        let element_align = (*element_tydesc).align;
+
+        // If size is 0, just free the buffer.
+        if size == 0 {
+            if !old_data.is_null() && capacity > 0 {
+                rt.free(element_size, element_align, capacity, old_data);
+                (*list_ptr).data = std::ptr::null();
+                (*list_ptr).capacity = 0;
+            }
+            return RtStatus::Ok;
+        }
+
+        // Allocate new buffer with exact size.
+        let new_data = rt.alloc(element_size, element_align, size);
+        if new_data.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Copy elements to new buffer.
+        let bytes_to_copy = (size * element_size) as usize;
+        std::ptr::copy_nonoverlapping(old_data, new_data, bytes_to_copy);
+
+        // Free old buffer.
+        rt.free(element_size, element_align, capacity, old_data);
+
+        // Update list.
+        (*list_ptr).data = new_data;
+        (*list_ptr).capacity = size;
+
+        RtStatus::Ok
+    }
 }
 
 // ============================================================================
@@ -177,7 +528,55 @@ pub unsafe fn list_clone_from_slice_impl(
     slice_len: u32,
     element_tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_out.is_null() || list_tydesc.is_null()
+            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_ptr = list_value_out as *mut List;
+
+        // Create empty list.
+        let status = list_create_impl(rt, list_value_out, list_tydesc);
+        if status != RtStatus::Ok {
+            return status;
+        }
+
+        if slice_len == 0 {
+            return RtStatus::Ok;
+        }
+
+        let element_size = (*element_tydesc).size;
+        let element_align = (*element_tydesc).align;
+
+        // Allocate buffer with exact capacity.
+        let data = rt.alloc(element_size, element_align, slice_len);
+        if data.is_null() {
+            return RtStatus::Error;
+        }
+
+        (*list_ptr).data = data;
+        (*list_ptr).capacity = slice_len;
+
+        // Clone each element from the slice.
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        for i in 0..slice_len {
+            let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
+            let dest_ptr = data.add((i * element_size) as usize);
+
+            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc, dest_ptr);
+            if status != RtStatus::Ok {
+                // Clean up partially created list.
+                (*list_ptr).size = i;
+                let _ = list_destroy_impl(rt, list_value_out, list_tydesc);
+                return status;
+            }
+        }
+
+        (*list_ptr).size = slice_len;
+
+        RtStatus::Ok
+    }
 }
 
 /// Append all elements from a slice to the list (clones elements).
@@ -189,7 +588,46 @@ pub unsafe fn list_extend_from_slice_impl(
     slice_len: u32,
     element_tydesc: *const TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if list_value_mut.is_null() || list_tydesc.is_null()
+            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        if slice_len == 0 {
+            return RtStatus::Ok;
+        }
+
+        let list_ptr = list_value_mut as *mut List;
+        let size = (*list_ptr).size;
+
+        // Reserve space for all new elements.
+        let status = list_reserve_impl(rt, list_value_mut, list_tydesc, slice_len);
+        if status != RtStatus::Ok {
+            return status;
+        }
+
+        let data_ptr = (*list_ptr).data as *mut u8;
+        let element_size = (*element_tydesc).size;
+
+        // Clone each element from the slice.
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        for i in 0..slice_len {
+            let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
+            let dest_ptr = data_ptr.add(((size + i) * element_size) as usize);
+
+            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc, dest_ptr);
+            if status != RtStatus::Ok {
+                // Update size to reflect what was successfully added.
+                (*list_ptr).size = size + i;
+                return status;
+            }
+        }
+
+        (*list_ptr).size = size + slice_len;
+
+        RtStatus::Ok
+    }
 }
 
 // ============================================================================
@@ -236,7 +674,41 @@ unsafe fn grow_buffer(
     element_tydesc: *const TyDesc,
     new_capacity: u32,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        let old_capacity = (*list_ptr).capacity;
+        let size = (*list_ptr).size;
+        let old_data = (*list_ptr).data as *mut u8;
+
+        if new_capacity <= old_capacity {
+            return RtStatus::Ok;
+        }
+
+        let element_size = (*element_tydesc).size;
+        let element_align = (*element_tydesc).align;
+
+        // Allocate new buffer.
+        let new_data = rt.alloc(element_size, element_align, new_capacity);
+        if new_data.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Copy existing elements to new buffer.
+        if !old_data.is_null() && size > 0 {
+            let bytes_to_copy = (size * element_size) as usize;
+            std::ptr::copy_nonoverlapping(old_data, new_data, bytes_to_copy);
+        }
+
+        // Free old buffer.
+        if !old_data.is_null() && old_capacity > 0 {
+            rt.free(element_size, element_align, old_capacity, old_data);
+        }
+
+        // Update list.
+        (*list_ptr).data = new_data;
+        (*list_ptr).capacity = new_capacity;
+
+        RtStatus::Ok
+    }
 }
 
 /// Destroy elements in a range [start, end).
@@ -247,5 +719,18 @@ unsafe fn destroy_elements(
     start: u32,
     end: u32,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        let element_size = (*element_tydesc).size as usize;
+        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+
+        for i in start..end {
+            let element_ptr = data_ptr.add((i as usize) * element_size);
+            let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc);
+            if status != RtStatus::Ok {
+                return status;
+            }
+        }
+
+        RtStatus::Ok
+    }
 }
