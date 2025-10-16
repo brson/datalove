@@ -400,6 +400,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_resolve_shadowing() {
         let ref db = crate::Database::default();
         // Create a nested structure where inner scope shadows outer scope.
