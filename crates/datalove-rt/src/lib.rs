@@ -15,6 +15,7 @@ pub mod clone;
 pub mod string;
 pub mod pretty;
 pub mod btreemap;
+pub mod list;
 pub mod destroy;
 
 /// A runtime handle. Needed for all calls.
@@ -468,27 +469,308 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
 
 
 
-/// Hypothetical language-accessible runtime call.
-///
-/// Note it's using ByRefArg and ReturnArg.
-///
-/// Probably list constructors and destructors though will
-/// be emitted by the compiler and this won't actually be used
-/// by the standard library.
+// ============================================================================
+// List Operations
+// ============================================================================
+
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rt_list_create(
+pub unsafe extern "C" fn dtlv_rti_list_create_local(
     rt: LocalRtHandle,
-    tydesc: rtdt::ByRefArg,
-    ret_new_list: rtdt::ReturnArg,
+    value_out: *mut u8,
+    tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if rt.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_create_impl(rt_ref, value_out, tydesc)
+    }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rt_list_destroy(
+pub unsafe extern "C" fn dtlv_rti_list_destroy_local(
     rt: LocalRtHandle,
-    tydesc: rtdt::ByRefArg,
-    ret_new_list: rtdt::ReturnArg,
+    value_in: *mut u8,
+    tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    todo!()
+    unsafe {
+        if rt.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_destroy_impl(rt_ref, value_in, tydesc)
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_clear_local(
+    rt: LocalRtHandle,
+    value_mut: *mut u8,
+    tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_clear_impl(rt_ref, value_mut, tydesc)
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_get(
+    rt: LocalRtHandle,
+    list_value_ref: *const u8,
+    list_tydesc: *const rtdt::TyDesc,
+    index: u32,
+    option_value_out: *mut u8,
+    option_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_ref.is_null() || list_tydesc.is_null()
+            || option_value_out.is_null() || option_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_get_impl(
+            rt_ref,
+            list_value_ref,
+            list_tydesc,
+            index,
+            option_value_out,
+            option_tydesc,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_set_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    index: u32,
+    element_in: *mut u8,
+    element_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
+            || element_in.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_set_impl(
+            rt_ref,
+            list_value_mut,
+            list_tydesc,
+            index,
+            element_in,
+            element_tydesc,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_push_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    element_in: *mut u8,
+    element_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
+            || element_in.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_push_impl(
+            rt_ref,
+            list_value_mut,
+            list_tydesc,
+            element_in,
+            element_tydesc,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_pop_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    option_value_out: *mut u8,
+    option_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
+            || option_value_out.is_null() || option_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_pop_impl(
+            rt_ref,
+            list_value_mut,
+            list_tydesc,
+            option_value_out,
+            option_tydesc,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_insert_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    index: u32,
+    element_in: *mut u8,
+    element_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
+            || element_in.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_insert_impl(
+            rt_ref,
+            list_value_mut,
+            list_tydesc,
+            index,
+            element_in,
+            element_tydesc,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_remove_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    index: u32,
+    option_value_out: *mut u8,
+    option_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
+            || option_value_out.is_null() || option_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_remove_impl(
+            rt_ref,
+            list_value_mut,
+            list_tydesc,
+            index,
+            option_value_out,
+            option_tydesc,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_reserve_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    additional: u32,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_reserve_impl(
+            rt_ref,
+            list_value_mut,
+            list_tydesc,
+            additional,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_shrink_to_fit_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_shrink_to_fit_impl(
+            rt_ref,
+            list_value_mut,
+            list_tydesc,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_clone_from_slice_local(
+    rt: LocalRtHandle,
+    list_value_out: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    slice_ptr_ref: *const u8,
+    slice_len: u32,
+    element_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_out.is_null() || list_tydesc.is_null()
+            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_clone_from_slice_impl(
+            rt_ref,
+            list_value_out,
+            list_tydesc,
+            slice_ptr_ref,
+            slice_len,
+            element_tydesc,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_extend_from_slice_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    slice_ptr_ref: *const u8,
+    slice_len: u32,
+    element_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
+            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        list::list_extend_from_slice_impl(
+            rt_ref,
+            list_value_mut,
+            list_tydesc,
+            slice_ptr_ref,
+            slice_len,
+            element_tydesc,
+        )
+    }
 }
