@@ -1424,6 +1424,7 @@ version = "0.1.0"
 dependencies = [
  "bct",
  "datalove-exampletest",
+ "datalove-rt",
  "datalove-rtdt",
  "rustmax",
  "salsa",

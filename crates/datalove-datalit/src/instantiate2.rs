@@ -1,21 +1,19 @@
 //! Instantiate runtime values from typechecked AST (v2 - runtime-integrated).
 //!
-//! This is a proposed redesign that would integrate with the datalove-rt runtime
-//! instead of maintaining a separate heap. This file demonstrates the API and
-//! approach but is not yet complete.
+//! Integrates with the datalove-rt runtime directly, using LocalRt for all allocations.
 //!
 //! ## Design Philosophy
 //!
-//! Unlike instantiate.rs which maintains its own `ValueHeap`, this module is
-//! designed to work with external runtime allocators. The caller provides
-//! allocation functions and is responsible for lifetime management.
+//! Unlike instantiate.rs which maintains its own `ValueHeap`, this module
+//! directly calls the datalove-rt runtime. The caller provides a LocalRt
+//! and is responsible for lifetime management.
 //!
 //! ## Intended Usage
 //!
 //! ```ignore
 //! // In datafun or other runtime-integrated code:
 //! let mut rt = datalove_rt::alloc::LocalRt::new();
-//! let result = instantiate_value_with_runtime(db, &mut rt, typechecked)?;
+//! let result = instantiate_value(db, &mut rt, typechecked)?;
 //! // Values are owned by rt, cleaned up when rt.shutdown() is called
 //! ```
 //!
@@ -28,22 +26,10 @@
 //! 5. Can call runtime helper functions (string_create_local, etc.)
 
 use rmx::prelude::*;
-use std::alloc::{alloc, dealloc, Layout};
 use crate::ast::*;
 use crate::tycheck::*;
 use crate::rtdt;
 use crate::tydesc_table::TyDescTable;
-
-/// Allocator trait for runtime integration.
-///
-/// Implementations should wrap a runtime heap (like datalove_rt::alloc::LocalRt).
-pub trait RuntimeAllocator {
-    /// Allocate memory for `count` elements of type described by `tydesc`.
-    unsafe fn alloc(&mut self, size: u32, align: u32, count: u32) -> *mut u8;
-
-    /// Free previously allocated memory.
-    unsafe fn free(&mut self, size: u32, align: u32, count: u32, ptr: *mut u8);
-}
 
 /// An instantiated value with its type descriptor.
 ///
@@ -54,14 +40,13 @@ pub struct InstantiatedValue {
     pub tydesc: *const rtdt::TyDesc,
 }
 
-/// Instantiate a value from typechecked AST using a runtime allocator.
+/// Instantiate a value from typechecked AST using the runtime.
 ///
 /// This is the primary entry point for runtime-integrated instantiation.
-/// The caller provides an allocator (typically wrapping LocalRt) and is
-/// responsible for cleanup.
-pub fn instantiate_value<'db, A: RuntimeAllocator>(
+/// The caller provides a LocalRt and is responsible for cleanup.
+pub fn instantiate_value<'db>(
     db: &'db dyn crate::Db,
-    alloc: &mut A,
+    rt: &mut datalove_rt::alloc::LocalRt,
     typechecked: TypecheckResult<'db>,
 ) -> AnyResult<(TyDescTable<'db>, InstantiatedValue)> {
     let root_type = typechecked.root_type(db)
@@ -71,7 +56,7 @@ pub fn instantiate_value<'db, A: RuntimeAllocator>(
     let mut tydesc_table = TyDescTable::new(db);
     let tydesc = tydesc_table.get_or_create(root_type.ty(db));
 
-    let value_ptr = instantiate_expr(db, alloc, root_expr, root_type.ty(db), &mut tydesc_table)?;
+    let value_ptr = instantiate_expr(db, rt, root_expr, root_type.ty(db), &mut tydesc_table)?;
 
     Ok((
         tydesc_table,
@@ -83,9 +68,9 @@ pub fn instantiate_value<'db, A: RuntimeAllocator>(
 }
 
 /// Instantiate an expression into a runtime value.
-fn instantiate_expr<'db, A: RuntimeAllocator>(
+fn instantiate_expr<'db>(
     db: &'db dyn crate::Db,
-    alloc: &mut A,
+    rt: &mut datalove_rt::alloc::LocalRt,
     expr: ExprFull<'db>,
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
@@ -94,83 +79,83 @@ fn instantiate_expr<'db, A: RuntimeAllocator>(
     let expr_inner = expr_and_heap.expr(db);
 
     match (expr_inner, ty) {
-        (Expr::True, Type::Bool) => instantiate_bool(alloc, true),
-        (Expr::False, Type::Bool) => instantiate_bool(alloc, false),
+        (Expr::True, Type::Bool) => instantiate_bool(rt, true),
+        (Expr::False, Type::Bool) => instantiate_bool(rt, false),
 
-        (Expr::Int(int_expr), Type::U8) => instantiate_u8(alloc, db, int_expr),
-        (Expr::Int(int_expr), Type::I8) => instantiate_i8(alloc, db, int_expr),
-        (Expr::Int(int_expr), Type::U16) => instantiate_u16(alloc, db, int_expr),
-        (Expr::Int(int_expr), Type::I16) => instantiate_i16(alloc, db, int_expr),
-        (Expr::Int(int_expr), Type::U32) => instantiate_u32(alloc, db, int_expr),
-        (Expr::Int(int_expr), Type::I32) => instantiate_i32(alloc, db, int_expr),
-        (Expr::Int(int_expr), Type::U64) => instantiate_u64(alloc, db, int_expr),
-        (Expr::Int(int_expr), Type::I64) => instantiate_i64(alloc, db, int_expr),
-        (Expr::Int(int_expr), Type::Int) => instantiate_bigint(alloc, db, int_expr),
+        (Expr::Int(int_expr), Type::U8) => instantiate_u8(rt, db, int_expr),
+        (Expr::Int(int_expr), Type::I8) => instantiate_i8(rt, db, int_expr),
+        (Expr::Int(int_expr), Type::U16) => instantiate_u16(rt, db, int_expr),
+        (Expr::Int(int_expr), Type::I16) => instantiate_i16(rt, db, int_expr),
+        (Expr::Int(int_expr), Type::U32) => instantiate_u32(rt, db, int_expr),
+        (Expr::Int(int_expr), Type::I32) => instantiate_i32(rt, db, int_expr),
+        (Expr::Int(int_expr), Type::U64) => instantiate_u64(rt, db, int_expr),
+        (Expr::Int(int_expr), Type::I64) => instantiate_i64(rt, db, int_expr),
+        (Expr::Int(int_expr), Type::Int) => instantiate_bigint(rt, db, int_expr),
 
-        (Expr::Float(float_expr), Type::F32) => instantiate_f32(alloc, db, float_expr),
+        (Expr::Float(float_expr), Type::F32) => instantiate_f32(rt, db, float_expr),
 
         (Expr::String(string_expr), Type::String) => {
-            instantiate_string(alloc, db, string_expr)
+            instantiate_string(rt, db, string_expr)
         }
 
         (Expr::AnonTuple(tuple_expr), Type::AnonTuple(tuple_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tuple(db, alloc, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc)
+            instantiate_tuple(db, rt, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc)
         }
 
         (Expr::NamedTuple(tuple_expr), Type::NamedTuple(tuple_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tuple(db, alloc, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc)
+            instantiate_tuple(db, rt, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc)
         }
 
         (Expr::AnonStruct(struct_expr), Type::AnonStruct(struct_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, alloc, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc)
+            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc)
         }
 
         (Expr::AnonStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, alloc, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc)
+            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc)
         }
 
         (Expr::NamedStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, alloc, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc)
+            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc)
         }
 
         (Expr::AnonEnum(enum_expr), Type::AnonEnum(enum_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, alloc, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc)
+            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc)
         }
 
         (Expr::AnonEnum(enum_expr), Type::NamedEnum(enum_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, alloc, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc)
+            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc)
         }
 
         (Expr::NamedEnum(enum_expr), Type::NamedEnum(enum_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, alloc, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc)
+            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc)
         }
 
         (Expr::List(list_expr), Type::List(list_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_list(db, alloc, &list_expr.elements(db), list_ty.element_type(db), tydesc_table, tydesc)
+            instantiate_list(db, rt, &list_expr.elements(db), list_ty.element_type(db), tydesc_table, tydesc)
         }
 
         (Expr::None, Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, alloc, false, None, opt.inner_type(db), tydesc_table, tydesc)
+            instantiate_option(db, rt, false, None, opt.inner_type(db), tydesc_table, tydesc)
         }
 
         (_, Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, alloc, true, Some(expr), opt.inner_type(db), tydesc_table, tydesc)
+            instantiate_option(db, rt, true, Some(expr), opt.inner_type(db), tydesc_table, tydesc)
         }
 
         (Expr::Data(data_expr), Type::Data) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_data(db, alloc, data_expr.value(db), tydesc_table, tydesc)
+            instantiate_data(db, rt, data_expr.value(db), tydesc_table, tydesc)
         }
 
         _ => bail!("Unsupported expression/type combination for instantiation"),
@@ -181,114 +166,114 @@ fn instantiate_expr<'db, A: RuntimeAllocator>(
 // Scalar type instantiation
 // ============================================================================
 
-fn instantiate_bool<A: RuntimeAllocator>(alloc: &mut A, value: bool) -> AnyResult<*const u8> {
+fn instantiate_bool(rt: &mut datalove_rt::alloc::LocalRt, value: bool) -> AnyResult<*const u8> {
     unsafe {
-        let ptr = alloc.alloc(1, 1, 1);
+        let ptr = rt.alloc(1, 1, 1);
         *ptr = if value { 1 } else { 0 };
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_u8<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_u8(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: u8 = value_str.parse()?;
 
     unsafe {
-        let ptr = alloc.alloc(1, 1, 1);
+        let ptr = rt.alloc(1, 1, 1);
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_i8<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_i8(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i8 = value_str.parse()?;
 
     unsafe {
-        let ptr = alloc.alloc(1, 1, 1) as *mut i8;
+        let ptr = rt.alloc(1, 1, 1) as *mut i8;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_u16<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_u16(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: u16 = value_str.parse()?;
 
     unsafe {
-        let ptr = alloc.alloc(2, 2, 1) as *mut u16;
+        let ptr = rt.alloc(2, 2, 1) as *mut u16;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_i16<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_i16(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i16 = value_str.parse()?;
 
     unsafe {
-        let ptr = alloc.alloc(2, 2, 1) as *mut i16;
+        let ptr = rt.alloc(2, 2, 1) as *mut i16;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_u32<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_u32(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: u32 = value_str.parse()?;
 
     unsafe {
-        let ptr = alloc.alloc(4, 4, 1) as *mut u32;
+        let ptr = rt.alloc(4, 4, 1) as *mut u32;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_i32<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_i32(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i32 = value_str.parse()?;
 
     unsafe {
-        let ptr = alloc.alloc(4, 4, 1) as *mut i32;
+        let ptr = rt.alloc(4, 4, 1) as *mut i32;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_u64<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_u64(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: u64 = value_str.parse()?;
 
     unsafe {
-        let ptr = alloc.alloc(8, 8, 1) as *mut u64;
+        let ptr = rt.alloc(8, 8, 1) as *mut u64;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_i64<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_i64(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i64 = value_str.parse()?;
 
     unsafe {
-        let ptr = alloc.alloc(8, 8, 1) as *mut i64;
+        let ptr = rt.alloc(8, 8, 1) as *mut i64;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_f32<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, float_expr: ExprFloat) -> AnyResult<*const u8> {
+fn instantiate_f32(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, float_expr: ExprFloat) -> AnyResult<*const u8> {
     let value_str = float_expr.value(db).as_str(db);
     let value: f32 = value_str.parse()?;
 
     unsafe {
-        let ptr = alloc.alloc(4, 4, 1) as *mut f32;
+        let ptr = rt.alloc(4, 4, 1) as *mut f32;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_bigint<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_bigint(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i128 = value_str.parse()?;
 
@@ -307,9 +292,9 @@ fn instantiate_bigint<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, in
     }
 
     unsafe {
-        // Allocate limbs array via runtime allocator.
+        // Allocate limbs array via runtime.
         let limbs_ptr = if !limbs.is_empty() {
-            let ptr = alloc.alloc(std::mem::size_of::<u32>() as u32, 4, limbs.len() as u32) as *mut u32;
+            let ptr = rt.alloc(std::mem::size_of::<u32>() as u32, 4, limbs.len() as u32) as *mut u32;
             for (i, &limb) in limbs.iter().enumerate() {
                 *ptr.add(i) = limb;
             }
@@ -318,8 +303,8 @@ fn instantiate_bigint<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, in
             std::ptr::null()
         };
 
-        // Allocate Int struct via runtime allocator.
-        let int_ptr = alloc.alloc(
+        // Allocate Int struct via runtime.
+        let int_ptr = rt.alloc(
             std::mem::size_of::<rtdt::Int>() as u32,
             std::mem::align_of::<rtdt::Int>() as u32,
             1,
@@ -341,8 +326,8 @@ fn instantiate_bigint<A: RuntimeAllocator>(alloc: &mut A, db: &dyn crate::Db, in
 // String instantiation
 // ============================================================================
 
-fn instantiate_string<A: RuntimeAllocator>(
-    alloc: &mut A,
+fn instantiate_string(
+    rt: &mut datalove_rt::alloc::LocalRt,
     db: &dyn crate::Db,
     string_expr: ExprString,
 ) -> AnyResult<*const u8> {
@@ -357,7 +342,7 @@ fn instantiate_string<A: RuntimeAllocator>(
     unsafe {
         // Allocate data buffer if non-empty.
         let data_ptr = if !value_str.is_empty() {
-            let ptr = alloc.alloc(value_str.len() as u32, 1, 1);
+            let ptr = rt.alloc(value_str.len() as u32, 1, 1);
             std::ptr::copy_nonoverlapping(
                 value_str.as_ptr(),
                 ptr,
@@ -369,7 +354,7 @@ fn instantiate_string<A: RuntimeAllocator>(
         };
 
         // Allocate String struct.
-        let string_ptr = alloc.alloc(
+        let string_ptr = rt.alloc(
             std::mem::size_of::<rtdt::String>() as u32,
             std::mem::align_of::<rtdt::String>() as u32,
             1,
@@ -387,9 +372,9 @@ fn instantiate_string<A: RuntimeAllocator>(
 // Compound type instantiation
 // ============================================================================
 
-fn instantiate_tuple<'db, A: RuntimeAllocator>(
+fn instantiate_tuple<'db>(
     db: &'db dyn crate::Db,
-    alloc: &mut A,
+    rt: &mut datalove_rt::alloc::LocalRt,
     elements: &[ExprFull<'db>],
     field_types: &[TypeAndHeap<'db>],
     tydesc_table: &mut TyDescTable<'db>,
@@ -398,11 +383,11 @@ fn instantiate_tuple<'db, A: RuntimeAllocator>(
     let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc) };
 
     let tuple_ptr = unsafe {
-        alloc.alloc(layout.size, layout.align, 1)
+        rt.alloc(layout.size, layout.align, 1)
     };
 
     for (i, (elem, field_ty)) in elements.iter().zip(field_types.iter()).enumerate() {
-        let field_value = instantiate_expr(db, alloc, *elem, field_ty.ty(db), tydesc_table)?;
+        let field_value = instantiate_expr(db, rt, *elem, field_ty.ty(db), tydesc_table)?;
         let field_offset = layout.field_offsets[i];
         let field_size = unsafe { (*tydesc_table.get_or_create(field_ty.ty(db))).size };
 
@@ -418,9 +403,9 @@ fn instantiate_tuple<'db, A: RuntimeAllocator>(
     Ok(tuple_ptr as *const u8)
 }
 
-fn instantiate_struct<'db, A: RuntimeAllocator>(
+fn instantiate_struct<'db>(
     db: &'db dyn crate::Db,
-    alloc: &mut A,
+    rt: &mut datalove_rt::alloc::LocalRt,
     expr_fields: &[ExprStructField<'db>],
     type_fields: &[TypeNamedField<'db>],
     tydesc_table: &mut TyDescTable<'db>,
@@ -429,7 +414,7 @@ fn instantiate_struct<'db, A: RuntimeAllocator>(
     let layout = unsafe { rtdt::layout::compute_struct_layout(struct_tydesc) };
 
     let struct_ptr = unsafe {
-        alloc.alloc(layout.size, layout.align, 1)
+        rt.alloc(layout.size, layout.align, 1)
     };
 
     let mut field_map: std::collections::HashMap<&str, ExprFull<'db>> = std::collections::HashMap::new();
@@ -445,7 +430,7 @@ fn instantiate_struct<'db, A: RuntimeAllocator>(
         let field_expr = field_map.get(field_name)
             .ok_or_else(|| anyhow!("Missing field: {}", field_name))?;
 
-        let field_value = instantiate_expr(db, alloc, *field_expr, field_ty.ty(db), tydesc_table)?;
+        let field_value = instantiate_expr(db, rt, *field_expr, field_ty.ty(db), tydesc_table)?;
         let field_offset = layout.field_offsets[i];
         let field_size = unsafe { (*tydesc_table.get_or_create(field_ty.ty(db))).size };
 
@@ -461,9 +446,9 @@ fn instantiate_struct<'db, A: RuntimeAllocator>(
     Ok(struct_ptr as *const u8)
 }
 
-fn instantiate_enum<'db, A: RuntimeAllocator>(
+fn instantiate_enum<'db>(
     db: &'db dyn crate::Db,
-    alloc: &mut A,
+    rt: &mut datalove_rt::alloc::LocalRt,
     variant_name: bct::text::InternedText<'db>,
     payload_expr: Option<ExprFull<'db>>,
     type_variants: &[TypeEnumVariant<'db>],
@@ -480,7 +465,7 @@ fn instantiate_enum<'db, A: RuntimeAllocator>(
     let layout = unsafe { rtdt::layout::compute_enum_layout(enum_tydesc) };
 
     let enum_ptr = unsafe {
-        alloc.alloc(layout.size, layout.align, 1)
+        rt.alloc(layout.size, layout.align, 1)
     };
 
     unsafe {
@@ -488,7 +473,7 @@ fn instantiate_enum<'db, A: RuntimeAllocator>(
     }
 
     if let (Some(payload_expr), Some(payload_ty)) = (payload_expr, variant_ty.payload(db)) {
-        let payload_value = instantiate_expr(db, alloc, payload_expr, payload_ty.ty(db), tydesc_table)?;
+        let payload_value = instantiate_expr(db, rt, payload_expr, payload_ty.ty(db), tydesc_table)?;
         let payload_size = unsafe { (*tydesc_table.get_or_create(payload_ty.ty(db))).size } as usize;
         let payload_offset = layout.variant_offsets[variant_index];
 
@@ -504,9 +489,9 @@ fn instantiate_enum<'db, A: RuntimeAllocator>(
     Ok(enum_ptr as *const u8)
 }
 
-fn instantiate_list<'db, A: RuntimeAllocator>(
+fn instantiate_list<'db>(
     db: &'db dyn crate::Db,
-    alloc: &mut A,
+    rt: &mut datalove_rt::alloc::LocalRt,
     elements: &[ExprFull<'db>],
     element_type: TypeAndHeap<'db>,
     tydesc_table: &mut TyDescTable<'db>,
@@ -519,10 +504,10 @@ fn instantiate_list<'db, A: RuntimeAllocator>(
 
     unsafe {
         let data_ptr = if !elements.is_empty() {
-            let array_ptr = alloc.alloc(element_size, element_align, elements.len() as u32);
+            let array_ptr = rt.alloc(element_size, element_align, elements.len() as u32);
 
             for (i, elem) in elements.iter().enumerate() {
-                let elem_value = instantiate_expr(db, alloc, *elem, element_ty, tydesc_table)?;
+                let elem_value = instantiate_expr(db, rt, *elem, element_ty, tydesc_table)?;
 
                 std::ptr::copy_nonoverlapping(
                     elem_value,
@@ -535,7 +520,7 @@ fn instantiate_list<'db, A: RuntimeAllocator>(
             std::ptr::null()
         };
 
-        let list_ptr = alloc.alloc(
+        let list_ptr = rt.alloc(
             std::mem::size_of::<rtdt::List>() as u32,
             std::mem::align_of::<rtdt::List>() as u32,
             1,
@@ -549,9 +534,9 @@ fn instantiate_list<'db, A: RuntimeAllocator>(
     }
 }
 
-fn instantiate_option<'db, A: RuntimeAllocator>(
+fn instantiate_option<'db>(
     db: &'db dyn crate::Db,
-    alloc: &mut A,
+    rt: &mut datalove_rt::alloc::LocalRt,
     is_some: bool,
     payload_expr: Option<ExprFull<'db>>,
     inner_type: TypeAndHeap<'db>,
@@ -561,14 +546,14 @@ fn instantiate_option<'db, A: RuntimeAllocator>(
     let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc) };
 
     let option_ptr = unsafe {
-        alloc.alloc(layout.size, layout.align, 1)
+        rt.alloc(layout.size, layout.align, 1)
     };
 
     if is_some {
         unsafe { *option_ptr = rtdt::OptionTag::Some as u8 };
 
         let payload = payload_expr.ok_or_else(|| anyhow!("Some variant missing payload"))?;
-        let payload_value = instantiate_expr(db, alloc, payload, inner_type.ty(db), tydesc_table)?;
+        let payload_value = instantiate_expr(db, rt, payload, inner_type.ty(db), tydesc_table)?;
         let payload_size = unsafe { (*tydesc_table.get_or_create(inner_type.ty(db))).size } as usize;
 
         unsafe {
@@ -585,9 +570,9 @@ fn instantiate_option<'db, A: RuntimeAllocator>(
     Ok(option_ptr as *const u8)
 }
 
-fn instantiate_data<'db, A: RuntimeAllocator>(
+fn instantiate_data<'db>(
     db: &'db dyn crate::Db,
-    alloc: &mut A,
+    rt: &mut datalove_rt::alloc::LocalRt,
     inner_expr: ExprFull<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _data_tydesc: *const rtdt::TyDesc,
@@ -600,10 +585,10 @@ fn instantiate_data<'db, A: RuntimeAllocator>(
         .ok_or_else(|| anyhow!("Cannot determine type of data value"))?;
 
     let inner_tydesc = tydesc_table.get_or_create(inner_type.ty(db));
-    let inner_value = instantiate_expr(db, alloc, inner_expr, inner_type.ty(db), tydesc_table)?;
+    let inner_value = instantiate_expr(db, rt, inner_expr, inner_type.ty(db), tydesc_table)?;
 
     let data_ptr = unsafe {
-        alloc.alloc(
+        rt.alloc(
             std::mem::size_of::<rtdt::Data>() as u32,
             std::mem::align_of::<rtdt::Data>() as u32,
             1,
@@ -629,55 +614,6 @@ mod tests {
     use super::*;
     use crate::Database;
 
-    /// Simple allocator for testing that uses standard allocation.
-    struct TestAllocator {
-        allocations: Vec<(*mut u8, Layout)>,
-    }
-
-    impl TestAllocator {
-        fn new() -> Self {
-            Self {
-                allocations: Vec::new(),
-            }
-        }
-    }
-
-    impl RuntimeAllocator for TestAllocator {
-        unsafe fn alloc(&mut self, size: u32, align: u32, count: u32) -> *mut u8 {
-            let total_size = (size as usize) * (count as usize);
-            let layout = Layout::from_size_align(total_size, align as usize)
-                .expect("Invalid layout");
-            unsafe {
-                let ptr = alloc(layout);
-                if ptr.is_null() {
-                    panic!("Allocation failed");
-                }
-                std::ptr::write_bytes(ptr, 0, total_size);
-                self.allocations.push((ptr, layout));
-                ptr
-            }
-        }
-
-        unsafe fn free(&mut self, _size: u32, _align: u32, _count: u32, ptr: *mut u8) {
-            if let Some(pos) = self.allocations.iter().position(|(p, _)| *p == ptr) {
-                let (_, layout) = self.allocations.remove(pos);
-                unsafe {
-                    dealloc(ptr, layout);
-                }
-            }
-        }
-    }
-
-    impl Drop for TestAllocator {
-        fn drop(&mut self) {
-            for (ptr, layout) in &self.allocations {
-                unsafe {
-                    dealloc(*ptr, *layout);
-                }
-            }
-        }
-    }
-
     fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<TypecheckResult<'db>> {
         let source = bct::input::Source::new(db, source_text.to_string());
         let parsed = crate::parser::parse(db, source);
@@ -690,12 +626,13 @@ mod tests {
     fn test_instantiate_bool_true() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@true")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
             assert_eq!(*inst.ptr, 1);
+            rt.shutdown();
         }
         Ok(())
     }
@@ -704,12 +641,13 @@ mod tests {
     fn test_instantiate_bool_false() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@false")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
             assert_eq!(*inst.ptr, 0);
+            rt.shutdown();
         }
         Ok(())
     }
@@ -718,12 +656,13 @@ mod tests {
     fn test_instantiate_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@42")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::U32);
             assert_eq!(*(inst.ptr as *const u32), 42);
+            rt.shutdown();
         }
         Ok(())
     }
@@ -732,12 +671,13 @@ mod tests {
     fn test_instantiate_f32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@3.14")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::F32);
             assert_eq!(*(inst.ptr as *const f32), 3.14);
+            rt.shutdown();
         }
         Ok(())
     }
@@ -746,8 +686,8 @@ mod tests {
     fn test_instantiate_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, r#"@"hello""#)?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
@@ -756,6 +696,7 @@ mod tests {
             assert_eq!(string.capacity, 5);
             let str_slice = std::slice::from_raw_parts(string.data, string.size as usize);
             assert_eq!(str_slice, b"hello");
+            rt.shutdown();
         }
         Ok(())
     }
@@ -764,8 +705,8 @@ mod tests {
     fn test_instantiate_empty_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, r#"@"""#)?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
@@ -773,6 +714,7 @@ mod tests {
             assert_eq!(string.size, 0);
             assert_eq!(string.capacity, 0);
             assert!(string.data.is_null());
+            rt.shutdown();
         }
         Ok(())
     }
@@ -781,8 +723,8 @@ mod tests {
     fn test_instantiate_tuple_simple() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@(@true, @42)")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
@@ -795,6 +737,7 @@ mod tests {
 
             let u32_value = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
             assert_eq!(u32_value, 42);
+            rt.shutdown();
         }
         Ok(())
     }
@@ -803,8 +746,8 @@ mod tests {
     fn test_instantiate_int_small() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @int / @42")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
@@ -821,8 +764,8 @@ mod tests {
     fn test_instantiate_int_zero() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @int / @0")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
@@ -839,8 +782,8 @@ mod tests {
     fn test_instantiate_anon_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@{x = @1, y = @2}")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
@@ -868,8 +811,8 @@ mod tests {
     fn test_instantiate_enum_no_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -886,8 +829,8 @@ mod tests {
     fn test_instantiate_enum_with_scalar_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -909,8 +852,8 @@ mod tests {
     fn test_instantiate_list_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@[@1, @2, @3, @4, @5]")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -932,8 +875,8 @@ mod tests {
     fn test_instantiate_empty_list() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @[@u32] / @[]")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -949,8 +892,8 @@ mod tests {
     fn test_instantiate_option_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@u32 / @none")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -964,8 +907,8 @@ mod tests {
     fn test_instantiate_option_some_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@u32 / @42")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -983,8 +926,8 @@ mod tests {
     fn test_instantiate_list_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, r#"@[@"hello", @"world"]"#)?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -1011,8 +954,8 @@ mod tests {
     fn test_instantiate_nested_option_some_some() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@?@u32 / @42")?;
-        let mut alloc = TestAllocator::new();
-        let (_tydesc_table, inst) = instantiate_value(&db, &mut alloc, typechecked)?;
+        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let (_tydesc_table, inst) = instantiate_value(&db, &mut rt, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
