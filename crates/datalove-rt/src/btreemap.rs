@@ -269,8 +269,18 @@ unsafe fn destroy_tree_recursive(
 
         match tag {
             MapNodeTag::Internal => {
-                // Recursively destroy children.
                 let len = read_node_len(node);
+
+                // Destroy all keys in the internal node.
+                let keys_ptr = internal_keys_ptr(node, key_tydesc);
+                let key_size = (*key_tydesc).size as usize;
+                let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+                for i in 0..len as usize {
+                    let key_slot = keys_ptr.add(i * key_size);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
+                }
+
+                // Recursively destroy children.
                 let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
                 for i in 0..=(len as usize) {
                     let child = *children_ptr.add(i);
@@ -278,8 +288,20 @@ unsafe fn destroy_tree_recursive(
                 }
             }
             MapNodeTag::Leaf => {
-                // Leaf nodes have no children to recurse on.
-                // TODO: Need to properly destroy key and value data if they contain allocated resources.
+                let len = read_node_len(node);
+                let keys_ptr = leaf_keys_ptr(node, key_tydesc, value_tydesc);
+                let values_ptr = leaf_values_ptr(node, key_tydesc, value_tydesc);
+                let key_size = (*key_tydesc).size as usize;
+                let value_size = (*value_tydesc).size as usize;
+                let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+
+                // Destroy all keys and values in the leaf node.
+                for i in 0..len as usize {
+                    let key_slot = keys_ptr.add(i * key_size);
+                    let value_slot = values_ptr.add(i * value_size);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc);
+                }
             }
         }
 
@@ -325,6 +347,8 @@ struct SplitInfo {
     separator_key_buf: Vec<u8>,
     /// The new right sibling node created by the split.
     new_node: *mut MapNode,
+    /// The result of inserting the pending key during the split.
+    insert_result: LeafInsertResult,
 }
 
 /// Find the leaf node where a key should be inserted.
@@ -377,6 +401,7 @@ unsafe fn find_leaf_for_key(
 
 /// Try to insert or update a key-value pair in a leaf node.
 unsafe fn leaf_insert_or_update(
+    rt: &mut LocalRt,
     leaf: *mut MapNode,
     key: *const u8,
     value: *const u8,
@@ -413,7 +438,10 @@ unsafe fn leaf_insert_or_update(
                 }
                 crate::RtOrdering::Equal => {
                     // Key already exists, update the value.
+                    // Destroy the old value before overwriting.
                     let value_slot = values_ptr.add(i * value_size);
+                    let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+                    let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc);
                     std::ptr::copy_nonoverlapping(value, value_slot, value_size);
                     return LeafInsertResult::Updated;
                 }
@@ -499,16 +527,58 @@ unsafe fn split_leaf(
         *leaf_next_ptr_mut(leaf, key_tydesc, value_tydesc) = new_leaf;
         *leaf_next_ptr_mut(new_leaf, key_tydesc, value_tydesc) = old_next;
 
-        // Determine which leaf should receive the new key.
-        let first_key_of_new = new_keys_ptr;
-        let cmp_result = crate::cmp::cmp_total(key, key_tydesc, first_key_of_new, key_tydesc);
+        // Copy the separator key (first key of new_leaf) into a buffer.
+        let mut separator_key_buf = vec![0u8; key_size];
+        std::ptr::copy_nonoverlapping(new_keys_ptr, separator_key_buf.as_mut_ptr(), key_size);
 
-        let insert_result = match cmp_result {
+        // Check if the pending key equals the separator.
+        let cmp_result = crate::cmp::cmp_total(key, key_tydesc, separator_key_buf.as_ptr(), key_tydesc);
+        let pending_key_is_separator = matches!(cmp_result, crate::RtOrdering::Equal);
+
+        // Destroy the separator's old value before removing it, unless the pending key
+        // equals the separator (in which case we'll overwrite it).
+        if !pending_key_is_separator {
+            let separator_value_slot = new_values_ptr;
+            let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+            let _ = crate::destroy::any_destroy_local(rt_handle, separator_value_slot, value_tydesc);
+        }
+
+        // Remove the separator key from new_leaf by shifting remaining elements down.
+        let new_len = read_node_len(new_leaf);
+        if new_len > 1 {
+            // Shift keys down.
+            std::ptr::copy(
+                new_keys_ptr.add(key_size),
+                new_keys_ptr,
+                (new_len as usize - 1) * key_size,
+            );
+            // Shift values down.
+            std::ptr::copy(
+                new_values_ptr.add(value_size),
+                new_values_ptr,
+                (new_len as usize - 1) * value_size,
+            );
+        }
+        write_node_len(new_leaf, new_len - 1);
+
+        // Determine which leaf should receive the new key.
+        let mut insert_result = match cmp_result {
             crate::RtOrdering::Less => {
-                leaf_insert_or_update(leaf, key, value, key_tydesc, value_tydesc)
+                leaf_insert_or_update(rt, leaf, key, value, key_tydesc, value_tydesc)
+            }
+            crate::RtOrdering::Equal => {
+                // Key equals separator. We removed it from new_leaf, so re-inserting
+                // it is really an update (replacing the separator's value).
+                let result = leaf_insert_or_update(rt, new_leaf, key, value, key_tydesc, value_tydesc);
+                // Treat insertion as update since we're replacing the separator.
+                match result {
+                    LeafInsertResult::Inserted => LeafInsertResult::Updated,
+                    other => other,
+                }
             }
             _ => {
-                leaf_insert_or_update(new_leaf, key, value, key_tydesc, value_tydesc)
+                // Key is > separator, so it goes into new_leaf.
+                leaf_insert_or_update(rt, new_leaf, key, value, key_tydesc, value_tydesc)
             }
         };
 
@@ -517,13 +587,10 @@ unsafe fn split_leaf(
             return Err(RtStatus::Error);
         }
 
-        // Copy the separator key (first key of new_leaf) into a buffer.
-        let mut separator_key_buf = vec![0u8; key_size];
-        std::ptr::copy_nonoverlapping(new_keys_ptr, separator_key_buf.as_mut_ptr(), key_size);
-
         Ok(SplitInfo {
             separator_key_buf,
             new_node: new_leaf,
+            insert_result,
         })
     }
 }
@@ -678,6 +745,8 @@ unsafe fn split_internal_node(
         SplitInfo {
             separator_key_buf,
             new_node,
+            // Internal node splits always represent new separator insertions.
+            insert_result: LeafInsertResult::Inserted,
         }
     }
 }
@@ -745,6 +814,7 @@ pub unsafe fn btreemap_insert_impl(
 
         // Try to insert into the leaf.
         let result = leaf_insert_or_update(
+            rt,
             leaf,
             key_ptr,
             val_ptr,
@@ -769,6 +839,8 @@ pub unsafe fn btreemap_insert_impl(
                     Err(status) => return status,
                 };
 
+                let was_inserted = split_info.insert_result == LeafInsertResult::Inserted;
+
                 // Propagate split up the tree.
                 let status = propagate_split_up(
                     rt,
@@ -779,7 +851,7 @@ pub unsafe fn btreemap_insert_impl(
                     map_key_tydesc,
                 );
 
-                if status == RtStatus::Ok {
+                if status == RtStatus::Ok && was_inserted {
                     (*map_ptr).len += 1;
                 }
                 status
