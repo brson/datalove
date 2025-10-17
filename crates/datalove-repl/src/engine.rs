@@ -269,14 +269,18 @@ impl Engine {
 
     fn eval_impl(&mut self, command: Command) -> Eval {
         match command {
-            Command::ReplCommand(command) => {
-                self.eval_repl_command(command)
+            Command::ReplCommand(ref repl_command) => {
+                let eval = self.eval_repl_command(repl_command.C());
+                self.history.add_non_script_entry(command);
+                eval
             }
             Command::ScriptStatement(source) => {
                 self.eval_script_statement(source)
             }
-            Command::Expression(source) => {
-                self.eval_expression(source)
+            Command::Expression(ref source) => {
+                let eval = self.eval_expression(source.C());
+                self.history.add_non_script_entry(command);
+                eval
             }
         }
     }
@@ -301,26 +305,28 @@ impl Engine {
         let eval = self.eval_script_with_unit(new_unit);
 
         match &eval {
-            Eval::Error(_) | Eval::CrashReset(_) => {
+            Eval::Error(_) => {
                 self.history.add_script_entry(
                     Command::ScriptStatement(source),
                     new_unit,
                     false,
                 );
             }
-            Eval::Nothing | Eval::SuccessLet(_) | Eval::SuccessExpr(_) |
-            Eval::CallerInterpret(_) => {
+            Eval::SuccessLet(_) | Eval::SuccessExpr(_) => {
                 self.history.add_script_entry(
                     Command::ScriptStatement(source),
                     new_unit,
                     true,
                 );
             }
+            Eval::Nothing | Eval::CallerInterpret(_) | Eval::CrashReset(_) => {
+                bug!()
+            }
         }
 
         eval
     }
-
+    
     fn eval_script_with_unit(&mut self, unit: datafun::script::ScriptUnit) -> Eval {
         let db = &self.db;
 
