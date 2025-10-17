@@ -21,7 +21,7 @@ struct ReplHistory {
 
 struct HistoryEntry {
     command: Command,
-    last_eval: Option<Eval>,
+    last_eval: Eval,
     /// Not all commands produce script units.
     script_status: Option<ScriptUnitStatus>,
 }
@@ -67,12 +67,13 @@ impl ReplHistory {
     fn add_script_entry(
         &mut self,
         command: Command,
+        eval: Eval,
         script_unit: datafun::script::ScriptUnit,
         active: bool,
     ) {
         self.entries.push(HistoryEntry {
             command,
-            last_eval: None,
+            last_eval: eval,
             script_status: Some(ScriptUnitStatus {
                 script_unit,
                 active,
@@ -81,10 +82,10 @@ impl ReplHistory {
     }
 
     /// Add a new history entry without a script unit (for commands like expressions).
-    fn add_non_script_entry(&mut self, command: Command) {
+    fn add_non_script_entry(&mut self, command: Command, eval: Eval) {
         self.entries.push(HistoryEntry {
             command,
-            last_eval: None,
+            last_eval: eval,
             script_status: None,
         });
     }
@@ -271,7 +272,7 @@ impl Engine {
         match command {
             Command::ReplCommand(ref repl_command) => {
                 let eval = self.eval_repl_command(repl_command.C());
-                self.history.add_non_script_entry(command);
+                self.history.add_non_script_entry(command, eval.C());
                 eval
             }
             Command::ScriptStatement(source) => {
@@ -279,7 +280,7 @@ impl Engine {
             }
             Command::Expression(ref source) => {
                 let eval = self.eval_expression(source.C());
-                self.history.add_non_script_entry(command);
+                self.history.add_non_script_entry(command, eval.C());
                 eval
             }
         }
@@ -308,6 +309,7 @@ impl Engine {
             Eval::Error(_) => {
                 self.history.add_script_entry(
                     Command::ScriptStatement(source),
+                    eval.C(),
                     new_unit,
                     false,
                 );
@@ -315,6 +317,7 @@ impl Engine {
             Eval::SuccessLet(_) | Eval::SuccessExpr(_) => {
                 self.history.add_script_entry(
                     Command::ScriptStatement(source),
+                    eval.C(),
                     new_unit,
                     true,
                 );
