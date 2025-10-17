@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 use bct::input::Source;
 
-use crate::{Command, ReplCommand, ScriptStatement, Eval, EvalLet, EvalExpr, InputParse, Input};
+use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, InputParse, Input};
 use crate::datafun;
 
 pub struct Engine {
@@ -295,9 +295,8 @@ impl Engine {
         }
     }
 
-    fn eval_script_statement(&mut self, source: ScriptStatement) -> Eval {
-        // Create the new script unit.
-        let new_unit = create_script_unit(&self.db, source.0.C());
+    fn eval_script_statement(&mut self, source: String) -> Eval {
+        let new_unit = create_script_unit(&self.db, source.C());
 
         let eval = self.eval_script_with_unit(new_unit);
 

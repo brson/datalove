@@ -31,7 +31,7 @@ pub enum InputParse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     ReplCommand(ReplCommand),
-    ScriptStatement(ScriptStatement),
+    ScriptStatement(String),
     Expression(String),
 }
 
@@ -41,9 +41,6 @@ pub enum ReplCommand {
     Exit,
     Help,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScriptStatement(String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalLet {
@@ -84,9 +81,7 @@ impl Command {
     }
 
     pub(crate) fn script_statement(input: &str) -> InputParse {
-        InputParse::Command(Command::ScriptStatement(
-            ScriptStatement(S(input))
-        ))
+        InputParse::Command(Command::ScriptStatement(S(input)))
     }
 
     pub(crate) fn expression(input: &str) -> InputParse {
