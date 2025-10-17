@@ -1791,10 +1791,11 @@ mod tests {
             let inner_value = *(inner_value_ptr as *const u32);
             assert_eq!(inner_value, 42);
 
-            // Note: Error destructor not yet implemented, so we manually free allocations.
-            // Free inner value (u32).
-            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inner_tydesc, 1, inner_value_ptr as *mut u8);
-            // Free error wrapper.
+            // Destroy the error contents.
+            let status = datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+            // Free the error wrapper itself.
             datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
 
             let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);

@@ -206,11 +206,75 @@ pub unsafe fn any_destroy_local(
 
             // Data and Error - dynamic types.
             rtdt::TyTag::Data => {
-                todo!("Data destructor")
+                let data_ptr = value_in as *const rtdt::Data;
+                let data = &*data_ptr;
+
+                match data.tag() {
+                    rtdt::anypack::Tag::TwoPointers => {
+                        // Extract inner tydesc and value pointer.
+                        let inner_tydesc = data.tydesc();
+                        let inner_value_ptr = data.value_ptr();
+
+                        // Recursively destroy the inner value.
+                        if !inner_value_ptr.is_null() && !inner_tydesc.is_null() {
+                            let status = any_destroy_local(rt, inner_value_ptr as *mut u8, inner_tydesc);
+                            if status != RtStatus::Ok {
+                                return status;
+                            }
+
+                            // Free the inner value allocation.
+                            let inner_ty = &*inner_tydesc;
+                            rt_ref.free(inner_ty.size, inner_ty.align, 1, inner_value_ptr as *mut u8);
+                        }
+
+                        RtStatus::Ok
+                    }
+                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
+                        // Value is inline, no allocations to free.
+                        RtStatus::Ok
+                    }
+                    _ => {
+                        // Invalid tag.
+                        RtStatus::Error
+                    }
+                }
             }
 
             rtdt::TyTag::Error => {
-                todo!("Error destructor")
+                // Error uses same encoding as Data.
+                let error_ptr = value_in as *const rtdt::Error;
+                let as_data_ptr = error_ptr as *const rtdt::Data;
+                let data = &*as_data_ptr;
+
+                match data.tag() {
+                    rtdt::anypack::Tag::TwoPointers => {
+                        // Extract inner tydesc and value pointer using Error methods.
+                        let inner_tydesc = (*error_ptr).tydesc();
+                        let inner_value_ptr = (*error_ptr).value_ptr();
+
+                        // Recursively destroy the inner value.
+                        if !inner_value_ptr.is_null() && !inner_tydesc.is_null() {
+                            let status = any_destroy_local(rt, inner_value_ptr as *mut u8, inner_tydesc);
+                            if status != RtStatus::Ok {
+                                return status;
+                            }
+
+                            // Free the inner value allocation.
+                            let inner_ty = &*inner_tydesc;
+                            rt_ref.free(inner_ty.size, inner_ty.align, 1, inner_value_ptr as *mut u8);
+                        }
+
+                        RtStatus::Ok
+                    }
+                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
+                        // Value is inline, no allocations to free.
+                        RtStatus::Ok
+                    }
+                    _ => {
+                        // Invalid tag.
+                        RtStatus::Error
+                    }
+                }
             }
         }
     }
@@ -385,6 +449,292 @@ mod tests {
             assert!(tuple.field1.data.is_null());
             assert_eq!(tuple.field1.size, 0);
             assert_eq!(tuple.field1.capacity, 0);
+
+            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            rt.shutdown();
+        }
+    }
+
+    /// Helper to create a Data type descriptor.
+    unsafe fn create_data_tydesc() -> rtdt::TyDesc {
+        rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Data,
+            size: std::mem::size_of::<rtdt::Data>() as u32,
+            align: std::mem::align_of::<rtdt::Data>() as u32,
+            type_info: rtdt::TyInfo {
+                nothing: rtdt::TyInfoNothing,
+            },
+        }
+    }
+
+    /// Helper to create an Error type descriptor.
+    unsafe fn create_error_tydesc() -> rtdt::TyDesc {
+        rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Error,
+            size: std::mem::size_of::<rtdt::Error>() as u32,
+            align: std::mem::align_of::<rtdt::Error>() as u32,
+            type_info: rtdt::TyInfo {
+                nothing: rtdt::TyInfoNothing,
+            },
+        }
+    }
+
+    #[test]
+    fn test_any_destroy_data_small_immediate() {
+        let rt = alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let data_tydesc = unsafe { create_data_tydesc() };
+
+        unsafe {
+            // Create Data with SmallImmediate encoding (u32).
+            let mut data = rtdt::Data::from_u32(42);
+
+            let status = any_destroy_local(
+                rt_handle,
+                &mut data as *mut rtdt::Data as *mut u8,
+                &data_tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_any_destroy_data_inline_with_tydesc() {
+        let rt = alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let data_tydesc = unsafe { create_data_tydesc() };
+        let f64_tydesc = rtdt::TyDesc {
+            type_tag: rtdt::TyTag::F64,
+            size: 8,
+            align: 8,
+            type_info: rtdt::TyInfo {
+                nothing: rtdt::TyInfoNothing,
+            },
+        };
+
+        unsafe {
+            // Create Data with InlineWithTyDesc encoding (f64).
+            let mut data = rtdt::Data::from_f64(3.14159, &f64_tydesc);
+
+            let status = any_destroy_local(
+                rt_handle,
+                &mut data as *mut rtdt::Data as *mut u8,
+                &data_tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_any_destroy_data_two_pointers_primitive() {
+        let rt = alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut alloc::LocalRt) };
+        let data_tydesc = unsafe { create_data_tydesc() };
+        let u32_tydesc = unsafe { create_u32_tydesc() };
+
+        unsafe {
+            // Allocate a u32 value.
+            let inner_value_ptr = rt_ref.alloc(4, 4, 1) as *mut u32;
+            *inner_value_ptr = 123;
+
+            // Create Data with TwoPointers encoding.
+            let mut data = rtdt::Data::from_pointers(&u32_tydesc, inner_value_ptr as *const u8);
+
+            let status = any_destroy_local(
+                rt_handle,
+                &mut data as *mut rtdt::Data as *mut u8,
+                &data_tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_any_destroy_data_two_pointers_string() {
+        let rt = alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut alloc::LocalRt) };
+        let data_tydesc = unsafe { create_data_tydesc() };
+        let string_tydesc = unsafe { create_string_tydesc() };
+
+        unsafe {
+            // Allocate and initialize a String value.
+            let inner_string_ptr = rt_ref.alloc(
+                string_tydesc.size,
+                string_tydesc.align,
+                1
+            ) as *mut rtdt::String;
+
+            crate::string::string_create_local(
+                rt_handle,
+                inner_string_ptr as *mut u8,
+                &string_tydesc,
+            );
+
+            crate::string::string_push_bytes_local(
+                rt_handle,
+                inner_string_ptr as *mut u8,
+                &string_tydesc,
+                b"hello data".as_ptr(),
+                10,
+            );
+
+            // Create Data with TwoPointers encoding.
+            let mut data = rtdt::Data::from_pointers(&string_tydesc, inner_string_ptr as *const u8);
+
+            let status = any_destroy_local(
+                rt_handle,
+                &mut data as *mut rtdt::Data as *mut u8,
+                &data_tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_any_destroy_error_small_immediate() {
+        let rt = alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let error_tydesc = unsafe { create_error_tydesc() };
+
+        unsafe {
+            // Create Error with SmallImmediate encoding (reinterpret Data).
+            let data = rtdt::Data::from_u32(404);
+            let mut error = std::mem::transmute::<rtdt::Data, rtdt::Error>(data);
+
+            let status = any_destroy_local(
+                rt_handle,
+                &mut error as *mut rtdt::Error as *mut u8,
+                &error_tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_any_destroy_error_inline_with_tydesc() {
+        let rt = alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let error_tydesc = unsafe { create_error_tydesc() };
+        let i64_tydesc = rtdt::TyDesc {
+            type_tag: rtdt::TyTag::I64,
+            size: 8,
+            align: 8,
+            type_info: rtdt::TyInfo {
+                nothing: rtdt::TyInfoNothing,
+            },
+        };
+
+        unsafe {
+            // Create Error with InlineWithTyDesc encoding.
+            let data = rtdt::Data::from_i64(-500, &i64_tydesc);
+            let mut error = std::mem::transmute::<rtdt::Data, rtdt::Error>(data);
+
+            let status = any_destroy_local(
+                rt_handle,
+                &mut error as *mut rtdt::Error as *mut u8,
+                &error_tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_any_destroy_error_two_pointers_primitive() {
+        let rt = alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut alloc::LocalRt) };
+        let error_tydesc = unsafe { create_error_tydesc() };
+        let u32_tydesc = unsafe { create_u32_tydesc() };
+
+        unsafe {
+            // Allocate a u32 value.
+            let inner_value_ptr = rt_ref.alloc(4, 4, 1) as *mut u32;
+            *inner_value_ptr = 500;
+
+            // Create Error with TwoPointers encoding.
+            let data = rtdt::Data::from_pointers(&u32_tydesc, inner_value_ptr as *const u8);
+            let mut error = std::mem::transmute::<rtdt::Data, rtdt::Error>(data);
+
+            let status = any_destroy_local(
+                rt_handle,
+                &mut error as *mut rtdt::Error as *mut u8,
+                &error_tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_any_destroy_error_two_pointers_string() {
+        let rt = alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut alloc::LocalRt) };
+        let error_tydesc = unsafe { create_error_tydesc() };
+        let string_tydesc = unsafe { create_string_tydesc() };
+
+        unsafe {
+            // Allocate and initialize a String value.
+            let inner_string_ptr = rt_ref.alloc(
+                string_tydesc.size,
+                string_tydesc.align,
+                1
+            ) as *mut rtdt::String;
+
+            crate::string::string_create_local(
+                rt_handle,
+                inner_string_ptr as *mut u8,
+                &string_tydesc,
+            );
+
+            crate::string::string_push_bytes_local(
+                rt_handle,
+                inner_string_ptr as *mut u8,
+                &string_tydesc,
+                b"error occurred".as_ptr(),
+                14,
+            );
+
+            // Create Error with TwoPointers encoding.
+            let data = rtdt::Data::from_pointers(&string_tydesc, inner_string_ptr as *const u8);
+            let mut error = std::mem::transmute::<rtdt::Data, rtdt::Error>(data);
+
+            let status = any_destroy_local(
+                rt_handle,
+                &mut error as *mut rtdt::Error as *mut u8,
+                &error_tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
             rt.shutdown();
