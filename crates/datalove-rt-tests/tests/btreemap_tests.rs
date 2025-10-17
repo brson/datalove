@@ -2851,3 +2851,339 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
 
     Ok(())
 }
+
+// ==================== clone_from_slice tests ====================
+
+/// Helper to create a (u32, u32) tuple type descriptor.
+fn create_tuple_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<[rtdt::TyInfoTupleField; 2]>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
+    let key_tydesc = create_u32_tydesc();
+    let value_tydesc = create_u32_tydesc();
+
+    // Create tuple fields with proper alignment.
+    // (u32, u32) layout: first field at offset 0, second at offset 4.
+    let fields = Box::new([
+        rtdt::TyInfoTupleField {
+            offset: 0,
+            tydesc: &*key_tydesc as *const rtdt::TyDesc,
+        },
+        rtdt::TyInfoTupleField {
+            offset: 4,
+            tydesc: &*value_tydesc as *const rtdt::TyDesc,
+        },
+    ]);
+
+    let tuple_tydesc = Box::new(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::Tuple,
+        size: 8,
+        align: 4,
+        type_info: rtdt::TyInfo {
+            tuple: rtdt::TyInfoTuple {
+                num_fields: 2,
+                fields: fields.as_ptr(),
+            },
+        },
+    });
+
+    (tuple_tydesc, fields, key_tydesc, value_tydesc)
+}
+
+#[test]
+fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    // Create map from empty slice.
+    let status = unsafe {
+        datalove_rt::btreemap::btreemap_clone_from_slice_impl(
+            &mut *(rt as *mut datalove_rt::rt_local::RtLocal),
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            ptr::null(),
+            0,
+            &*tuple_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(map.len, 0);
+    assert!(map.root.is_null());
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+#[test]
+fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    // Create a slice with a single (key, value) pair.
+    #[repr(C)]
+    struct Tuple2U32 {
+        key: rtdt::U32,
+        value: rtdt::U32,
+    }
+
+    let slice_data = vec![
+        Tuple2U32 { key: rtdt::U32(42), value: rtdt::U32(100) },
+    ];
+
+    let status = unsafe {
+        datalove_rt::btreemap::btreemap_clone_from_slice_impl(
+            &mut *(rt as *mut datalove_rt::rt_local::RtLocal),
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            slice_data.as_ptr() as *const u8,
+            slice_data.len() as u32,
+            &*tuple_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(map.len, 1);
+
+    // Verify we can retrieve the value.
+    let (option_tydesc, _inner) = create_option_u32_tydesc();
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+    let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+    let key = rtdt::U32(42);
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_get_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &key as *const rtdt::U32 as *const u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let tag = option_buffer[0];
+    assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+    let value_ptr = unsafe {
+        option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+    };
+    let retrieved_value = unsafe { *value_ptr };
+    assert_eq!(retrieved_value, 100);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+#[test]
+fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    #[repr(C)]
+    struct Tuple2U32 {
+        key: rtdt::U32,
+        value: rtdt::U32,
+    }
+
+    let slice_data = vec![
+        Tuple2U32 { key: rtdt::U32(10), value: rtdt::U32(100) },
+        Tuple2U32 { key: rtdt::U32(20), value: rtdt::U32(200) },
+        Tuple2U32 { key: rtdt::U32(30), value: rtdt::U32(300) },
+        Tuple2U32 { key: rtdt::U32(40), value: rtdt::U32(400) },
+        Tuple2U32 { key: rtdt::U32(50), value: rtdt::U32(500) },
+    ];
+
+    let status = unsafe {
+        datalove_rt::btreemap::btreemap_clone_from_slice_impl(
+            &mut *(rt as *mut datalove_rt::rt_local::RtLocal),
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            slice_data.as_ptr() as *const u8,
+            slice_data.len() as u32,
+            &*tuple_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(map.len, 5);
+
+    // Verify all values are retrievable.
+    let (option_tydesc, _inner) = create_option_u32_tydesc();
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+
+    for (k, v) in &[(10, 100), (20, 200), (30, 300), (40, 400), (50, 500)] {
+        let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+        let key = rtdt::U32(*k);
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreemap_get_local(
+                rt,
+                map_ptr,
+                &*map_tydesc as *const rtdt::TyDesc,
+                &key as *const rtdt::U32 as *const u8,
+                &*key_tydesc as *const rtdt::TyDesc,
+                option_buffer.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+        let tag = option_buffer[0];
+        assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+        let value_ptr = unsafe {
+            option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+        };
+        let retrieved_value = unsafe { *value_ptr };
+        assert_eq!(retrieved_value, *v, "Expected value {} for key {}", v, k);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+#[test]
+fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc();
+
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: 0,
+    };
+    let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+
+    #[repr(C)]
+    struct Tuple2U32 {
+        key: rtdt::U32,
+        value: rtdt::U32,
+    }
+
+    // Slice with duplicate keys - last value should win.
+    let slice_data = vec![
+        Tuple2U32 { key: rtdt::U32(10), value: rtdt::U32(100) },
+        Tuple2U32 { key: rtdt::U32(20), value: rtdt::U32(200) },
+        Tuple2U32 { key: rtdt::U32(10), value: rtdt::U32(999) },  // Duplicate key.
+    ];
+
+    let status = unsafe {
+        datalove_rt::btreemap::btreemap_clone_from_slice_impl(
+            &mut *(rt as *mut datalove_rt::rt_local::RtLocal),
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            slice_data.as_ptr() as *const u8,
+            slice_data.len() as u32,
+            &*tuple_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(map.len, 2, "Map should have 2 unique keys");
+
+    // Verify key 10 has the updated value.
+    let (option_tydesc, _inner) = create_option_u32_tydesc();
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
+    };
+    let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+    let key = rtdt::U32(10);
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_get_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+            &key as *const rtdt::U32 as *const u8,
+            &*key_tydesc as *const rtdt::TyDesc,
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let tag = option_buffer[0];
+    assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+    let value_ptr = unsafe {
+        option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+    };
+    let retrieved_value = unsafe { *value_ptr };
+    assert_eq!(retrieved_value, 999, "Duplicate key should have last value");
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreemap_destroy_local(
+            rt,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}

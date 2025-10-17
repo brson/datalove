@@ -1931,15 +1931,105 @@ pub unsafe fn btreemap_clone_tree(
 }
 
 /// Create a BTreeMap from a slice of key-value pairs.
+///
+/// Takes a slice of (K, V) tuples and creates a map by cloning and inserting each pair.
 pub unsafe fn btreemap_clone_from_slice_impl(
-    _rt: &mut RtLocal,
-    _btreemap_value_out: *mut u8,
-    _btreemap_tydesc: *const TyDesc,
-    _slice_ptr_ref: *const u8,
-    _slice_ptr_len: u32,
-    _slice_element_tydesc: *const TyDesc,
+    rt: &mut RtLocal,
+    btreemap_value_out: *mut u8,
+    btreemap_tydesc: *const TyDesc,
+    slice_ptr_ref: *const u8,
+    slice_ptr_len: u32,
+    slice_element_tydesc: *const TyDesc,
 ) -> RtStatus {
     unsafe {
-        todo!("btreemap_clone_from_slice_impl")
+        if btreemap_value_out.is_null() || btreemap_tydesc.is_null() || slice_element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Create an empty map.
+        let status = btreemap_create_impl(rt, btreemap_value_out, btreemap_tydesc);
+        if status != RtStatus::Ok {
+            return status;
+        }
+
+        // If the slice is empty, we're done.
+        if slice_ptr_len == 0 || slice_ptr_ref.is_null() {
+            return RtStatus::Ok;
+        }
+
+        // Get map key and value type descriptors.
+        let map_info = (*btreemap_tydesc).type_info.map;
+        let map_key_tydesc = map_info.key_tydesc;
+        let map_value_tydesc = map_info.value_tydesc;
+
+        // The slice element should be a tuple (K, V).
+        let tuple_info = (*slice_element_tydesc).type_info.tuple;
+        if tuple_info.num_fields != 2 {
+            return RtStatus::Error;
+        }
+
+        let key_field = &*tuple_info.fields.add(0);
+        let value_field = &*tuple_info.fields.add(1);
+        let element_size = (*slice_element_tydesc).size as usize;
+
+        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+
+        // Iterate through each element in the slice.
+        for i in 0..slice_ptr_len {
+            let element_ptr = slice_ptr_ref.add(i as usize * element_size);
+
+            // Get pointers to key and value within the tuple.
+            let key_ptr = element_ptr.add(key_field.offset as usize);
+            let value_ptr = element_ptr.add(value_field.offset as usize);
+
+            // Clone the key and value into temporary buffers.
+            let key_size = (*map_key_tydesc).size as usize;
+            let value_size = (*map_value_tydesc).size as usize;
+
+            let mut key_buf = vec![0u8; key_size];
+            let mut value_buf = vec![0u8; value_size];
+
+            let status = crate::clone::clone_value(
+                rt_handle,
+                key_ptr,
+                key_field.tydesc,
+                key_buf.as_mut_ptr(),
+            );
+            if status != RtStatus::Ok {
+                return status;
+            }
+
+            let status = crate::clone::clone_value(
+                rt_handle,
+                value_ptr,
+                value_field.tydesc,
+                value_buf.as_mut_ptr(),
+            );
+            if status != RtStatus::Ok {
+                // Clean up the cloned key before returning.
+                let _ = crate::destroy::any_destroy_local(rt_handle, key_buf.as_mut_ptr(), map_key_tydesc);
+                return status;
+            }
+
+            // Insert the cloned key-value pair into the map.
+            let status = btreemap_insert_impl(
+                rt,
+                btreemap_value_out,
+                btreemap_tydesc,
+                key_buf.as_mut_ptr(),
+                map_key_tydesc,
+                value_buf.as_mut_ptr(),
+                map_value_tydesc,
+            );
+
+            // Note: btreemap_insert_impl takes ownership of key and value (by-move semantics),
+            // so we don't need to destroy them here. The Vec will be dropped automatically.
+
+            if status != RtStatus::Ok {
+                return status;
+            }
+        }
+
+        RtStatus::Ok
     }
 }
