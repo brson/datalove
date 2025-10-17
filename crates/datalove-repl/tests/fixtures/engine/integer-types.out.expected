@@ -9,13 +9,7 @@
     "eval": {
       "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "u8_min",
@@ -25,15 +19,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, UnresolvedName(\"u8_min\")"
+      "Error": "type error(s): UnresolvedName(\"u8_min\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u8_max: @u8 = @255",
@@ -43,20 +31,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "u8_max",
@@ -66,20 +43,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, UnresolvedName(\"u8_max\")"
+      "Error": "type error(s): UnresolvedName(\"u8_max\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i8_min: @i8 = @-128",
@@ -89,25 +55,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "i8_min",
@@ -117,25 +67,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i8_min\")"
+      "Error": "type error(s): UnresolvedName(\"i8_min\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i8_max: @i8 = @127",
@@ -145,30 +79,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"i8\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "i8_max",
@@ -178,30 +91,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, UnresolvedName(\"i8_max\")"
+      "Error": "type error(s): UnresolvedName(\"i8_max\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u16_min: @u16 = @0",
@@ -211,35 +103,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u16\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "u16_min",
@@ -249,35 +115,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_min\")"
+      "Error": "type error(s): UnresolvedName(\"u16_min\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u16_max: @u16 = @65535",
@@ -287,40 +127,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u16\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "u16_max",
@@ -330,40 +139,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_max\")"
+      "Error": "type error(s): UnresolvedName(\"u16_max\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i16_min: @i16 = @-32768",
@@ -373,45 +151,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "i16_min",
@@ -421,45 +163,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i16_min\")"
+      "Error": "type error(s): UnresolvedName(\"i16_min\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i16_max: @i16 = @32767",
@@ -469,50 +175,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "i16_max",
@@ -522,50 +187,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, UnresolvedName(\"i16_max\")"
+      "Error": "type error(s): UnresolvedName(\"i16_max\")"
     },
-    "environment": [
-      {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u32_min: @u32 = @0",
@@ -575,53 +199,17 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "SuccessLet": {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
+      }
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -633,53 +221,17 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@0"
+      }
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -691,58 +243,22 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "SuccessLet": {
+        "name": "u32_max",
+        "ty": "u32",
+        "value": "@4294967295"
+      }
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -754,58 +270,22 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@4294967295"
+      }
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -817,63 +297,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -885,63 +320,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i32_min\")"
+      "Error": "type error(s): UnresolvedName(\"i32_min\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -953,68 +343,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"i32\", actual: \"u32\" }"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1026,68 +366,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, UnresolvedName(\"i32_max\")"
+      "Error": "type error(s): UnresolvedName(\"i32_max\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1099,73 +389,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u64\", actual: \"u32\" }"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1177,73 +412,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, UnresolvedName(\"u64_min\")"
+      "Error": "type error(s): UnresolvedName(\"u64_min\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1255,78 +435,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1338,78 +458,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"u64_max\")"
+      "Error": "type error(s): UnresolvedName(\"u64_max\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1421,83 +481,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1509,83 +504,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i64_min\")"
+      "Error": "type error(s): UnresolvedName(\"i64_min\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1597,88 +527,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1690,88 +550,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i64_max\")"
+      "Error": "type error(s): UnresolvedName(\"i64_max\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1783,93 +573,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1881,93 +596,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, UnresolvedName(\"u8_add\")"
+      "Error": "type error(s): UnresolvedName(\"u8_add\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -1979,98 +619,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -2082,98 +642,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i8_add\")"
+      "Error": "type error(s): UnresolvedName(\"i8_add\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -2185,103 +665,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u16\", actual: \"u32\" }"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -2293,103 +688,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, UnresolvedName(\"u16_mul\")"
+      "Error": "type error(s): UnresolvedName(\"u16_mul\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -2401,108 +711,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -2514,108 +734,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, UnresolvedName(\"i16_sub\")"
+      "Error": "type error(s): UnresolvedName(\"i16_sub\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       }
     ]
   },
@@ -2627,113 +757,27 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "SuccessLet": {
+        "name": "u32_div",
+        "ty": "u32",
+        "value": "@1000"
+      }
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       },
       {
         "name": "u32_div",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@1000"
       }
     ]
   },
@@ -2745,113 +789,27 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@1000"
+      }
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       },
       {
         "name": "u32_div",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@1000"
       }
     ]
   },
@@ -2863,118 +821,23 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       },
       {
         "name": "u32_div",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_mul",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@1000"
       }
     ]
   },
@@ -2986,118 +849,23 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i32_mul\")"
+      "Error": "type error(s): UnresolvedName(\"i32_mul\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       },
       {
         "name": "u32_div",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_mul",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@1000"
       }
     ]
   },
@@ -3109,123 +877,23 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       },
       {
         "name": "u32_div",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_add",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@1000"
       }
     ]
   },
@@ -3237,123 +905,23 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"u64_add\")"
+      "Error": "type error(s): UnresolvedName(\"u64_add\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       },
       {
         "name": "u32_div",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_add",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@1000"
       }
     ]
   },
@@ -3365,128 +933,23 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       },
       {
         "name": "u32_div",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@1000"
       }
     ]
   },
@@ -3498,128 +961,23 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u64\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), UnresolvedName(\"i64_sub\")"
+      "Error": "type error(s): UnresolvedName(\"i64_sub\")"
     },
     "environment": [
       {
-        "name": "u8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
         "name": "u32_min",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_min",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_max",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@4294967295"
       },
       {
         "name": "u32_div",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_mul",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_add",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_sub",
-        "ty": "error",
-        "value": ""
+        "ty": "u32",
+        "value": "@1000"
       }
     ]
   }

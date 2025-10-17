@@ -9,13 +9,7 @@
     "eval": {
       "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u8_negative: @u8 = @-1",
@@ -25,20 +19,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i8_overflow: @i8 = @128",
@@ -48,25 +31,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"i8\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i8_underflow: @i8 = @-129",
@@ -76,30 +43,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u16_overflow: @u16 = @65536",
@@ -109,35 +55,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u16\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u16_negative: @u16 = @-1",
@@ -147,40 +67,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i16_overflow: @i16 = @32768",
@@ -190,45 +79,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i16_underflow: @i16 = @-32769",
@@ -238,50 +91,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_underflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u32_overflow: @u32 = @4294967296",
@@ -291,55 +103,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_overflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u32_negative: @u32 = @-1",
@@ -349,60 +115,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_negative",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i32_overflow: @i32 = @2147483648",
@@ -412,65 +127,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"i32\", actual: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i32_underflow: @i32 = @-2147483649",
@@ -480,70 +139,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_underflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u64_overflow: @u64 = @18446744073709551616",
@@ -553,75 +151,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_overflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u64_negative: @u64 = @-1",
@@ -631,80 +163,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_negative",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i64_overflow: @i64 = @9223372036854775808",
@@ -714,85 +175,9 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_overflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i64_underflow: @i64 = @-9223372036854775809",
@@ -802,89 +187,8 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i8\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"u16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i16\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), TypeMismatch { expected: \"i32\", actual: \"u32\" }, DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\"), DatalitError(\"IntOutOfRange\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u8_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i8_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u16_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i16_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u32_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i32_underflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "u64_negative",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_overflow",
-        "ty": "error",
-        "value": ""
-      },
-      {
-        "name": "i64_underflow",
-        "ty": "error",
-        "value": ""
-      }
-    ]
+    "environment": []
   }
 ]
