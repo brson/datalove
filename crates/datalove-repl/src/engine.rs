@@ -599,10 +599,6 @@ mod tests {
             }
             other => panic!("Expected Command, got {:?}", other),
         }
-
-        // Note: The implementation details of history tracking have been
-        // moved to the engine module, so we can't directly verify them here.
-        // The successful evaluation above confirms the engine is working correctly.
     }
 
     #[test]
@@ -637,9 +633,6 @@ mod tests {
             }
             other => panic!("Expected Command, got {:?}", other),
         }
-
-        // Note: Expression evaluations should not persist to the history.
-        // The implementation is in the engine module, so we can't verify it here.
     }
 
     #[test]
