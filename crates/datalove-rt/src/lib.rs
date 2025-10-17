@@ -334,12 +334,13 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_create_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() {
+        if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        btreemap::btreemap_create_impl(rt_ref, value_out, tydesc)
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
+        btreemap::btreemap_create_impl(rt_ref, value_out, tydesc_ref)
     }
 }
 
@@ -357,15 +358,16 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clone_from_slice_local(
     slice_element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() {
+        if rt.is_null() || btreemap_tydesc.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
         btreemap::btreemap_clone_from_slice_impl(
             rt_ref,
             btreemap_value_out,
-            btreemap_tydesc,
+            btreemap_tydesc_ref,
             slice_ptr_ref,
             slice_ptr_len,
             slice_element_tydesc,
@@ -382,12 +384,13 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_destroy_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() {
+        if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        btreemap::btreemap_destroy_impl(rt_ref, value_in, tydesc)
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
+        btreemap::btreemap_destroy_impl(rt_ref, value_in, tydesc_ref)
     }
 }
 
@@ -404,19 +407,23 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_insert_local(
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() {
+        if rt.is_null() || btreemap_tydesc.is_null()
+            || key_tydesc.is_null() || value_tydesc.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+        let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
         btreemap::btreemap_insert_impl(
             rt_ref,
             btreemap_value_mut,
-            btreemap_tydesc,
+            btreemap_tydesc_ref,
             key_in,
-            key_tydesc,
+            key_tydesc_ref,
             value_in,
-            value_tydesc,
+            value_tydesc_ref,
         )
     }
 }
@@ -430,17 +437,19 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_remove_local(
     key_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() {
+        if rt.is_null() || btreemap_tydesc.is_null() || key_tydesc.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
         btreemap::btreemap_remove_impl(
             rt_ref,
             btreemap_value_mut,
-            btreemap_tydesc,
+            btreemap_tydesc_ref,
             key_ref,
-            key_tydesc,
+            key_tydesc_ref,
         )
     }
 }
@@ -465,14 +474,17 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+        let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
         btreemap::btreemap_get_impl(
             rt_ref,
             btreemap_value_mut,
-            btreemap_tydesc,
+            btreemap_tydesc_ref,
             key_ref,
-            key_tydesc,
+            key_tydesc_ref,
             value_out,
-            value_tydesc,
+            value_tydesc_ref,
         )
     }
 }
@@ -495,14 +507,17 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+        let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
         btreemap::btreemap_get_impl(
             rt_ref,
             btreemap_value_ref,
-            btreemap_tydesc,
+            btreemap_tydesc_ref,
             key_ref,
-            key_tydesc,
+            key_tydesc_ref,
             option_value_out,
-            option_tydesc,
+            option_tydesc_ref,
         )
     }
 }
@@ -514,12 +529,12 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
     btreemap_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() {
+        if rt.is_null() || btreemap_tydesc.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        btreemap::btreemap_clear_impl(rt_ref, btreemap_value_mut, btreemap_tydesc)
+        btreemap::btreemap_clear_impl(rt_ref, btreemap_value_mut, rtdt::TyDescRef::from_ptr(btreemap_tydesc))
     }
 }
 
@@ -542,12 +557,13 @@ pub unsafe extern "C" fn dtlv_rti_list_create_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() {
+        if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        list::list_create_impl(rt_ref, value_out, tydesc)
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
+        list::list_create_impl(rt_ref, value_out, tydesc_ref)
     }
 }
 
@@ -558,12 +574,13 @@ pub unsafe extern "C" fn dtlv_rti_list_destroy_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() {
+        if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        list::list_destroy_impl(rt_ref, value_in, tydesc)
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
+        list::list_destroy_impl(rt_ref, value_in, tydesc_ref)
     }
 }
 
@@ -574,12 +591,13 @@ pub unsafe extern "C" fn dtlv_rti_list_clear_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() {
+        if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        list::list_clear_impl(rt_ref, value_mut, tydesc)
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
+        list::list_clear_impl(rt_ref, value_mut, tydesc_ref)
     }
 }
 
@@ -599,13 +617,15 @@ pub unsafe extern "C" fn dtlv_rti_list_get(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
         list::list_get_impl(
             rt_ref,
             list_value_ref,
-            list_tydesc,
+            list_tydesc_ref,
             index,
             option_value_out,
-            option_tydesc,
+            option_tydesc_ref,
         )
     }
 }
@@ -626,13 +646,15 @@ pub unsafe extern "C" fn dtlv_rti_list_set_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
         list::list_set_impl(
             rt_ref,
             list_value_mut,
-            list_tydesc,
+            list_tydesc_ref,
             index,
             element_in,
-            element_tydesc,
+            element_tydesc_ref,
         )
     }
 }
@@ -652,12 +674,14 @@ pub unsafe extern "C" fn dtlv_rti_list_push_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
         list::list_push_impl(
             rt_ref,
             list_value_mut,
-            list_tydesc,
+            list_tydesc_ref,
             element_in,
-            element_tydesc,
+            element_tydesc_ref,
         )
     }
 }
@@ -677,12 +701,14 @@ pub unsafe extern "C" fn dtlv_rti_list_pop_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
         list::list_pop_impl(
             rt_ref,
             list_value_mut,
-            list_tydesc,
+            list_tydesc_ref,
             option_value_out,
-            option_tydesc,
+            option_tydesc_ref,
         )
     }
 }
@@ -703,13 +729,15 @@ pub unsafe extern "C" fn dtlv_rti_list_insert_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
         list::list_insert_impl(
             rt_ref,
             list_value_mut,
-            list_tydesc,
+            list_tydesc_ref,
             index,
             element_in,
-            element_tydesc,
+            element_tydesc_ref,
         )
     }
 }
@@ -730,13 +758,15 @@ pub unsafe extern "C" fn dtlv_rti_list_remove_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
         list::list_remove_impl(
             rt_ref,
             list_value_mut,
-            list_tydesc,
+            list_tydesc_ref,
             index,
             option_value_out,
-            option_tydesc,
+            option_tydesc_ref,
         )
     }
 }
@@ -754,10 +784,11 @@ pub unsafe extern "C" fn dtlv_rti_list_reserve_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         list::list_reserve_impl(
             rt_ref,
             list_value_mut,
-            list_tydesc,
+            list_tydesc_ref,
             additional,
         )
     }
@@ -775,10 +806,11 @@ pub unsafe extern "C" fn dtlv_rti_list_shrink_to_fit_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         list::list_shrink_to_fit_impl(
             rt_ref,
             list_value_mut,
-            list_tydesc,
+            list_tydesc_ref,
         )
     }
 }
@@ -799,13 +831,15 @@ pub unsafe extern "C" fn dtlv_rti_list_clone_from_slice_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
         list::list_clone_from_slice_impl(
             rt_ref,
             list_value_out,
-            list_tydesc,
+            list_tydesc_ref,
             slice_ptr_ref,
             slice_len,
-            element_tydesc,
+            element_tydesc_ref,
         )
     }
 }
@@ -826,13 +860,15 @@ pub unsafe extern "C" fn dtlv_rti_list_extend_from_slice_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
         list::list_extend_from_slice_impl(
             rt_ref,
             list_value_mut,
-            list_tydesc,
+            list_tydesc_ref,
             slice_ptr_ref,
             slice_len,
-            element_tydesc,
+            element_tydesc_ref,
         )
     }
 }

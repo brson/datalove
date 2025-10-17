@@ -58,7 +58,7 @@ pub unsafe fn any_destroy_local(
 
             // Map has allocations.
             rtdt::TyTag::Map => {
-                crate::btreemap::btreemap_destroy_impl(rt_ref, value_in, tydesc)
+                crate::btreemap::btreemap_destroy_impl(rt_ref, value_in, ty)
             }
 
             // List has allocations.

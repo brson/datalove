@@ -15,10 +15,10 @@ use crate::RtStatus;
 pub unsafe fn list_create_impl(
     rt: &mut RtLocal,
     value_out: *mut u8,
-    tydesc: *const TyDesc,
+    tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if value_out.is_null() || tydesc.is_null() {
+        if value_out.is_null() {
             return RtStatus::Error;
         }
 
@@ -36,15 +36,14 @@ pub unsafe fn list_create_impl(
 pub unsafe fn list_destroy_impl(
     rt: &mut RtLocal,
     value_in: *mut u8,
-    tydesc: *const TyDesc,
+    tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if value_in.is_null() || tydesc.is_null() {
+        if value_in.is_null() {
             return RtStatus::Error;
         }
 
-        let ty = rtdt::TyDescRef::from_ptr(tydesc);
-        let element_ty = ty.list_element_ty();
+        let element_ty = tydesc.list_element_ty();
         let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = value_in as *mut List;
@@ -54,7 +53,7 @@ pub unsafe fn list_destroy_impl(
 
         // Destroy all elements.
         if !data_ptr.is_null() && size > 0 {
-            let status = destroy_elements(rt, data_ptr, element_tydesc, 0, size);
+            let status = destroy_elements(rt, data_ptr, element_ty, 0, size);
             if status != RtStatus::Ok {
                 return status;
             }
@@ -78,15 +77,14 @@ pub unsafe fn list_destroy_impl(
 pub unsafe fn list_clear_impl(
     rt: &mut RtLocal,
     value_mut: *mut u8,
-    tydesc: *const TyDesc,
+    tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if value_mut.is_null() || tydesc.is_null() {
+        if value_mut.is_null() {
             return RtStatus::Error;
         }
 
-        let ty = rtdt::TyDescRef::from_ptr(tydesc);
-        let element_ty = ty.list_element_ty();
+        let element_ty = tydesc.list_element_ty();
         let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = value_mut as *mut List;
@@ -95,7 +93,7 @@ pub unsafe fn list_clear_impl(
 
         // Destroy all elements.
         if !data_ptr.is_null() && size > 0 {
-            let status = destroy_elements(rt, data_ptr, element_tydesc, 0, size);
+            let status = destroy_elements(rt, data_ptr, element_ty, 0, size);
             if status != RtStatus::Ok {
                 return status;
             }
@@ -120,26 +118,25 @@ pub unsafe fn list_clear_impl(
 pub unsafe fn list_get_impl(
     rt: &mut RtLocal,
     list_value_ref: *const u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
     index: u32,
     option_value_out: *mut u8,
-    option_tydesc: *const TyDesc,
+    option_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if list_value_ref.is_null() || list_tydesc.is_null()
-            || option_value_out.is_null() || option_tydesc.is_null() {
+        if list_value_ref.is_null()
+            || option_value_out.is_null() {
             return RtStatus::Error;
         }
 
-        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let element_ty = ty.list_element_ty();
+        let element_ty = list_tydesc.list_element_ty();
         let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = list_value_ref as *const List;
         let size = (*list_ptr).size;
 
         // Compute option layout.
-        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc.as_ptr());
         let option_tag_ptr = option_value_out;
         let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
 
@@ -177,14 +174,14 @@ pub unsafe fn list_get_impl(
 pub unsafe fn list_set_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
     index: u32,
     element_in: *mut u8,
-    element_tydesc: *const TyDesc,
+    element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if list_value_mut.is_null() || list_tydesc.is_null()
-            || element_in.is_null() || element_tydesc.is_null() {
+        if list_value_mut.is_null()
+            || element_in.is_null() {
             return RtStatus::Error;
         }
 
@@ -198,11 +195,11 @@ pub unsafe fn list_set_impl(
 
         // Destroy old element.
         let data_ptr = (*list_ptr).data as *mut u8;
-        let element_size = (*element_tydesc).size as usize;
+        let element_size = element_tydesc.size() as usize;
         let element_ptr = data_ptr.add(index as usize * element_size);
 
         let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
-        let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc);
+        let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr());
         if status != RtStatus::Ok {
             return status;
         }
@@ -224,13 +221,13 @@ pub unsafe fn list_set_impl(
 pub unsafe fn list_push_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
     element_in: *mut u8,
-    element_tydesc: *const TyDesc,
+    element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if list_value_mut.is_null() || list_tydesc.is_null()
-            || element_in.is_null() || element_tydesc.is_null() {
+        if list_value_mut.is_null()
+            || element_in.is_null() {
             return RtStatus::Error;
         }
 
@@ -249,7 +246,7 @@ pub unsafe fn list_push_impl(
 
         // Copy element to end.
         let data_ptr = (*list_ptr).data as *mut u8;
-        let element_size = (*element_tydesc).size as usize;
+        let element_size = element_tydesc.size() as usize;
         let dest_ptr = data_ptr.add(size as usize * element_size);
         std::ptr::copy_nonoverlapping(element_in, dest_ptr, element_size);
 
@@ -267,25 +264,24 @@ pub unsafe fn list_push_impl(
 pub unsafe fn list_pop_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
     option_value_out: *mut u8,
-    option_tydesc: *const TyDesc,
+    option_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if list_value_mut.is_null() || list_tydesc.is_null()
-            || option_value_out.is_null() || option_tydesc.is_null() {
+        if list_value_mut.is_null()
+            || option_value_out.is_null() {
             return RtStatus::Error;
         }
 
-        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let element_ty = ty.list_element_ty();
+        let element_ty = list_tydesc.list_element_ty();
         let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
 
         // Compute option layout.
-        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc.as_ptr());
         let option_tag_ptr = option_value_out;
         let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
 
@@ -319,14 +315,14 @@ pub unsafe fn list_pop_impl(
 pub unsafe fn list_insert_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
     index: u32,
     element_in: *mut u8,
-    element_tydesc: *const TyDesc,
+    element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if list_value_mut.is_null() || list_tydesc.is_null()
-            || element_in.is_null() || element_tydesc.is_null() {
+        if list_value_mut.is_null()
+            || element_in.is_null() {
             return RtStatus::Error;
         }
 
@@ -349,7 +345,7 @@ pub unsafe fn list_insert_impl(
         }
 
         let data_ptr = (*list_ptr).data as *mut u8;
-        let element_size = (*element_tydesc).size as usize;
+        let element_size = element_tydesc.size() as usize;
 
         // Shift elements right.
         if index < size {
@@ -377,26 +373,25 @@ pub unsafe fn list_insert_impl(
 pub unsafe fn list_remove_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
     index: u32,
     option_value_out: *mut u8,
-    option_tydesc: *const TyDesc,
+    option_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if list_value_mut.is_null() || list_tydesc.is_null()
-            || option_value_out.is_null() || option_tydesc.is_null() {
+        if list_value_mut.is_null()
+            || option_value_out.is_null() {
             return RtStatus::Error;
         }
 
-        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let element_ty = ty.list_element_ty();
+        let element_ty = list_tydesc.list_element_ty();
         let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
 
         // Compute option layout.
-        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc.as_ptr());
         let option_tag_ptr = option_value_out;
         let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
 
@@ -438,17 +433,15 @@ pub unsafe fn list_remove_impl(
 pub unsafe fn list_reserve_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
     additional: u32,
 ) -> RtStatus {
     unsafe {
-        if list_value_mut.is_null() || list_tydesc.is_null() {
+        if list_value_mut.is_null() {
             return RtStatus::Error;
         }
 
-        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let element_ty = ty.list_element_ty();
-        let element_tydesc = element_ty.as_ptr();
+        let element_ty = list_tydesc.list_element_ty();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
@@ -460,7 +453,7 @@ pub unsafe fn list_reserve_impl(
         }
 
         let new_capacity = calculate_new_capacity(capacity, required);
-        grow_buffer(rt, list_ptr, element_tydesc, new_capacity)
+        grow_buffer(rt, list_ptr, element_ty, new_capacity)
     }
 }
 
@@ -468,15 +461,14 @@ pub unsafe fn list_reserve_impl(
 pub unsafe fn list_shrink_to_fit_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if list_value_mut.is_null() || list_tydesc.is_null() {
+        if list_value_mut.is_null() {
             return RtStatus::Error;
         }
 
-        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let element_ty = ty.list_element_ty();
+        let element_ty = list_tydesc.list_element_ty();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
@@ -529,14 +521,14 @@ pub unsafe fn list_shrink_to_fit_impl(
 pub unsafe fn list_clone_from_slice_impl(
     rt: &mut RtLocal,
     list_value_out: *mut u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
     slice_ptr_ref: *const u8,
     slice_len: u32,
-    element_tydesc: *const TyDesc,
+    element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if list_value_out.is_null() || list_tydesc.is_null()
-            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
+        if list_value_out.is_null()
+            || slice_ptr_ref.is_null() {
             return RtStatus::Error;
         }
 
@@ -552,8 +544,8 @@ pub unsafe fn list_clone_from_slice_impl(
             return RtStatus::Ok;
         }
 
-        let element_size = (*element_tydesc).size;
-        let element_align = (*element_tydesc).align;
+        let element_size = element_tydesc.size();
+        let element_align = element_tydesc.align();
 
         // Allocate buffer with exact capacity.
         let data = rt.alloc.alloc(element_size, element_align, slice_len);
@@ -570,7 +562,7 @@ pub unsafe fn list_clone_from_slice_impl(
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data.add((i * element_size) as usize);
 
-            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc, dest_ptr);
+            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr);
             if status != RtStatus::Ok {
                 // Clean up partially created list.
                 (*list_ptr).size = i;
@@ -589,14 +581,14 @@ pub unsafe fn list_clone_from_slice_impl(
 pub unsafe fn list_extend_from_slice_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: *const TyDesc,
+    list_tydesc: rtdt::TyDescRef,
     slice_ptr_ref: *const u8,
     slice_len: u32,
-    element_tydesc: *const TyDesc,
+    element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if list_value_mut.is_null() || list_tydesc.is_null()
-            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
+        if list_value_mut.is_null()
+            || slice_ptr_ref.is_null() {
             return RtStatus::Error;
         }
 
@@ -614,7 +606,7 @@ pub unsafe fn list_extend_from_slice_impl(
         }
 
         let data_ptr = (*list_ptr).data as *mut u8;
-        let element_size = (*element_tydesc).size;
+        let element_size = element_tydesc.size();
 
         // Clone each element from the slice.
         let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
@@ -622,7 +614,7 @@ pub unsafe fn list_extend_from_slice_impl(
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data_ptr.add(((size + i) * element_size) as usize);
 
-            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc, dest_ptr);
+            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr);
             if status != RtStatus::Ok {
                 // Update size to reflect what was successfully added.
                 (*list_ptr).size = size + i;
@@ -677,7 +669,7 @@ fn calculate_new_capacity(current: u32, required: u32) -> u32 {
 unsafe fn grow_buffer(
     rt: &mut RtLocal,
     list_ptr: *mut List,
-    element_tydesc: *const TyDesc,
+    element_tydesc: rtdt::TyDescRef,
     new_capacity: u32,
 ) -> RtStatus {
     unsafe {
@@ -689,8 +681,8 @@ unsafe fn grow_buffer(
             return RtStatus::Ok;
         }
 
-        let element_size = (*element_tydesc).size;
-        let element_align = (*element_tydesc).align;
+        let element_size = element_tydesc.size();
+        let element_align = element_tydesc.align();
 
         // Allocate new buffer.
         let new_data = rt.alloc.alloc(element_size, element_align, new_capacity);
@@ -721,17 +713,17 @@ unsafe fn grow_buffer(
 unsafe fn destroy_elements(
     rt: &mut RtLocal,
     data_ptr: *mut u8,
-    element_tydesc: *const TyDesc,
+    element_tydesc: rtdt::TyDescRef,
     start: u32,
     end: u32,
 ) -> RtStatus {
     unsafe {
-        let element_size = (*element_tydesc).size as usize;
+        let element_size = element_tydesc.size() as usize;
         let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
 
         for i in start..end {
             let element_ptr = data_ptr.add((i as usize) * element_size);
-            let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc);
+            let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr());
             if status != RtStatus::Ok {
                 return status;
             }

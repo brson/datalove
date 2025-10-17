@@ -234,8 +234,8 @@ unsafe fn clone_impl(
                     crate::btreemap::btreemap_clone_tree(
                         rt_ref,
                         map_in.root,
-                        key_ty.as_ptr(),
-                        value_ty.as_ptr(),
+                        key_ty,
+                        value_ty,
                     )
                 };
 

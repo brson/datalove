@@ -18,10 +18,10 @@ const HEADER_SIZE: u32 = 8;  // tag (u8) + padding + len (u32).
 /// Allocate and initialize a new internal node.
 unsafe fn alloc_internal_node(
     rt: &mut RtLocal,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) -> *mut MapNode {
     unsafe {
-        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
+        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
 
         // Allocate the node.
         let ptr = rt.alloc.alloc(layout.size, layout.align, 1);
@@ -42,11 +42,11 @@ unsafe fn alloc_internal_node(
 /// Allocate and initialize a new leaf node.
 unsafe fn alloc_leaf_node(
     rt: &mut RtLocal,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> *mut MapNode {
     unsafe {
-        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
 
         // Allocate the node.
         let ptr = rt.alloc.alloc(layout.size, layout.align, 1);
@@ -72,8 +72,8 @@ unsafe fn alloc_leaf_node(
 unsafe fn free_node(
     rt: &mut RtLocal,
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) {
     unsafe {
         if node.is_null() {
@@ -84,11 +84,11 @@ unsafe fn free_node(
 
         match tag {
             MapNodeTag::Internal => {
-                let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
+                let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
                 rt.alloc.free(layout.size, layout.align, 1, node as *mut u8);
             }
             MapNodeTag::Leaf => {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
                 rt.alloc.free(layout.size, layout.align, 1, node as *mut u8);
             }
         };
@@ -140,10 +140,10 @@ unsafe fn write_node_len(node: *mut MapNode, len: u32) {
 #[inline]
 unsafe fn internal_keys_ptr(
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) -> *mut u8 {
     unsafe {
-        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
+        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
         (node as *mut u8).add(layout.keys_offset as usize)
     }
 }
@@ -152,10 +152,10 @@ unsafe fn internal_keys_ptr(
 #[inline]
 unsafe fn internal_child_ptrs_ptr(
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) -> *mut *mut MapNode {
     unsafe {
-        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
+        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
         (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut MapNode
     }
 }
@@ -166,11 +166,11 @@ unsafe fn internal_child_ptrs_ptr(
 #[inline]
 unsafe fn leaf_next_ptr_mut(
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> *mut *mut MapNode {
     unsafe {
-        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
         (node as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut MapNode
     }
 }
@@ -179,11 +179,11 @@ unsafe fn leaf_next_ptr_mut(
 #[inline]
 unsafe fn leaf_keys_ptr(
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> *mut u8 {
     unsafe {
-        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
         (node as *mut u8).add(layout.keys_offset as usize)
     }
 }
@@ -192,11 +192,11 @@ unsafe fn leaf_keys_ptr(
 #[inline]
 unsafe fn leaf_values_ptr(
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> *mut u8 {
     unsafe {
-        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
         (node as *mut u8).add(layout.values_offset as usize)
     }
 }
@@ -205,10 +205,10 @@ unsafe fn leaf_values_ptr(
 pub unsafe fn btreemap_create_impl(
     rt: &mut RtLocal,
     value_out: *mut u8,
-    tydesc: *const TyDesc,
+    tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if value_out.is_null() || tydesc.is_null() {
+        if value_out.is_null() {
             return RtStatus::Error;
         }
 
@@ -225,24 +225,21 @@ pub unsafe fn btreemap_create_impl(
 pub unsafe fn btreemap_destroy_impl(
     rt: &mut RtLocal,
     value_in: *mut u8,
-    tydesc: *const TyDesc,
+    tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if value_in.is_null() || tydesc.is_null() {
+        if value_in.is_null() {
             return RtStatus::Error;
         }
 
-        let ty = rtdt::TyDescRef::from_ptr(tydesc);
-        let key_ty = ty.map_key_ty();
-        let value_ty = ty.map_value_ty();
-        let key_tydesc = key_ty.as_ptr();
-        let value_tydesc = value_ty.as_ptr();
+        let key_ty = tydesc.map_key_ty();
+        let value_ty = tydesc.map_value_ty();
 
         let map_ptr = value_in as *mut Map;
         let root = (*map_ptr).root as *mut MapNode;
 
         if !root.is_null() {
-            destroy_tree_recursive(rt, root, key_tydesc, value_tydesc);
+            destroy_tree_recursive(rt, root, key_ty, value_ty);
         }
 
         // Clear the map struct.
@@ -257,8 +254,8 @@ pub unsafe fn btreemap_destroy_impl(
 unsafe fn destroy_tree_recursive(
     rt: &mut RtLocal,
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) {
     unsafe {
         if node.is_null() {
@@ -273,11 +270,11 @@ unsafe fn destroy_tree_recursive(
 
                 // Destroy all keys in the internal node.
                 let keys_ptr = internal_keys_ptr(node, key_tydesc);
-                let key_size = (*key_tydesc).size as usize;
+                let key_size = key_tydesc.size() as usize;
                 let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
                 for i in 0..len as usize {
                     let key_slot = keys_ptr.add(i * key_size);
-                    let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc.as_ptr());
                 }
 
                 // Recursively destroy children.
@@ -291,16 +288,16 @@ unsafe fn destroy_tree_recursive(
                 let len = read_node_len(node);
                 let keys_ptr = leaf_keys_ptr(node, key_tydesc, value_tydesc);
                 let values_ptr = leaf_values_ptr(node, key_tydesc, value_tydesc);
-                let key_size = (*key_tydesc).size as usize;
-                let value_size = (*value_tydesc).size as usize;
+                let key_size = key_tydesc.size() as usize;
+                let value_size = value_tydesc.size() as usize;
                 let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
 
                 // Destroy all keys and values in the leaf node.
                 for i in 0..len as usize {
                     let key_slot = keys_ptr.add(i * key_size);
                     let value_slot = values_ptr.add(i * value_size);
-                    let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
-                    let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc.as_ptr());
+                    let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc.as_ptr());
                 }
             }
         }
@@ -314,7 +311,7 @@ unsafe fn destroy_tree_recursive(
 pub unsafe fn btreemap_clear_impl(
     rt: &mut RtLocal,
     value_mut: *mut u8,
-    tydesc: *const TyDesc,
+    tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
         // Destroy the existing tree.
@@ -353,13 +350,13 @@ struct SplitInfo {
 
 impl SplitInfo {
     /// Destroy the separator key and clean up.
-    unsafe fn destroy(mut self, rt: &mut RtLocal, key_tydesc: *const TyDesc) {
+    unsafe fn destroy(mut self, rt: &mut RtLocal, key_tydesc: rtdt::TyDescRef) {
         unsafe {
             let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
             let _ = crate::destroy::any_destroy_local(
                 rt_handle,
                 self.separator_key_buf.as_mut_ptr(),
-                key_tydesc,
+                key_tydesc.as_ptr(),
             );
             // Vec will be dropped automatically after key is destroyed.
         }
@@ -370,8 +367,8 @@ impl SplitInfo {
 unsafe fn find_leaf_for_key(
     mut node: *mut MapNode,
     key: *const u8,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> *mut MapNode {
     unsafe {
         loop {
@@ -382,7 +379,7 @@ unsafe fn find_leaf_for_key(
                     let len = read_node_len(node);
                     let keys_ptr = internal_keys_ptr(node, key_tydesc);
                     let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
-                    let key_size = (*key_tydesc).size as usize;
+                    let key_size = key_tydesc.size() as usize;
 
                     // Find the child to descend into.
                     // In a B+tree, separators represent the minimum key in the right subtree,
@@ -392,9 +389,9 @@ unsafe fn find_leaf_for_key(
                         let node_key = keys_ptr.add(i * key_size);
                         let cmp_result = crate::cmp::cmp_total(
                             key,
-                            key_tydesc,
+                            key_tydesc.as_ptr(),
                             node_key,
-                            key_tydesc,
+                            key_tydesc.as_ptr(),
                         );
                         match cmp_result {
                             crate::RtOrdering::Less => break,
@@ -426,8 +423,8 @@ unsafe fn leaf_insert_or_update(
     leaf: *mut MapNode,
     key: *const u8,
     value: *const u8,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> LeafInsertResult {
     unsafe {
         let len = read_node_len(leaf);
@@ -439,8 +436,8 @@ unsafe fn leaf_insert_or_update(
 
         let keys_ptr = leaf_keys_ptr(leaf, key_tydesc, value_tydesc);
         let values_ptr = leaf_values_ptr(leaf, key_tydesc, value_tydesc);
-        let key_size = (*key_tydesc).size as usize;
-        let value_size = (*value_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
 
         // Find the insertion position using binary search.
         let mut insert_pos = len as usize;
@@ -448,9 +445,9 @@ unsafe fn leaf_insert_or_update(
             let node_key = keys_ptr.add(i * key_size);
             let cmp_result = crate::cmp::cmp_total(
                 key,
-                key_tydesc,
+                key_tydesc.as_ptr(),
                 node_key,
-                key_tydesc,
+                key_tydesc.as_ptr(),
             );
             match cmp_result {
                 crate::RtOrdering::Less => {
@@ -462,11 +459,11 @@ unsafe fn leaf_insert_or_update(
                     // Destroy the old value before overwriting.
                     let value_slot = values_ptr.add(i * value_size);
                     let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
-                    let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc.as_ptr());
                     // Move the new value (by-move semantics).
                     std::ptr::copy_nonoverlapping(value, value_slot, value_size);
                     // Destroy the input key since we're not using it (key already exists in tree).
-                    let _ = crate::destroy::any_destroy_local(rt_handle, key as *mut u8, key_tydesc);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, key as *mut u8, key_tydesc.as_ptr());
                     return LeafInsertResult::Updated;
                 }
                 crate::RtOrdering::Greater => continue,
@@ -509,8 +506,8 @@ unsafe fn split_leaf(
     leaf: *mut MapNode,
     key: *const u8,
     value: *const u8,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> core::result::Result<SplitInfo, RtStatus> {
     unsafe {
         // Allocate a new sibling leaf.
@@ -527,8 +524,8 @@ unsafe fn split_leaf(
         let new_keys_ptr = leaf_keys_ptr(new_leaf, key_tydesc, value_tydesc);
         let new_values_ptr = leaf_values_ptr(new_leaf, key_tydesc, value_tydesc);
 
-        let key_size = (*key_tydesc).size as usize;
-        let value_size = (*value_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
 
         // Move upper half to new leaf.
         let move_count = capacity as usize - split_point;
@@ -558,7 +555,7 @@ unsafe fn split_leaf(
         let status = crate::clone::clone_value(
             rt_handle,
             new_keys_ptr,
-            key_tydesc,
+            key_tydesc.as_ptr(),
             separator_key_buf.as_mut_ptr(),
         );
         if status != RtStatus::Ok {
@@ -566,7 +563,7 @@ unsafe fn split_leaf(
         }
 
         // Determine which leaf should receive the new key.
-        let cmp_result = crate::cmp::cmp_total(key, key_tydesc, separator_key_buf.as_ptr(), key_tydesc);
+        let cmp_result = crate::cmp::cmp_total(key, key_tydesc.as_ptr(), separator_key_buf.as_ptr(), key_tydesc.as_ptr());
         let mut insert_result = match cmp_result {
             crate::RtOrdering::Less => {
                 // Key goes in left leaf.
@@ -604,7 +601,7 @@ unsafe fn insert_into_internal(
     node: *mut MapNode,
     separator_key: &[u8],
     right_child: *mut MapNode,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) -> core::result::Result<(), SplitInfo> {
     unsafe {
         let len = read_node_len(node);
@@ -617,7 +614,7 @@ unsafe fn insert_into_internal(
 
         let keys_ptr = internal_keys_ptr(node, key_tydesc);
         let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
-        let key_size = (*key_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
 
         // Find insertion position.
         let mut insert_pos = len as usize;
@@ -625,9 +622,9 @@ unsafe fn insert_into_internal(
             let node_key = keys_ptr.add(i * key_size);
             let cmp_result = crate::cmp::cmp_total(
                 separator_key.as_ptr(),
-                key_tydesc,
+                key_tydesc.as_ptr(),
                 node_key,
-                key_tydesc,
+                key_tydesc.as_ptr(),
             );
             match cmp_result {
                 crate::RtOrdering::Less => {
@@ -665,7 +662,7 @@ unsafe fn insert_into_internal(
         let status = crate::clone::clone_value(
             rt_handle,
             separator_key.as_ptr(),
-            key_tydesc,
+            key_tydesc.as_ptr(),
             key_slot,
         );
         if status != RtStatus::Ok {
@@ -686,7 +683,7 @@ unsafe fn split_internal_node(
     node: *mut MapNode,
     pending_key: &[u8],
     pending_child: *mut MapNode,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) -> SplitInfo {
     unsafe {
         // Allocate a new sibling internal node.
@@ -701,7 +698,7 @@ unsafe fn split_internal_node(
         let new_keys_ptr = internal_keys_ptr(new_node, key_tydesc);
         let new_children_ptr = internal_child_ptrs_ptr(new_node, key_tydesc);
 
-        let key_size = (*key_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
 
         // Clone the middle key as the separator to push up.
         let mut separator_key_buf = vec![0u8; key_size];
@@ -709,7 +706,7 @@ unsafe fn split_internal_node(
         let status = crate::clone::clone_value(
             rt_handle,
             keys_ptr.add(split_point * key_size),
-            key_tydesc,
+            key_tydesc.as_ptr(),
             separator_key_buf.as_mut_ptr(),
         );
         if status != RtStatus::Ok {
@@ -720,7 +717,7 @@ unsafe fn split_internal_node(
         let _ = crate::destroy::any_destroy_local(
             rt_handle,
             keys_ptr.add(split_point * key_size),
-            key_tydesc,
+            key_tydesc.as_ptr(),
         );
 
         // Move keys after split_point (excluding the separator) to new node.
@@ -747,9 +744,9 @@ unsafe fn split_internal_node(
         // Now insert the pending key/child into the appropriate node.
         let cmp_result = crate::cmp::cmp_total(
             pending_key.as_ptr(),
-            key_tydesc,
+            key_tydesc.as_ptr(),
             separator_key_buf.as_ptr(),
-            key_tydesc,
+            key_tydesc.as_ptr(),
         );
 
         let insert_result = match cmp_result {
@@ -777,25 +774,22 @@ unsafe fn split_internal_node(
 pub unsafe fn btreemap_insert_impl(
     rt: &mut RtLocal,
     btreemap_value_mut: *mut u8,
-    btreemap_tydesc: *const TyDesc,
+    btreemap_tydesc: rtdt::TyDescRef,
     key_in: *mut u8,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
     value_in: *mut u8,
-    value_tydesc: *const TyDesc,
+    value_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if btreemap_value_mut.is_null() || btreemap_tydesc.is_null()
-            || key_in.is_null() || key_tydesc.is_null()
-            || value_in.is_null() || value_tydesc.is_null() {
+        if btreemap_value_mut.is_null()
+            || key_in.is_null()
+            || value_in.is_null() {
             return RtStatus::Error;
         }
 
         // Get key and value type descriptors from map type.
-        let ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
-        let map_key_ty = ty.map_key_ty();
-        let map_value_ty = ty.map_value_ty();
-        let map_key_tydesc = map_key_ty.as_ptr();
-        let map_value_tydesc = map_value_ty.as_ptr();
+        let map_key_ty = btreemap_tydesc.map_key_ty();
+        let map_value_ty = btreemap_tydesc.map_value_ty();
 
         let key_ptr = key_in;
         let val_ptr = value_in;
@@ -805,18 +799,18 @@ pub unsafe fn btreemap_insert_impl(
 
         // If map is empty, create the first leaf.
         if root.is_null() {
-            let leaf = alloc_leaf_node(rt, map_key_tydesc, map_value_tydesc);
+            let leaf = alloc_leaf_node(rt, map_key_ty, map_value_ty);
             if leaf.is_null() {
                 return RtStatus::Error;
             }
 
             // Insert the key-value pair into the empty leaf.
-            let keys_ptr = leaf_keys_ptr(leaf, map_key_tydesc, map_value_tydesc);
-            let values_ptr = leaf_values_ptr(leaf, map_key_tydesc, map_value_tydesc);
+            let keys_ptr = leaf_keys_ptr(leaf, map_key_ty, map_value_ty);
+            let values_ptr = leaf_values_ptr(leaf, map_key_ty, map_value_ty);
 
             // Move key and value from the input pointers (by-move semantics).
-            let key_size = (*map_key_tydesc).size as usize;
-            let value_size = (*map_value_tydesc).size as usize;
+            let key_size = map_key_ty.size() as usize;
+            let value_size = map_value_ty.size() as usize;
             std::ptr::copy_nonoverlapping(key_ptr, keys_ptr, key_size);
             std::ptr::copy_nonoverlapping(val_ptr, values_ptr, value_size);
 
@@ -829,7 +823,7 @@ pub unsafe fn btreemap_insert_impl(
 
         // Find the leaf where the key should be inserted, keeping track of the path.
         let mut path: Vec<*mut MapNode> = Vec::new();
-        let leaf = find_leaf_with_path(root, key_ptr, map_key_tydesc, map_value_tydesc, &mut path);
+        let leaf = find_leaf_with_path(root, key_ptr, map_key_ty, map_value_ty, &mut path);
 
         // Try to insert into the leaf.
         let result = leaf_insert_or_update(
@@ -837,8 +831,8 @@ pub unsafe fn btreemap_insert_impl(
             leaf,
             key_ptr,
             val_ptr,
-            map_key_tydesc,
-            map_value_tydesc,
+            map_key_ty,
+            map_value_ty,
         );
 
         match result {
@@ -853,7 +847,7 @@ pub unsafe fn btreemap_insert_impl(
             }
             LeafInsertResult::NeedsSplit => {
                 // Leaf is full, need to split and propagate up.
-                let split_info = match split_leaf(rt, leaf, key_ptr, val_ptr, map_key_tydesc, map_value_tydesc) {
+                let split_info = match split_leaf(rt, leaf, key_ptr, val_ptr, map_key_ty, map_value_ty) {
                     Ok(info) => info,
                     Err(status) => return status,
                 };
@@ -867,7 +861,7 @@ pub unsafe fn btreemap_insert_impl(
                     leaf,
                     split_info,
                     &path,
-                    map_key_tydesc,
+                    map_key_ty,
                 );
 
                 if status == RtStatus::Ok && was_inserted {
@@ -883,8 +877,8 @@ pub unsafe fn btreemap_insert_impl(
 unsafe fn find_leaf_with_path(
     mut node: *mut MapNode,
     key: *const u8,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
     path: &mut Vec<*mut MapNode>,
 ) -> *mut MapNode {
     unsafe {
@@ -898,7 +892,7 @@ unsafe fn find_leaf_with_path(
                     let len = read_node_len(node);
                     let keys_ptr = internal_keys_ptr(node, key_tydesc);
                     let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
-                    let key_size = (*key_tydesc).size as usize;
+                    let key_size = key_tydesc.size() as usize;
 
                     // Find the child to descend into.
                     // In a B+tree, separators represent the minimum key in the right subtree,
@@ -908,9 +902,9 @@ unsafe fn find_leaf_with_path(
                         let node_key = keys_ptr.add(i * key_size);
                         let cmp_result = crate::cmp::cmp_total(
                             key,
-                            key_tydesc,
+                            key_tydesc.as_ptr(),
                             node_key,
-                            key_tydesc,
+                            key_tydesc.as_ptr(),
                         );
                         match cmp_result {
                             crate::RtOrdering::Less => break,
@@ -940,7 +934,7 @@ unsafe fn propagate_split_up(
     mut child: *mut MapNode,
     mut split_info: SplitInfo,
     path: &[*mut MapNode],
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
         // If there's no parent, child must be the root.
@@ -959,7 +953,7 @@ unsafe fn propagate_split_up(
             let status = crate::clone::clone_value(
                 rt_handle,
                 split_info.separator_key_buf.as_ptr(),
-                key_tydesc,
+                key_tydesc.as_ptr(),
                 root_keys_ptr,
             );
             if status != RtStatus::Ok {
@@ -1015,7 +1009,7 @@ unsafe fn propagate_split_up(
         let status = crate::clone::clone_value(
             rt_handle,
             split_info.separator_key_buf.as_ptr(),
-            key_tydesc,
+            key_tydesc.as_ptr(),
             root_keys_ptr,
         );
         if status != RtStatus::Ok {
@@ -1041,31 +1035,28 @@ unsafe fn propagate_split_up(
 pub unsafe fn btreemap_get_impl(
     rt: &mut RtLocal,
     btreemap_value_ref: *const u8,
-    btreemap_tydesc: *const TyDesc,
+    btreemap_tydesc: rtdt::TyDescRef,
     key_ref: *const u8,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
     option_value_out: *mut u8,
-    option_tydesc: *const TyDesc,
+    option_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if btreemap_value_ref.is_null() || btreemap_tydesc.is_null()
-            || key_ref.is_null() || key_tydesc.is_null()
-            || option_value_out.is_null() || option_tydesc.is_null() {
+        if btreemap_value_ref.is_null()
+            || key_ref.is_null()
+            || option_value_out.is_null() {
             return RtStatus::Error;
         }
 
         // Get key and value type descriptors from map type.
-        let ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
-        let map_key_ty = ty.map_key_ty();
-        let map_value_ty = ty.map_value_ty();
-        let map_key_tydesc = map_key_ty.as_ptr();
-        let map_value_tydesc = map_value_ty.as_ptr();
+        let map_key_ty = btreemap_tydesc.map_key_ty();
+        let map_value_ty = btreemap_tydesc.map_value_ty();
 
         let map_ptr = btreemap_value_ref as *const Map;
         let root = (*map_ptr).root as *mut MapNode;
 
         // Compute option layout.
-        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc.as_ptr());
         let option_tag_ptr = option_value_out as *mut u8;
         let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
 
@@ -1076,22 +1067,22 @@ pub unsafe fn btreemap_get_impl(
         }
 
         // Find the leaf node where the key would be.
-        let leaf = find_leaf_for_key(root, key_ref, map_key_tydesc, map_value_tydesc);
+        let leaf = find_leaf_for_key(root, key_ref, map_key_ty, map_value_ty);
 
         let len = read_node_len(leaf);
-        let keys_ptr = leaf_keys_ptr(leaf, map_key_tydesc, map_value_tydesc);
-        let values_ptr = leaf_values_ptr(leaf, map_key_tydesc, map_value_tydesc);
-        let key_size = (*map_key_tydesc).size as usize;
-        let value_size = (*map_value_tydesc).size as usize;
+        let keys_ptr = leaf_keys_ptr(leaf, map_key_ty, map_value_ty);
+        let values_ptr = leaf_values_ptr(leaf, map_key_ty, map_value_ty);
+        let key_size = map_key_ty.size() as usize;
+        let value_size = map_value_ty.size() as usize;
 
         // Search for the key in the leaf.
         for i in 0..len as usize {
             let node_key = keys_ptr.add(i * key_size);
             let cmp_result = crate::cmp::cmp_total(
                 key_ref,
-                key_tydesc,
+                key_tydesc.as_ptr(),
                 node_key,
-                map_key_tydesc,
+                map_key_ty.as_ptr(),
             );
 
             match cmp_result {
@@ -1102,7 +1093,7 @@ pub unsafe fn btreemap_get_impl(
                     let status = crate::clone::clone_value(
                         rt_handle,
                         value_slot,
-                        map_value_tydesc,
+                        map_value_ty.as_ptr(),
                         option_payload_ptr,
                     );
 
@@ -1150,28 +1141,28 @@ unsafe fn leaf_remove(
     rt: &mut RtLocal,
     leaf: *mut MapNode,
     key: *const u8,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> RemoveResult {
     unsafe {
         let len = read_node_len(leaf);
         let keys_ptr = leaf_keys_ptr(leaf, key_tydesc, value_tydesc);
         let values_ptr = leaf_values_ptr(leaf, key_tydesc, value_tydesc);
-        let key_size = (*key_tydesc).size as usize;
-        let value_size = (*value_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
 
         // Find the key in the leaf.
         for i in 0..len as usize {
             let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = crate::cmp::cmp_total(key, key_tydesc, node_key, key_tydesc);
+            let cmp_result = crate::cmp::cmp_total(key, key_tydesc.as_ptr(), node_key, key_tydesc.as_ptr());
 
             match cmp_result {
                 crate::RtOrdering::Equal => {
                     // Found the key, destroy it and the value.
                     let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
                     let value_slot = values_ptr.add(i * value_size);
-                    let _ = crate::destroy::any_destroy_local(rt_handle, node_key as *mut u8, key_tydesc);
-                    let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc);
+                    let _ = crate::destroy::any_destroy_local(rt_handle, node_key as *mut u8, key_tydesc.as_ptr());
+                    let _ = crate::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc.as_ptr());
 
                     // Shift remaining elements left.
                     if i < (len - 1) as usize {
@@ -1210,15 +1201,15 @@ unsafe fn borrow_from_left_leaf(
     parent_key_idx: usize,
     left: *mut MapNode,
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) {
     unsafe {
         let left_len = read_node_len(left);
         let node_len = read_node_len(node);
 
-        let key_size = (*key_tydesc).size as usize;
-        let value_size = (*value_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
 
         let left_keys_ptr = leaf_keys_ptr(left, key_tydesc, value_tydesc);
         let left_values_ptr = leaf_values_ptr(left, key_tydesc, value_tydesc);
@@ -1261,10 +1252,10 @@ unsafe fn borrow_from_left_leaf(
 
         // Destroy old separator.
         let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
-        let _ = crate::destroy::any_destroy_local(rt_handle, parent_key, key_tydesc);
+        let _ = crate::destroy::any_destroy_local(rt_handle, parent_key, key_tydesc.as_ptr());
 
         // Clone new separator (first key of node).
-        let _ = crate::clone::clone_value(rt_handle, node_keys_ptr, key_tydesc, parent_key);
+        let _ = crate::clone::clone_value(rt_handle, node_keys_ptr, key_tydesc.as_ptr(), parent_key);
     }
 }
 
@@ -1275,12 +1266,12 @@ unsafe fn borrow_from_left_internal(
     parent_key_idx: usize,
     left: *mut MapNode,
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) {
     unsafe {
         let left_len = read_node_len(left);
         let node_len = read_node_len(node);
-        let key_size = (*key_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
 
         let left_keys_ptr = internal_keys_ptr(left, key_tydesc);
         let left_children_ptr = internal_child_ptrs_ptr(left, key_tydesc);
@@ -1328,12 +1319,12 @@ unsafe fn borrow_from_right_internal(
     parent_key_idx: usize,
     node: *mut MapNode,
     right: *mut MapNode,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) {
     unsafe {
         let node_len = read_node_len(node);
         let right_len = read_node_len(right);
-        let key_size = (*key_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
 
         let node_keys_ptr = internal_keys_ptr(node, key_tydesc);
         let node_children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
@@ -1380,15 +1371,15 @@ unsafe fn borrow_from_right_leaf(
     parent_key_idx: usize,
     node: *mut MapNode,
     right: *mut MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) {
     unsafe {
         let node_len = read_node_len(node);
         let right_len = read_node_len(right);
 
-        let key_size = (*key_tydesc).size as usize;
-        let value_size = (*value_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
 
         let node_keys_ptr = leaf_keys_ptr(node, key_tydesc, value_tydesc);
         let node_values_ptr = leaf_values_ptr(node, key_tydesc, value_tydesc);
@@ -1430,10 +1421,10 @@ unsafe fn borrow_from_right_leaf(
 
         // Destroy old separator.
         let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
-        let _ = crate::destroy::any_destroy_local(rt_handle, parent_key, key_tydesc);
+        let _ = crate::destroy::any_destroy_local(rt_handle, parent_key, key_tydesc.as_ptr());
 
         // Clone new separator (first key of right).
-        let _ = crate::clone::clone_value(rt_handle, right_keys_ptr, key_tydesc, parent_key);
+        let _ = crate::clone::clone_value(rt_handle, right_keys_ptr, key_tydesc.as_ptr(), parent_key);
     }
 }
 
@@ -1444,12 +1435,12 @@ unsafe fn merge_with_left_internal(
     parent_key_idx: usize,
     left: *mut MapNode,
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) {
     unsafe {
         let left_len = read_node_len(left);
         let node_len = read_node_len(node);
-        let key_size = (*key_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
 
         let left_keys_ptr = internal_keys_ptr(left, key_tydesc);
         let left_children_ptr = internal_child_ptrs_ptr(left, key_tydesc);
@@ -1462,7 +1453,7 @@ unsafe fn merge_with_left_internal(
         // Clone parent separator down to left.
         let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
         let left_separator_slot = left_keys_ptr.add(left_len as usize * key_size);
-        let _ = crate::clone::clone_value(rt_handle, parent_key, key_tydesc, left_separator_slot);
+        let _ = crate::clone::clone_value(rt_handle, parent_key, key_tydesc.as_ptr(), left_separator_slot);
 
         // Copy all keys from node to left.
         if node_len > 0 {
@@ -1483,7 +1474,8 @@ unsafe fn merge_with_left_internal(
         write_node_len(left, left_len + 1 + node_len);
 
         // Free the merged node (but don't destroy keys/values, they're now in left).
-        free_node(rt, node, key_tydesc, std::ptr::null());
+        // For internal nodes, value_tydesc is not used, so we pass key_tydesc.
+        free_node(rt, node, key_tydesc, key_tydesc);
     }
 }
 
@@ -1492,15 +1484,15 @@ unsafe fn merge_with_left_leaf(
     rt: &mut RtLocal,
     left: *mut MapNode,
     node: *mut MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) {
     unsafe {
         let left_len = read_node_len(left);
         let node_len = read_node_len(node);
 
-        let key_size = (*key_tydesc).size as usize;
-        let value_size = (*value_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
 
         let left_keys_ptr = leaf_keys_ptr(left, key_tydesc, value_tydesc);
         let left_values_ptr = leaf_values_ptr(left, key_tydesc, value_tydesc);
@@ -1535,18 +1527,18 @@ unsafe fn internal_remove_key(
     rt: &mut RtLocal,
     node: *mut MapNode,
     key_idx: usize,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) {
     unsafe {
         let len = read_node_len(node);
         let keys_ptr = internal_keys_ptr(node, key_tydesc);
         let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
-        let key_size = (*key_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
 
         // Destroy the key.
         let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
         let key_slot = keys_ptr.add(key_idx * key_size);
-        let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
+        let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc.as_ptr());
 
         // Shift keys left.
         if key_idx < (len - 1) as usize {
@@ -1575,8 +1567,8 @@ unsafe fn fix_underflow(
     rt: &mut RtLocal,
     parent: *mut MapNode,
     child_idx: usize,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> RemoveResult {
     unsafe {
         let parent_len = read_node_len(parent);
@@ -1692,8 +1684,8 @@ unsafe fn remove_recursive(
     rt: &mut RtLocal,
     node: *mut MapNode,
     key: *const u8,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> RemoveResult {
     unsafe {
         let tag = read_node_tag(node);
@@ -1703,14 +1695,14 @@ unsafe fn remove_recursive(
                 let len = read_node_len(node);
                 let keys_ptr = internal_keys_ptr(node, key_tydesc);
                 let children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
-                let key_size = (*key_tydesc).size as usize;
+                let key_size = key_tydesc.size() as usize;
 
                 // Find the child to descend into.
                 let mut child_idx = 0;
                 for i in 0..len as usize {
                     let node_key = keys_ptr.add(i * key_size);
                     let cmp_result =
-                        crate::cmp::cmp_total(key, key_tydesc, node_key, key_tydesc);
+                        crate::cmp::cmp_total(key, key_tydesc.as_ptr(), node_key, key_tydesc.as_ptr());
                     match cmp_result {
                         crate::RtOrdering::Less => break,
                         crate::RtOrdering::Equal => {
@@ -1742,24 +1734,19 @@ unsafe fn remove_recursive(
 pub unsafe fn btreemap_remove_impl(
     rt: &mut RtLocal,
     btreemap_value_mut: *mut u8,
-    btreemap_tydesc: *const TyDesc,
+    btreemap_tydesc: rtdt::TyDescRef,
     key_ref: *const u8,
-    key_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
         if btreemap_value_mut.is_null()
-            || btreemap_tydesc.is_null()
             || key_ref.is_null()
-            || key_tydesc.is_null()
         {
             return RtStatus::Error;
         }
 
-        let ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
-        let map_key_ty = ty.map_key_ty();
-        let map_value_ty = ty.map_value_ty();
-        let map_key_tydesc = map_key_ty.as_ptr();
-        let map_value_tydesc = map_value_ty.as_ptr();
+        let map_key_ty = btreemap_tydesc.map_key_ty();
+        let map_value_ty = btreemap_tydesc.map_value_ty();
 
         let map_ptr = btreemap_value_mut as *mut Map;
         let root = (*map_ptr).root as *mut MapNode;
@@ -1769,7 +1756,7 @@ pub unsafe fn btreemap_remove_impl(
             return RtStatus::Ok;
         }
 
-        let result = remove_recursive(rt, root, key_ref, map_key_tydesc, map_value_tydesc);
+        let result = remove_recursive(rt, root, key_ref, map_key_ty, map_value_ty);
 
         match result {
             RemoveResult::NotFound => {
@@ -1792,14 +1779,14 @@ pub unsafe fn btreemap_remove_impl(
                         MapNodeTag::Internal => {
                             // Root is internal with 0 keys, so it has 1 child.
                             // Make that child the new root.
-                            let children_ptr = internal_child_ptrs_ptr(root, map_key_tydesc);
+                            let children_ptr = internal_child_ptrs_ptr(root, map_key_ty);
                             let new_root = *children_ptr.add(0);
-                            free_node(rt, root, map_key_tydesc, map_value_tydesc);
+                            free_node(rt, root, map_key_ty, map_value_ty);
                             (*map_ptr).root = new_root;
                         }
                         MapNodeTag::Leaf => {
                             // Root is leaf with 0 keys, map is now empty.
-                            free_node(rt, root, map_key_tydesc, map_value_tydesc);
+                            free_node(rt, root, map_key_ty, map_value_ty);
                             (*map_ptr).root = std::ptr::null();
                         }
                     }
@@ -1815,8 +1802,8 @@ pub unsafe fn btreemap_remove_impl(
 unsafe fn clone_tree_recursive(
     rt: &mut RtLocal,
     node: *const MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> *mut MapNode {
     unsafe {
         if node.is_null() {
@@ -1839,13 +1826,13 @@ unsafe fn clone_tree_recursive(
 
                 let keys_ptr = internal_keys_ptr(node as *mut MapNode, key_tydesc);
                 let new_keys_ptr = internal_keys_ptr(new_node, key_tydesc);
-                let key_size = (*key_tydesc).size as usize;
+                let key_size = key_tydesc.size() as usize;
 
                 // Clone all keys.
                 for i in 0..len as usize {
                     let key_src = keys_ptr.add(i * key_size);
                     let key_dst = new_keys_ptr.add(i * key_size);
-                    let status = crate::clone::clone_value(rt_handle, key_src, key_tydesc, key_dst);
+                    let status = crate::clone::clone_value(rt_handle, key_src, key_tydesc.as_ptr(), key_dst);
                     if status != RtStatus::Ok {
                         // Cleanup and return null on error.
                         free_node(rt, new_node, key_tydesc, value_tydesc);
@@ -1885,14 +1872,14 @@ unsafe fn clone_tree_recursive(
                 let new_keys_ptr = leaf_keys_ptr(new_leaf, key_tydesc, value_tydesc);
                 let new_values_ptr = leaf_values_ptr(new_leaf, key_tydesc, value_tydesc);
 
-                let key_size = (*key_tydesc).size as usize;
-                let value_size = (*value_tydesc).size as usize;
+                let key_size = key_tydesc.size() as usize;
+                let value_size = value_tydesc.size() as usize;
 
                 // Clone all keys and values.
                 for i in 0..len as usize {
                     let key_src = keys_ptr.add(i * key_size);
                     let key_dst = new_keys_ptr.add(i * key_size);
-                    let status = crate::clone::clone_value(rt_handle, key_src, key_tydesc, key_dst);
+                    let status = crate::clone::clone_value(rt_handle, key_src, key_tydesc.as_ptr(), key_dst);
                     if status != RtStatus::Ok {
                         free_node(rt, new_leaf, key_tydesc, value_tydesc);
                         return std::ptr::null_mut();
@@ -1900,7 +1887,7 @@ unsafe fn clone_tree_recursive(
 
                     let value_src = values_ptr.add(i * value_size);
                     let value_dst = new_values_ptr.add(i * value_size);
-                    let status = crate::clone::clone_value(rt_handle, value_src, value_tydesc, value_dst);
+                    let status = crate::clone::clone_value(rt_handle, value_src, value_tydesc.as_ptr(), value_dst);
                     if status != RtStatus::Ok {
                         free_node(rt, new_leaf, key_tydesc, value_tydesc);
                         return std::ptr::null_mut();
@@ -1921,8 +1908,8 @@ unsafe fn clone_tree_recursive(
 pub unsafe fn btreemap_clone_tree(
     rt: &mut RtLocal,
     root: *const MapNode,
-    key_tydesc: *const TyDesc,
-    value_tydesc: *const TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
 ) -> *mut MapNode {
     unsafe {
         clone_tree_recursive(rt, root, key_tydesc, value_tydesc)
@@ -1935,13 +1922,13 @@ pub unsafe fn btreemap_clone_tree(
 pub unsafe fn btreemap_clone_from_slice_impl(
     rt: &mut RtLocal,
     btreemap_value_out: *mut u8,
-    btreemap_tydesc: *const TyDesc,
+    btreemap_tydesc: rtdt::TyDescRef,
     slice_ptr_ref: *const u8,
     slice_ptr_len: u32,
     slice_element_tydesc: *const TyDesc,
 ) -> RtStatus {
     unsafe {
-        if btreemap_value_out.is_null() || btreemap_tydesc.is_null() || slice_element_tydesc.is_null() {
+        if btreemap_value_out.is_null() || slice_element_tydesc.is_null() {
             return RtStatus::Error;
         }
 
@@ -1957,11 +1944,8 @@ pub unsafe fn btreemap_clone_from_slice_impl(
         }
 
         // Get map key and value type descriptors.
-        let ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
-        let map_key_ty = ty.map_key_ty();
-        let map_value_ty = ty.map_value_ty();
-        let map_key_tydesc = map_key_ty.as_ptr();
-        let map_value_tydesc = map_value_ty.as_ptr();
+        let map_key_ty = btreemap_tydesc.map_key_ty();
+        let map_value_ty = btreemap_tydesc.map_value_ty();
 
         // The slice element should be a tuple (K, V).
         let tuple_ty = rtdt::TyDescRef::from_ptr(slice_element_tydesc);
@@ -2009,7 +1993,7 @@ pub unsafe fn btreemap_clone_from_slice_impl(
             );
             if status != RtStatus::Ok {
                 // Clean up the cloned key before returning.
-                let _ = crate::destroy::any_destroy_local(rt_handle, key_buf.as_mut_ptr(), map_key_tydesc);
+                let _ = crate::destroy::any_destroy_local(rt_handle, key_buf.as_mut_ptr(), map_key_ty.as_ptr());
                 return status;
             }
 
@@ -2019,9 +2003,9 @@ pub unsafe fn btreemap_clone_from_slice_impl(
                 btreemap_value_out,
                 btreemap_tydesc,
                 key_buf.as_mut_ptr(),
-                map_key_tydesc,
+                map_key_ty,
                 value_buf.as_mut_ptr(),
-                map_value_tydesc,
+                map_value_ty,
             );
 
             // Note: btreemap_insert_impl takes ownership of key and value (by-move semantics),
