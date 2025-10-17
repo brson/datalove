@@ -594,52 +594,16 @@ impl<'db> Parser<'db> {
         }
     }
 
-    // Helper to parse a datalit expression by delegating to the real datalit parser.
+    // Helper to parse a datalit expression by delegating to the datalit parser.
     fn parse_datalit_expr(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> ast::ExprFun<'db> {
-        // Collect remaining tokens and reconstruct source text to parse.
+        // Collect remaining tokens.
         let remaining_tokens: Vec<TreeToken<'db>> = tokens.collect();
 
-        // Reconstruct the source text from the tokens.
-        // We need to convert the TreeTokens back into text that can be parsed.
-        let mut source_text = String::new();
-        for tree_token in &remaining_tokens {
-            match tree_token {
-                TreeToken::Token(token) => {
-                    source_text.push_str(token.text(self.db).as_str(self.db));
-                }
-                TreeToken::Branch(open_sigil, iter) => {
-                    // Add opening sigil.
-                    source_text.push_str(open_sigil.as_str());
-                    // Recursively add branch contents.
-                    for inner_token in iter.clone() {
-                        match inner_token {
-                            TreeToken::Token(token) => {
-                                source_text.push_str(token.text(self.db).as_str(self.db));
-                            }
-                            // For nested branches, we need to handle them recursively.
-                            // This is getting complex, so we'll simplify by using a helper.
-                            _ => {}
-                        }
-                    }
-                    // Add closing sigil.
-                    let close_sigil = match open_sigil {
-                        Sigil::ParenOpen => ")",
-                        Sigil::BraceOpen => "}",
-                        Sigil::BracketOpen => "]",
-                        Sigil::AngleOpen => ">",
-                        _ => "",
-                    };
-                    source_text.push_str(close_sigil);
-                }
-            }
-        }
-
-        // Parse the source text using the real datalit parser.
-        let source = Source::new(self.db, source_text.S());
-        let datalit_expr = datalit::parser::parse(self.db, source);
+        // Parse directly from tokens using the datalit parser.
+        let datalit_expr = datalit::parser::parse_from_tokens(self.db, remaining_tokens);
 
         ast::ExprFun::new(
             self.db,

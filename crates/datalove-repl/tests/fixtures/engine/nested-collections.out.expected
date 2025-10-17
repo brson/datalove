@@ -7,13 +7,17 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"CannotSynthesize\")"
+      "SuccessLet": {
+        "name": "struct_in_list",
+        "ty": "[@{x: @u32}]",
+        "value": "@[@{x = @1}, @{x = @2}]"
+      }
     },
     "environment": [
       {
         "name": "struct_in_list",
-        "ty": "error",
-        "value": ""
+        "ty": "[@{x: @u32}]",
+        "value": "@[@{x = @1}, @{x = @2}]"
       }
     ]
   },
@@ -25,13 +29,17 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"CannotSynthesize\"), UnresolvedName(\"struct_in_list\")"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "[@{x: @u32}]",
+        "value": "@[@{x = @1}, @{x = @2}]"
+      }
     },
     "environment": [
       {
         "name": "struct_in_list",
-        "ty": "error",
-        "value": ""
+        "ty": "[@{x: @u32}]",
+        "value": "@[@{x = @1}, @{x = @2}]"
       }
     ]
   },
@@ -43,18 +51,22 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"CannotSynthesize\"), DatalitError(\"CannotSynthesize\")"
+      "SuccessLet": {
+        "name": "list_in_struct",
+        "ty": "{items: @[@u32]}",
+        "value": "@{items = @[@1, @2, @3]}"
+      }
     },
     "environment": [
       {
         "name": "struct_in_list",
-        "ty": "error",
-        "value": ""
+        "ty": "[@{x: @u32}]",
+        "value": "@[@{x = @1}, @{x = @2}]"
       },
       {
         "name": "list_in_struct",
-        "ty": "error",
-        "value": ""
+        "ty": "{items: @[@u32]}",
+        "value": "@{items = @[@1, @2, @3]}"
       }
     ]
   },
@@ -66,18 +78,22 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"CannotSynthesize\"), DatalitError(\"CannotSynthesize\"), UnresolvedName(\"list_in_struct\")"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "{items: @[@u32]}",
+        "value": "@{items = @[@1, @2, @3]}"
+      }
     },
     "environment": [
       {
         "name": "struct_in_list",
-        "ty": "error",
-        "value": ""
+        "ty": "[@{x: @u32}]",
+        "value": "@[@{x = @1}, @{x = @2}]"
       },
       {
         "name": "list_in_struct",
-        "ty": "error",
-        "value": ""
+        "ty": "{items: @[@u32]}",
+        "value": "@{items = @[@1, @2, @3]}"
       }
     ]
   }

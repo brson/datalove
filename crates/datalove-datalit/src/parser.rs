@@ -38,6 +38,16 @@ fn parse_bracer<'db>(
     bracer: Bracer<'db>,
 ) -> ast::ExprFull<'db> {
     let tokens = bracer.iter(db).filter_map(|t| t.without_space(db)).collect::<Vec<_>>();
+    parse_from_tokens(db, tokens)
+}
+
+/// Parse a datalit expression directly from a vector of tokens.
+/// This allows other parsers to delegate to the datalit parser without
+/// reconstructing source text from tokens.
+pub fn parse_from_tokens<'db>(
+    db: &'db dyn crate::Db,
+    tokens: Vec<TreeToken<'db>>,
+) -> ast::ExprFull<'db> {
     let mut dyn_parser = DynParser {
         db,
         tokens,
