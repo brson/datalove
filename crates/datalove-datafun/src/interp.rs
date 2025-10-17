@@ -48,6 +48,9 @@ pub struct InterpContext<'db> {
     /// Type table.
     pub type_table: TypeTable,
 
+    /// Type descriptor table for instantiate2.
+    pub tydesc_table: crate::datalit::tydesc_table::TyDescTable<'db>,
+
     /// Variable bindings (name -> value).
     pub variables: HashMap<InternedText<'db>, Value>,
 
@@ -62,6 +65,7 @@ impl<'db> InterpContext<'db> {
             db,
             rt: rt::rt_local::RtLocal::new(),
             type_table,
+            tydesc_table: crate::datalit::tydesc_table::TyDescTable::new(db),
             variables: HashMap::new(),
             functions: HashMap::new(),
         }
