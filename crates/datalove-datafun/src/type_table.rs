@@ -25,6 +25,15 @@ pub struct TypeTable {
 }
 
 impl TypeTable {
+    /// Create an empty type table.
+    pub fn empty() -> Self {
+        TypeTable {
+            expr_types: Vec::new(),
+            datafun_expr_types: Vec::new(),
+            _cache: TyDescCache::new(),
+        }
+    }
+
     /// Build a type table from a typechecked script.
     pub fn build<'db>(
         db: &'db dyn crate::Db,

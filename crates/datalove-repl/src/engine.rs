@@ -11,8 +11,7 @@ pub struct Engine<'db> {
     db: &'db dyn datafun::Db,
     history: ReplHistory,
     /// Persistent interpreter context.
-    /// Created on first evaluation and reused for subsequent evaluations.
-    interp_ctx: Option<datafun::interp::InterpContext<'db>>,
+    interp_ctx: datafun::interp::InterpContext<'db>,
 }
 
 struct ReplHistory {
@@ -98,16 +97,18 @@ impl ReplHistory {
 
 impl<'db> Engine<'db> {
     pub fn new(db: &'db dyn datafun::Db) -> AnyResult<Engine<'db>> {
+        let type_table = datafun::type_table::TypeTable::empty();
         Ok(Engine {
             db,
             history: ReplHistory::new(),
-            interp_ctx: None,
+            interp_ctx: datafun::interp::InterpContext::new(db, type_table),
         })
     }
 
     fn reset(&mut self) {
         self.history = ReplHistory::new();
-        self.interp_ctx = None;
+        let type_table = datafun::type_table::TypeTable::empty();
+        self.interp_ctx = datafun::interp::InterpContext::new(self.db, type_table);
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -288,14 +289,10 @@ impl<'db> Engine<'db> {
             Err(e) => return Eval::Error(format!("type table error: {}", e)),
         };
 
-        // Create or update the interpreter context.
-        if self.interp_ctx.is_none() {
-            self.interp_ctx = Some(datafun::interp::InterpContext::new(db, type_table));
-        } else {
-            self.interp_ctx.as_mut().unwrap().update_type_table(type_table);
-        }
+        // Update the interpreter context.
+        self.interp_ctx.update_type_table(type_table);
 
-        let ctx = self.interp_ctx.as_mut().unwrap();
+        let ctx = &mut self.interp_ctx;
 
         // Collect function definitions from the new unit.
         for statement in unit_statements {
@@ -363,14 +360,10 @@ impl<'db> Engine<'db> {
             Err(e) => return Eval::Error(format!("type table error: {}", e)),
         };
 
-        // Create or update the interpreter context.
-        if self.interp_ctx.is_none() {
-            self.interp_ctx = Some(datafun::interp::InterpContext::new(db, type_table));
-        } else {
-            self.interp_ctx.as_mut().unwrap().update_type_table(type_table);
-        }
+        // Update the interpreter context.
+        self.interp_ctx.update_type_table(type_table);
 
-        let ctx = self.interp_ctx.as_mut().unwrap();
+        let ctx = &mut self.interp_ctx;
 
         // Parse the temporary unit to get the let statement.
         let units = new_script.units(db);
@@ -415,44 +408,43 @@ impl<'db> Engine<'db> {
     pub fn get_environment(&mut self) -> Vec<(String, String, String)> {
         let mut bindings = Vec::new();
 
-        if let Some(ctx) = &mut self.interp_ctx {
-            let db = self.db;
+        let ctx = &mut self.interp_ctx;
+        let db = self.db;
 
-            // Build the full script for type lookup.
-            let script = self.history.build_script(db);
-            let parsed_script = parse_full_script(db, script);
+        // Build the full script for type lookup.
+        let script = self.history.build_script(db);
+        let parsed_script = parse_full_script(db, script);
 
-            // Add functions.
-            for (name, _fun) in &ctx.functions {
-                bindings.push((
-                    name.as_str(db).to_string(),
-                    "function".to_string(),
-                    "".to_string(),
-                ));
-            }
+        // Add functions.
+        for (name, _fun) in &ctx.functions {
+            bindings.push((
+                name.as_str(db).to_string(),
+                "function".to_string(),
+                "".to_string(),
+            ));
+        }
 
-            // Collect variable names first to avoid borrow checker issues.
-            let var_names: Vec<_> = ctx.variables.keys().copied().collect();
+        // Collect variable names first to avoid borrow checker issues.
+        let var_names: Vec<_> = ctx.variables.keys().copied().collect();
 
-            // Add variables with types and values.
-            for name in var_names {
-                // Get the type from the typechecker.
-                let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
-                    datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
-                } else {
-                    "unknown".to_string()
-                };
+        // Add variables with types and values.
+        for name in var_names {
+            // Get the type from the typechecker.
+            let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
+                datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
+            } else {
+                "unknown".to_string()
+            };
 
-                // Get the value by pretty-printing.
-                let value_str = ctx.pretty_print_variable(name)
-                    .unwrap_or_else(|_| "error".to_string());
+            // Get the value by pretty-printing.
+            let value_str = ctx.pretty_print_variable(name)
+                .unwrap_or_else(|_| "error".to_string());
 
-                bindings.push((
-                    name.as_str(db).to_string(),
-                    ty_str,
-                    value_str,
-                ));
-            }
+            bindings.push((
+                name.as_str(db).to_string(),
+                ty_str,
+                value_str,
+            ));
         }
 
         // Sort bindings by name for deterministic output.
