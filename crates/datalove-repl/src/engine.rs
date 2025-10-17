@@ -8,9 +8,7 @@ use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, InputParse, Input};
 use crate::datafun;
 
 pub struct Engine {
-    /// The datafun database for salsa-based compilation.
     db: datafun::Database,
-    /// The REPL history tracking all commands and their evaluation state.
     history: ReplHistory,
 }
 
@@ -63,7 +61,6 @@ impl ReplHistory {
         datafun::script::Script::new(db, units)
     }
 
-    /// Add a new history entry with a script unit.
     fn add_script_entry(
         &mut self,
         command: Command,
@@ -81,7 +78,6 @@ impl ReplHistory {
         });
     }
 
-    /// Add a new history entry without a script unit (for commands like expressions).
     fn add_non_script_entry(&mut self, command: Command, eval: Eval) {
         self.entries.push(HistoryEntry {
             command,
@@ -105,7 +101,6 @@ impl Engine {
         })
     }
 
-    /// Reset the engine to a clean state.
     fn reset(&mut self) {
         self.db = datafun::Database::default();
         self.history = ReplHistory::new();
@@ -247,17 +242,10 @@ impl Engine {
     fn eval_script_with_unit(&mut self, unit: datafun::script::ScriptUnit) -> Eval {
         let db = &self.db;
 
-        // Build a script from the current history.
         let new_script = self.history.build_script_with_unit(db, unit);
-
-        // Get the index of the new unit in the script.
         let unit_index = new_script.units(db).len() - 1;
-
-        // Parse the new unit.
         let parsed_unit = datafun::parser::parse_script_unit(db, new_script, unit_index);
         let unit_statements = parsed_unit.statements(db);
-
-        // Parse the full script for typechecking.
         let parsed_script = parse_full_script(db, new_script);
 
         {
@@ -289,23 +277,19 @@ impl Engine {
             }
         }
 
-        // Execute the statement using the interpreter.
         let result = execute_with_interpreter_impl(db, new_script);
         match result {
             Ok(mut ctx) => {
-                // If it's a let statement, extract and return structured info.
                 if let datafun::ast::Statement::Let(let_stmt) = unit_statements.last().X() {
                     let name = let_stmt.name(db);
                     let name_str = name.as_str(db).to_string();
 
-                    // Get the type from the typechecker.
                     let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
                         datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
                     } else {
                         "unknown".to_string()
                     };
 
-                    // Get the value by pretty-printing.
                     let value_str = ctx.pretty_print_variable(name)
                         .unwrap_or_else(|e| format!("error: {:?}", e));
 
