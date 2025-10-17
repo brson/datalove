@@ -71,19 +71,75 @@ pub enum Eval {
 pub struct Engine {
     /// The datafun database for salsa-based compilation.
     db: datafun::Database,
-    /// The current script (Salsa input) tracking all submitted statements.
-    /// None if no statements have been submitted yet.
-    script: Option<datafun::script::Script>,
+    /// The REPL history tracking all commands and their evaluation state.
+    history: ReplHistory,
 }
 
 struct ReplHistory {
-    units: Vec<HistoryEntry>,
+    entries: Vec<HistoryEntry>,
+}
+
+impl ReplHistory {
+    fn new() -> Self {
+        ReplHistory {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Build a Script from all active script units in the history.
+    fn build_script(&self, db: &dyn datafun::Db) -> datafun::script::Script {
+        let active_units: Vec<_> = self.entries.iter()
+            .filter_map(|entry| entry.script_status.as_ref())
+            .filter(|status| status.active)
+            .map(|status| status.script_unit)
+            .collect();
+
+        datafun::script::Script::new(db, active_units)
+    }
+
+    fn build_script_with_unit(&self, db: &dyn datafun::Db, unit: datafun::script::ScriptUnit) -> datafun::script::Script {
+        let mut units: Vec<_> = self.entries.iter()
+            .filter_map(|entry| entry.script_status.as_ref())
+            .filter(|status| status.active)
+            .map(|status| status.script_unit)
+            .collect();
+        units.push(unit);
+
+        datafun::script::Script::new(db, units)
+    }
+
+    /// Add a new history entry with a script unit.
+    fn add_script_entry(&mut self, command: Command, script_unit: datafun::script::ScriptUnit) {
+        self.entries.push(HistoryEntry {
+            command,
+            last_eval: None,
+            script_status: Some(ScriptUnitStatus {
+                script_unit,
+                active: true,
+            }),
+        });
+    }
+
+    /// Add a new history entry without a script unit (for commands like expressions).
+    fn add_non_script_entry(&mut self, command: Command) {
+        self.entries.push(HistoryEntry {
+            command,
+            last_eval: None,
+            script_status: None,
+        });
+    }
+
+    fn deactivate_last(&mut self) {
+        let mut last = self.entries.last_mut().X();
+        let mut script_unit = last.script_status.as_mut().X();
+        script_unit.active = false;
+    }
 }
 
 struct HistoryEntry {
     command: Command,
     last_eval: Option<Eval>,
-    // Not all commands produce script units
+    // Not all commands produce script units.
     script_status: Option<ScriptUnitStatus>,
 }
 
@@ -91,36 +147,24 @@ struct ScriptUnitStatus {
     script_unit: datafun::script::ScriptUnit,
     // Whether the script unit is scheduled for evaluation.
     //
-    // This is autamotically turned off for new script units
+    // This is automatically turned off for new script units
     // if type checking fails.
     active: bool,
 }
 
-/// Create a new script with an additional statement.
+/// Create a new script unit from source text.
 ///
-/// This creates Salsa input structs (Script, ScriptUnit, Source)
+/// This creates Salsa input structs (ScriptUnit, Source)
 /// which don't require being in a tracked function context.
-fn prepare_new_script(
+fn create_script_unit(
     db: &dyn datafun::Db,
-    current_script: Option<datafun::script::Script>,
     source_text: String,
-) -> datafun::script::Script {
+) -> datafun::script::ScriptUnit {
     // Create Source input.
     let source_input = Source::new(db, source_text);
 
     // Create new ScriptUnit input.
-    let new_unit = datafun::script::ScriptUnit::new(db, source_input);
-
-    // Get current units or start with empty vec.
-    let current_units = match current_script {
-        Some(script) => script.units(db).clone(),
-        None => vec![],
-    };
-
-    // Create new Script with the new unit appended.
-    let mut updated_units = current_units;
-    updated_units.push(new_unit);
-    datafun::script::Script::new(db, updated_units)
+    datafun::script::ScriptUnit::new(db, source_input)
 }
 
 /// Tracked function to parse all script units into a single AST Script.
@@ -178,15 +222,18 @@ fn execute_with_interpreter_impl(
 /// but does not execute it. The caller must execute and pretty-print.
 fn create_expression_script(
     db: &dyn datafun::Db,
-    current_script: Option<datafun::script::Script>,
+    history: &ReplHistory,
     expression: &str,
 ) -> (datafun::script::Script, &'static str) {
     // Wrap the expression in a let statement with a temporary variable.
     let temp_var = "_expr_result";
     let let_statement = format!("let {} = {}", temp_var, expression);
 
-    // Create the new script with the let statement.
-    let new_script = prepare_new_script(db, current_script, let_statement);
+    // Create script unit for the temporary let statement.
+    let temp_unit = create_script_unit(db, let_statement);
+
+    // Build script from history plus the temporary unit.
+    let new_script = history.build_script_with_unit(db, temp_unit);
 
     (new_script, temp_var)
 }
@@ -217,14 +264,14 @@ impl Engine {
     pub fn new() -> AnyResult<Engine> {
         Ok(Engine {
             db: datafun::Database::default(),
-            script: None,
+            history: ReplHistory::new(),
         })
     }
 
     /// Reset the engine to a clean state.
     fn reset(&mut self) {
         self.db = datafun::Database::default();
-        self.script = None;
+        self.history = ReplHistory::new();
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -327,20 +374,32 @@ impl Engine {
     }
 
     fn eval_script_statement(&mut self, source: ScriptStatement) -> Eval {
-        let source_text = source.0;
+        // Create the new script unit.
+        let new_unit = create_script_unit(&self.db, source.0.C());
+
+        // Add to history (initially as active).
+        self.history.add_script_entry(Command::ScriptStatement(source), new_unit);
+
+        let eval = self.eval_current_script();
+
+        match &eval {
+            Eval::Error(_) | Eval::CrashReset(_) => {
+                self.history.deactivate_last();
+            }
+            Eval::Nothing | Eval::SuccessLet(_) | Eval::SuccessExpr(_) |
+            Eval::CallerInterpret(_) => {}
+        }
+
+        eval
+    }
+
+    fn eval_current_script(&mut self) -> Eval {
         let db = &self.db;
 
-        // Create the new script with the statement.
-        let new_script = prepare_new_script(
-            db,
-            self.script,
-            source_text,
-        );
+        // Build a script from the current history.
+        let new_script = self.history.build_script(db);
 
-        // Store the new script.
-        self.script = Some(new_script);
-
-        // Get the index of the new unit.
+        // Get the index of the new unit in the script.
         let unit_index = new_script.units(db).len() - 1;
 
         // Parse the new unit.
@@ -429,10 +488,10 @@ impl Engine {
         let db = &self.db;
 
         // Create the script with the expression wrapped in a let statement.
-        // This is temporary - we won't persist it to avoid polluting the environment.
+        // This is temporary - we won't persist it to the history.
         let (new_script, temp_var) = create_expression_script(
             db,
-            self.script,
+            &self.history,
             &source,
         );
 
@@ -468,7 +527,7 @@ impl Engine {
                 };
 
                 // Return SuccessExpr with the result.
-                // Note: We don't update self.script here, so _expr_result won't be in the environment.
+                // Note: We don't update the history here, so _expr_result won't be in the environment.
                 Eval::SuccessExpr(EvalExpr {
                     expr_kind: "expression".to_string(),
                     ty: ty_str,
@@ -484,9 +543,8 @@ impl Engine {
     pub fn get_environment(&self) -> Vec<(String, String, String)> {
         let mut bindings = Vec::new();
 
-        let Some(script) = self.script else {
-            return bindings;
-        };
+        // Build a script from the current history.
+        let script = self.history.build_script(&self.db);
 
         let db = &self.db;
 
@@ -652,11 +710,11 @@ mod tests {
             other => panic!("Expected Command, got {:?}", other),
         }
 
-        // Verify the script was created.
-        assert!(engine.script.is_some());
+        // Verify the history has entries.
+        assert!(!engine.history.units.is_empty());
 
-        // Verify we can execute the interpreter.
-        let script = engine.script.unwrap();
+        // Verify we can execute the interpreter with the current script.
+        let script = engine.history.build_script(&engine.db);
         let result = engine.execute_with_interpreter(script);
         assert!(result.is_ok());
     }
@@ -694,8 +752,9 @@ mod tests {
             other => panic!("Expected Command, got {:?}", other),
         }
 
-        // Verify the script was NOT updated (expression eval shouldn't persist).
-        assert!(engine.script.is_some());
+        // Verify the history contains only the let statement, not the expression.
+        // Expression evaluations should not persist to the history.
+        assert_eq!(engine.history.units.len(), 1);
     }
 
     #[test]
