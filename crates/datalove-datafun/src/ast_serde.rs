@@ -85,6 +85,7 @@ pub enum ExprFunKind {
     Datalit { value: Box<crate::datalit::ast_serde::ExprFull> },
     Name { name: String },
     BinOp(ExprBinOp),
+    FunctionCall(ExprFunctionCall),
     ParseError(ExprFunParseError),
 }
 
@@ -93,6 +94,12 @@ pub struct ExprBinOp {
     pub op: BinOp,
     pub lhs: Box<ExprFun>,
     pub rhs: Box<ExprFun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprFunctionCall {
+    pub name: String,
+    pub args: Vec<ExprFun>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -243,6 +250,7 @@ impl ExprFunKind {
                 name: n.as_str(db).to_string(),
             },
             crate::ast::ExprFunKind::BinOp(b) => ExprFunKind::BinOp(ExprBinOp::from_ast(db, b)),
+            crate::ast::ExprFunKind::FunctionCall(f) => ExprFunKind::FunctionCall(ExprFunctionCall::from_ast(db, f)),
             crate::ast::ExprFunKind::ParseError(e) => ExprFunKind::ParseError(ExprFunParseError::from_ast(db, e)),
         }
     }
@@ -254,6 +262,15 @@ impl ExprBinOp {
             op: BinOp::from_ast(ast.op(db)),
             lhs: Box::new(ExprFun::from_ast(db, ast.lhs(db))),
             rhs: Box::new(ExprFun::from_ast(db, ast.rhs(db))),
+        }
+    }
+}
+
+impl ExprFunctionCall {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFunctionCall<'db>) -> Self {
+        ExprFunctionCall {
+            name: ast.name(db).as_str(db).to_string(),
+            args: ast.args(db).iter().map(|a| ExprFun::from_ast(db, *a)).collect(),
         }
     }
 }

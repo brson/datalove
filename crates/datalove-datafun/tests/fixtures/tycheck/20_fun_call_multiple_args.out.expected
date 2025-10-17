@@ -1,0 +1,25 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "add",
+      "params": [
+        {
+          "name": "a",
+          "type": "@u32"
+        },
+        {
+          "name": "b",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "@u32"
+    },
+    {
+      "kind": "variable",
+      "name": "result",
+      "type": "u32"
+    }
+  ]
+}

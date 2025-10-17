@@ -1,0 +1,5 @@
+fun double(x: @u32): @u32
+  ret x + x
+end fun
+
+let output = double(@21)

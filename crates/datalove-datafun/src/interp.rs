@@ -33,6 +33,9 @@ pub enum InterpError {
 
     /// Runtime error.
     RuntimeError(String),
+
+    /// Return value from function (not a real error, used for control flow).
+    Return(Value),
 }
 
 /// Interpreter context.
@@ -107,11 +110,10 @@ impl<'db> InterpContext<'db> {
                 Ok(())
             }
 
-            Statement::Ret(_) => {
-                // Return statements are handled by function execution.
-                Err(InterpError::RuntimeError(
-                    "Return statement outside of function".to_string(),
-                ))
+            Statement::Ret(stmt) => {
+                // Evaluate the return value and throw it as a Return "error" for control flow.
+                let value = crate::eval_datafun::eval_expr(self, stmt.value(self.db))?;
+                Err(InterpError::Return(value))
             }
 
             Statement::Require(_) => {

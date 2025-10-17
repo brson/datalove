@@ -147,6 +147,13 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
                 self.visit_datafun_expr(binop.rhs(self.db))?;
                 // TODO: Store the result type of the binop.
             }
+            ExprFunKind::FunctionCall(call) => {
+                // Visit all argument expressions.
+                for arg in call.args(self.db) {
+                    self.visit_datafun_expr(*arg)?;
+                }
+                // TODO: Store the result type of the function call.
+            }
             ExprFunKind::ParseError(_) => {}
         }
         Ok(())

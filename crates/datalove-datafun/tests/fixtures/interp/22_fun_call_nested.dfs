@@ -1,0 +1,6 @@
+fun double(x: @u32): @u32
+  ret x + x
+end fun
+
+let x = @10
+let output = double(x)

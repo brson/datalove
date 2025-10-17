@@ -320,6 +320,10 @@ fn synthesize_expr<'db>(
             synthesize_binop(ctx, binop)
         }
 
+        ExprFunKind::FunctionCall(call) => {
+            synthesize_function_call(ctx, call)
+        }
+
         ExprFunKind::ParseError(_) => {
             Err(TypeError::CannotSynthesize)
         }
@@ -408,6 +412,39 @@ fn synthesize_binop<'db>(
     };
 
     Ok(result_ty)
+}
+
+/// Synthesize type for function call.
+fn synthesize_function_call<'db>(
+    ctx: &mut TypeContext<'db>,
+    call: ExprFunctionCall<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let name = call.name(db);
+    let args = call.args(db);
+
+    // Look up function signature.
+    let func_type = ctx.lookup_function(name)
+        .ok_or_else(|| TypeError::UnresolvedName(name.as_str(db).to_string()))?;
+
+    let param_types = func_type.param_types(db);
+    let return_type = func_type.return_type(db);
+
+    // Check argument count.
+    if args.len() != param_types.len() {
+        return Err(TypeError::ArityMismatch {
+            expected: param_types.len(),
+            actual: args.len(),
+        });
+    }
+
+    // Check each argument type.
+    for (arg, expected_param_ty) in args.iter().zip(param_types.iter()) {
+        check_expr(ctx, *arg, *expected_param_ty)?;
+    }
+
+    // Return the function's return type.
+    Ok(return_type)
 }
 
 /// Check if a type is numeric.

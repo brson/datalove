@@ -16,6 +16,8 @@ pub fn eval_expr<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>) -> Inter
 
         ExprFunKind::BinOp(binop) => eval_binop(ctx, binop),
 
+        ExprFunKind::FunctionCall(call) => eval_function_call(ctx, call),
+
         ExprFunKind::ParseError(err) => {
             let message = err.message(ctx.db);
             Err(InterpError::RuntimeError(
@@ -462,6 +464,84 @@ fn eval_ne(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
             "Unsupported types for inequality".to_string(),
         )),
     }
+}
+
+/// Evaluate a function call.
+fn eval_function_call<'db>(
+    ctx: &mut InterpContext<'db>,
+    call: crate::ast::ExprFunctionCall<'db>,
+) -> InterpResult {
+    let name = call.name(ctx.db);
+    let args = call.args(ctx.db);
+
+    // Look up the function definition (need to copy since we'll borrow ctx mutably later).
+    let func = *ctx.functions.get(&name)
+        .ok_or_else(|| InterpError::UnresolvedName(name.as_str(ctx.db).to_string()))?;
+
+    let params = func.params(ctx.db);
+    let body = func.body(ctx.db);
+
+    // Evaluate arguments.
+    let mut arg_values = Vec::new();
+    for arg in args {
+        let value = eval_expr(ctx, *arg)?;
+        arg_values.push(value);
+    }
+
+    // Save parameter names that we're about to shadow.
+    let mut shadowed_vars: Vec<(bct::text::InternedText<'db>, Option<Value>)> = Vec::new();
+    for param in params {
+        let param_name = param.name(ctx.db);
+        let old_value = ctx.variables.remove(&param_name);
+        shadowed_vars.push((param_name, old_value));
+    }
+
+    // Bind parameters to argument values.
+    for (param, arg_value) in params.iter().zip(arg_values.into_iter()) {
+        ctx.variables.insert(param.name(ctx.db), arg_value);
+    }
+
+    // Execute function body.
+    let mut result = Err(InterpError::RuntimeError(
+        "Function did not return a value".to_string(),
+    ));
+
+    for stmt in body {
+        match ctx.exec_stmt(stmt) {
+            Ok(()) => {
+                // Continue executing statements.
+            }
+            Err(InterpError::Return(value)) => {
+                // Got a return value.
+                result = Ok(value);
+                break;
+            }
+            Err(e) => {
+                // Propagate other errors.
+                result = Err(e);
+                break;
+            }
+        }
+    }
+
+    // Restore shadowed variables.
+    // First, free the parameter values.
+    for (param_name, _) in &shadowed_vars {
+        if let Some(mut param_value) = ctx.variables.remove(param_name) {
+            unsafe {
+                param_value.free(&mut ctx.rt);
+            }
+        }
+    }
+
+    // Then restore old values.
+    for (param_name, old_value) in shadowed_vars {
+        if let Some(old_val) = old_value {
+            ctx.variables.insert(param_name, old_val);
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]

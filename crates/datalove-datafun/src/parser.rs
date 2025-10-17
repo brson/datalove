@@ -293,6 +293,49 @@ impl<'db> Parser<'db> {
         params
     }
 
+    fn parse_function_call_args(
+        &mut self,
+        iter: BracerIter<'db>,
+    ) -> Vec<ast::ExprFun<'db>> {
+        let tokens: Vec<TreeToken<'db>> = iter.filter_map(|t| t.without_space(self.db)).collect();
+        if tokens.is_empty() {
+            return vec![];
+        }
+
+        // Split tokens by comma to get individual argument token groups.
+        let mut arg_token_groups: Vec<Vec<TreeToken<'db>>> = vec![];
+        let mut current_group: Vec<TreeToken<'db>> = vec![];
+
+        for token in tokens {
+            match token {
+                TreeToken::Token(t) if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) => {
+                    if !current_group.is_empty() {
+                        arg_token_groups.push(current_group);
+                        current_group = vec![];
+                    }
+                }
+                _ => {
+                    current_group.push(token);
+                }
+            }
+        }
+
+        // Don't forget the last group.
+        if !current_group.is_empty() {
+            arg_token_groups.push(current_group);
+        }
+
+        // Parse each argument group.
+        let mut args = vec![];
+        for group in arg_token_groups {
+            let mut group_iter = group.into_iter().peekable();
+            let arg = self.parse_expr_full(&mut group_iter);
+            args.push(arg);
+        }
+
+        args
+    }
+
     fn parse_ret(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
@@ -556,13 +599,31 @@ impl<'db> Parser<'db> {
                                     self.parse_datalit_expr(tokens)
                                 }
                                 _ => {
-                                    // It's a datafun name.
+                                    // It's a datafun name or function call.
                                     tokens.next(); // consume the token
                                     let name = InternedText::new(self.db, word.S());
-                                    ast::ExprFun::new(
-                                        self.db,
-                                        ast::ExprFunKind::Name(name)
-                                    )
+
+                                    // Check if followed by parentheses (function call).
+                                    if let Some(TreeToken::Branch(Sigil::ParenOpen, args_iter)) = tokens.peek() {
+                                        // It's a function call.
+                                        let args_iter = match tokens.next() {
+                                            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
+                                            _ => unreachable!(),
+                                        };
+                                        let args = self.parse_function_call_args(args_iter);
+                                        ast::ExprFun::new(
+                                            self.db,
+                                            ast::ExprFunKind::FunctionCall(
+                                                ast::ExprFunctionCall::new(self.db, name, args)
+                                            )
+                                        )
+                                    } else {
+                                        // It's just a variable name.
+                                        ast::ExprFun::new(
+                                            self.db,
+                                            ast::ExprFunKind::Name(name)
+                                        )
+                                    }
                                 }
                             }
                         } else {

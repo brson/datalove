@@ -88,10 +88,12 @@ pub struct ExprFun<'db> {
 pub enum ExprFunKind<'db> {
     // Wrap datalit expression (literals, tuples, structs, etc.)
     Datalit(datalit::ast::ExprFull<'db>),
-    // Bare name/identifier (for variables, function calls, etc.)
+    // Bare name/identifier (for variables)
     Name(InternedText<'db>),
     // Binary operation
     BinOp(ExprBinOp<'db>),
+    // Function call
+    FunctionCall(ExprFunctionCall<'db>),
     // Parse error
     ParseError(ExprFunParseError<'db>),
 }
@@ -101,6 +103,13 @@ pub struct ExprBinOp<'db> {
     pub op: BinOp,
     pub lhs: ExprFun<'db>,
     pub rhs: ExprFun<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprFunctionCall<'db> {
+    pub name: InternedText<'db>,
+    #[returns(ref)]
+    pub args: Vec<ExprFun<'db>>,
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
