@@ -7,11 +7,19 @@ use bct::input::Source;
 use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, InputParse, Input};
 use crate::datafun;
 
+/// An environment binding from the REPL.
+#[derive(Clone, Debug)]
+struct EnvBinding {
+    name: String,
+    ty: String,
+    value: String,
+}
+
 pub struct Engine {
     db: datafun::Database,
     history: ReplHistory,
     /// Cached environment from the last successful script evaluation.
-    cached_environment: Vec<(String, String, String)>,
+    cached_environment: Vec<EnvBinding>,
 }
 
 struct ReplHistory {
@@ -361,7 +369,10 @@ impl Engine {
     /// Get current environment bindings (functions and let statements).
     /// Returns a list of (name, type, value) triples.
     pub fn get_environment(&self) -> Vec<(String, String, String)> {
-        self.cached_environment.clone()
+        self.cached_environment
+            .iter()
+            .map(|binding| (binding.name.clone(), binding.ty.clone(), binding.value.clone()))
+            .collect()
     }
 
     /// Execute a script file line by line and output JSON results.
@@ -459,7 +470,7 @@ fn extract_environment<'a>(
     script: datafun::script::Script,
     parsed_script: datafun::ast::Script,
     ctx: &mut datafun::interp::InterpContext<'a>,
-) -> Vec<(String, String, String)> {
+) -> Vec<EnvBinding> {
     let mut bindings = Vec::new();
 
     // Get resolved function units.
@@ -472,7 +483,11 @@ fn extract_environment<'a>(
         for stmt in parsed.statements(db) {
             if let datafun::ast::Statement::Fun(fun) = stmt {
                 let name = fun.name(db).as_str(db).to_string();
-                bindings.push((name, "function".to_string(), "".to_string()));
+                bindings.push(EnvBinding {
+                    name,
+                    ty: "function".to_string(),
+                    value: "".to_string(),
+                });
             }
         }
     }
@@ -497,7 +512,11 @@ fn extract_environment<'a>(
                 let value_str = ctx.pretty_print_variable(name)
                     .unwrap_or_else(|_| "error".to_string());
 
-                bindings.push((name_str, ty_str, value_str));
+                bindings.push(EnvBinding {
+                    name: name_str,
+                    ty: ty_str,
+                    value: value_str,
+                });
             }
         }
     }
