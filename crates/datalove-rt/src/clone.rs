@@ -18,7 +18,8 @@ pub unsafe fn clone_value(
     assert!(!value_out.is_null());
 
     unsafe {
-        clone_impl(rt, value_in, tydesc_in, value_out)
+        let ty = rtdt::TyDescRef::from_ptr(tydesc_in);
+        clone_impl(rt, value_in, ty, value_out)
     }
 }
 
@@ -26,20 +27,20 @@ pub unsafe fn clone_value(
 unsafe fn clone_impl(
     rt: LocalRtHandle,
     value_in: *const u8,
-    tydesc: *const rtdt::TyDesc,
+    tydesc: rtdt::TyDescRef,
     value_out: *mut u8,
 ) -> RtStatus {
     use rtdt::TyTag;
 
-    let ty = unsafe { &*tydesc };
+    let ty = tydesc;
 
-    match ty.type_tag {
+    match ty.type_tag() {
         // Scalars - just copy bytes.
         TyTag::Bool | TyTag::U8 | TyTag::I8 | TyTag::U16 | TyTag::I16 |
         TyTag::U32 | TyTag::I32 | TyTag::U64 | TyTag::I64 |
         TyTag::F32 | TyTag::F64 => {
             unsafe {
-                std::ptr::copy_nonoverlapping(value_in, value_out, ty.size as usize);
+                std::ptr::copy_nonoverlapping(value_in, value_out, ty.size() as usize);
             }
             RtStatus::Ok
         }
@@ -114,17 +115,12 @@ unsafe fn clone_impl(
 
         // Tuple - recursively clone each field.
         TyTag::Tuple => {
-            let tuple_info = unsafe { ty.type_info.tuple };
-            let num_fields = tuple_info.num_fields;
-            let fields = tuple_info.fields;
-
-            for i in 0..num_fields {
-                let field_info = unsafe { &*fields.add(i as usize) };
-                let field_in = unsafe { value_in.add(field_info.offset as usize) };
-                let field_out = unsafe { value_out.add(field_info.offset as usize) };
+            for field in ty.iter_tuple_fields() {
+                let field_in = unsafe { value_in.add(field.offset() as usize) };
+                let field_out = unsafe { value_out.add(field.offset() as usize) };
 
                 let status = unsafe {
-                    clone_impl(rt, field_in, field_info.tydesc, field_out)
+                    clone_impl(rt, field_in, field.tydesc(), field_out)
                 };
 
                 if status != RtStatus::Ok {
@@ -137,17 +133,12 @@ unsafe fn clone_impl(
 
         // Struct - recursively clone each field.
         TyTag::Struct => {
-            let struct_info = unsafe { ty.type_info.struct_ };
-            let num_fields = struct_info.num_fields;
-            let fields = struct_info.fields;
-
-            for i in 0..num_fields {
-                let field_info = unsafe { &*fields.add(i as usize) };
-                let field_in = unsafe { value_in.add(field_info.offset as usize) };
-                let field_out = unsafe { value_out.add(field_info.offset as usize) };
+            for field in ty.iter_struct_fields() {
+                let field_in = unsafe { value_in.add(field.offset() as usize) };
+                let field_out = unsafe { value_out.add(field.offset() as usize) };
 
                 let status = unsafe {
-                    clone_impl(rt, field_in, field_info.tydesc, field_out)
+                    clone_impl(rt, field_in, field.tydesc(), field_out)
                 };
 
                 if status != RtStatus::Ok {
@@ -160,7 +151,7 @@ unsafe fn clone_impl(
 
         // Enum - copy discriminant and clone payload if present.
         TyTag::Enum => {
-            let enum_info = unsafe { ty.type_info.enum_ };
+            let enum_info = ty.enum_info();
             let discriminant = unsafe { *(value_in as *const u32) };
 
             // Copy discriminant.
@@ -169,16 +160,16 @@ unsafe fn clone_impl(
             }
 
             // Find variant and clone payload if it exists.
-            if (discriminant as usize) < enum_info.num_variants as usize {
-                let variant_info = unsafe { &*enum_info.variants.add(discriminant as usize) };
+            if (discriminant as usize) < enum_info.num_variants() as usize {
+                if let core::option::Option::Some(variant) = enum_info.variant(discriminant as usize) {
+                    if let core::option::Option::Some(payload_ty) = variant.payload() {
+                        let payload_in = unsafe { value_in.add(variant.offset() as usize) };
+                        let payload_out = unsafe { value_out.add(variant.offset() as usize) };
 
-                if !variant_info.payload.is_null() {
-                    let payload_in = unsafe { value_in.add(variant_info.offset as usize) };
-                    let payload_out = unsafe { value_out.add(variant_info.offset as usize) };
-
-                    return unsafe {
-                        clone_impl(rt, payload_in, variant_info.payload, payload_out)
-                    };
+                        return unsafe {
+                            clone_impl(rt, payload_in, payload_ty, payload_out)
+                        };
+                    }
                 }
             }
 
@@ -190,9 +181,8 @@ unsafe fn clone_impl(
             let list_in = unsafe { &*(value_in as *const rtdt::List) };
             let list_out = unsafe { &mut *(value_out as *mut rtdt::List) };
 
-            let list_info = unsafe { ty.type_info.list };
-            let elem_tydesc = list_info.element_tydesc;
-            let elem_size = unsafe { (*elem_tydesc).size };
+            let elem_ty = ty.list_element_ty();
+            let elem_size = elem_ty.size();
 
             if list_in.size == 0 || list_in.data.is_null() {
                 // Empty list.
@@ -202,7 +192,7 @@ unsafe fn clone_impl(
             } else {
                 // Allocate new list buffer.
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                let elem_align = unsafe { (*elem_tydesc).align };
+                let elem_align = elem_ty.align();
                 let new_data = unsafe { rt_ref.alloc.alloc(elem_size, elem_align, list_in.size) };
 
                 // Clone each element.
@@ -211,7 +201,7 @@ unsafe fn clone_impl(
                     let elem_out = unsafe { new_data.add((i * elem_size) as usize) };
 
                     let status = unsafe {
-                        clone_impl(rt, elem_in, elem_tydesc, elem_out)
+                        clone_impl(rt, elem_in, elem_ty, elem_out)
                     };
 
                     if status != RtStatus::Ok {
@@ -236,17 +226,16 @@ unsafe fn clone_impl(
                 map_out.root = std::ptr::null();
                 map_out.len = 0;
             } else {
-                let map_info = unsafe { ty.type_info.map };
-                let key_tydesc = map_info.key_tydesc;
-                let value_tydesc = map_info.value_tydesc;
+                let key_ty = ty.map_key_ty();
+                let value_ty = ty.map_value_ty();
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
                     crate::btreemap::btreemap_clone_tree(
                         rt_ref,
                         map_in.root,
-                        key_tydesc,
-                        value_tydesc,
+                        key_ty.as_ptr(),
+                        value_ty.as_ptr(),
                     )
                 };
 
@@ -270,15 +259,14 @@ unsafe fn clone_impl(
                 set_out.root = std::ptr::null();
                 set_out.len = 0;
             } else {
-                let set_info = unsafe { ty.type_info.set };
-                let element_tydesc = set_info.element_tydesc;
+                let element_ty = ty.set_element_ty();
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
                     crate::set::set_clone_tree(
                         rt_ref,
                         set_in.root,
-                        element_tydesc,
+                        element_ty.as_ptr(),
                     )
                 };
 
@@ -302,9 +290,8 @@ unsafe fn clone_impl(
             opt_out.tag = opt_in.tag;
 
             if opt_in.tag == rtdt::OptionTag::Some {
-                let opt_info = unsafe { ty.type_info.option };
-                let inner_tydesc = opt_info.inner_tydesc;
-                let inner_align = unsafe { (*inner_tydesc).align };
+                let inner_ty = ty.option_inner_ty();
+                let inner_align = inner_ty.align();
 
                 // Compute payload offset.
                 let payload_offset = rtdt::layout::align_up(1, inner_align);
@@ -313,7 +300,7 @@ unsafe fn clone_impl(
                 let payload_out = unsafe { value_out.add(payload_offset as usize) };
 
                 return unsafe {
-                    clone_impl(rt, payload_in, inner_tydesc, payload_out)
+                    clone_impl(rt, payload_in, inner_ty, payload_out)
                 };
             }
 
@@ -328,20 +315,19 @@ unsafe fn clone_impl(
             // Copy tag.
             res_out.tag = res_in.tag;
 
-            let res_info = unsafe { ty.type_info.result };
-            let ok_tydesc = res_info.ok_tydesc;
+            let ok_ty = ty.result_ok_ty();
 
             // For now, we only handle Ok case.
             // Error type cloning would need the error tydesc.
             if res_in.tag == rtdt::ResultTag::Ok {
-                let ok_align = unsafe { (*ok_tydesc).align };
+                let ok_align = ok_ty.align();
                 let payload_offset = rtdt::layout::align_up(1, ok_align);
 
                 let payload_in = unsafe { value_in.add(payload_offset as usize) };
                 let payload_out = unsafe { value_out.add(payload_offset as usize) };
 
                 return unsafe {
-                    clone_impl(rt, payload_in, ok_tydesc, payload_out)
+                    clone_impl(rt, payload_in, ok_ty, payload_out)
                 };
             }
 

@@ -15,10 +15,10 @@ pub unsafe fn any_destroy_local(
     }
 
     unsafe {
-        let ty = &*tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(tydesc);
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
 
-        match ty.type_tag {
+        match ty.type_tag() {
             // Primitives - no allocations to free.
             rtdt::TyTag::Bool
             | rtdt::TyTag::U8
@@ -65,13 +65,12 @@ pub unsafe fn any_destroy_local(
             rtdt::TyTag::List => {
                 let list_ptr = value_in as *mut rtdt::List;
                 let list = &*list_ptr;
-                let list_info = ty.type_info.list;
-                let element_tydesc = list_info.element_tydesc;
-                let element_ty = &*element_tydesc;
+                let element_ty = ty.list_element_ty();
+                let element_tydesc = element_ty.as_ptr();
 
                 // Recursively destroy each element.
                 if !list.data.is_null() && list.size > 0 {
-                    let element_size = element_ty.size as usize;
+                    let element_size = element_ty.size() as usize;
                     for i in 0..list.size {
                         let element_ptr = (list.data as *mut u8).add((i as usize) * element_size);
                         let status = any_destroy_local(rt, element_ptr, element_tydesc);
@@ -83,7 +82,7 @@ pub unsafe fn any_destroy_local(
 
                 // Free the list buffer if it exists.
                 if !list.data.is_null() && list.capacity > 0 {
-                    rt_ref.alloc.free(element_ty.size, element_ty.align, list.capacity, list.data as *mut u8);
+                    rt_ref.alloc.free(element_ty.size(), element_ty.align(), list.capacity, list.data as *mut u8);
                 }
 
                 // Clear the list fields.
@@ -101,15 +100,9 @@ pub unsafe fn any_destroy_local(
 
             // Tuple - recursively destroy fields.
             rtdt::TyTag::Tuple => {
-                let tuple_info = ty.type_info.tuple;
-                let fields = std::slice::from_raw_parts(
-                    tuple_info.fields,
-                    tuple_info.num_fields as usize,
-                );
-
-                for field in fields {
-                    let field_ptr = value_in.add(field.offset as usize);
-                    let status = any_destroy_local(rt, field_ptr, field.tydesc);
+                for field in ty.iter_tuple_fields() {
+                    let field_ptr = value_in.add(field.offset() as usize);
+                    let status = any_destroy_local(rt, field_ptr, field.tydesc().as_ptr());
                     if status != RtStatus::Ok {
                         return status;
                     }
@@ -120,15 +113,9 @@ pub unsafe fn any_destroy_local(
 
             // Struct - recursively destroy fields.
             rtdt::TyTag::Struct => {
-                let struct_info = ty.type_info.struct_;
-                let fields = std::slice::from_raw_parts(
-                    struct_info.fields,
-                    struct_info.num_fields as usize,
-                );
-
-                for field in fields {
-                    let field_ptr = value_in.add(field.offset as usize);
-                    let status = any_destroy_local(rt, field_ptr, field.tydesc);
+                for field in ty.iter_struct_fields() {
+                    let field_ptr = value_in.add(field.offset() as usize);
+                    let status = any_destroy_local(rt, field_ptr, field.tydesc().as_ptr());
                     if status != RtStatus::Ok {
                         return status;
                     }
@@ -139,7 +126,7 @@ pub unsafe fn any_destroy_local(
 
             // Enum - check tag and destroy payload.
             rtdt::TyTag::Enum => {
-                let enum_info = ty.type_info.enum_;
+                let enum_info = ty.enum_info();
                 let layout = rtdt::layout::compute_enum_layout(tydesc);
 
                 // Read the discriminant (u32 at offset 0).
@@ -147,20 +134,16 @@ pub unsafe fn any_destroy_local(
                 let discriminant = *discriminant_ptr;
 
                 // Find the variant.
-                if discriminant < enum_info.num_variants {
-                    let variants = std::slice::from_raw_parts(
-                        enum_info.variants,
-                        enum_info.num_variants as usize,
-                    );
-                    let variant = &variants[discriminant as usize];
-
-                    // If variant has payload, destroy it.
-                    if !variant.payload.is_null() {
-                        let payload_offset = layout.variant_offsets[discriminant as usize];
-                        let payload_ptr = value_in.add(payload_offset as usize);
-                        let status = any_destroy_local(rt, payload_ptr, variant.payload);
-                        if status != RtStatus::Ok {
-                            return status;
+                if discriminant < enum_info.num_variants() {
+                    if let core::option::Option::Some(variant) = enum_info.variant(discriminant as usize) {
+                        // If variant has payload, destroy it.
+                        if let core::option::Option::Some(payload_ty) = variant.payload() {
+                            let payload_offset = layout.variant_offsets[discriminant as usize];
+                            let payload_ptr = value_in.add(payload_offset as usize);
+                            let status = any_destroy_local(rt, payload_ptr, payload_ty.as_ptr());
+                            if status != RtStatus::Ok {
+                                return status;
+                            }
                         }
                     }
                 }
@@ -174,10 +157,10 @@ pub unsafe fn any_destroy_local(
                 let tag = (*option_ptr).tag;
 
                 if tag == rtdt::OptionTag::Some {
-                    let option_info = ty.type_info.option;
+                    let inner_ty = ty.option_inner_ty();
                     let layout = rtdt::layout::compute_option_layout(tydesc);
                     let payload_ptr = value_in.add(layout.payload_offset as usize);
-                    any_destroy_local(rt, payload_ptr, option_info.inner_tydesc)
+                    any_destroy_local(rt, payload_ptr, inner_ty.as_ptr())
                 } else {
                     RtStatus::Ok
                 }
@@ -188,13 +171,13 @@ pub unsafe fn any_destroy_local(
                 let result_ptr = value_in as *const rtdt::Result;
                 let tag = (*result_ptr).tag;
 
-                let result_info = ty.type_info.result;
+                let ok_ty = ty.result_ok_ty();
                 let layout = rtdt::layout::compute_result_layout(tydesc);
                 let payload_ptr = value_in.add(layout.payload_offset as usize);
 
                 match tag {
                     rtdt::ResultTag::Ok => {
-                        any_destroy_local(rt, payload_ptr, result_info.ok_tydesc)
+                        any_destroy_local(rt, payload_ptr, ok_ty.as_ptr())
                     }
                     rtdt::ResultTag::Err => {
                         // Error type is not parameterized - need to figure out how to destroy it.
@@ -222,8 +205,8 @@ pub unsafe fn any_destroy_local(
                             }
 
                             // Free the inner value allocation.
-                            let inner_ty = &*inner_tydesc;
-                            rt_ref.alloc.free(inner_ty.size, inner_ty.align, 1, inner_value_ptr as *mut u8);
+                            let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
+                            rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
                         }
 
                         RtStatus::Ok
@@ -259,8 +242,8 @@ pub unsafe fn any_destroy_local(
                             }
 
                             // Free the inner value allocation.
-                            let inner_ty = &*inner_tydesc;
-                            rt_ref.alloc.free(inner_ty.size, inner_ty.align, 1, inner_value_ptr as *mut u8);
+                            let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
+                            rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
                         }
 
                         RtStatus::Ok

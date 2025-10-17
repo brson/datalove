@@ -43,8 +43,9 @@ pub unsafe fn list_destroy_impl(
             return RtStatus::Error;
         }
 
-        let list_info = (*tydesc).type_info.list;
-        let element_tydesc = list_info.element_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(tydesc);
+        let element_ty = ty.list_element_ty();
+        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = value_in as *mut List;
         let data_ptr = (*list_ptr).data as *mut u8;
@@ -61,7 +62,7 @@ pub unsafe fn list_destroy_impl(
 
         // Free the buffer.
         if !data_ptr.is_null() && capacity > 0 {
-            rt.alloc.free((*element_tydesc).size, (*element_tydesc).align, capacity, data_ptr);
+            rt.alloc.free(element_ty.size(), element_ty.align(), capacity, data_ptr);
         }
 
         // Reset the list.
@@ -84,8 +85,9 @@ pub unsafe fn list_clear_impl(
             return RtStatus::Error;
         }
 
-        let list_info = (*tydesc).type_info.list;
-        let element_tydesc = list_info.element_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(tydesc);
+        let element_ty = ty.list_element_ty();
+        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = value_mut as *mut List;
         let data_ptr = (*list_ptr).data as *mut u8;
@@ -129,8 +131,9 @@ pub unsafe fn list_get_impl(
             return RtStatus::Error;
         }
 
-        let list_info = (*list_tydesc).type_info.list;
-        let element_tydesc = list_info.element_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_ty = ty.list_element_ty();
+        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = list_value_ref as *const List;
         let size = (*list_ptr).size;
@@ -148,7 +151,7 @@ pub unsafe fn list_get_impl(
 
         // Clone element to option payload.
         let data_ptr = (*list_ptr).data;
-        let element_size = (*element_tydesc).size as usize;
+        let element_size = element_ty.size() as usize;
         let element_ptr = (data_ptr as *const u8).add(index as usize * element_size);
 
         let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
@@ -274,8 +277,9 @@ pub unsafe fn list_pop_impl(
             return RtStatus::Error;
         }
 
-        let list_info = (*list_tydesc).type_info.list;
-        let element_tydesc = list_info.element_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_ty = ty.list_element_ty();
+        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
@@ -293,7 +297,7 @@ pub unsafe fn list_pop_impl(
 
         // Move last element to option payload.
         let data_ptr = (*list_ptr).data as *mut u8;
-        let element_size = (*element_tydesc).size as usize;
+        let element_size = element_ty.size() as usize;
         let last_element_ptr = data_ptr.add((size - 1) as usize * element_size);
         std::ptr::copy_nonoverlapping(last_element_ptr, option_payload_ptr, element_size);
 
@@ -384,8 +388,9 @@ pub unsafe fn list_remove_impl(
             return RtStatus::Error;
         }
 
-        let list_info = (*list_tydesc).type_info.list;
-        let element_tydesc = list_info.element_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_ty = ty.list_element_ty();
+        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
@@ -402,7 +407,7 @@ pub unsafe fn list_remove_impl(
         }
 
         let data_ptr = (*list_ptr).data as *mut u8;
-        let element_size = (*element_tydesc).size as usize;
+        let element_size = element_ty.size() as usize;
         let element_ptr = data_ptr.add(index as usize * element_size);
 
         // Move element to option payload.
@@ -441,8 +446,9 @@ pub unsafe fn list_reserve_impl(
             return RtStatus::Error;
         }
 
-        let list_info = (*list_tydesc).type_info.list;
-        let element_tydesc = list_info.element_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_ty = ty.list_element_ty();
+        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
@@ -469,8 +475,8 @@ pub unsafe fn list_shrink_to_fit_impl(
             return RtStatus::Error;
         }
 
-        let list_info = (*list_tydesc).type_info.list;
-        let element_tydesc = list_info.element_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_ty = ty.list_element_ty();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
@@ -481,8 +487,8 @@ pub unsafe fn list_shrink_to_fit_impl(
         }
 
         let old_data = (*list_ptr).data as *mut u8;
-        let element_size = (*element_tydesc).size;
-        let element_align = (*element_tydesc).align;
+        let element_size = element_ty.size();
+        let element_align = element_ty.align();
 
         // If size is 0, just free the buffer.
         if size == 0 {

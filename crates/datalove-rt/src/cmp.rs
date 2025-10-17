@@ -32,10 +32,12 @@ pub unsafe fn eq(
     assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
 
     unsafe {
-        if !eq_tydesc(tydesc_a, tydesc_b) {
+        let td_a = rtdt::TyDescRef::from_ptr(tydesc_a);
+        let td_b = rtdt::TyDescRef::from_ptr(tydesc_b);
+        if !eq_tydesc(td_a, td_b) {
             return crate::RtEq::Error;
         }
-        if eq_value(value_a, value_b, tydesc_a, FloatEqPolicy::Ieee) {
+        if eq_value(value_a, value_b, td_a, FloatEqPolicy::Ieee) {
             crate::RtEq::Equals
         } else {
             crate::RtEq::NotEquals
@@ -53,10 +55,12 @@ pub unsafe fn eq_unique(
     assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
 
     unsafe {
-        if !eq_tydesc(tydesc_a, tydesc_b) {
+        let td_a = rtdt::TyDescRef::from_ptr(tydesc_a);
+        let td_b = rtdt::TyDescRef::from_ptr(tydesc_b);
+        if !eq_tydesc(td_a, td_b) {
             return crate::RtEq::Error;
         }
-        if eq_value(value_a, value_b, tydesc_a, FloatEqPolicy::Bitwise) {
+        if eq_value(value_a, value_b, td_a, FloatEqPolicy::Bitwise) {
             crate::RtEq::Equals
         } else {
             crate::RtEq::NotEquals
@@ -74,10 +78,12 @@ pub unsafe fn cmp(
     assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
 
     unsafe {
-        if !eq_tydesc(tydesc_a, tydesc_b) {
+        let td_a = rtdt::TyDescRef::from_ptr(tydesc_a);
+        let td_b = rtdt::TyDescRef::from_ptr(tydesc_b);
+        if !eq_tydesc(td_a, td_b) {
             return crate::RtOrdering::Error;
         }
-        cmp_value(value_a, value_b, tydesc_a, FloatOrdPolicy::Datalove)
+        cmp_value(value_a, value_b, td_a, FloatOrdPolicy::Datalove)
     }
 }
 
@@ -91,10 +97,12 @@ pub unsafe fn cmp_total(
     assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
 
     unsafe {
-        if !eq_tydesc(tydesc_a, tydesc_b) {
+        let td_a = rtdt::TyDescRef::from_ptr(tydesc_a);
+        let td_b = rtdt::TyDescRef::from_ptr(tydesc_b);
+        if !eq_tydesc(td_a, td_b) {
             return crate::RtOrdering::Error;
         }
-        cmp_value(value_a, value_b, tydesc_a, FloatOrdPolicy::Total)
+        cmp_value(value_a, value_b, td_a, FloatOrdPolicy::Total)
     }
 }
 
@@ -102,26 +110,24 @@ pub unsafe fn cmp_total(
 ///
 /// Fixme we can probably use pointer equality, but need
 /// to make sure tydescs are fully deduplicated.
-unsafe fn eq_tydesc(
-    tydesc_a: *const rtdt::TyDesc,
-    tydesc_b: *const rtdt::TyDesc,
+fn eq_tydesc(
+    td_a: rtdt::TyDescRef,
+    td_b: rtdt::TyDescRef,
 ) -> bool {
     unsafe {
-        let td_a = &*tydesc_a;
-        let td_b = &*tydesc_b;
 
         // Type tags must match.
-        if td_a.type_tag != td_b.type_tag {
+        if td_a.type_tag() != td_b.type_tag() {
             return false;
         }
 
         // Size and alignment should match for same type.
-        if td_a.size != td_b.size || td_a.align != td_b.align {
+        if td_a.size() != td_b.size() || td_a.align() != td_b.align() {
             return false;
         }
 
         // For composite types, we need to compare the structure recursively.
-        match td_a.type_tag {
+        match td_a.type_tag() {
             rtdt::TyTag::Bool | rtdt::TyTag::U8 | rtdt::TyTag::I8 |
             rtdt::TyTag::U16 | rtdt::TyTag::I16 | rtdt::TyTag::U32 | rtdt::TyTag::I32 |
             rtdt::TyTag::F32 | rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::F64 |
@@ -129,114 +135,113 @@ unsafe fn eq_tydesc(
                 true
             }
             rtdt::TyTag::Tuple => {
-                let info_a = &td_a.type_info.tuple;
-                let info_b = &td_b.type_info.tuple;
+                let info_a = td_a.tuple_info();
+                let info_b = td_b.tuple_info();
 
-                if info_a.num_fields != info_b.num_fields {
+                if info_a.num_fields() != info_b.num_fields() {
                     return false;
                 }
 
-                let fields_a = std::slice::from_raw_parts(info_a.fields, info_a.num_fields as usize);
-                let fields_b = std::slice::from_raw_parts(info_b.fields, info_b.num_fields as usize);
+                for i in 0..info_a.num_fields() as usize {
+                    let field_a = info_a.field(i).unwrap();
+                    let field_b = info_b.field(i).unwrap();
 
-                for i in 0..info_a.num_fields as usize {
-                    if fields_a[i].offset != fields_b[i].offset {
+                    if field_a.offset() != field_b.offset() {
                         return false;
                     }
-                    if !eq_tydesc(fields_a[i].tydesc, fields_b[i].tydesc) {
+                    if !eq_tydesc(field_a.tydesc(), field_b.tydesc()) {
                         return false;
                     }
                 }
                 true
             }
             rtdt::TyTag::Struct => {
-                let info_a = &td_a.type_info.struct_;
-                let info_b = &td_b.type_info.struct_;
+                let info_a = td_a.struct_info();
+                let info_b = td_b.struct_info();
 
-                if info_a.num_fields != info_b.num_fields {
+                if info_a.num_fields() != info_b.num_fields() {
                     return false;
                 }
 
-                let fields_a = std::slice::from_raw_parts(info_a.fields, info_a.num_fields as usize);
-                let fields_b = std::slice::from_raw_parts(info_b.fields, info_b.num_fields as usize);
+                for i in 0..info_a.num_fields() as usize {
+                    let field_a = info_a.field(i).unwrap();
+                    let field_b = info_b.field(i).unwrap();
 
-                for i in 0..info_a.num_fields as usize {
                     // Compare field names.
-                    let name_a = std::slice::from_raw_parts(fields_a[i].name, fields_a[i].name_len as usize);
-                    let name_b = std::slice::from_raw_parts(fields_b[i].name, fields_b[i].name_len as usize);
-                    if name_a != name_b {
+                    if field_a.name() != field_b.name() {
                         return false;
                     }
 
-                    if fields_a[i].offset != fields_b[i].offset {
+                    if field_a.offset() != field_b.offset() {
                         return false;
                     }
-                    if !eq_tydesc(fields_a[i].tydesc, fields_b[i].tydesc) {
+                    if !eq_tydesc(field_a.tydesc(), field_b.tydesc()) {
                         return false;
                     }
                 }
                 true
             }
             rtdt::TyTag::Enum => {
-                let info_a = &td_a.type_info.enum_;
-                let info_b = &td_b.type_info.enum_;
+                let info_a = td_a.enum_info();
+                let info_b = td_b.enum_info();
 
-                if info_a.num_variants != info_b.num_variants {
+                if info_a.num_variants() != info_b.num_variants() {
                     return false;
                 }
 
-                let variants_a = std::slice::from_raw_parts(info_a.variants, info_a.num_variants as usize);
-                let variants_b = std::slice::from_raw_parts(info_b.variants, info_b.num_variants as usize);
+                for i in 0..info_a.num_variants() as usize {
+                    let variant_a = info_a.variant(i).unwrap();
+                    let variant_b = info_b.variant(i).unwrap();
 
-                for i in 0..info_a.num_variants as usize {
                     // Compare variant names.
-                    let name_a = std::slice::from_raw_parts(variants_a[i].name, variants_a[i].name_len as usize);
-                    let name_b = std::slice::from_raw_parts(variants_b[i].name, variants_b[i].name_len as usize);
-                    if name_a != name_b {
+                    if variant_a.name() != variant_b.name() {
                         return false;
                     }
 
-                    if variants_a[i].offset != variants_b[i].offset {
+                    if variant_a.offset() != variant_b.offset() {
                         return false;
                     }
 
                     // Compare payload types.
-                    let payload_a = variants_a[i].payload;
-                    let payload_b = variants_b[i].payload;
-                    if payload_a.is_null() != payload_b.is_null() {
-                        return false;
-                    }
-                    if !payload_a.is_null() && !eq_tydesc(payload_a, payload_b) {
-                        return false;
+                    match (variant_a.payload(), variant_b.payload()) {
+                        (core::option::Option::None, core::option::Option::None) => {}
+                        (core::option::Option::Some(payload_ty_a), core::option::Option::Some(payload_ty_b)) => {
+                            if !eq_tydesc(payload_ty_a, payload_ty_b) {
+                                return false;
+                            }
+                        }
+                        _ => return false,
                     }
                 }
                 true
             }
             rtdt::TyTag::List => {
-                let info_a = &td_a.type_info.list;
-                let info_b = &td_b.type_info.list;
-                eq_tydesc(info_a.element_tydesc, info_b.element_tydesc)
+                let elem_ty_a = td_a.list_element_ty();
+                let elem_ty_b = td_b.list_element_ty();
+                eq_tydesc(elem_ty_a, elem_ty_b)
             }
             rtdt::TyTag::Map => {
-                let info_a = &td_a.type_info.map;
-                let info_b = &td_b.type_info.map;
-                eq_tydesc(info_a.key_tydesc, info_b.key_tydesc) &&
-                    eq_tydesc(info_a.value_tydesc, info_b.value_tydesc)
+                let key_ty_a = td_a.map_key_ty();
+                let key_ty_b = td_b.map_key_ty();
+                let value_ty_a = td_a.map_value_ty();
+                let value_ty_b = td_b.map_value_ty();
+                eq_tydesc(key_ty_a, key_ty_b) &&
+                    eq_tydesc(value_ty_a, value_ty_b)
             }
             rtdt::TyTag::Set => {
-                let info_a = &td_a.type_info.set;
-                let info_b = &td_b.type_info.set;
-                eq_tydesc(info_a.element_tydesc, info_b.element_tydesc)
+                let elem_ty_a = td_a.set_element_ty();
+                let elem_ty_b = td_b.set_element_ty();
+                eq_tydesc(elem_ty_a, elem_ty_b)
             }
             rtdt::TyTag::Option => {
-                let info_a = &td_a.type_info.option;
-                let info_b = &td_b.type_info.option;
-                eq_tydesc(info_a.inner_tydesc, info_b.inner_tydesc)
+                let inner_ty_a = td_a.option_inner_ty();
+                let inner_ty_b = td_b.option_inner_ty();
+                eq_tydesc(inner_ty_a, inner_ty_b)
             }
             rtdt::TyTag::Result => {
-                let info_a = &td_a.type_info.result;
-                let info_b = &td_b.type_info.result;
-                eq_tydesc(info_a.ok_tydesc, info_b.ok_tydesc)
+                let ok_ty_a = td_a.result_ok_ty();
+                let ok_ty_b = td_b.result_ok_ty();
+                eq_tydesc(ok_ty_a, ok_ty_b)
             }
         }
     }
@@ -248,13 +253,13 @@ unsafe fn eq_tydesc(
 unsafe fn eq_value(
     value_a: *const u8,
     value_b: *const u8,
-    tydesc: *const rtdt::TyDesc,
+    tydesc: rtdt::TyDescRef,
     float_policy: FloatEqPolicy,
 ) -> bool {
     unsafe {
-        let td = &*tydesc;
+        let td = tydesc;
 
-        match td.type_tag {
+        match td.type_tag() {
             rtdt::TyTag::Bool => {
                 let a = *value_a;
                 let b = *value_b;
@@ -353,34 +358,27 @@ unsafe fn eq_value(
                 bytes_a == bytes_b
             }
             rtdt::TyTag::Tuple => {
-                let tuple_info = &td.type_info.tuple;
-                let fields = std::slice::from_raw_parts(tuple_info.fields, tuple_info.num_fields as usize);
-
-                for field in fields {
-                    let field_a = value_a.add(field.offset as usize);
-                    let field_b = value_b.add(field.offset as usize);
-                    if !eq_value(field_a, field_b, field.tydesc, float_policy) {
+                for field in td.iter_tuple_fields() {
+                    let field_a = value_a.add(field.offset() as usize);
+                    let field_b = value_b.add(field.offset() as usize);
+                    if !eq_value(field_a, field_b, field.tydesc(), float_policy) {
                         return false;
                     }
                 }
                 true
             }
             rtdt::TyTag::Struct => {
-                let struct_info = &td.type_info.struct_;
-                let fields = std::slice::from_raw_parts(struct_info.fields, struct_info.num_fields as usize);
-
-                for field in fields {
-                    let field_a = value_a.add(field.offset as usize);
-                    let field_b = value_b.add(field.offset as usize);
-                    if !eq_value(field_a, field_b, field.tydesc, float_policy) {
+                for field in td.iter_struct_fields() {
+                    let field_a = value_a.add(field.offset() as usize);
+                    let field_b = value_b.add(field.offset() as usize);
+                    if !eq_value(field_a, field_b, field.tydesc(), float_policy) {
                         return false;
                     }
                 }
                 true
             }
             rtdt::TyTag::Enum => {
-                let enum_info = &td.type_info.enum_;
-                let variants = std::slice::from_raw_parts(enum_info.variants, enum_info.num_variants as usize);
+                let enum_info = td.enum_info();
 
                 // Compare discriminants.
                 let disc_a = *(value_a as *const u32);
@@ -390,12 +388,13 @@ unsafe fn eq_value(
                 }
 
                 // Compare payload if present.
-                if disc_a < enum_info.num_variants {
-                    let variant = &variants[disc_a as usize];
-                    if !variant.payload.is_null() {
-                        let payload_a = value_a.add(variant.offset as usize);
-                        let payload_b = value_b.add(variant.offset as usize);
-                        return eq_value(payload_a, payload_b, variant.payload, float_policy);
+                if disc_a < enum_info.num_variants() {
+                    if let core::option::Option::Some(variant) = enum_info.variant(disc_a as usize) {
+                        if let core::option::Option::Some(payload_ty) = variant.payload() {
+                            let payload_a = value_a.add(variant.offset() as usize);
+                            let payload_b = value_b.add(variant.offset() as usize);
+                            return eq_value(payload_a, payload_b, payload_ty, float_policy);
+                        }
                     }
                 }
                 true
@@ -410,14 +409,13 @@ unsafe fn eq_value(
                 }
 
                 // Compare elements.
-                let list_info = &td.type_info.list;
-                let element_tydesc = list_info.element_tydesc;
-                let element_size = (*element_tydesc).size as usize;
+                let element_ty = td.list_element_ty();
+                let element_size = element_ty.size() as usize;
 
                 for i in 0..list_a.size as usize {
                     let elem_a = list_a.data.add(i * element_size);
                     let elem_b = list_b.data.add(i * element_size);
-                    if !eq_value(elem_a, elem_b, element_tydesc, float_policy) {
+                    if !eq_value(elem_a, elem_b, element_ty, float_policy) {
                         return false;
                     }
                 }
@@ -434,11 +432,11 @@ unsafe fn eq_value(
 
                 // If both are Some, compare inner values.
                 if option_a.tag == rtdt::OptionTag::Some {
-                    let option_info = &td.type_info.option;
-                    let layout = rtdt::layout::compute_option_layout(tydesc);
+                    let inner_ty = td.option_inner_ty();
+                    let layout = rtdt::layout::compute_option_layout(tydesc.as_ptr());
                     let payload_a = value_a.add(layout.payload_offset as usize);
                     let payload_b = value_b.add(layout.payload_offset as usize);
-                    return eq_value(payload_a, payload_b, option_info.inner_tydesc, float_policy);
+                    return eq_value(payload_a, payload_b, inner_ty, float_policy);
                 }
 
                 true
@@ -452,14 +450,14 @@ unsafe fn eq_value(
                     return false;
                 }
 
-                let result_info = &td.type_info.result;
-                let layout = rtdt::layout::compute_result_layout(tydesc);
+                let ok_ty = td.result_ok_ty();
+                let layout = rtdt::layout::compute_result_layout(tydesc.as_ptr());
                 let payload_a = value_a.add(layout.payload_offset as usize);
                 let payload_b = value_b.add(layout.payload_offset as usize);
 
                 match result_a.tag {
                     rtdt::ResultTag::Ok => {
-                        eq_value(payload_a, payload_b, result_info.ok_tydesc, float_policy)
+                        eq_value(payload_a, payload_b, ok_ty, float_policy)
                     }
                     rtdt::ResultTag::Err => {
                         // Compare Error values.
@@ -485,16 +483,15 @@ unsafe fn eq_value(
                     return true;
                 }
 
-                let map_info = &td.type_info.map;
-                let key_tydesc = map_info.key_tydesc;
-                let value_tydesc = map_info.value_tydesc;
+                let key_ty = td.map_key_ty();
+                let value_ty = td.map_value_ty();
 
                 // Walk both trees in sorted order using leaf chains.
                 eq_map_trees(
                     map_a.root as *mut rtdt::MapNode,
                     map_b.root as *mut rtdt::MapNode,
-                    key_tydesc,
-                    value_tydesc,
+                    key_ty,
+                    value_ty,
                     float_policy,
                 )
             }
@@ -512,20 +509,19 @@ unsafe fn eq_value(
                     return true;
                 }
 
-                let set_info = &td.type_info.set;
-                let element_tydesc = set_info.element_tydesc;
+                let element_ty = td.set_element_ty();
 
                 // Walk both trees in sorted order using leaf chains.
                 eq_set_trees(
                     set_a.root as *mut rtdt::SetNode,
                     set_b.root as *mut rtdt::SetNode,
-                    element_tydesc,
+                    element_ty,
                     float_policy,
                 )
             }
             rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
-                unimplemented!("eq_value for {:?}", td.type_tag)
+                unimplemented!("eq_value for {:?}", td.type_tag())
             }
         }
     }
@@ -537,13 +533,13 @@ unsafe fn eq_value(
 unsafe fn cmp_value(
     value_a: *const u8,
     value_b: *const u8,
-    tydesc: *const rtdt::TyDesc,
+    tydesc: rtdt::TyDescRef,
     float_policy: FloatOrdPolicy,
 ) -> crate::RtOrdering {
     unsafe {
-        let td = &*tydesc;
+        let td = tydesc;
 
-        match td.type_tag {
+        match td.type_tag() {
             rtdt::TyTag::Bool => {
                 let a = *value_a;
                 let b = *value_b;
@@ -792,14 +788,11 @@ unsafe fn cmp_value(
                 }
             }
             rtdt::TyTag::Tuple => {
-                let tuple_info = &td.type_info.tuple;
-                let fields = std::slice::from_raw_parts(tuple_info.fields, tuple_info.num_fields as usize);
-
                 // Lexicographic ordering by fields.
-                for field in fields {
-                    let field_a = value_a.add(field.offset as usize);
-                    let field_b = value_b.add(field.offset as usize);
-                    let field_cmp = cmp_value(field_a, field_b, field.tydesc, float_policy);
+                for field in td.iter_tuple_fields() {
+                    let field_a = value_a.add(field.offset() as usize);
+                    let field_b = value_b.add(field.offset() as usize);
+                    let field_cmp = cmp_value(field_a, field_b, field.tydesc(), float_policy);
                     match field_cmp {
                         crate::RtOrdering::Less => return crate::RtOrdering::Less,
                         crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
@@ -810,14 +803,11 @@ unsafe fn cmp_value(
                 crate::RtOrdering::Equal
             }
             rtdt::TyTag::Struct => {
-                let struct_info = &td.type_info.struct_;
-                let fields = std::slice::from_raw_parts(struct_info.fields, struct_info.num_fields as usize);
-
                 // Lexicographic ordering by fields.
-                for field in fields {
-                    let field_a = value_a.add(field.offset as usize);
-                    let field_b = value_b.add(field.offset as usize);
-                    let field_cmp = cmp_value(field_a, field_b, field.tydesc, float_policy);
+                for field in td.iter_struct_fields() {
+                    let field_a = value_a.add(field.offset() as usize);
+                    let field_b = value_b.add(field.offset() as usize);
+                    let field_cmp = cmp_value(field_a, field_b, field.tydesc(), float_policy);
                     match field_cmp {
                         crate::RtOrdering::Less => return crate::RtOrdering::Less,
                         crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
@@ -828,8 +818,7 @@ unsafe fn cmp_value(
                 crate::RtOrdering::Equal
             }
             rtdt::TyTag::Enum => {
-                let enum_info = &td.type_info.enum_;
-                let variants = std::slice::from_raw_parts(enum_info.variants, enum_info.num_variants as usize);
+                let enum_info = td.enum_info();
 
                 // Compare discriminants first.
                 let disc_a = *(value_a as *const u32);
@@ -844,12 +833,13 @@ unsafe fn cmp_value(
                 }
 
                 // Same variant, compare payload if present.
-                if disc_a < enum_info.num_variants {
-                    let variant = &variants[disc_a as usize];
-                    if !variant.payload.is_null() {
-                        let payload_a = value_a.add(variant.offset as usize);
-                        let payload_b = value_b.add(variant.offset as usize);
-                        return cmp_value(payload_a, payload_b, variant.payload, float_policy);
+                if disc_a < enum_info.num_variants() {
+                    if let core::option::Option::Some(variant) = enum_info.variant(disc_a as usize) {
+                        if let core::option::Option::Some(payload_ty) = variant.payload() {
+                            let payload_a = value_a.add(variant.offset() as usize);
+                            let payload_b = value_b.add(variant.offset() as usize);
+                            return cmp_value(payload_a, payload_b, payload_ty, float_policy);
+                        }
                     }
                 }
                 crate::RtOrdering::Equal
@@ -858,16 +848,15 @@ unsafe fn cmp_value(
                 let list_a = &*(value_a as *const rtdt::List);
                 let list_b = &*(value_b as *const rtdt::List);
 
-                let list_info = &td.type_info.list;
-                let element_tydesc = list_info.element_tydesc;
-                let element_size = (*element_tydesc).size as usize;
+                let element_ty = td.list_element_ty();
+                let element_size = element_ty.size() as usize;
 
                 // Lexicographic comparison.
                 let min_size = list_a.size.min(list_b.size) as usize;
                 for i in 0..min_size {
                     let elem_a = list_a.data.add(i * element_size);
                     let elem_b = list_b.data.add(i * element_size);
-                    let elem_cmp = cmp_value(elem_a, elem_b, element_tydesc, float_policy);
+                    let elem_cmp = cmp_value(elem_a, elem_b, element_ty, float_policy);
                     match elem_cmp {
                         crate::RtOrdering::Less => return crate::RtOrdering::Less,
                         crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
@@ -895,11 +884,11 @@ unsafe fn cmp_value(
                     (rtdt::OptionTag::None, rtdt::OptionTag::Some) => crate::RtOrdering::Less,
                     (rtdt::OptionTag::Some, rtdt::OptionTag::None) => crate::RtOrdering::Greater,
                     (rtdt::OptionTag::Some, rtdt::OptionTag::Some) => {
-                        let option_info = &td.type_info.option;
-                        let layout = rtdt::layout::compute_option_layout(tydesc);
+                        let inner_ty = td.option_inner_ty();
+                        let layout = rtdt::layout::compute_option_layout(tydesc.as_ptr());
                         let payload_a = value_a.add(layout.payload_offset as usize);
                         let payload_b = value_b.add(layout.payload_offset as usize);
-                        cmp_value(payload_a, payload_b, option_info.inner_tydesc, float_policy)
+                        cmp_value(payload_a, payload_b, inner_ty, float_policy)
                     }
                 }
             }
@@ -912,14 +901,14 @@ unsafe fn cmp_value(
                     (rtdt::ResultTag::Err, rtdt::ResultTag::Ok) => crate::RtOrdering::Less,
                     (rtdt::ResultTag::Ok, rtdt::ResultTag::Err) => crate::RtOrdering::Greater,
                     _ => {
-                        let result_info = &td.type_info.result;
-                        let layout = rtdt::layout::compute_result_layout(tydesc);
+                        let ok_ty = td.result_ok_ty();
+                        let layout = rtdt::layout::compute_result_layout(tydesc.as_ptr());
                         let payload_a = value_a.add(layout.payload_offset as usize);
                         let payload_b = value_b.add(layout.payload_offset as usize);
 
                         match result_a.tag {
                             rtdt::ResultTag::Ok => {
-                                cmp_value(payload_a, payload_b, result_info.ok_tydesc, float_policy)
+                                cmp_value(payload_a, payload_b, ok_ty, float_policy)
                             }
                             rtdt::ResultTag::Err => {
                                 // Compare Error values.
@@ -940,16 +929,15 @@ unsafe fn cmp_value(
                 let map_a = &*(value_a as *const rtdt::Map);
                 let map_b = &*(value_b as *const rtdt::Map);
 
-                let map_info = &td.type_info.map;
-                let key_tydesc = map_info.key_tydesc;
-                let value_tydesc = map_info.value_tydesc;
+                let key_ty = td.map_key_ty();
+                let value_ty = td.map_value_ty();
 
                 // Lexicographic comparison by sorted key-value pairs.
                 cmp_map_trees(
                     map_a.root as *mut rtdt::MapNode,
                     map_b.root as *mut rtdt::MapNode,
-                    key_tydesc,
-                    value_tydesc,
+                    key_ty,
+                    value_ty,
                     float_policy,
                 )
             }
@@ -957,34 +945,33 @@ unsafe fn cmp_value(
                 let set_a = &*(value_a as *const rtdt::Set);
                 let set_b = &*(value_b as *const rtdt::Set);
 
-                let set_info = &td.type_info.set;
-                let element_tydesc = set_info.element_tydesc;
+                let element_ty = td.set_element_ty();
 
                 // Lexicographic comparison by sorted elements.
                 cmp_set_trees(
                     set_a.root as *mut rtdt::SetNode,
                     set_b.root as *mut rtdt::SetNode,
-                    element_tydesc,
+                    element_ty,
                     float_policy,
                 )
             }
             rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
-                unimplemented!("cmp_value for {:?}", td.type_tag)
+                unimplemented!("cmp_value for {:?}", td.type_tag())
             }
         }
     }
 }
 
 /// Helper to find the leftmost leaf in a map tree.
-unsafe fn find_leftmost_map_leaf(mut node: *mut rtdt::MapNode, key_tydesc: *const rtdt::TyDesc) -> *mut rtdt::MapNode {
+unsafe fn find_leftmost_map_leaf(mut node: *mut rtdt::MapNode, key_tydesc: rtdt::TyDescRef) -> *mut rtdt::MapNode {
     unsafe {
         loop {
             let tag = read_map_node_tag(node);
             match tag {
                 rtdt::MapNodeTag::Leaf => return node,
                 rtdt::MapNodeTag::Internal => {
-                    let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
+                    let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
                     let children_ptr = (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut rtdt::MapNode;
                     node = *children_ptr;
                 }
@@ -994,14 +981,14 @@ unsafe fn find_leftmost_map_leaf(mut node: *mut rtdt::MapNode, key_tydesc: *cons
 }
 
 /// Helper to find the leftmost leaf in a set tree.
-unsafe fn find_leftmost_set_leaf(mut node: *mut rtdt::SetNode, key_tydesc: *const rtdt::TyDesc) -> *mut rtdt::SetNode {
+unsafe fn find_leftmost_set_leaf(mut node: *mut rtdt::SetNode, key_tydesc: rtdt::TyDescRef) -> *mut rtdt::SetNode {
     unsafe {
         loop {
             let tag = read_set_node_tag(node);
             match tag {
                 rtdt::SetNodeTag::Leaf => return node,
                 rtdt::SetNodeTag::Internal => {
-                    let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc);
+                    let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc.as_ptr());
                     let children_ptr = (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut rtdt::SetNode;
                     node = *children_ptr;
                 }
@@ -1054,8 +1041,8 @@ unsafe fn read_set_node_len(node: *const rtdt::SetNode) -> u32 {
 unsafe fn eq_map_trees(
     root_a: *mut rtdt::MapNode,
     root_b: *mut rtdt::MapNode,
-    key_tydesc: *const rtdt::TyDesc,
-    value_tydesc: *const rtdt::TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
     float_policy: FloatEqPolicy,
 ) -> bool {
     unsafe {
@@ -1063,8 +1050,8 @@ unsafe fn eq_map_trees(
         let mut leaf_a = find_leftmost_map_leaf(root_a, key_tydesc);
         let mut leaf_b = find_leftmost_map_leaf(root_b, key_tydesc);
 
-        let key_size = (*key_tydesc).size as usize;
-        let value_size = (*value_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
 
         let mut idx_a = 0u32;
         let mut idx_b = 0u32;
@@ -1074,7 +1061,7 @@ unsafe fn eq_map_trees(
         loop {
             // If both exhausted their current leaves, move to next.
             if idx_a >= len_a {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_a = *next_ptr;
                 if leaf_a.is_null() {
@@ -1085,7 +1072,7 @@ unsafe fn eq_map_trees(
             }
 
             if idx_b >= len_b {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_b = *next_ptr;
                 if leaf_b.is_null() {
@@ -1096,13 +1083,13 @@ unsafe fn eq_map_trees(
             }
 
             // Get key and value pointers.
-            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
             let keys_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
             let values_a = (leaf_a as *mut u8).add(layout_a.values_offset as usize);
             let key_a = keys_a.add((idx_a as usize) * key_size);
             let value_a = values_a.add((idx_a as usize) * value_size);
 
-            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
             let keys_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
             let values_b = (leaf_b as *mut u8).add(layout_b.values_offset as usize);
             let key_b = keys_b.add((idx_b as usize) * key_size);
@@ -1131,7 +1118,7 @@ unsafe fn eq_map_trees(
 unsafe fn eq_set_trees(
     root_a: *mut rtdt::SetNode,
     root_b: *mut rtdt::SetNode,
-    element_tydesc: *const rtdt::TyDesc,
+    element_tydesc: rtdt::TyDescRef,
     float_policy: FloatEqPolicy,
 ) -> bool {
     unsafe {
@@ -1139,7 +1126,7 @@ unsafe fn eq_set_trees(
         let mut leaf_a = find_leftmost_set_leaf(root_a, element_tydesc);
         let mut leaf_b = find_leftmost_set_leaf(root_b, element_tydesc);
 
-        let element_size = (*element_tydesc).size as usize;
+        let element_size = element_tydesc.size() as usize;
 
         let mut idx_a = 0u32;
         let mut idx_b = 0u32;
@@ -1149,7 +1136,7 @@ unsafe fn eq_set_trees(
         loop {
             // If both exhausted their current leaves, move to next.
             if idx_a >= len_a {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_a = *next_ptr;
                 if leaf_a.is_null() {
@@ -1160,7 +1147,7 @@ unsafe fn eq_set_trees(
             }
 
             if idx_b >= len_b {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_b = *next_ptr;
                 if leaf_b.is_null() {
@@ -1171,11 +1158,11 @@ unsafe fn eq_set_trees(
             }
 
             // Get element pointers.
-            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
             let elements_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
             let element_a = elements_a.add((idx_a as usize) * element_size);
 
-            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
             let elements_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
             let element_b = elements_b.add((idx_b as usize) * element_size);
 
@@ -1197,8 +1184,8 @@ unsafe fn eq_set_trees(
 unsafe fn cmp_map_trees(
     root_a: *mut rtdt::MapNode,
     root_b: *mut rtdt::MapNode,
-    key_tydesc: *const rtdt::TyDesc,
-    value_tydesc: *const rtdt::TyDesc,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
     float_policy: FloatOrdPolicy,
 ) -> crate::RtOrdering {
     unsafe {
@@ -1217,8 +1204,8 @@ unsafe fn cmp_map_trees(
         let mut leaf_a = find_leftmost_map_leaf(root_a, key_tydesc);
         let mut leaf_b = find_leftmost_map_leaf(root_b, key_tydesc);
 
-        let key_size = (*key_tydesc).size as usize;
-        let value_size = (*value_tydesc).size as usize;
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
 
         let mut idx_a = 0u32;
         let mut idx_b = 0u32;
@@ -1228,13 +1215,13 @@ unsafe fn cmp_map_trees(
         loop {
             // Check if we've exhausted leaves.
             let exhausted_a = idx_a >= len_a && {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 (*next_ptr).is_null()
             };
 
             let exhausted_b = idx_b >= len_b && {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 (*next_ptr).is_null()
             };
@@ -1251,7 +1238,7 @@ unsafe fn cmp_map_trees(
 
             // Move to next leaf if needed.
             if idx_a >= len_a {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_a = *next_ptr;
                 idx_a = 0;
@@ -1259,7 +1246,7 @@ unsafe fn cmp_map_trees(
             }
 
             if idx_b >= len_b {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_b = *next_ptr;
                 idx_b = 0;
@@ -1267,13 +1254,13 @@ unsafe fn cmp_map_trees(
             }
 
             // Get key and value pointers.
-            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
             let keys_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
             let values_a = (leaf_a as *mut u8).add(layout_a.values_offset as usize);
             let key_a = keys_a.add((idx_a as usize) * key_size);
             let value_a = values_a.add((idx_a as usize) * value_size);
 
-            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
             let keys_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
             let values_b = (leaf_b as *mut u8).add(layout_b.values_offset as usize);
             let key_b = keys_b.add((idx_b as usize) * key_size);
@@ -1308,7 +1295,7 @@ unsafe fn cmp_map_trees(
 unsafe fn cmp_set_trees(
     root_a: *mut rtdt::SetNode,
     root_b: *mut rtdt::SetNode,
-    element_tydesc: *const rtdt::TyDesc,
+    element_tydesc: rtdt::TyDescRef,
     float_policy: FloatOrdPolicy,
 ) -> crate::RtOrdering {
     unsafe {
@@ -1327,7 +1314,7 @@ unsafe fn cmp_set_trees(
         let mut leaf_a = find_leftmost_set_leaf(root_a, element_tydesc);
         let mut leaf_b = find_leftmost_set_leaf(root_b, element_tydesc);
 
-        let element_size = (*element_tydesc).size as usize;
+        let element_size = element_tydesc.size() as usize;
 
         let mut idx_a = 0u32;
         let mut idx_b = 0u32;
@@ -1337,13 +1324,13 @@ unsafe fn cmp_set_trees(
         loop {
             // Check if we've exhausted leaves.
             let exhausted_a = idx_a >= len_a && {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 (*next_ptr).is_null()
             };
 
             let exhausted_b = idx_b >= len_b && {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 (*next_ptr).is_null()
             };
@@ -1360,7 +1347,7 @@ unsafe fn cmp_set_trees(
 
             // Move to next leaf if needed.
             if idx_a >= len_a {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_a = *next_ptr;
                 idx_a = 0;
@@ -1368,7 +1355,7 @@ unsafe fn cmp_set_trees(
             }
 
             if idx_b >= len_b {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_b = *next_ptr;
                 idx_b = 0;
@@ -1376,11 +1363,11 @@ unsafe fn cmp_set_trees(
             }
 
             // Get element pointers.
-            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
             let elements_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
             let element_a = elements_a.add((idx_a as usize) * element_size);
 
-            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
             let elements_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
             let element_b = elements_b.add((idx_b as usize) * element_size);
 

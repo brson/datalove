@@ -235,8 +235,9 @@ pub unsafe fn set_destroy_impl(
             return RtStatus::Error;
         }
 
-        let set_info = (*tydesc).type_info.set;
-        let element_tydesc = set_info.element_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(tydesc);
+        let element_ty = ty.set_element_ty();
+        let element_tydesc = element_ty.as_ptr();
 
         let set_ptr = value_in as *mut Set;
         let root = (*set_ptr).root as *mut SetNode;

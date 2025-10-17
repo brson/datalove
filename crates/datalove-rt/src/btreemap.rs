@@ -212,11 +212,6 @@ pub unsafe fn btreemap_create_impl(
             return RtStatus::Error;
         }
 
-        // Get key and value type descriptors.
-        let map_info = (*tydesc).type_info.map;
-        let key_tydesc = map_info.key_tydesc;
-        let value_tydesc = map_info.value_tydesc;
-
         // Create an empty map (null root, zero length).
         let map_ptr = value_out as *mut Map;
         (*map_ptr).root = std::ptr::null_mut();
@@ -237,9 +232,11 @@ pub unsafe fn btreemap_destroy_impl(
             return RtStatus::Error;
         }
 
-        let map_info = (*tydesc).type_info.map;
-        let key_tydesc = map_info.key_tydesc;
-        let value_tydesc = map_info.value_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(tydesc);
+        let key_ty = ty.map_key_ty();
+        let value_ty = ty.map_value_ty();
+        let key_tydesc = key_ty.as_ptr();
+        let value_tydesc = value_ty.as_ptr();
 
         let map_ptr = value_in as *mut Map;
         let root = (*map_ptr).root as *mut MapNode;
@@ -794,9 +791,11 @@ pub unsafe fn btreemap_insert_impl(
         }
 
         // Get key and value type descriptors from map type.
-        let map_info = (*btreemap_tydesc).type_info.map;
-        let map_key_tydesc = map_info.key_tydesc;
-        let map_value_tydesc = map_info.value_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let map_key_ty = ty.map_key_ty();
+        let map_value_ty = ty.map_value_ty();
+        let map_key_tydesc = map_key_ty.as_ptr();
+        let map_value_tydesc = map_value_ty.as_ptr();
 
         let key_ptr = key_in;
         let val_ptr = value_in;
@@ -1056,13 +1055,11 @@ pub unsafe fn btreemap_get_impl(
         }
 
         // Get key and value type descriptors from map type.
-        let map_info = (*btreemap_tydesc).type_info.map;
-        let map_key_tydesc = map_info.key_tydesc;
-        let map_value_tydesc = map_info.value_tydesc;
-
-        // Get the option inner type (which should be V).
-        let option_info = (*option_tydesc).type_info.option;
-        let inner_value_tydesc = option_info.inner_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let map_key_ty = ty.map_key_ty();
+        let map_value_ty = ty.map_value_ty();
+        let map_key_tydesc = map_key_ty.as_ptr();
+        let map_value_tydesc = map_value_ty.as_ptr();
 
         let map_ptr = btreemap_value_ref as *const Map;
         let root = (*map_ptr).root as *mut MapNode;
@@ -1758,9 +1755,11 @@ pub unsafe fn btreemap_remove_impl(
             return RtStatus::Error;
         }
 
-        let map_info = (*btreemap_tydesc).type_info.map;
-        let map_key_tydesc = map_info.key_tydesc;
-        let map_value_tydesc = map_info.value_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let map_key_ty = ty.map_key_ty();
+        let map_value_ty = ty.map_value_ty();
+        let map_key_tydesc = map_key_ty.as_ptr();
+        let map_value_tydesc = map_value_ty.as_ptr();
 
         let map_ptr = btreemap_value_mut as *mut Map;
         let root = (*map_ptr).root as *mut MapNode;
@@ -1958,19 +1957,22 @@ pub unsafe fn btreemap_clone_from_slice_impl(
         }
 
         // Get map key and value type descriptors.
-        let map_info = (*btreemap_tydesc).type_info.map;
-        let map_key_tydesc = map_info.key_tydesc;
-        let map_value_tydesc = map_info.value_tydesc;
+        let ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let map_key_ty = ty.map_key_ty();
+        let map_value_ty = ty.map_value_ty();
+        let map_key_tydesc = map_key_ty.as_ptr();
+        let map_value_tydesc = map_value_ty.as_ptr();
 
         // The slice element should be a tuple (K, V).
-        let tuple_info = (*slice_element_tydesc).type_info.tuple;
-        if tuple_info.num_fields != 2 {
+        let tuple_ty = rtdt::TyDescRef::from_ptr(slice_element_tydesc);
+        if tuple_ty.tuple_info().num_fields() != 2 {
             return RtStatus::Error;
         }
 
-        let key_field = &*tuple_info.fields.add(0);
-        let value_field = &*tuple_info.fields.add(1);
-        let element_size = (*slice_element_tydesc).size as usize;
+        let mut fields = tuple_ty.iter_tuple_fields();
+        let key_field = fields.next().unwrap();
+        let value_field = fields.next().unwrap();
+        let element_size = tuple_ty.size() as usize;
 
         let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
 
@@ -1979,12 +1981,12 @@ pub unsafe fn btreemap_clone_from_slice_impl(
             let element_ptr = slice_ptr_ref.add(i as usize * element_size);
 
             // Get pointers to key and value within the tuple.
-            let key_ptr = element_ptr.add(key_field.offset as usize);
-            let value_ptr = element_ptr.add(value_field.offset as usize);
+            let key_ptr = element_ptr.add(key_field.offset() as usize);
+            let value_ptr = element_ptr.add(value_field.offset() as usize);
 
             // Clone the key and value into temporary buffers.
-            let key_size = (*map_key_tydesc).size as usize;
-            let value_size = (*map_value_tydesc).size as usize;
+            let key_size = map_key_ty.size() as usize;
+            let value_size = map_value_ty.size() as usize;
 
             let mut key_buf = vec![0u8; key_size];
             let mut value_buf = vec![0u8; value_size];
@@ -1992,7 +1994,7 @@ pub unsafe fn btreemap_clone_from_slice_impl(
             let status = crate::clone::clone_value(
                 rt_handle,
                 key_ptr,
-                key_field.tydesc,
+                key_field.tydesc().as_ptr(),
                 key_buf.as_mut_ptr(),
             );
             if status != RtStatus::Ok {
@@ -2002,7 +2004,7 @@ pub unsafe fn btreemap_clone_from_slice_impl(
             let status = crate::clone::clone_value(
                 rt_handle,
                 value_ptr,
-                value_field.tydesc,
+                value_field.tydesc().as_ptr(),
                 value_buf.as_mut_ptr(),
             );
             if status != RtStatus::Ok {

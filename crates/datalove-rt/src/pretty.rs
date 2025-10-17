@@ -175,24 +175,22 @@ unsafe fn pretty_tuple(
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
-    unsafe {
-        let info = &tydesc.type_info.tuple;
-        push_str(rt, string_mut, string_tydesc, b"@(")?;
+    // Demonstrate safe TyDescRef API.
+    let ty = rtdt::TyDescRef::from_ref(tydesc);
+    push_str(rt, string_mut, string_tydesc, b"@(")?;
 
-        for i in 0..info.num_fields {
-            if i > 0 {
-                push_str(rt, string_mut, string_tydesc, b", ")?;
-            }
-
-            let field = &*info.fields.add(i as usize);
-            let field_value = value_ref.add(field.offset as usize);
-            let field_tydesc = &*field.tydesc;
-
-            pretty_value(rt, field_value, field_tydesc, string_mut, string_tydesc)?;
+    for (i, field) in ty.iter_tuple_fields().enumerate() {
+        if i > 0 {
+            push_str(rt, string_mut, string_tydesc, b", ")?;
         }
 
-        push_str(rt, string_mut, string_tydesc, b")")
+        unsafe {
+            let field_value = value_ref.add(field.offset() as usize);
+            pretty_value(rt, field_value, field.tydesc().as_ref(), string_mut, string_tydesc)?;
+        }
     }
+
+    push_str(rt, string_mut, string_tydesc, b")")
 }
 
 unsafe fn pretty_struct(
@@ -202,28 +200,25 @@ unsafe fn pretty_struct(
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
-    unsafe {
-        let info = &tydesc.type_info.struct_;
-        push_str(rt, string_mut, string_tydesc, b"@{")?;
+    // Demonstrate safe TyDescRef API.
+    let ty = rtdt::TyDescRef::from_ref(tydesc);
+    push_str(rt, string_mut, string_tydesc, b"@{")?;
 
-        for i in 0..info.num_fields {
-            if i > 0 {
-                push_str(rt, string_mut, string_tydesc, b", ")?;
-            }
-
-            let field = &*info.fields.add(i as usize);
-            let field_name = std::slice::from_raw_parts(field.name, field.name_len as usize);
-            push_str(rt, string_mut, string_tydesc, field_name)?;
-            push_str(rt, string_mut, string_tydesc, b" = ")?;
-
-            let field_value = value_ref.add(field.offset as usize);
-            let field_tydesc = &*field.tydesc;
-
-            pretty_value(rt, field_value, field_tydesc, string_mut, string_tydesc)?;
+    for (i, field) in ty.iter_struct_fields().enumerate() {
+        if i > 0 {
+            push_str(rt, string_mut, string_tydesc, b", ")?;
         }
 
-        push_str(rt, string_mut, string_tydesc, b"}")
+        push_str(rt, string_mut, string_tydesc, field.name().as_bytes())?;
+        push_str(rt, string_mut, string_tydesc, b" = ")?;
+
+        unsafe {
+            let field_value = value_ref.add(field.offset() as usize);
+            pretty_value(rt, field_value, field.tydesc().as_ref(), string_mut, string_tydesc)?;
+        }
     }
+
+    push_str(rt, string_mut, string_tydesc, b"}")
 }
 
 unsafe fn pretty_enum(
@@ -234,28 +229,27 @@ unsafe fn pretty_enum(
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
-        let info = &tydesc.type_info.enum_;
+        let ty = rtdt::TyDescRef::from_ref(tydesc);
+        let enum_info = ty.enum_info();
 
         // Read discriminant (u8).
         let discriminant = *value_ref;
 
-        if (discriminant as u32) >= info.num_variants {
+        if (discriminant as u32) >= enum_info.num_variants() {
             push_str(rt, string_mut, string_tydesc, b"<invalid-enum>")?;
             return Ok(());
         }
 
-        let variant = &*info.variants.add(discriminant as usize);
-        let variant_name = std::slice::from_raw_parts(variant.name, variant.name_len as usize);
+        if let core::option::Option::Some(variant) = enum_info.variant(discriminant as usize) {
+            push_str(rt, string_mut, string_tydesc, b"@enum ")?;
+            push_str(rt, string_mut, string_tydesc, variant.name().as_bytes())?;
 
-        push_str(rt, string_mut, string_tydesc, b"@enum ")?;
-        push_str(rt, string_mut, string_tydesc, variant_name)?;
-
-        if !variant.payload.is_null() {
-            push_str(rt, string_mut, string_tydesc, b"(")?;
-            let payload_value = value_ref.add(variant.offset as usize);
-            let payload_tydesc = &*variant.payload;
-            pretty_value(rt, payload_value, payload_tydesc, string_mut, string_tydesc)?;
-            push_str(rt, string_mut, string_tydesc, b")")?;
+            if let core::option::Option::Some(payload_ty) = variant.payload() {
+                push_str(rt, string_mut, string_tydesc, b"(")?;
+                let payload_value = value_ref.add(variant.offset() as usize);
+                pretty_value(rt, payload_value, payload_ty.as_ref(), string_mut, string_tydesc)?;
+                push_str(rt, string_mut, string_tydesc, b")")?;
+            }
         }
 
         Ok(())
@@ -271,8 +265,8 @@ unsafe fn pretty_list(
 ) -> Result<(), ()> {
     unsafe {
         let list = &*(value_ref as *const rtdt::List);
-        let info = &tydesc.type_info.list;
-        let elem_tydesc = &*info.element_tydesc;
+        let ty = rtdt::TyDescRef::from_ref(tydesc);
+        let elem_ty = ty.list_element_ty();
 
         push_str(rt, string_mut, string_tydesc, b"@[")?;
 
@@ -282,8 +276,8 @@ unsafe fn pretty_list(
                     push_str(rt, string_mut, string_tydesc, b", ")?;
                 }
 
-                let elem_value = list.data.add((i * elem_tydesc.size) as usize);
-                pretty_value(rt, elem_value, elem_tydesc, string_mut, string_tydesc)?;
+                let elem_value = list.data.add((i * elem_ty.size()) as usize);
+                pretty_value(rt, elem_value, elem_ty.as_ref(), string_mut, string_tydesc)?;
             }
         }
 
@@ -331,14 +325,14 @@ unsafe fn pretty_option(
                 push_str(rt, string_mut, string_tydesc, b"@none")
             }
             rtdt::OptionTag::Some => {
-                let info = &tydesc.type_info.option;
-                let inner_tydesc = &*info.inner_tydesc;
+                let ty = rtdt::TyDescRef::from_ref(tydesc);
+                let inner_ty = ty.option_inner_ty();
 
                 // Calculate payload offset.
-                let payload_offset = align_up(1, inner_tydesc.align as usize);
+                let payload_offset = align_up(1, inner_ty.align() as usize);
                 let payload_value = value_ref.add(payload_offset);
 
-                pretty_value(rt, payload_value, inner_tydesc, string_mut, string_tydesc)
+                pretty_value(rt, payload_value, inner_ty.as_ref(), string_mut, string_tydesc)
             }
         }
     }
@@ -353,16 +347,16 @@ unsafe fn pretty_result(
 ) -> Result<(), ()> {
     unsafe {
         let result = &*(value_ref as *const rtdt::Result);
-        let info = &tydesc.type_info.result;
-        let ok_tydesc = &*info.ok_tydesc;
+        let ty = rtdt::TyDescRef::from_ref(tydesc);
+        let ok_ty = ty.result_ok_ty();
 
         // Calculate payload offset (need to account for both ok and error types).
-        let payload_offset = align_up(1, ok_tydesc.align as usize);
+        let payload_offset = align_up(1, ok_ty.align() as usize);
         let payload_value = value_ref.add(payload_offset);
 
         match result.tag {
             rtdt::ResultTag::Ok => {
-                pretty_value(rt, payload_value, ok_tydesc, string_mut, string_tydesc)
+                pretty_value(rt, payload_value, ok_ty.as_ref(), string_mut, string_tydesc)
             }
             rtdt::ResultTag::Err => {
                 push_str(rt, string_mut, string_tydesc, b"error ")?;
