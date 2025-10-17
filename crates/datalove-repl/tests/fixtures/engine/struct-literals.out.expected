@@ -1,0 +1,164 @@
+[
+  {
+    "input": "let point = @{x = @10, y = @20}",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let point = @{x = @10, y = @20}"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "point",
+        "ty": "{x: @u32, y: @u32}",
+        "value": "@{x = @10, y = @20}"
+      }
+    },
+    "environment": [
+      {
+        "name": "point",
+        "ty": "{x: @u32, y: @u32}",
+        "value": "@{x = @10, y = @20}"
+      }
+    ]
+  },
+  {
+    "input": "point",
+    "parse": {
+      "Command": {
+        "Expression": "point"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "{x: @u32, y: @u32}",
+        "value": "@{x = @10, y = @20}"
+      }
+    },
+    "environment": [
+      {
+        "name": "point",
+        "ty": "{x: @u32, y: @u32}",
+        "value": "@{x = @10, y = @20}"
+      }
+    ]
+  },
+  {
+    "input": "let person = @{name = @\"Alice\", age = @30}",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let person = @{name = @\"Alice\", age = @30}"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "person",
+        "ty": "{name: @string, age: @u32}",
+        "value": "@{name = @\"Alice\", age = @30}"
+      }
+    },
+    "environment": [
+      {
+        "name": "point",
+        "ty": "{x: @u32, y: @u32}",
+        "value": "@{x = @10, y = @20}"
+      },
+      {
+        "name": "person",
+        "ty": "{name: @string, age: @u32}",
+        "value": "@{name = @\"Alice\", age = @30}"
+      }
+    ]
+  },
+  {
+    "input": "person",
+    "parse": {
+      "Command": {
+        "Expression": "person"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "{name: @string, age: @u32}",
+        "value": "@{name = @\"Alice\", age = @30}"
+      }
+    },
+    "environment": [
+      {
+        "name": "point",
+        "ty": "{x: @u32, y: @u32}",
+        "value": "@{x = @10, y = @20}"
+      },
+      {
+        "name": "person",
+        "ty": "{name: @string, age: @u32}",
+        "value": "@{name = @\"Alice\", age = @30}"
+      }
+    ]
+  },
+  {
+    "input": "let multifield = @{a = @1, b = @2, c = @3, d = @4}",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let multifield = @{a = @1, b = @2, c = @3, d = @4}"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "multifield",
+        "ty": "{a: @u32, b: @u32, c: @u32, d: @u32}",
+        "value": "@{a = @1, b = @2, c = @3, d = @4}"
+      }
+    },
+    "environment": [
+      {
+        "name": "point",
+        "ty": "{x: @u32, y: @u32}",
+        "value": "@{x = @10, y = @20}"
+      },
+      {
+        "name": "person",
+        "ty": "{name: @string, age: @u32}",
+        "value": "@{name = @\"Alice\", age = @30}"
+      },
+      {
+        "name": "multifield",
+        "ty": "{a: @u32, b: @u32, c: @u32, d: @u32}",
+        "value": "@{a = @1, b = @2, c = @3, d = @4}"
+      }
+    ]
+  },
+  {
+    "input": "multifield",
+    "parse": {
+      "Command": {
+        "Expression": "multifield"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "{a: @u32, b: @u32, c: @u32, d: @u32}",
+        "value": "@{a = @1, b = @2, c = @3, d = @4}"
+      }
+    },
+    "environment": [
+      {
+        "name": "point",
+        "ty": "{x: @u32, y: @u32}",
+        "value": "@{x = @10, y = @20}"
+      },
+      {
+        "name": "person",
+        "ty": "{name: @string, age: @u32}",
+        "value": "@{name = @\"Alice\", age = @30}"
+      },
+      {
+        "name": "multifield",
+        "ty": "{a: @u32, b: @u32, c: @u32, d: @u32}",
+        "value": "@{a = @1, b = @2, c = @3, d = @4}"
+      }
+    ]
+  }
+]

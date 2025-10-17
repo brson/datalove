@@ -824,4 +824,149 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_eval_struct_literal() {
+        let mut engine = Engine::new().unwrap();
+
+        let parse_result = engine.parse_input(Input::Input("let x = @{a = @1, b = @2}".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessLet(eval_let) => {
+                        assert_eq!(eval_let.name, "x");
+                        assert_eq!(eval_let.value, "@{a = @1, b = @2}");
+                    }
+                    other => panic!("Expected Eval::SuccessLet, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eval_list_literal() {
+        let mut engine = Engine::new().unwrap();
+
+        let parse_result = engine.parse_input(Input::Input("let x = @[@1, @2, @3]".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessLet(eval_let) => {
+                        assert_eq!(eval_let.name, "x");
+                        assert_eq!(eval_let.value, "@[@1, @2, @3]");
+                    }
+                    other => panic!("Expected Eval::SuccessLet, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eval_tuple_literal() {
+        let mut engine = Engine::new().unwrap();
+
+        let parse_result = engine.parse_input(Input::Input("let x = @(@42, @\"hello\")".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessLet(eval_let) => {
+                        assert_eq!(eval_let.name, "x");
+                        assert_eq!(eval_let.value, "@(@42, @\"hello\")");
+                    }
+                    other => panic!("Expected Eval::SuccessLet, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eval_struct_expression() {
+        let mut engine = Engine::new().unwrap();
+
+        // Test evaluating a struct expression (without let).
+        let parse_result = engine.parse_input(Input::Input("@{x = @10, y = @20}".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessExpr(eval_expr) => {
+                        assert_eq!(eval_expr.value, "@{x = @10, y = @20}");
+                    }
+                    other => panic!("Expected Eval::SuccessExpr, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eval_list_expression() {
+        let mut engine = Engine::new().unwrap();
+
+        // Test evaluating a list expression.
+        let parse_result = engine.parse_input(Input::Input("@[@100, @200, @300]".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessExpr(eval_expr) => {
+                        assert_eq!(eval_expr.value, "@[@100, @200, @300]");
+                    }
+                    other => panic!("Expected Eval::SuccessExpr, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
+
+
+    #[test]
+    fn test_eval_struct_with_multiple_fields() {
+        let mut engine = Engine::new().unwrap();
+
+        let parse_result = engine.parse_input(Input::Input("let x = @{a = @1, b = @2, c = @3}".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessLet(eval_let) => {
+                        assert_eq!(eval_let.name, "x");
+                        assert!(eval_let.value.contains("@1"));
+                        assert!(eval_let.value.contains("@2"));
+                        assert!(eval_let.value.contains("@3"));
+                    }
+                    other => panic!("Expected Eval::SuccessLet, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eval_list_with_strings() {
+        let mut engine = Engine::new().unwrap();
+
+        let parse_result = engine.parse_input(Input::Input("let x = @[@\"a\", @\"b\", @\"c\"]".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                match eval_result {
+                    Eval::SuccessLet(eval_let) => {
+                        assert_eq!(eval_let.name, "x");
+                        assert!(eval_let.value.contains("@\"a\""));
+                        assert!(eval_let.value.contains("@\"b\""));
+                        assert!(eval_let.value.contains("@\"c\""));
+                    }
+                    other => panic!("Expected Eval::SuccessLet, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Command, got {:?}", other),
+        }
+    }
 } 

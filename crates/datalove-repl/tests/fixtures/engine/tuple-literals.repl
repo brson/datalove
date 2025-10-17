@@ -1,0 +1,11 @@
+let pair = @(@42, @"hello")
+---
+pair
+---
+let triple = @(@1, @2, @3)
+---
+triple
+---
+let mixed = @(@100, @"test", @true)
+---
+mixed

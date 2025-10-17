@@ -1,0 +1,164 @@
+[
+  {
+    "input": "let nums = @[@1, @2, @3]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let nums = @[@1, @2, @3]"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "nums",
+        "ty": "[@u32]",
+        "value": "@[@1, @2, @3]"
+      }
+    },
+    "environment": [
+      {
+        "name": "nums",
+        "ty": "[@u32]",
+        "value": "@[@1, @2, @3]"
+      }
+    ]
+  },
+  {
+    "input": "nums",
+    "parse": {
+      "Command": {
+        "Expression": "nums"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "[@u32]",
+        "value": "@[@1, @2, @3]"
+      }
+    },
+    "environment": [
+      {
+        "name": "nums",
+        "ty": "[@u32]",
+        "value": "@[@1, @2, @3]"
+      }
+    ]
+  },
+  {
+    "input": "let words = @[@\"hello\", @\"world\"]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let words = @[@\"hello\", @\"world\"]"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "words",
+        "ty": "[@string]",
+        "value": "@[@\"hello\", @\"world\"]"
+      }
+    },
+    "environment": [
+      {
+        "name": "nums",
+        "ty": "[@u32]",
+        "value": "@[@1, @2, @3]"
+      },
+      {
+        "name": "words",
+        "ty": "[@string]",
+        "value": "@[@\"hello\", @\"world\"]"
+      }
+    ]
+  },
+  {
+    "input": "words",
+    "parse": {
+      "Command": {
+        "Expression": "words"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "[@string]",
+        "value": "@[@\"hello\", @\"world\"]"
+      }
+    },
+    "environment": [
+      {
+        "name": "nums",
+        "ty": "[@u32]",
+        "value": "@[@1, @2, @3]"
+      },
+      {
+        "name": "words",
+        "ty": "[@string]",
+        "value": "@[@\"hello\", @\"world\"]"
+      }
+    ]
+  },
+  {
+    "input": "let bigger = @[@10, @20, @30, @40, @50]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let bigger = @[@10, @20, @30, @40, @50]"
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "bigger",
+        "ty": "[@u32]",
+        "value": "@[@10, @20, @30, @40, @50]"
+      }
+    },
+    "environment": [
+      {
+        "name": "nums",
+        "ty": "[@u32]",
+        "value": "@[@1, @2, @3]"
+      },
+      {
+        "name": "words",
+        "ty": "[@string]",
+        "value": "@[@\"hello\", @\"world\"]"
+      },
+      {
+        "name": "bigger",
+        "ty": "[@u32]",
+        "value": "@[@10, @20, @30, @40, @50]"
+      }
+    ]
+  },
+  {
+    "input": "bigger",
+    "parse": {
+      "Command": {
+        "Expression": "bigger"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "[@u32]",
+        "value": "@[@10, @20, @30, @40, @50]"
+      }
+    },
+    "environment": [
+      {
+        "name": "nums",
+        "ty": "[@u32]",
+        "value": "@[@1, @2, @3]"
+      },
+      {
+        "name": "words",
+        "ty": "[@string]",
+        "value": "@[@\"hello\", @\"world\"]"
+      },
+      {
+        "name": "bigger",
+        "ty": "[@u32]",
+        "value": "@[@10, @20, @30, @40, @50]"
+      }
+    ]
+  }
+]

@@ -1,0 +1,7 @@
+let struct_in_list = @[@{x = @1}, @{x = @2}]
+---
+struct_in_list
+---
+let list_in_struct = @{items = @[@1, @2, @3]}
+---
+list_in_struct

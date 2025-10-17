@@ -1,0 +1,11 @@
+let nums = @[@1, @2, @3]
+---
+nums
+---
+let words = @[@"hello", @"world"]
+---
+words
+---
+let bigger = @[@10, @20, @30, @40, @50]
+---
+bigger

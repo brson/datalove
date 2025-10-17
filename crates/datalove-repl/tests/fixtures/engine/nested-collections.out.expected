@@ -1,0 +1,84 @@
+[
+  {
+    "input": "let struct_in_list = @[@{x = @1}, @{x = @2}]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let struct_in_list = @[@{x = @1}, @{x = @2}]"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "struct_in_list",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "struct_in_list",
+    "parse": {
+      "Command": {
+        "Expression": "struct_in_list"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): DatalitError(\"CannotSynthesize\"), UnresolvedName(\"struct_in_list\")"
+    },
+    "environment": [
+      {
+        "name": "struct_in_list",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "let list_in_struct = @{items = @[@1, @2, @3]}",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let list_in_struct = @{items = @[@1, @2, @3]}"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): DatalitError(\"CannotSynthesize\"), DatalitError(\"CannotSynthesize\")"
+    },
+    "environment": [
+      {
+        "name": "struct_in_list",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "list_in_struct",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "list_in_struct",
+    "parse": {
+      "Command": {
+        "Expression": "list_in_struct"
+      }
+    },
+    "eval": {
+      "Error": "type error(s): DatalitError(\"CannotSynthesize\"), DatalitError(\"CannotSynthesize\"), UnresolvedName(\"list_in_struct\")"
+    },
+    "environment": [
+      {
+        "name": "struct_in_list",
+        "ty": "error",
+        "value": ""
+      },
+      {
+        "name": "list_in_struct",
+        "ty": "error",
+        "value": ""
+      }
+    ]
+  }
+]
