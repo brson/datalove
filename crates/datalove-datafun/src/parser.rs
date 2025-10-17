@@ -137,6 +137,7 @@ impl<'db> Parser<'db> {
             Some("fun") => self.parse_fun(&mut tokens, remaining_lines),
             Some("ret") => self.parse_ret(&mut tokens),
             Some("require") => self.parse_require(&mut tokens),
+            Some("if") => self.parse_if(&mut tokens, remaining_lines),
             _ => {
                 let message = InternedText::new(self.db, "unexpected statement".S());
                 ast::Statement::ParseError(ast::StmtParseError::new(self.db, message))
@@ -216,14 +217,8 @@ impl<'db> Parser<'db> {
 
             let (_, line) = remaining_lines.next().X();
             if !line.is_empty() {
-                let mut line_tokens = line.into_iter().peekable();
-                let stmt = match self.peek_word(&mut line_tokens) {
-                    Some("ret") => self.parse_ret(&mut line_tokens),
-                    _ => {
-                        let message = InternedText::new(self.db, "unexpected statement in fun body".S());
-                        ast::Statement::ParseError(ast::StmtParseError::new(self.db, message))
-                    }
-                };
+                // Parse statement recursively to handle if/ret/etc in function body.
+                let stmt = self.parse_statement(line, remaining_lines);
                 body.push(stmt);
             }
         }
@@ -383,6 +378,81 @@ impl<'db> Parser<'db> {
             kind,
             name,
             type_hint,
+        ))
+    }
+
+    fn parse_if(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+    ) -> ast::Statement<'db> {
+        self.eat_word(tokens, "if");
+
+        // Parse condition expression.
+        let condition = self.parse_expr_full(tokens);
+
+        // Parse then body until we hit "else" or "end if".
+        let mut then_body = vec![];
+        let mut found_else = false;
+
+        while let Some((_, line)) = remaining_lines.peek() {
+            if line.len() >= 2 {
+                if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
+                    if let (Some("end"), Some("if")) = (t1.word_str(self.db), t2.word_str(self.db)) {
+                        remaining_lines.next(); // consume "end if" line
+                        break;
+                    }
+                }
+            }
+
+            if line.len() >= 1 {
+                if let Some(TreeToken::Token(t1)) = line.get(0) {
+                    if let Some("else") = t1.word_str(self.db) {
+                        remaining_lines.next(); // consume "else" line
+                        found_else = true;
+                        break;
+                    }
+                }
+            }
+
+            let (_, line) = remaining_lines.next().X();
+            if !line.is_empty() {
+                let stmt = self.parse_statement(line, remaining_lines);
+                then_body.push(stmt);
+            }
+        }
+
+        // Parse else body if we found "else".
+        let else_body = if found_else {
+            let mut body = vec![];
+
+            while let Some((_, line)) = remaining_lines.peek() {
+                if line.len() >= 2 {
+                    if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
+                        if let (Some("end"), Some("if")) = (t1.word_str(self.db), t2.word_str(self.db)) {
+                            remaining_lines.next(); // consume "end if" line
+                            break;
+                        }
+                    }
+                }
+
+                let (_, line) = remaining_lines.next().X();
+                if !line.is_empty() {
+                    let stmt = self.parse_statement(line, remaining_lines);
+                    body.push(stmt);
+                }
+            }
+
+            Some(body)
+        } else {
+            None
+        };
+
+        ast::Statement::If(ast::StmtIf::new(
+            self.db,
+            condition,
+            then_body,
+            else_body,
         ))
     }
 

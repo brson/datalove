@@ -131,6 +131,38 @@ impl<'db> InterpContext<'db> {
                 Err(InterpError::NotImplemented("require statement".to_string()))
             }
 
+            Statement::If(stmt) => {
+                let condition = stmt.condition(self.db);
+                let then_body = stmt.then_body(self.db);
+                let else_body = stmt.else_body(self.db);
+
+                // Evaluate condition.
+                let condition_value = crate::eval_datafun::eval_expr(self, condition)?;
+
+                // Condition must be a bool.
+                let condition_bool = match condition_value {
+                    Value::Bool(b) => b,
+                    _ => {
+                        return Err(InterpError::TypeError(
+                            "condition must be bool".to_string()
+                        ));
+                    }
+                };
+
+                // Execute appropriate branch.
+                if condition_bool {
+                    for stmt in then_body {
+                        self.exec_stmt(stmt)?;
+                    }
+                } else if let Some(else_stmts) = else_body {
+                    for stmt in else_stmts {
+                        self.exec_stmt(stmt)?;
+                    }
+                }
+
+                Ok(())
+            }
+
             Statement::ParseError(err) => {
                 let message = err.message(self.db);
                 Err(InterpError::RuntimeError(

@@ -1,0 +1,21 @@
+{
+  "errors": [
+    {
+      "kind": "DatalitError",
+      "message": "CannotSynthesize"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [
+        {
+          "name": "n",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "@u32"
+    }
+  ]
+}

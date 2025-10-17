@@ -18,6 +18,7 @@ pub enum Statement {
     Fun(StmtFun),
     Ret(StmtRet),
     Require(StmtRequire),
+    If(StmtIf),
     ParseError(StmtParseError),
 }
 
@@ -67,6 +68,13 @@ pub struct StmtRequire {
 pub enum RequireKind {
     Module,
     Data,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtIf {
+    pub condition: ExprFun,
+    pub then_body: Vec<Statement>,
+    pub else_body: Option<Vec<Statement>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -150,6 +158,7 @@ impl Statement {
             crate::ast::Statement::Fun(s) => Statement::Fun(StmtFun::from_ast(db, *s)),
             crate::ast::Statement::Ret(s) => Statement::Ret(StmtRet::from_ast(db, *s)),
             crate::ast::Statement::Require(s) => Statement::Require(StmtRequire::from_ast(db, *s)),
+            crate::ast::Statement::If(s) => Statement::If(StmtIf::from_ast(db, *s)),
             crate::ast::Statement::ParseError(s) => Statement::ParseError(StmtParseError::from_ast(db, *s)),
         }
     }
@@ -220,6 +229,18 @@ impl RequireKind {
         match ast {
             crate::ast::RequireKind::Module => RequireKind::Module,
             crate::ast::RequireKind::Data => RequireKind::Data,
+        }
+    }
+}
+
+impl StmtIf {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::StmtIf<'db>) -> Self {
+        StmtIf {
+            condition: ExprFun::from_ast(db, ast.condition(db)),
+            then_body: ast.then_body(db).iter().map(|s| Statement::from_ast(db, s)).collect(),
+            else_body: ast.else_body(db).as_ref().map(|stmts| {
+                stmts.iter().map(|s| Statement::from_ast(db, s)).collect()
+            }),
         }
     }
 }

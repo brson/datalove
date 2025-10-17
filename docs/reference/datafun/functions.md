@@ -58,20 +58,16 @@ let sum = add(@10, @20)   # sum = @30
 
 Datafun supports recursive function calls with automatic stack overflow protection (max depth: 1000).
 
-### Recursion Works
-
 ✅ Functions can call themselves
 ✅ Type checking validates recursive calls
 ✅ Stack overflow protection prevents infinite recursion
+✅ Conditional statements enable practical recursion
 
-### Current Limitation: No Conditionals
+### Practical Recursion with Conditionals
 
-❌ **Practical recursive algorithms require conditional statements (if/when), which are not yet implemented.**
-
-Without conditionals, you cannot write terminating recursive functions like factorial or fibonacci. For example, this factorial definition **cannot be written** in current datafun:
+With conditional statements, you can write terminating recursive functions like factorial:
 
 ```datafun
-# NOT VALID - no if/when statements exist yet
 fun factorial(n: @u32): @u32
   if n .<= @1
     ret @1
@@ -79,11 +75,13 @@ fun factorial(n: @u32): @u32
     ret n * factorial(n - @1)
   end if
 end fun
+
+let result = factorial(@5)  # result = @120
 ```
 
-### Infinite Recursion Example
+### Infinite Recursion Protection
 
-Without conditionals, recursive functions will hit stack overflow protection:
+Without conditionals to terminate recursion, functions will hit stack overflow protection:
 
 ```datafun
 fun infinite(n: @u32): @u32
@@ -107,13 +105,79 @@ let output = infinite(@0)
 - Original variables are restored after function returns
 - Functions see global variables defined before them
 
-## Next Steps
+## Conditional Statements
 
-To enable practical recursion, datafun needs:
+Datafun supports if/else statements for conditional branching.
 
-1. **Conditional statements** - `if/when/else` for branching logic
-2. **Comparison expressions** - already have `.<`, `.>`, `<=`, `>=`, `==`, `!=`
-3. **Boolean expressions** - `and`, `or`, `not`
+### Syntax
+
+```datafun
+if condition
+  # statements executed if condition is true
+end if
+```
+
+With else clause:
+
+```datafun
+if condition
+  # statements executed if condition is true
+else
+  # statements executed if condition is false
+end if
+```
+
+### Condition Types
+
+The condition must be a boolean expression. Comparison operators return booleans:
+
+- `.<` - less than
+- `.>` - greater than
+- `<=` - less than or equal
+- `>=` - greater than or equal
+- `==` - equal
+- `!=` - not equal
+
+### Examples
+
+**Simple conditional:**
+```datafun
+fun abs(x: @i32): @i32
+  if x .< @0
+    ret @0 - x
+  else
+    ret x
+  end if
+end fun
+```
+
+**Conditional in recursion:**
+```datafun
+fun factorial(n: @u32): @u32
+  if n .<= @1
+    ret @1
+  else
+    ret n * factorial(n - @1)
+  end if
+end fun
+```
+
+**Multiple statements in branches:**
+```datafun
+fun classify(x: @u32): @u32
+  if x .< @10
+    ret @1
+  else
+    ret @2
+  end if
+end fun
+```
+
+### Limitations
+
+- No `else if` or `elif` - use nested if statements
+- No boolean operators (`and`, `or`, `not`) yet
+- No ternary conditional expressions
 
 ## See Also
 

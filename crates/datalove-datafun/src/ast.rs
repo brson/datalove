@@ -17,6 +17,7 @@ pub enum Statement<'db> {
     Fun(StmtFun<'db>),
     Ret(StmtRet<'db>),
     Require(StmtRequire<'db>),
+    If(StmtIf<'db>),
     ParseError(StmtParseError<'db>),
 }
 
@@ -63,6 +64,15 @@ pub struct StmtRequire<'db> {
     pub kind: RequireKind,
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+}
+
+#[salsa::tracked]
+pub struct StmtIf<'db> {
+    pub condition: ExprFun<'db>,
+    #[returns(ref)]
+    pub then_body: Vec<Statement<'db>>,
+    #[returns(ref)]
+    pub else_body: Option<Vec<Statement<'db>>>,
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]

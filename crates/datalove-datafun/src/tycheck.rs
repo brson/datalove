@@ -270,6 +270,35 @@ fn check_statement<'db>(
             // TODO: implement require type checking.
         }
 
+        Statement::If(stmt) => {
+            let condition = stmt.condition(db);
+            let then_body = stmt.then_body(db);
+            let else_body = stmt.else_body(db);
+
+            // Check condition is bool type.
+            let bool_type = TypeAndHeap::new(
+                db,
+                datalit::ast::Heap::Omitted,
+                Type::Datalit(datalit::tycheck::Type::Bool),
+            );
+
+            if let Err(e) = check_expr(ctx, condition, bool_type) {
+                ctx.add_error(e);
+            }
+
+            // Type check then body.
+            for stmt in then_body {
+                check_statement(ctx, stmt);
+            }
+
+            // Type check else body if present.
+            if let Some(else_stmts) = else_body {
+                for stmt in else_stmts {
+                    check_statement(ctx, stmt);
+                }
+            }
+        }
+
         Statement::ParseError(_) => {
             // Skip parse errors.
         }

@@ -109,6 +109,17 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
             Statement::Ret(stmt) => {
                 self.visit_datafun_expr(stmt.value(self.db))?;
             }
+            Statement::If(stmt) => {
+                self.visit_datafun_expr(stmt.condition(self.db))?;
+                for then_stmt in stmt.then_body(self.db) {
+                    self.visit_statement(then_stmt)?;
+                }
+                if let Some(else_stmts) = stmt.else_body(self.db) {
+                    for else_stmt in else_stmts {
+                        self.visit_statement(else_stmt)?;
+                    }
+                }
+            }
             Statement::Require(_) | Statement::ParseError(_) => {}
         }
         Ok(())
