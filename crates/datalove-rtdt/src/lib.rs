@@ -2,6 +2,14 @@
 
 pub mod layout;
 pub mod anypack;
+pub mod tydesc_ref;
+
+pub use tydesc_ref::{
+    TyDescRef,
+    TupleInfo, TupleFieldRef, TupleFieldIter,
+    StructInfo, StructFieldRef, StructFieldIter,
+    EnumInfo, EnumVariantRef, EnumVariantIter,
+};
 
 
 
