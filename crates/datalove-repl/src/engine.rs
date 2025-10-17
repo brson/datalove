@@ -331,40 +331,39 @@ impl Engine {
         let unit_index = new_script.units(db).len() - 1;
 
         // Parse the new unit.
-        let parsed = datafun::parser::parse_script_unit(db, new_script, unit_index);
-        let statements = parsed.statements(db);
-
-        if statements.is_empty() {
-            return Eval::Error("no statements parsed".to_string());
-        }
-
-        // Check for parse errors.
-        for stmt in statements {
-            if let datafun::ast::Statement::ParseError(err) = stmt {
-                let msg = err.message(db).as_str(db).to_string();
-                return Eval::Error(format!("parse error: {}", msg));
-            }
-        }
-
-        // Run resolution to check if the unit is valid.
-        let fun_resolution = datafun::resolution::resolve_functions(db, new_script);
-        let let_resolution = datafun::resolution::resolve_let_statement(db, new_script, unit_index);
-        //todo check resolution
-
-        // Check if this is a let statement.
-        let is_let_stmt = statements.iter().any(|stmt| matches!(stmt, datafun::ast::Statement::Let(_)));
+        let parsed_unit = datafun::parser::parse_script_unit(db, new_script, unit_index);
+        let unit_statements = parsed_unit.statements(db);
 
         // Parse the full script for typechecking.
         let parsed_script = parse_full_script(db, new_script);
 
-        // Type check the script.
-        let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
-        if !tycheck_result.errors(db).is_empty() {
-            let errors: Vec<_> = tycheck_result.errors(db)
-                .iter()
-                .map(|e| format!("{:?}", e.error(db)))
-                .collect();
-            return Eval::Error(format!("type error(s): {}", errors.join(", ")));
+        {
+            if unit_statements.is_empty() {
+                return Eval::Error("no statements parsed".to_string());
+            }
+
+            // Check for parse errors.
+            for stmt in unit_statements {
+                if let datafun::ast::Statement::ParseError(err) = stmt {
+                    let msg = err.message(db).as_str(db).to_string();
+                    return Eval::Error(format!("parse error: {}", msg));
+                }
+            }
+
+            // Run resolution to check if the unit is valid.
+            let fun_resolution = datafun::resolution::resolve_functions(db, new_script);
+            let let_resolution = datafun::resolution::resolve_let_statement(db, new_script, unit_index);
+            //todo check resolution
+
+            // Type check the script.
+            let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
+            if !tycheck_result.errors(db).is_empty() {
+                let errors: Vec<_> = tycheck_result.errors(db)
+                    .iter()
+                    .map(|e| format!("{:?}", e.error(db)))
+                    .collect();
+                return Eval::Error(format!("type error(s): {}", errors.join(", ")));
+            }
         }
 
         // Execute the statement using the interpreter.
@@ -372,28 +371,26 @@ impl Engine {
         match result {
             Ok(mut ctx) => {
                 // If it's a let statement, extract and return structured info.
-                if is_let_stmt {
-                    if let Some(datafun::ast::Statement::Let(let_stmt)) = statements.first() {
-                        let name = let_stmt.name(db);
-                        let name_str = name.as_str(db).to_string();
+                if let datafun::ast::Statement::Let(let_stmt) = unit_statements.last().X() {
+                    let name = let_stmt.name(db);
+                    let name_str = name.as_str(db).to_string();
 
-                        // Get the type from the typechecker.
-                        let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
-                            datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
-                        } else {
-                            "unknown".to_string()
-                        };
+                    // Get the type from the typechecker.
+                    let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
+                        datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
+                    } else {
+                        "unknown".to_string()
+                    };
 
-                        // Get the value by pretty-printing.
-                        let value_str = ctx.pretty_print_variable(name)
-                            .unwrap_or_else(|e| format!("error: {:?}", e));
+                    // Get the value by pretty-printing.
+                    let value_str = ctx.pretty_print_variable(name)
+                        .unwrap_or_else(|e| format!("error: {:?}", e));
 
-                        return Eval::SuccessLet(EvalLet {
-                            name: name_str,
-                            ty: ty_str,
-                            value: value_str,
-                        });
-                    }
+                    return Eval::SuccessLet(EvalLet {
+                        name: name_str,
+                        ty: ty_str,
+                        value: value_str,
+                    });
                 }
 
                 Eval::Nothing
