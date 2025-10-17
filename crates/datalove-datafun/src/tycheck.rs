@@ -107,7 +107,14 @@ pub fn type_check<'db>(
 ) -> TypecheckResult<'db> {
     let mut ctx = TypeContext::new(db);
 
-    // Type check each statement in order.
+    // First pass: collect all function signatures.
+    for statement in script.statements(db) {
+        if let Statement::Fun(stmt) = statement {
+            collect_function_signature(&mut ctx, stmt);
+        }
+    }
+
+    // Second pass: type check all statements (including function bodies).
     for statement in script.statements(db) {
         check_statement(&mut ctx, statement);
     }
@@ -133,12 +140,63 @@ pub fn lookup_variable_type<'db>(
 ) -> Option<TypeAndHeap<'db>> {
     let mut ctx = TypeContext::new(db);
 
-    // Type check each statement in order.
+    // First pass: collect all function signatures.
+    for statement in script.statements(db) {
+        if let Statement::Fun(stmt) = statement {
+            collect_function_signature(&mut ctx, stmt);
+        }
+    }
+
+    // Second pass: type check all statements.
     for statement in script.statements(db) {
         check_statement(&mut ctx, statement);
     }
 
     ctx.lookup_variable(name)
+}
+
+/// Collect function signature without checking body (first pass).
+fn collect_function_signature<'db>(
+    ctx: &mut TypeContext<'db>,
+    stmt: &StmtFun<'db>,
+) {
+    let db = ctx.db;
+    let name = stmt.name(db);
+    let params = stmt.params(db);
+    let return_type = stmt.return_type(db);
+
+    // Convert parameter types.
+    let mut param_types = Vec::new();
+    for param in params {
+        match convert_type_hint(db, param.type_hint(db)) {
+            Ok(ty) => param_types.push(ty),
+            Err(e) => {
+                ctx.add_error(e);
+                return;
+            }
+        }
+    }
+
+    // Convert return type.
+    let ret_ty = match return_type {
+        Some(type_hint) => {
+            match convert_type_hint(db, type_hint) {
+                Ok(ty) => ty,
+                Err(e) => {
+                    ctx.add_error(e);
+                    return;
+                }
+            }
+        }
+        None => {
+            ctx.add_error(TypeError::CannotSynthesize);
+            return;
+        }
+    };
+
+    // Create function type and add to context.
+    let func_type = TypeFunction::new(db, param_types, ret_ty);
+    ctx.add_function(name, func_type);
 }
 
 /// Check a statement.
@@ -195,42 +253,25 @@ fn check_statement<'db>(
         Statement::Fun(stmt) => {
             let name = stmt.name(db);
             let params = stmt.params(db);
-            let return_type = stmt.return_type(db);
             let body = stmt.body(db);
 
-            // Convert parameter types.
-            let mut param_types = Vec::new();
-            for param in params {
-                match convert_type_hint(db, param.type_hint(db)) {
-                    Ok(ty) => param_types.push(ty),
-                    Err(e) => {
-                        ctx.add_error(e);
-                        return;
-                    }
-                }
-            }
-
-            // Convert return type.
-            let ret_ty = match return_type {
-                Some(type_hint) => {
-                    match convert_type_hint(db, type_hint) {
-                        Ok(ty) => ty,
-                        Err(e) => {
-                            ctx.add_error(e);
-                            return;
-                        }
-                    }
-                }
+            // Function signature should already be collected in first pass.
+            // Look it up to get param types and return type.
+            let func_type = match ctx.lookup_function(name) {
+                Some(func_type) => func_type,
                 None => {
-                    // TODO: infer return type from body.
-                    ctx.add_error(TypeError::CannotSynthesize);
-                    return;
+                    // Function not in context (shouldn't happen in normal flow).
+                    // Collect signature now for error resilience.
+                    collect_function_signature(ctx, stmt);
+                    match ctx.lookup_function(name) {
+                        Some(func_type) => func_type,
+                        None => return, // Errors already recorded.
+                    }
                 }
             };
 
-            // Create function type and add to context.
-            let func_type = TypeFunction::new(db, param_types.clone(), ret_ty);
-            ctx.add_function(name, func_type);
+            let param_types = func_type.param_types(db);
+            let ret_ty = func_type.return_type(db);
 
             // Create new context for function body with parameters in scope.
             let saved_variables = ctx.variables.clone();
