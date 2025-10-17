@@ -76,6 +76,26 @@ pub struct Engine {
     script: Option<datafun::script::Script>,
 }
 
+struct ReplHistory {
+    units: Vec<HistoryEntry>,
+}
+
+struct HistoryEntry {
+    command: Command,
+    last_eval: Option<Eval>,
+    // Not all commands produce script units
+    script_status: Option<ScriptUnitStatus>,
+}
+
+struct ScriptUnitStatus {
+    script_unit: datafun::script::ScriptUnit,
+    // Whether the script unit is scheduled for evaluation.
+    //
+    // This is autamotically turned off for new script units
+    // if type checking fails.
+    active: bool,
+}
+
 /// Create a new script with an additional statement.
 ///
 /// This creates Salsa input structs (Script, ScriptUnit, Source)
