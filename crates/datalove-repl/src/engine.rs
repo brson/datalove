@@ -42,7 +42,6 @@ impl ReplHistory {
         }
     }
 
-    /// Build a Script from all active script units in the history.
     fn build_script(&self, db: &dyn datafun::Db) -> datafun::script::Script {
         let active_units: Vec<_> = self.entries.iter()
             .filter_map(|entry| entry.script_status.as_ref())
@@ -65,13 +64,18 @@ impl ReplHistory {
     }
 
     /// Add a new history entry with a script unit.
-    fn add_script_entry(&mut self, command: Command, script_unit: datafun::script::ScriptUnit) {
+    fn add_script_entry(
+        &mut self,
+        command: Command,
+        script_unit: datafun::script::ScriptUnit,
+        active: bool,
+    ) {
         self.entries.push(HistoryEntry {
             command,
             last_eval: None,
             script_status: Some(ScriptUnitStatus {
                 script_unit,
-                active: true,
+                active,
             }),
         });
     }
@@ -295,27 +299,34 @@ impl Engine {
         // Create the new script unit.
         let new_unit = create_script_unit(&self.db, source.0.C());
 
-        // Add to history (initially as active).
-        self.history.add_script_entry(Command::ScriptStatement(source), new_unit);
-
-        let eval = self.eval_current_script();
+        let eval = self.eval_script_with_unit(new_unit);
 
         match &eval {
             Eval::Error(_) | Eval::CrashReset(_) => {
-                self.history.deactivate_last();
+                self.history.add_script_entry(
+                    Command::ScriptStatement(source),
+                    new_unit,
+                    false,
+                );
             }
             Eval::Nothing | Eval::SuccessLet(_) | Eval::SuccessExpr(_) |
-            Eval::CallerInterpret(_) => {}
+            Eval::CallerInterpret(_) => {
+                self.history.add_script_entry(
+                    Command::ScriptStatement(source),
+                    new_unit,
+                    true,
+                );
+            }
         }
 
         eval
     }
 
-    fn eval_current_script(&mut self) -> Eval {
+    fn eval_script_with_unit(&mut self, unit: datafun::script::ScriptUnit) -> Eval {
         let db = &self.db;
 
         // Build a script from the current history.
-        let new_script = self.history.build_script(db);
+        let new_script = self.history.build_script_with_unit(db, unit);
 
         // Get the index of the new unit in the script.
         let unit_index = new_script.units(db).len() - 1;
