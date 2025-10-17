@@ -31,8 +31,10 @@ fn find_test_fixtures() -> Vec<PathBuf> {
 /// Compile and instantiate a datalit value.
 fn compile_and_instantiate<'db>(
     db: &'db datalit::Database,
+    rt: &mut rt::rt_local::RtLocal,
+    tydesc_table: &mut datalit::tydesc_table::TyDescTable<'db>,
     source_text: &str,
-) -> Result<(datalit::instantiate::TyDescTable<'db>, datalit::instantiate::ValueHeap, datalit::instantiate::InstantiatedValue<'static>), String> {
+) -> Result<datalit::instantiate2::InstantiatedValue, String> {
     let source = bct::input::Source::new(db, source_text.S());
     let parsed = datalit::parser::parse(db, source);
     let resolved = datalit::resolve::resolve_names(db, parsed);
@@ -49,7 +51,7 @@ fn compile_and_instantiate<'db>(
         return Err(format!("Type check errors: {} error(s)", errors.len()));
     }
 
-    datalit::instantiate::instantiate_value(db, typechecked)
+    datalit::instantiate2::instantiate_value(db, rt, tydesc_table, typechecked)
         .map_err(|e| format!("Instantiation error: {}", e))
 }
 
@@ -138,25 +140,44 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Step 1: Parse, type check, and instantiate the original datalit.
     let db = datalit::Database::default();
-    let (_tydesc_table1, _value_heap1, inst1) = compile_and_instantiate(&db, &source_text)?;
+    let mut rt_inst = rt::rt_local::RtLocal::new();
+    let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(&db);
+    let inst1 = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &source_text)?;
 
     // Step 2: Pretty-print using runtime pretty printer.
-    let pretty1 = rt_pretty_print(inst1.value, inst1.tydesc)?;
+    let pretty1 = rt_pretty_print(inst1.ptr, inst1.tydesc)?;
 
     // Step 3: Parse, type check, and instantiate the pretty-printed output.
-    let (_tydesc_table2, _value_heap2, inst2) = compile_and_instantiate(&db, &pretty1)?;
+    let inst2 = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &pretty1)?;
 
     // Step 4: Pretty-print again.
-    let pretty2 = rt_pretty_print(inst2.value, inst2.tydesc)?;
+    let pretty2 = rt_pretty_print(inst2.ptr, inst2.tydesc)?;
 
     // Step 5: Check that both pretty-prints are identical.
     if pretty1 != pretty2 {
+        unsafe {
+            let rt_handle = &mut *rt_inst as *mut rt::rt_local::RtLocal as *mut u8;
+            rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+            rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+            rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+            rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+            rt_inst.shutdown();
+        }
         return Err(format!(
             "Pretty-prints differ:\nFirst:  {}\nSecond: {}",
             pretty1, pretty2
         ));
     }
 
+    // Clean up instantiated values before shutdown.
+    unsafe {
+        let rt_handle = &mut *rt_inst as *mut rt::rt_local::RtLocal as *mut u8;
+        rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+        rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+        rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+        rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+        rt_inst.shutdown();
+    }
     Ok(pretty1)
 }
 

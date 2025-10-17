@@ -2,7 +2,9 @@
 
 use rmx::prelude::*;
 
-use datalove_datalit::{Database, instantiate};
+use datalove_datalit::{Database, instantiate2};
+use datalove_datalit::tydesc_table::TyDescTable;
+use datalove_rt::rt_local::RtLocal;
 
 fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
     let source = bct::input::Source::new(db, source_text.to_string());
@@ -17,7 +19,9 @@ fn test_clone_empty_map() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @map <@u32, @string> / @map {}")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the map.
     let rt = datalove_rt::dtlv_rti_init();
@@ -28,7 +32,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -61,7 +65,9 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @map <@u32, @string> / @map { 1 = \"hello\" }")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the map.
     let rt = datalove_rt::dtlv_rti_init();
@@ -72,7 +78,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -107,7 +113,9 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
         ": @map <@u32, @string> / @map { 1 = \"one\", 2 = \"two\", 3 = \"three\", 4 = \"four\", 5 = \"five\" }"
     )?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the map.
     let rt = datalove_rt::dtlv_rti_init();
@@ -118,7 +126,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -153,7 +161,9 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
         ": @map <@u32, @(@u32, @string)> / @map { 1 = @(10, \"first\"), 2 = @(20, \"second\") }"
     )?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the map.
     let rt = datalove_rt::dtlv_rti_init();
@@ -164,7 +174,7 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -197,7 +207,9 @@ fn test_clone_empty_set() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @set <@u32> / @set {}")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::dtlv_rti_init();
@@ -208,7 +220,7 @@ fn test_clone_empty_set() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -241,7 +253,9 @@ fn test_clone_set_single_element() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @set <@u32> / @set { 42 }")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::dtlv_rti_init();
@@ -252,7 +266,7 @@ fn test_clone_set_single_element() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -287,7 +301,9 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
         ": @set <@u32> / @set { 1, 2, 3, 4, 5 }"
     )?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::dtlv_rti_init();
@@ -298,7 +314,7 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -333,7 +349,9 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
         ": @set <@string> / @set { \"apple\", \"banana\", \"cherry\" }"
     )?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::dtlv_rti_init();
@@ -344,7 +362,7 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -379,7 +397,9 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
         ": @set <@(@u32, @string)> / @set { @(1, \"one\"), @(2, \"two\") }"
     )?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::dtlv_rti_init();
@@ -390,7 +410,7 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )

@@ -2,7 +2,9 @@
 
 use rmx::prelude::*;
 
-use datalove_datalit::{Database, instantiate};
+use datalove_datalit::{Database, instantiate2};
+use datalove_datalit::tydesc_table::TyDescTable;
+use datalove_rt::rt_local::RtLocal;
 
 fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
     let source = bct::input::Source::new(db, source_text.to_string());
@@ -18,15 +20,17 @@ fn test_cmp_bool_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@false")?;
     let typechecked_b = compile(&db, "@true")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -41,15 +45,17 @@ fn test_cmp_bool_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@true")?;
     let typechecked_b = compile(&db, "@true")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -64,15 +70,17 @@ fn test_cmp_u32_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@42")?;
     let typechecked_b = compile(&db, "@99")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -87,15 +95,17 @@ fn test_cmp_u32_greater() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@99")?;
     let typechecked_b = compile(&db, "@42")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -110,15 +120,17 @@ fn test_cmp_u32_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@42")?;
     let typechecked_b = compile(&db, "@42")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -133,15 +145,17 @@ fn test_cmp_f32_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@2.71")?;
     let typechecked_b = compile(&db, "@3.14")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -156,15 +170,17 @@ fn test_cmp_f32_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@3.14")?;
     let typechecked_b = compile(&db, "@3.14")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -179,15 +195,17 @@ fn test_cmp_string_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, r#"@"apple""#)?;
     let typechecked_b = compile(&db, r#"@"banana""#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -202,15 +220,17 @@ fn test_cmp_string_greater() -> AnyResult<()> {
     let typechecked_a = compile(&db, r#"@"zebra""#)?;
     let typechecked_b = compile(&db, r#"@"apple""#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -225,15 +245,17 @@ fn test_cmp_string_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, r#"@"hello""#)?;
     let typechecked_b = compile(&db, r#"@"hello""#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -248,15 +270,17 @@ fn test_cmp_int_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @int / @42")?;
     let typechecked_b = compile(&db, ": @int / @99")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -271,15 +295,17 @@ fn test_cmp_int_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @int / @42")?;
     let typechecked_b = compile(&db, ": @int / @42")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -294,15 +320,17 @@ fn test_cmp_tuple_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@(@1, @2)")?;
     let typechecked_b = compile(&db, "@(@1, @3)")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -317,15 +345,17 @@ fn test_cmp_tuple_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@(@1, @2)")?;
     let typechecked_b = compile(&db, "@(@1, @2)")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -340,15 +370,17 @@ fn test_cmp_tuple_greater() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@(@2, @1)")?;
     let typechecked_b = compile(&db, "@(@1, @99)")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -363,15 +395,17 @@ fn test_cmp_struct_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@{x = @1, y = @2}")?;
     let typechecked_b = compile(&db, "@{x = @1, y = @3}")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -386,15 +420,17 @@ fn test_cmp_struct_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@{x = @1, y = @2}")?;
     let typechecked_b = compile(&db, "@{x = @1, y = @2}")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -409,15 +445,17 @@ fn test_cmp_list_less_by_element() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@[@1, @2, @3]")?;
     let typechecked_b = compile(&db, "@[@1, @2, @4]")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -432,15 +470,17 @@ fn test_cmp_list_less_by_length() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@[@1, @2]")?;
     let typechecked_b = compile(&db, "@[@1, @2, @3]")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -455,15 +495,17 @@ fn test_cmp_list_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@[@1, @2, @3]")?;
     let typechecked_b = compile(&db, "@[@1, @2, @3]")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -478,15 +520,17 @@ fn test_cmp_enum_less_by_discriminant() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
     let typechecked_b = compile(&db, ": @enum Status { Ok, Error } / @enum Error")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -501,15 +545,17 @@ fn test_cmp_enum_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
     let typechecked_b = compile(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -524,15 +570,17 @@ fn test_cmp_enum_with_payload_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@10)")?;
     let typechecked_b = compile(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@20)")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -547,15 +595,17 @@ fn test_cmp_option_none_vs_none() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @?@u32 / @none")?;
     let typechecked_b = compile(&db, ": @?@u32 / @none")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -570,15 +620,17 @@ fn test_cmp_option_none_less_than_some() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @?@u32 / @none")?;
     let typechecked_b = compile(&db, ": @?@u32 / @42")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -593,15 +645,17 @@ fn test_cmp_option_some_greater_than_none() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @?@u32 / @42")?;
     let typechecked_b = compile(&db, ": @?@u32 / @none")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -616,15 +670,17 @@ fn test_cmp_option_some_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @?@u32 / @42")?;
     let typechecked_b = compile(&db, ": @?@u32 / @42")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -639,15 +695,17 @@ fn test_cmp_option_some_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @?@u32 / @10")?;
     let typechecked_b = compile(&db, ": @?@u32 / @20")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -663,15 +721,17 @@ fn test_cmp_result_err_less_than_ok() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @!@u32 / @err")?;
     let typechecked_b = compile(&db, ": @!@u32 / @42")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -687,15 +747,17 @@ fn test_cmp_result_ok_greater_than_err() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @!@u32 / @42")?;
     let typechecked_b = compile(&db, ": @!@u32 / @err")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -711,15 +773,17 @@ fn test_cmp_result_ok_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @!@u32 / @42")?;
     let typechecked_b = compile(&db, ": @!@u32 / @42")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -735,15 +799,17 @@ fn test_cmp_result_ok_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @!@u32 / @10")?;
     let typechecked_b = compile(&db, ": @!@u32 / @20")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -759,15 +825,17 @@ fn test_cmp_result_err_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @!@u32 / @err")?;
     let typechecked_b = compile(&db, ": @!@u32 / @err")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -783,15 +851,17 @@ fn test_cmp_result_err_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @!@u32 / @err")?;
     let typechecked_b = compile(&db, ": @!@u32 / @err")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -806,15 +876,17 @@ fn test_cmp_type_mismatch() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@42")?;
     let typechecked_b = compile(&db, "@true")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -829,15 +901,17 @@ fn test_cmp_map_empty_vs_empty() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @map<@string, @u32> / @map{}")?;
     let typechecked_b = compile(&db, ": @map<@string, @u32> / @map{}")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -852,15 +926,17 @@ fn test_cmp_map_empty_vs_nonempty() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @map<@string, @u32> / @map{}")?;
     let typechecked_b = compile(&db, r#"@map{"a" = @1}"#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -875,15 +951,17 @@ fn test_cmp_map_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
     let typechecked_b = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -898,15 +976,17 @@ fn test_cmp_map_less_by_key() -> AnyResult<()> {
     let typechecked_a = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
     let typechecked_b = compile(&db, r#"@map{"a" = @1, "c" = @2}"#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -921,15 +1001,17 @@ fn test_cmp_map_less_by_value() -> AnyResult<()> {
     let typechecked_a = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
     let typechecked_b = compile(&db, r#"@map{"a" = @1, "b" = @3}"#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -944,15 +1026,17 @@ fn test_cmp_map_less_by_length() -> AnyResult<()> {
     let typechecked_a = compile(&db, r#"@map{"a" = @1}"#)?;
     let typechecked_b = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -967,15 +1051,17 @@ fn test_cmp_map_greater_by_key() -> AnyResult<()> {
     let typechecked_a = compile(&db, r#"@map{"a" = @1, "c" = @2}"#)?;
     let typechecked_b = compile(&db, r#"@map{"a" = @1, "b" = @2}"#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -990,15 +1076,17 @@ fn test_cmp_set_empty_vs_empty() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @set<@u32> / @set{}")?;
     let typechecked_b = compile(&db, ": @set<@u32> / @set{}")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -1013,15 +1101,17 @@ fn test_cmp_set_empty_vs_nonempty() -> AnyResult<()> {
     let typechecked_a = compile(&db, ": @set<@u32> / @set{}")?;
     let typechecked_b = compile(&db, "@set{@1}")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -1036,15 +1126,17 @@ fn test_cmp_set_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@set{@1, @2, @3}")?;
     let typechecked_b = compile(&db, "@set{@1, @2, @3}")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -1059,15 +1151,17 @@ fn test_cmp_set_less_by_element() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@set{@1, @2}")?;
     let typechecked_b = compile(&db, "@set{@1, @3}")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -1082,15 +1176,17 @@ fn test_cmp_set_less_by_length() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@set{@1, @2}")?;
     let typechecked_b = compile(&db, "@set{@1, @2, @3}")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -1105,15 +1201,17 @@ fn test_cmp_set_greater_by_element() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@set{@1, @3}")?;
     let typechecked_b = compile(&db, "@set{@1, @2}")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -1128,15 +1226,17 @@ fn test_cmp_set_with_strings() -> AnyResult<()> {
     let typechecked_a = compile(&db, r#"@set{"apple", "banana"}"#)?;
     let typechecked_b = compile(&db, r#"@set{"apple", "cherry"}"#)?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };

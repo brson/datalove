@@ -184,6 +184,16 @@ fn instantiate_expr_into<'db>(
             instantiate_error(db, rt, err_expr.value(db), tydesc_table, tydesc, dest_ptr)
         }
 
+        (Expr::Map(map_expr), Type::Map(map_ty)) => {
+            let tydesc = tydesc_table.get_or_create(ty);
+            instantiate_map(db, rt, &map_expr.entries(db), map_ty.key_type(db), map_ty.value_type(db), tydesc_table, tydesc, dest_ptr)
+        }
+
+        (Expr::Set(set_expr), Type::Set(set_ty)) => {
+            let tydesc = tydesc_table.get_or_create(ty);
+            instantiate_set(db, rt, &set_expr.elements(db), set_ty.element_type(db), tydesc_table, tydesc, dest_ptr)
+        }
+
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
@@ -625,6 +635,157 @@ fn instantiate_error<'db>(
     }
 
     Ok(dest_ptr as *const u8)
+}
+
+// ============================================================================
+// Map instantiation
+// ============================================================================
+
+fn instantiate_map<'db>(
+    db: &'db dyn crate::Db,
+    rt: &mut datalove_rt::rt_local::RtLocal,
+    entries: &[ExprMapEntry<'db>],
+    key_type: TypeAndHeap<'db>,
+    value_type: TypeAndHeap<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    _map_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
+) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let map_ptr = dest_ptr as *mut rtdt::Map;
+
+    if entries.is_empty() {
+        // Empty map: null root, zero length.
+        unsafe {
+            (*map_ptr).root = std::ptr::null();
+            (*map_ptr).len = 0;
+        }
+        return Ok(map_ptr as *const u8);
+    }
+
+    // Non-empty map: build a single leaf node.
+    if entries.len() > rtdt::MAP_NODE_CAPACITY as usize {
+        bail!("Map instantiation limited to {} entries", rtdt::MAP_NODE_CAPACITY);
+    }
+
+    // Get type descriptors.
+    let key_tydesc = tydesc_table.get_or_create(key_type.ty(db));
+    let value_tydesc = tydesc_table.get_or_create(value_type.ty(db));
+
+    // Compute leaf node layout.
+    let leaf_layout = unsafe { rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc) };
+
+    // Allocate leaf node.
+    let leaf_node = unsafe {
+        rt.alloc.alloc(leaf_layout.size, leaf_layout.align, 1)
+    };
+
+    // Initialize node header: tag = Leaf (2), len = entries.len().
+    unsafe {
+        *leaf_node = rtdt::MapNodeTag::Leaf as u8;  // tag at offset 0
+        *(leaf_node.add(4) as *mut u32) = entries.len() as u32;  // len at offset 4
+    }
+
+    // Initialize next_leaf pointer to null.
+    unsafe {
+        let next_leaf_ptr = leaf_node.add(leaf_layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+        *next_leaf_ptr = std::ptr::null_mut();
+    }
+
+    // Get pointers to keys and values arrays.
+    let keys_array = unsafe { leaf_node.add(leaf_layout.keys_offset as usize) };
+    let values_array = unsafe { leaf_node.add(leaf_layout.values_offset as usize) };
+
+    let key_size = unsafe { (*key_tydesc).size as usize };
+    let value_size = unsafe { (*value_tydesc).size as usize };
+
+    // Instantiate and copy each key-value pair.
+    for (i, entry) in entries.iter().enumerate() {
+        let key_expr = entry.key(db);
+        let value_expr = entry.value(db);
+
+        let key_dest = unsafe { keys_array.add(i * key_size) };
+        let value_dest = unsafe { values_array.add(i * value_size) };
+
+        instantiate_expr_into(db, rt, key_expr, key_type.ty(db), tydesc_table, key_dest)?;
+        instantiate_expr_into(db, rt, value_expr, value_type.ty(db), tydesc_table, value_dest)?;
+    }
+
+    // Initialize Map struct.
+    unsafe {
+        (*map_ptr).root = leaf_node as *const rtdt::MapNode;
+        (*map_ptr).len = entries.len() as u32;
+    }
+
+    Ok(map_ptr as *const u8)
+}
+
+// ============================================================================
+// Set instantiation
+// ============================================================================
+
+fn instantiate_set<'db>(
+    db: &'db dyn crate::Db,
+    rt: &mut datalove_rt::rt_local::RtLocal,
+    elements: &[ExprFull<'db>],
+    element_type: TypeAndHeap<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    _set_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
+) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let set_ptr = dest_ptr as *mut rtdt::Set;
+
+    if elements.is_empty() {
+        // Empty set: null root, zero length.
+        unsafe {
+            (*set_ptr).root = std::ptr::null();
+            (*set_ptr).len = 0;
+        }
+        return Ok(set_ptr as *const u8);
+    }
+
+    // Non-empty set: build a single leaf node.
+    if elements.len() > rtdt::SET_NODE_CAPACITY as usize {
+        bail!("Set instantiation limited to {} elements", rtdt::SET_NODE_CAPACITY);
+    }
+
+    // Get type descriptor.
+    let element_tydesc = tydesc_table.get_or_create(element_type.ty(db));
+
+    // Compute leaf node layout.
+    let leaf_layout = unsafe { rtdt::layout::compute_set_leaf_node_layout(element_tydesc) };
+
+    // Allocate leaf node.
+    let leaf_node = unsafe {
+        rt.alloc.alloc(leaf_layout.size, leaf_layout.align, 1)
+    };
+
+    // Initialize node header (SetNode struct).
+    unsafe {
+        let set_node_ptr = leaf_node as *mut rtdt::SetNode;
+        (*set_node_ptr).tag = rtdt::SetNodeTag::Leaf;
+        (*set_node_ptr).len = elements.len() as u32;
+    }
+
+    // Get pointer to keys array.
+    let keys_array = unsafe { leaf_node.add(leaf_layout.keys_offset as usize) };
+
+    let element_size = unsafe { (*element_tydesc).size as usize };
+
+    // Instantiate and copy each element.
+    for (i, elem_expr) in elements.iter().enumerate() {
+        let elem_dest = unsafe { keys_array.add(i * element_size) };
+        instantiate_expr_into(db, rt, *elem_expr, element_type.ty(db), tydesc_table, elem_dest)?;
+    }
+
+    // Initialize Set struct.
+    unsafe {
+        (*set_ptr).root = leaf_node as *const rtdt::SetNode;
+        (*set_ptr).len = elements.len() as u32;
+    }
+
+    Ok(set_ptr as *const u8)
 }
 
 // ============================================================================

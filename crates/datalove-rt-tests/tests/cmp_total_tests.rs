@@ -3,7 +3,9 @@
 
 use rmx::prelude::*;
 
-use datalove_datalit::{Database, instantiate};
+use datalove_datalit::{Database, instantiate2};
+use datalove_datalit::tydesc_table::TyDescTable;
+use datalove_rt::rt_local::RtLocal;
 
 fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
     let source = bct::input::Source::new(db, source_text.to_string());
@@ -19,15 +21,17 @@ fn test_cmp_total_f32_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@2.71")?;
     let typechecked_b = compile(&db, "@3.14")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -42,15 +46,17 @@ fn test_cmp_total_f32_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@3.14")?;
     let typechecked_b = compile(&db, "@3.14")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -65,15 +71,17 @@ fn test_cmp_total_f32_greater() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@3.14")?;
     let typechecked_b = compile(&db, "@2.71")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -88,15 +96,17 @@ fn test_cmp_total_tuple_less() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@(@true, @2.71)")?;
     let typechecked_b = compile(&db, "@(@true, @3.14)")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };
@@ -111,15 +121,17 @@ fn test_cmp_total_tuple_equal() -> AnyResult<()> {
     let typechecked_a = compile(&db, "@(@true, @3.14)")?;
     let typechecked_b = compile(&db, "@(@true, @3.14)")?;
 
-    let (_tydesc_table_a, _value_heap_a, inst_a) = instantiate::instantiate_value(&db, typechecked_a)?;
-    let (_tydesc_table_b, _value_heap_b, inst_b) = instantiate::instantiate_value(&db, typechecked_b)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
-            inst_a.value,
+            inst_a.ptr,
             inst_a.tydesc,
-            inst_b.value,
+            inst_b.ptr,
             inst_b.tydesc,
         )
     };

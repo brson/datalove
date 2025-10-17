@@ -209,8 +209,11 @@ impl LitOpCommand {
         }
 
         // Instantiate values.
-        let (tydesc_table1, value_heap1, inst1) = datalit::instantiate::instantiate_value(&db, typechecked1)?;
-        let (tydesc_table2, value_heap2, inst2) = datalit::instantiate::instantiate_value(&db, typechecked2)?;
+        let mut rt = datalove_rt::rt_local::RtLocal::new();
+        let mut tydesc_table1 = datalit::tydesc_table::TyDescTable::new(&db);
+        let inst1 = datalit::instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table1, typechecked1)?;
+        let mut tydesc_table2 = datalit::tydesc_table::TyDescTable::new(&db);
+        let inst2 = datalit::instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table2, typechecked2)?;
 
         // Execute the operation.
         match self.op.as_str() {
@@ -219,9 +222,9 @@ impl LitOpCommand {
                 let result = unsafe {
                     datalove_rt::dtlv_rti_eq(
                         std::ptr::null_mut(), // runtime handle not needed
-                        inst1.value,
+                        inst1.ptr,
                         inst1.tydesc,
-                        inst2.value,
+                        inst2.ptr,
                         inst2.tydesc,
                     )
                 };
@@ -237,9 +240,9 @@ impl LitOpCommand {
                 let result = unsafe {
                     datalove_rt::dtlv_rti_cmp_total(
                         std::ptr::null_mut(), // runtime handle not needed
-                        inst1.value,
+                        inst1.ptr,
                         inst1.tydesc,
-                        inst2.value,
+                        inst2.ptr,
                         inst2.tydesc,
                     )
                 };
@@ -256,6 +259,15 @@ impl LitOpCommand {
             }
         }
 
+        // Clean up instantiated values before shutdown.
+        unsafe {
+            let rt_handle = &mut *rt as *mut datalove_rt::rt_local::RtLocal as *mut u8;
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+            rt.shutdown();
+        }
         Ok(())
     }
 }

@@ -2,7 +2,9 @@
 
 use rmx::prelude::*;
 
-use datalove_datalit::{Database, instantiate};
+use datalove_datalit::{Database, instantiate2};
+use datalove_datalit::tydesc_table::TyDescTable;
+use datalove_rt::rt_local::RtLocal;
 
 fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
     let source = bct::input::Source::new(db, source_text.to_string());
@@ -17,7 +19,9 @@ fn test_destroy_int_small() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @int / @42")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the int to get a runtime-allocated copy.
     let rt = datalove_rt::dtlv_rti_init();
@@ -28,7 +32,7 @@ fn test_destroy_int_small() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -62,7 +66,9 @@ fn test_destroy_int_large() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @int / @1234567890123456789012345678901234567890")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the int to get a runtime-allocated copy.
     let rt = datalove_rt::dtlv_rti_init();
@@ -73,7 +79,7 @@ fn test_destroy_int_large() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -106,7 +112,9 @@ fn test_destroy_list_empty() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @[@u32] / @[]")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
     let rt = datalove_rt::dtlv_rti_init();
@@ -117,7 +125,7 @@ fn test_destroy_list_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -151,7 +159,9 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, "@[@1, @2, @3, @4, @5]")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
     let rt = datalove_rt::dtlv_rti_init();
@@ -162,7 +172,7 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -196,7 +206,9 @@ fn test_destroy_list_strings() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, r#"@[@"hello", @"world", @"test"]"#)?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
     let rt = datalove_rt::dtlv_rti_init();
@@ -207,7 +219,7 @@ fn test_destroy_list_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -241,7 +253,9 @@ fn test_destroy_list_nested() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, r#"@[@[@"a", @"b"], @[@"c", @"d"]]"#)?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
     let rt = datalove_rt::dtlv_rti_init();
@@ -252,7 +266,7 @@ fn test_destroy_list_nested() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -286,7 +300,9 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
@@ -299,7 +315,7 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -327,7 +343,9 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
@@ -340,7 +358,7 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -368,7 +386,9 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, r#": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Err(@"error message")"#)?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
@@ -381,7 +401,7 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -409,7 +429,9 @@ fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, r#": @enum Msg { Text(@string), Items(@[@string]) } / @enum Msg.Items(@[@"a", @"b", @"c"])"#)?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
@@ -422,7 +444,7 @@ fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -450,7 +472,9 @@ fn test_destroy_set_empty() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @set <@u32> / @set {}")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -462,7 +486,7 @@ fn test_destroy_set_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -497,7 +521,9 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
         ": @set <@u32> / @set { @1, @2, @3, @4, @5 }"
     )?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -509,7 +535,7 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -544,7 +570,9 @@ fn test_destroy_set_strings() -> AnyResult<()> {
         r#": @set <@string> / @set { @"apple", @"banana", @"cherry" }"#
     )?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -556,7 +584,7 @@ fn test_destroy_set_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -591,7 +619,9 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
         r#": @set <@(@u32, @string)> / @set { @(1, "one"), @(2, "two"), @(3, "three") }"#
     )?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -603,7 +633,7 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -639,7 +669,9 @@ fn test_destroy_set_large() -> AnyResult<()> {
         ": @set <@u32> / @set { @1, @2, @3, @4, @5, @6, @7, @8, @9, @10, @11 }"
     )?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -651,7 +683,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -684,7 +716,9 @@ fn test_destroy_option_none() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, ": @?@u32 / @none")?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the option.
     // Clone to get a runtime-allocated copy.
@@ -697,7 +731,7 @@ fn test_destroy_option_none() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -726,7 +760,9 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, r#": @?@string / @"test string""#)?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the option.
     // Clone to get a runtime-allocated copy.
@@ -739,7 +775,7 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
@@ -768,7 +804,9 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile(&db, r#": @!@string / @"success""#)?;
 
-    let (_tydesc_table, _value_heap, inst) = instantiate::instantiate_value(&db, typechecked)?;
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Destroy the result.
     // Clone to get a runtime-allocated copy.
@@ -781,7 +819,7 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::dtlv_rti_clone_local(
             rt,
-            inst.value,
+            inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
