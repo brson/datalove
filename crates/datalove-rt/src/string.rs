@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 use crate::rtdt;
-use crate::alloc::LocalRt;
+use crate::rt_local::RtLocal;
 use crate::{LocalRtHandle, RtStatus};
 
 /// Creates a new empty string.
@@ -54,8 +54,8 @@ pub unsafe fn string_destroy_local(
 
         // Free the data buffer if it exists.
         if !string.data.is_null() && string.capacity > 0 {
-            let rt_ref = &mut *(rt as *mut LocalRt);
-            rt_ref.free(1, 1, string.capacity, string.data as *mut u8);
+            let rt_ref = &mut *(rt as *mut RtLocal);
+            rt_ref.alloc.free(1, 1, string.capacity, string.data as *mut u8);
         }
 
         // Clear the string fields.
@@ -100,7 +100,7 @@ pub unsafe fn string_push_bytes_local(
 
         // Reallocate if needed.
         if new_size > string.capacity {
-            let rt_ref = &mut *(rt as *mut LocalRt);
+            let rt_ref = &mut *(rt as *mut RtLocal);
 
             // Calculate new capacity (double, or enough for new size).
             let mut new_capacity = string.capacity.max(8);
@@ -109,7 +109,7 @@ pub unsafe fn string_push_bytes_local(
             }
 
             // Allocate new buffer.
-            let new_data = rt_ref.alloc(1, 1, new_capacity);
+            let new_data = rt_ref.alloc.alloc(1, 1, new_capacity);
             if new_data.is_null() {
                 return RtStatus::Error;
             }
@@ -125,7 +125,7 @@ pub unsafe fn string_push_bytes_local(
 
             // Free old buffer if it exists.
             if !string.data.is_null() && string.capacity > 0 {
-                rt_ref.free(1, 1, string.capacity, string.data as *mut u8);
+                rt_ref.alloc.free(1, 1, string.capacity, string.data as *mut u8);
             }
 
             string.data = new_data;
@@ -173,7 +173,7 @@ pub unsafe fn string_clear_local(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::alloc::LocalRt;
+    use crate::rt_local;
 
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_string_create_local() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let tydesc = unsafe { create_string_tydesc() };
 
@@ -207,14 +207,14 @@ mod tests {
             assert_eq!(string.size, 0);
             assert_eq!(string.capacity, 0);
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_string_push_bytes_local() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let tydesc = unsafe { create_string_tydesc() };
 
@@ -250,14 +250,14 @@ mod tests {
                 &tydesc,
             );
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_string_push_bytes_multiple() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let tydesc = unsafe { create_string_tydesc() };
 
@@ -304,14 +304,14 @@ mod tests {
                 &tydesc,
             );
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_string_clear_local() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let tydesc = unsafe { create_string_tydesc() };
 
@@ -351,14 +351,14 @@ mod tests {
                 &tydesc,
             );
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_string_destroy_local() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let tydesc = unsafe { create_string_tydesc() };
 
@@ -390,14 +390,14 @@ mod tests {
             assert_eq!(string.size, 0);
             assert_eq!(string.capacity, 0);
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_string_push_empty_bytes() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let tydesc = unsafe { create_string_tydesc() };
 
@@ -427,7 +427,7 @@ mod tests {
                 &tydesc,
             );
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
         }
     }
@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_string_error_wrong_type() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
@@ -464,7 +464,7 @@ mod tests {
 
             assert_eq!(status, RtStatus::Error);
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
         }
     }

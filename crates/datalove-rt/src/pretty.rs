@@ -3,6 +3,7 @@
 //! Produces valid datalit syntax that can be parsed back.
 
 use rmx::prelude::*;
+use crate::rt_local;
 use crate::rtdt;
 use crate::{LocalRtHandle, RtStatus};
 
@@ -450,7 +451,7 @@ fn align_up(offset: usize, align: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::alloc::LocalRt;
+    use crate::rt_local::RtLocal;
 
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
@@ -488,7 +489,7 @@ mod tests {
 
     #[test]
     fn test_pretty_print_bool() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
@@ -519,14 +520,14 @@ mod tests {
                 &output_tydesc,
             );
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_pretty_print_u32() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
@@ -557,14 +558,14 @@ mod tests {
                 &output_tydesc,
             );
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_pretty_print_f32() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
@@ -595,14 +596,14 @@ mod tests {
                 &output_tydesc,
             );
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_pretty_print_string() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
@@ -649,14 +650,14 @@ mod tests {
                 &output_tydesc,
             );
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_pretty_print_string_with_escapes() {
-        let rt = LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
 
         unsafe {
@@ -702,7 +703,7 @@ mod tests {
                 &output_tydesc,
             );
 
-            let rt = Box::from_raw(rt_handle as *mut LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }

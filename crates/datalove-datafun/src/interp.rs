@@ -43,7 +43,7 @@ pub struct InterpContext<'db> {
     pub db: &'db dyn crate::Db,
 
     /// Runtime allocator.
-    pub rt: Box<rt::alloc::LocalRt>,
+    pub rt: Box<rt::rt_local::RtLocal>,
 
     /// Type table.
     pub type_table: TypeTable,
@@ -60,7 +60,7 @@ impl<'db> InterpContext<'db> {
     pub fn new(db: &'db dyn crate::Db, type_table: TypeTable) -> Self {
         Self {
             db,
-            rt: rt::alloc::LocalRt::new(),
+            rt: rt::rt_local::RtLocal::new(),
             type_table,
             variables: HashMap::new(),
             functions: HashMap::new(),

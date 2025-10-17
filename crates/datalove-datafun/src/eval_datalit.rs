@@ -117,7 +117,7 @@ fn eval_string<'db>(
 
     unsafe {
         // Allocate heap storage for the string struct.
-        let ptr = ctx.rt.alloc(
+        let ptr = ctx.rt.alloc.alloc(
             std::mem::size_of::<rtdt::String>() as u32,
             std::mem::align_of::<rtdt::String>() as u32,
             1,
@@ -133,7 +133,7 @@ fn eval_string<'db>(
         );
 
         if status != datalove_rt::RtStatus::Ok {
-            ctx.rt.free(
+            ctx.rt.alloc.free(
                 std::mem::size_of::<rtdt::String>() as u32,
                 std::mem::align_of::<rtdt::String>() as u32,
                 1,
@@ -161,7 +161,7 @@ fn eval_string<'db>(
                 ptr as *mut u8,
                 tydesc,
             );
-            ctx.rt.free(
+            ctx.rt.alloc.free(
                 std::mem::size_of::<rtdt::String>() as u32,
                 std::mem::align_of::<rtdt::String>() as u32,
                 1,

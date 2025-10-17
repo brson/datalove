@@ -3,7 +3,7 @@
 //! Uses a simple growable array structure with element-based capacity.
 
 use rmx::prelude::*;
-use crate::alloc::LocalRt;
+use crate::rt_local::RtLocal;
 use crate::rtdt::{self, *};
 use crate::RtStatus;
 
@@ -13,7 +13,7 @@ use crate::RtStatus;
 
 /// Create an empty List.
 pub unsafe fn list_create_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     value_out: *mut u8,
     tydesc: *const TyDesc,
 ) -> RtStatus {
@@ -34,7 +34,7 @@ pub unsafe fn list_create_impl(
 
 /// Destroy a List and free all elements and buffer.
 pub unsafe fn list_destroy_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     value_in: *mut u8,
     tydesc: *const TyDesc,
 ) -> RtStatus {
@@ -61,7 +61,7 @@ pub unsafe fn list_destroy_impl(
 
         // Free the buffer.
         if !data_ptr.is_null() && capacity > 0 {
-            rt.free((*element_tydesc).size, (*element_tydesc).align, capacity, data_ptr);
+            rt.alloc.free((*element_tydesc).size, (*element_tydesc).align, capacity, data_ptr);
         }
 
         // Reset the list.
@@ -75,7 +75,7 @@ pub unsafe fn list_destroy_impl(
 
 /// Clear a List (destroy all elements and reset to empty, keeping buffer).
 pub unsafe fn list_clear_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     value_mut: *mut u8,
     tydesc: *const TyDesc,
 ) -> RtStatus {
@@ -116,7 +116,7 @@ pub unsafe fn list_clear_impl(
 /// - If index is valid, sets option to Some and clones the element.
 /// - If index is out of bounds, sets option to None.
 pub unsafe fn list_get_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_ref: *const u8,
     list_tydesc: *const TyDesc,
     index: u32,
@@ -151,7 +151,7 @@ pub unsafe fn list_get_impl(
         let element_size = (*element_tydesc).size as usize;
         let element_ptr = (data_ptr as *const u8).add(index as usize * element_size);
 
-        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
         let status = crate::clone::clone_value(
             rt_handle,
             element_ptr,
@@ -172,7 +172,7 @@ pub unsafe fn list_get_impl(
 ///
 /// Returns Ok if successful, Error if index is out of bounds.
 pub unsafe fn list_set_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: *const TyDesc,
     index: u32,
@@ -198,7 +198,7 @@ pub unsafe fn list_set_impl(
         let element_size = (*element_tydesc).size as usize;
         let element_ptr = data_ptr.add(index as usize * element_size);
 
-        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
         let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc);
         if status != RtStatus::Ok {
             return status;
@@ -219,7 +219,7 @@ pub unsafe fn list_set_impl(
 ///
 /// The element is moved into the list.
 pub unsafe fn list_push_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: *const TyDesc,
     element_in: *mut u8,
@@ -262,7 +262,7 @@ pub unsafe fn list_push_impl(
 /// - If list is non-empty, sets option to Some and moves the element.
 /// - If list is empty, sets option to None.
 pub unsafe fn list_pop_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: *const TyDesc,
     option_value_out: *mut u8,
@@ -313,7 +313,7 @@ pub unsafe fn list_pop_impl(
 /// Returns Ok if successful, Error if index > len.
 /// index == len is equivalent to push.
 pub unsafe fn list_insert_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: *const TyDesc,
     index: u32,
@@ -371,7 +371,7 @@ pub unsafe fn list_insert_impl(
 /// - If index is valid, sets option to Some and moves the element.
 /// - If index is out of bounds, sets option to None.
 pub unsafe fn list_remove_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: *const TyDesc,
     index: u32,
@@ -431,7 +431,7 @@ pub unsafe fn list_remove_impl(
 ///
 /// Does nothing if capacity is already sufficient.
 pub unsafe fn list_reserve_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: *const TyDesc,
     additional: u32,
@@ -460,7 +460,7 @@ pub unsafe fn list_reserve_impl(
 
 /// Shrink capacity to fit current size.
 pub unsafe fn list_shrink_to_fit_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: *const TyDesc,
 ) -> RtStatus {
@@ -487,7 +487,7 @@ pub unsafe fn list_shrink_to_fit_impl(
         // If size is 0, just free the buffer.
         if size == 0 {
             if !old_data.is_null() && capacity > 0 {
-                rt.free(element_size, element_align, capacity, old_data);
+                rt.alloc.free(element_size, element_align, capacity, old_data);
                 (*list_ptr).data = std::ptr::null();
                 (*list_ptr).capacity = 0;
             }
@@ -495,7 +495,7 @@ pub unsafe fn list_shrink_to_fit_impl(
         }
 
         // Allocate new buffer with exact size.
-        let new_data = rt.alloc(element_size, element_align, size);
+        let new_data = rt.alloc.alloc(element_size, element_align, size);
         if new_data.is_null() {
             return RtStatus::Error;
         }
@@ -505,7 +505,7 @@ pub unsafe fn list_shrink_to_fit_impl(
         std::ptr::copy_nonoverlapping(old_data, new_data, bytes_to_copy);
 
         // Free old buffer.
-        rt.free(element_size, element_align, capacity, old_data);
+        rt.alloc.free(element_size, element_align, capacity, old_data);
 
         // Update list.
         (*list_ptr).data = new_data;
@@ -521,7 +521,7 @@ pub unsafe fn list_shrink_to_fit_impl(
 
 /// Create a List from a slice of elements (clones elements).
 pub unsafe fn list_clone_from_slice_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_out: *mut u8,
     list_tydesc: *const TyDesc,
     slice_ptr_ref: *const u8,
@@ -550,7 +550,7 @@ pub unsafe fn list_clone_from_slice_impl(
         let element_align = (*element_tydesc).align;
 
         // Allocate buffer with exact capacity.
-        let data = rt.alloc(element_size, element_align, slice_len);
+        let data = rt.alloc.alloc(element_size, element_align, slice_len);
         if data.is_null() {
             return RtStatus::Error;
         }
@@ -559,7 +559,7 @@ pub unsafe fn list_clone_from_slice_impl(
         (*list_ptr).capacity = slice_len;
 
         // Clone each element from the slice.
-        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
         for i in 0..slice_len {
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data.add((i * element_size) as usize);
@@ -581,7 +581,7 @@ pub unsafe fn list_clone_from_slice_impl(
 
 /// Append all elements from a slice to the list (clones elements).
 pub unsafe fn list_extend_from_slice_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: *const TyDesc,
     slice_ptr_ref: *const u8,
@@ -611,7 +611,7 @@ pub unsafe fn list_extend_from_slice_impl(
         let element_size = (*element_tydesc).size;
 
         // Clone each element from the slice.
-        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
         for i in 0..slice_len {
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data_ptr.add(((size + i) * element_size) as usize);
@@ -669,7 +669,7 @@ fn calculate_new_capacity(current: u32, required: u32) -> u32 {
 
 /// Grow the list buffer to accommodate at least `new_capacity` elements.
 unsafe fn grow_buffer(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     list_ptr: *mut List,
     element_tydesc: *const TyDesc,
     new_capacity: u32,
@@ -687,7 +687,7 @@ unsafe fn grow_buffer(
         let element_align = (*element_tydesc).align;
 
         // Allocate new buffer.
-        let new_data = rt.alloc(element_size, element_align, new_capacity);
+        let new_data = rt.alloc.alloc(element_size, element_align, new_capacity);
         if new_data.is_null() {
             return RtStatus::Error;
         }
@@ -700,7 +700,7 @@ unsafe fn grow_buffer(
 
         // Free old buffer.
         if !old_data.is_null() && old_capacity > 0 {
-            rt.free(element_size, element_align, old_capacity, old_data);
+            rt.alloc.free(element_size, element_align, old_capacity, old_data);
         }
 
         // Update list.
@@ -713,7 +713,7 @@ unsafe fn grow_buffer(
 
 /// Destroy elements in a range [start, end).
 unsafe fn destroy_elements(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     data_ptr: *mut u8,
     element_tydesc: *const TyDesc,
     start: u32,
@@ -721,7 +721,7 @@ unsafe fn destroy_elements(
 ) -> RtStatus {
     unsafe {
         let element_size = (*element_tydesc).size as usize;
-        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
 
         for i in start..end {
             let element_ptr = data_ptr.add((i as usize) * element_size);

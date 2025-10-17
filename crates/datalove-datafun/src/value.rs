@@ -111,24 +111,24 @@ impl Value {
 
     /// Allocate an Int (bigint) value.
     pub unsafe fn alloc_int(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) as *mut rtdt::Int };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) as *mut rtdt::Int };
 
         Value::Int { ptr, tydesc }
     }
 
     /// Allocate a String value.
     pub unsafe fn alloc_string(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) as *mut rtdt::String };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) as *mut rtdt::String };
 
         // Initialize to empty string.
         unsafe {
@@ -142,48 +142,48 @@ impl Value {
 
     /// Allocate a Tuple value.
     pub unsafe fn alloc_tuple(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) };
 
         Value::Tuple { ptr, tydesc }
     }
 
     /// Allocate a Struct value.
     pub unsafe fn alloc_struct(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) };
 
         Value::Struct { ptr, tydesc }
     }
 
     /// Allocate an Enum value.
     pub unsafe fn alloc_enum(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) };
 
         Value::Enum { ptr, tydesc }
     }
 
     /// Allocate a List value.
     pub unsafe fn alloc_list(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) as *mut rtdt::List };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) as *mut rtdt::List };
 
         // Initialize to empty list.
         unsafe {
@@ -197,12 +197,12 @@ impl Value {
 
     /// Allocate a Map value.
     pub unsafe fn alloc_map(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) as *mut rtdt::Map };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) as *mut rtdt::Map };
 
         // Initialize to empty map.
         unsafe {
@@ -215,12 +215,12 @@ impl Value {
 
     /// Allocate a Set value.
     pub unsafe fn alloc_set(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) as *mut rtdt::Set };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) as *mut rtdt::Set };
 
         // Initialize to empty set.
         unsafe {
@@ -233,24 +233,24 @@ impl Value {
 
     /// Allocate an Option value.
     pub unsafe fn alloc_option(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) };
 
         Value::Option { ptr, tydesc }
     }
 
     /// Allocate a Result value.
     pub unsafe fn alloc_result(
-        rt: &mut rt::alloc::LocalRt,
+        rt: &mut rt::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
         let align = unsafe { (*tydesc).align };
-        let ptr = unsafe { rt.alloc(size, align, 1) };
+        let ptr = unsafe { rt.alloc.alloc(size, align, 1) };
 
         Value::Result { ptr, tydesc }
     }
@@ -307,7 +307,7 @@ impl Value {
     /// Pretty-print this value using the runtime pretty printer.
     ///
     /// Returns a string representation in valid datalit syntax.
-    pub fn pretty_print(&self, rt: &mut rt::alloc::LocalRt) -> Result<String, crate::interp::InterpError> {
+    pub fn pretty_print(&self, rt: &mut rt::rt_local::RtLocal) -> Result<String, crate::interp::InterpError> {
         unsafe {
             // Get runtime handle.
             let rt_handle = rt as *mut _ as rt::LocalRtHandle;
@@ -430,7 +430,7 @@ impl Value {
     }
 
     /// Free this value using the runtime allocator.
-    pub unsafe fn free(&mut self, rt: &mut rt::alloc::LocalRt) {
+    pub unsafe fn free(&mut self, rt: &mut rt::rt_local::RtLocal) {
         match self {
             Value::Bool(_) | Value::U32(_) | Value::F32(_) => {
                 // Inline values don't need freeing.
@@ -439,7 +439,7 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr as *mut u8) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
             Value::String { ptr, tydesc } => {
@@ -457,77 +457,77 @@ impl Value {
                     // Then free the String struct itself.
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr as *mut u8) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
             Value::List { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr as *mut u8) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
             Value::Map { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr as *mut u8) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
             Value::Set { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr as *mut u8) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
             Value::Data { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr as *mut u8) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
             Value::Error { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr as *mut u8) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
             Value::Tuple { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
             Value::Struct { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
             Value::Enum { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
             Value::Option { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
             Value::Result { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
-                    unsafe { rt.free(size, align, 1, *ptr) };
+                    unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
         }

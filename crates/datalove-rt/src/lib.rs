@@ -41,6 +41,7 @@ pub use datalove_rtdt as rtdt;
 
 mod cmp;
 pub mod alloc;
+pub mod rt_local;
 pub mod clone;
 pub mod string;
 pub mod pretty;
@@ -66,7 +67,7 @@ pub enum RtStatus {
 /// May return null.
 #[unsafe(no_mangle)]
 pub extern "C" fn dtlv_rti_init() -> LocalRtHandle {
-    let rt = alloc::LocalRt::new();
+    let rt = rt_local::RtLocal::new();
     Box::into_raw(rt) as *mut u8
 }
 
@@ -79,7 +80,7 @@ pub unsafe extern "C" fn dtlv_rti_shutdown(
     }
 
     unsafe {
-        let rt = Box::from_raw(rt as *mut alloc::LocalRt);
+        let rt = Box::from_raw(rt as *mut rt_local::RtLocal);
         rt.shutdown();
     }
 
@@ -99,9 +100,9 @@ pub unsafe extern "C" fn dtlv_rti_mem_alloc_local(
     }
 
     unsafe {
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let ty = &*tydesc;
-        rt_ref.alloc(ty.size, ty.align, count)
+        rt_ref.alloc.alloc(ty.size, ty.align, count)
     }
 }
 
@@ -118,9 +119,9 @@ pub unsafe extern "C" fn dtlv_rti_mem_free_local(
     }
 
     unsafe {
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let ty = &*tydesc;
-        rt_ref.free(ty.size, ty.align, count, ptr);
+        rt_ref.alloc.free(ty.size, ty.align, count, ptr);
     }
 
     RtStatus::Ok
@@ -337,7 +338,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_create_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         btreemap::btreemap_create_impl(rt_ref, value_out, tydesc)
     }
 }
@@ -360,7 +361,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clone_from_slice_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         btreemap::btreemap_clone_from_slice_impl(
             rt_ref,
             btreemap_value_out,
@@ -385,7 +386,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_destroy_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         btreemap::btreemap_destroy_impl(rt_ref, value_in, tydesc)
     }
 }
@@ -407,7 +408,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_insert_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         btreemap::btreemap_insert_impl(
             rt_ref,
             btreemap_value_mut,
@@ -433,7 +434,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_remove_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         btreemap::btreemap_remove_impl(
             rt_ref,
             btreemap_value_mut,
@@ -463,7 +464,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         btreemap::btreemap_get_impl(
             rt_ref,
             btreemap_value_mut,
@@ -493,7 +494,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         btreemap::btreemap_get_impl(
             rt_ref,
             btreemap_value_ref,
@@ -517,7 +518,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         btreemap::btreemap_clear_impl(rt_ref, btreemap_value_mut, btreemap_tydesc)
     }
 }
@@ -545,7 +546,7 @@ pub unsafe extern "C" fn dtlv_rti_list_create_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_create_impl(rt_ref, value_out, tydesc)
     }
 }
@@ -561,7 +562,7 @@ pub unsafe extern "C" fn dtlv_rti_list_destroy_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_destroy_impl(rt_ref, value_in, tydesc)
     }
 }
@@ -577,7 +578,7 @@ pub unsafe extern "C" fn dtlv_rti_list_clear_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_clear_impl(rt_ref, value_mut, tydesc)
     }
 }
@@ -597,7 +598,7 @@ pub unsafe extern "C" fn dtlv_rti_list_get(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_get_impl(
             rt_ref,
             list_value_ref,
@@ -624,7 +625,7 @@ pub unsafe extern "C" fn dtlv_rti_list_set_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_set_impl(
             rt_ref,
             list_value_mut,
@@ -650,7 +651,7 @@ pub unsafe extern "C" fn dtlv_rti_list_push_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_push_impl(
             rt_ref,
             list_value_mut,
@@ -675,7 +676,7 @@ pub unsafe extern "C" fn dtlv_rti_list_pop_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_pop_impl(
             rt_ref,
             list_value_mut,
@@ -701,7 +702,7 @@ pub unsafe extern "C" fn dtlv_rti_list_insert_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_insert_impl(
             rt_ref,
             list_value_mut,
@@ -728,7 +729,7 @@ pub unsafe extern "C" fn dtlv_rti_list_remove_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_remove_impl(
             rt_ref,
             list_value_mut,
@@ -752,7 +753,7 @@ pub unsafe extern "C" fn dtlv_rti_list_reserve_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_reserve_impl(
             rt_ref,
             list_value_mut,
@@ -773,7 +774,7 @@ pub unsafe extern "C" fn dtlv_rti_list_shrink_to_fit_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_shrink_to_fit_impl(
             rt_ref,
             list_value_mut,
@@ -797,7 +798,7 @@ pub unsafe extern "C" fn dtlv_rti_list_clone_from_slice_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_clone_from_slice_impl(
             rt_ref,
             list_value_out,
@@ -824,7 +825,7 @@ pub unsafe extern "C" fn dtlv_rti_list_extend_from_slice_local(
             return RtStatus::Error;
         }
 
-        let rt_ref = &mut *(rt as *mut alloc::LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         list::list_extend_from_slice_impl(
             rt_ref,
             list_value_mut,

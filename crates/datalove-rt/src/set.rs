@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 use crate::rtdt::{self, TyDesc, Set, SetNode, SetNodeTag, SET_NODE_CAPACITY};
-use crate::alloc::LocalRt;
+use crate::rt_local::RtLocal;
 use crate::RtStatus;
 
 /// Reads the tag from a set node.
@@ -47,7 +47,7 @@ unsafe fn leaf_keys_ptr(node: *mut SetNode, key_tydesc: *const TyDesc) -> *mut u
 }
 
 /// Frees a set node.
-unsafe fn free_node(rt: &mut LocalRt, node: *mut SetNode, key_tydesc: *const TyDesc) {
+unsafe fn free_node(rt: &mut RtLocal, node: *mut SetNode, key_tydesc: *const TyDesc) {
     unsafe {
         let tag = read_node_tag(node);
         let layout = match tag {
@@ -61,13 +61,13 @@ unsafe fn free_node(rt: &mut LocalRt, node: *mut SetNode, key_tydesc: *const TyD
             }
         };
 
-        rt.free(layout.0, layout.1, 1, node as *mut u8);
+        rt.alloc.free(layout.0, layout.1, 1, node as *mut u8);
     }
 }
 
 /// Recursively destroys a set subtree.
 unsafe fn destroy_tree_recursive(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     node: *mut SetNode,
     key_tydesc: *const TyDesc,
 ) {
@@ -85,7 +85,7 @@ unsafe fn destroy_tree_recursive(
                 // Destroy all keys in the internal node.
                 let keys_ptr = internal_keys_ptr(node, key_tydesc);
                 let key_size = (*key_tydesc).size as usize;
-                let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+                let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
                 for i in 0..len as usize {
                     let key_slot = keys_ptr.add(i * key_size);
                     let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
@@ -102,7 +102,7 @@ unsafe fn destroy_tree_recursive(
                 let len = read_node_len(node);
                 let keys_ptr = leaf_keys_ptr(node, key_tydesc);
                 let key_size = (*key_tydesc).size as usize;
-                let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+                let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
 
                 // Destroy all keys in the leaf node.
                 for i in 0..len as usize {
@@ -119,7 +119,7 @@ unsafe fn destroy_tree_recursive(
 
 /// Recursively clone a set subtree.
 unsafe fn clone_tree_recursive(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     node: *const SetNode,
     key_tydesc: *const TyDesc,
 ) -> *mut SetNode {
@@ -129,13 +129,13 @@ unsafe fn clone_tree_recursive(
         }
 
         let tag = read_node_tag(node);
-        let rt_handle = rt as *mut LocalRt as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
 
         match tag {
             SetNodeTag::Internal => {
                 // Allocate a new internal node.
                 let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc);
-                let new_node_ptr = rt.alloc(layout.size, layout.align, 1);
+                let new_node_ptr = rt.alloc.alloc(layout.size, layout.align, 1);
                 if new_node_ptr.is_null() {
                     return std::ptr::null_mut();
                 }
@@ -179,7 +179,7 @@ unsafe fn clone_tree_recursive(
             SetNodeTag::Leaf => {
                 // Allocate a new leaf node.
                 let layout = rtdt::layout::compute_set_leaf_node_layout(key_tydesc);
-                let new_leaf_ptr = rt.alloc(layout.size, layout.align, 1);
+                let new_leaf_ptr = rt.alloc.alloc(layout.size, layout.align, 1);
                 if new_leaf_ptr.is_null() {
                     return std::ptr::null_mut();
                 }
@@ -215,7 +215,7 @@ unsafe fn clone_tree_recursive(
 
 /// Clone a set tree.
 pub unsafe fn set_clone_tree(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     root: *const SetNode,
     key_tydesc: *const TyDesc,
 ) -> *mut SetNode {
@@ -226,7 +226,7 @@ pub unsafe fn set_clone_tree(
 
 /// Destroys a set, freeing all allocations.
 pub unsafe fn set_destroy_impl(
-    rt: &mut LocalRt,
+    rt: &mut RtLocal,
     value_in: *mut u8,
     tydesc: *const TyDesc,
 ) -> RtStatus {

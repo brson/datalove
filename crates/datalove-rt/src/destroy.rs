@@ -1,8 +1,7 @@
 //! Destructor implementation for all Datalove types.
 
 use rmx::prelude::*;
-use crate::alloc::LocalRt;
-use crate::rtdt;
+use crate::{rt_local, rtdt};
 use crate::{LocalRtHandle, RtStatus};
 
 /// Destroys any type of value, freeing allocations recursively.
@@ -17,7 +16,7 @@ pub unsafe fn any_destroy_local(
 
     unsafe {
         let ty = &*tydesc;
-        let rt_ref = &mut *(rt as *mut LocalRt);
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
 
         match ty.type_tag {
             // Primitives - no allocations to free.
@@ -41,7 +40,7 @@ pub unsafe fn any_destroy_local(
                 // Free the limb buffer if it exists.
                 if !int.data.is_null() && int.capacity > 0 {
                     // Each limb is a u32.
-                    rt_ref.free(4, 4, int.capacity, int.data as *mut u8);
+                    rt_ref.alloc.free(4, 4, int.capacity, int.data as *mut u8);
                 }
 
                 // Clear the int fields.
@@ -84,7 +83,7 @@ pub unsafe fn any_destroy_local(
 
                 // Free the list buffer if it exists.
                 if !list.data.is_null() && list.capacity > 0 {
-                    rt_ref.free(element_ty.size, element_ty.align, list.capacity, list.data as *mut u8);
+                    rt_ref.alloc.free(element_ty.size, element_ty.align, list.capacity, list.data as *mut u8);
                 }
 
                 // Clear the list fields.
@@ -224,7 +223,7 @@ pub unsafe fn any_destroy_local(
 
                             // Free the inner value allocation.
                             let inner_ty = &*inner_tydesc;
-                            rt_ref.free(inner_ty.size, inner_ty.align, 1, inner_value_ptr as *mut u8);
+                            rt_ref.alloc.free(inner_ty.size, inner_ty.align, 1, inner_value_ptr as *mut u8);
                         }
 
                         RtStatus::Ok
@@ -261,7 +260,7 @@ pub unsafe fn any_destroy_local(
 
                             // Free the inner value allocation.
                             let inner_ty = &*inner_tydesc;
-                            rt_ref.free(inner_ty.size, inner_ty.align, 1, inner_value_ptr as *mut u8);
+                            rt_ref.alloc.free(inner_ty.size, inner_ty.align, 1, inner_value_ptr as *mut u8);
                         }
 
                         RtStatus::Ok
@@ -283,7 +282,7 @@ pub unsafe fn any_destroy_local(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::alloc;
+    use crate::rt_local::RtLocal;
 
     /// Helper to create a string type descriptor.
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
@@ -311,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_any_destroy_primitive() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let tydesc = unsafe { create_u32_tydesc() };
 
@@ -325,14 +324,14 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_any_destroy_string() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let tydesc = unsafe { create_string_tydesc() };
 
@@ -364,14 +363,14 @@ mod tests {
             assert_eq!(string.size, 0);
             assert_eq!(string.capacity, 0);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_any_destroy_tuple_with_string() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let string_tydesc = unsafe { create_string_tydesc() };
         let u32_tydesc = unsafe { create_u32_tydesc() };
@@ -450,7 +449,7 @@ mod tests {
             assert_eq!(tuple.field1.size, 0);
             assert_eq!(tuple.field1.capacity, 0);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
@@ -481,7 +480,7 @@ mod tests {
 
     #[test]
     fn test_any_destroy_data_small_immediate() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let data_tydesc = unsafe { create_data_tydesc() };
 
@@ -497,14 +496,14 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_any_destroy_data_inline_with_tydesc() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let data_tydesc = unsafe { create_data_tydesc() };
         let f64_tydesc = rtdt::TyDesc {
@@ -528,22 +527,22 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_any_destroy_data_two_pointers_primitive() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
-        let rt_ref = unsafe { &mut *(rt_handle as *mut alloc::LocalRt) };
+        let rt_ref = unsafe { &mut *(rt_handle as *mut rt_local::RtLocal) };
         let data_tydesc = unsafe { create_data_tydesc() };
         let u32_tydesc = unsafe { create_u32_tydesc() };
 
         unsafe {
             // Allocate a u32 value.
-            let inner_value_ptr = rt_ref.alloc(4, 4, 1) as *mut u32;
+            let inner_value_ptr = rt_ref.alloc.alloc(4, 4, 1) as *mut u32;
             *inner_value_ptr = 123;
 
             // Create Data with TwoPointers encoding.
@@ -557,22 +556,22 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_any_destroy_data_two_pointers_string() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
-        let rt_ref = unsafe { &mut *(rt_handle as *mut alloc::LocalRt) };
+        let rt_ref = unsafe { &mut *(rt_handle as *mut rt_local::RtLocal) };
         let data_tydesc = unsafe { create_data_tydesc() };
         let string_tydesc = unsafe { create_string_tydesc() };
 
         unsafe {
             // Allocate and initialize a String value.
-            let inner_string_ptr = rt_ref.alloc(
+            let inner_string_ptr = rt_ref.alloc.alloc(
                 string_tydesc.size,
                 string_tydesc.align,
                 1
@@ -603,14 +602,14 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_any_destroy_error_small_immediate() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let error_tydesc = unsafe { create_error_tydesc() };
 
@@ -627,14 +626,14 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_any_destroy_error_inline_with_tydesc() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
         let error_tydesc = unsafe { create_error_tydesc() };
         let i64_tydesc = rtdt::TyDesc {
@@ -659,22 +658,22 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_any_destroy_error_two_pointers_primitive() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
-        let rt_ref = unsafe { &mut *(rt_handle as *mut alloc::LocalRt) };
+        let rt_ref = unsafe { &mut *(rt_handle as *mut rt_local::RtLocal) };
         let error_tydesc = unsafe { create_error_tydesc() };
         let u32_tydesc = unsafe { create_u32_tydesc() };
 
         unsafe {
             // Allocate a u32 value.
-            let inner_value_ptr = rt_ref.alloc(4, 4, 1) as *mut u32;
+            let inner_value_ptr = rt_ref.alloc.alloc(4, 4, 1) as *mut u32;
             *inner_value_ptr = 500;
 
             // Create Error with TwoPointers encoding.
@@ -689,22 +688,22 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }
 
     #[test]
     fn test_any_destroy_error_two_pointers_string() {
-        let rt = alloc::LocalRt::new();
+        let rt = rt_local::RtLocal::new();
         let rt_handle = Box::into_raw(rt) as LocalRtHandle;
-        let rt_ref = unsafe { &mut *(rt_handle as *mut alloc::LocalRt) };
+        let rt_ref = unsafe { &mut *(rt_handle as *mut rt_local::RtLocal) };
         let error_tydesc = unsafe { create_error_tydesc() };
         let string_tydesc = unsafe { create_string_tydesc() };
 
         unsafe {
             // Allocate and initialize a String value.
-            let inner_string_ptr = rt_ref.alloc(
+            let inner_string_ptr = rt_ref.alloc.alloc(
                 string_tydesc.size,
                 string_tydesc.align,
                 1
@@ -736,7 +735,7 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
 
-            let rt = Box::from_raw(rt_handle as *mut alloc::LocalRt);
+            let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
     }

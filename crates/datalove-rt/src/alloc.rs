@@ -58,8 +58,8 @@ mod unix_impl {
         size: usize,
     }
 
-    /// Runtime state for the Unix allocator.
-    pub struct LocalRt {
+    /// Local allocator state for the Unix platform.
+    pub struct AllocLocal {
         /// Free lists for each size class.
         free_lists: [*mut FreeListNode; NUM_SIZE_CLASSES],
         /// Pages allocated for small allocations.
@@ -72,25 +72,27 @@ mod unix_impl {
         leak_check_mode: LeakCheckMode,
     }
 
-    impl LocalRt {
-        pub fn new() -> Box<LocalRt> {
-            Box::new(LocalRt {
+    impl AllocLocal {
+        /// Create a new allocator (not boxed).
+        pub fn new_raw() -> AllocLocal {
+            AllocLocal {
                 free_lists: [ptr::null_mut(); NUM_SIZE_CLASSES],
                 small_pages: Vec::new(),
                 large_pages: Vec::new(),
                 active_allocations: HashMap::new(),
                 leak_check_mode: LeakCheckMode::from_env(),
-            })
+            }
         }
 
-        pub fn with_leak_check_mode(mode: LeakCheckMode) -> Box<LocalRt> {
-            Box::new(LocalRt {
+        /// Create a new allocator with a specific leak check mode (not boxed).
+        pub fn new_raw_with_leak_check_mode(mode: LeakCheckMode) -> AllocLocal {
+            AllocLocal {
                 free_lists: [ptr::null_mut(); NUM_SIZE_CLASSES],
                 small_pages: Vec::new(),
                 large_pages: Vec::new(),
                 active_allocations: HashMap::new(),
                 leak_check_mode: mode,
-            })
+            }
         }
 
         pub unsafe fn alloc(&mut self, size: u32, align: u32, count: u32) -> *mut u8 {
@@ -285,7 +287,7 @@ mod unix_impl {
             }
         }
 
-        pub unsafe fn shutdown(mut self: Box<Self>) {
+        pub unsafe fn shutdown(mut self) {
             // Check for leaks before cleanup.
             if !self.active_allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
                 let leaked_count = self.active_allocations.len();
@@ -378,25 +380,27 @@ mod wasm_impl {
         layout: Layout,
     }
 
-    /// Runtime state for the wasm32 allocator.
-    pub struct LocalRt {
+    /// Local allocator state for the wasm32 platform.
+    pub struct AllocLocal {
         allocations: Vec<Allocation>,
         leak_check_mode: LeakCheckMode,
     }
 
-    impl LocalRt {
-        pub fn new() -> Box<LocalRt> {
-            Box::new(LocalRt {
+    impl AllocLocal {
+        /// Create a new allocator (not boxed).
+        pub fn new_raw() -> AllocLocal {
+            AllocLocal {
                 allocations: Vec::new(),
                 leak_check_mode: LeakCheckMode::from_env(),
-            })
+            }
         }
 
-        pub fn with_leak_check_mode(mode: LeakCheckMode) -> Box<LocalRt> {
-            Box::new(LocalRt {
+        /// Create a new allocator with a specific leak check mode (not boxed).
+        pub fn new_raw_with_leak_check_mode(mode: LeakCheckMode) -> AllocLocal {
+            AllocLocal {
                 allocations: Vec::new(),
                 leak_check_mode: mode,
-            })
+            }
         }
 
         pub unsafe fn alloc(&mut self, size: u32, align: u32, count: u32) -> *mut u8 {
@@ -440,7 +444,7 @@ mod wasm_impl {
             }
         }
 
-        pub unsafe fn shutdown(mut self: Box<Self>) {
+        pub unsafe fn shutdown(mut self) {
             // Check for leaks before cleanup.
             if !self.allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
                 let leaked_count = self.allocations.len();
@@ -498,10 +502,10 @@ mod wasm_impl {
 // ============================================================================
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use unix_impl::LocalRt;
+pub use unix_impl::AllocLocal;
 
 #[cfg(target_arch = "wasm32")]
-pub use wasm_impl::LocalRt;
+pub use wasm_impl::AllocLocal;
 
 // ============================================================================
 // Tests
@@ -531,7 +535,7 @@ mod tests {
     #[test]
     fn test_small_alloc_each_size_class() {
         for &size in SIZE_CLASSES.iter() {
-            let mut rt = LocalRt::new();
+            let mut rt = AllocLocal::new_raw();
             unsafe {
                 let ptr = rt.alloc(size as u32, 8, 1);
                 assert!(!ptr.is_null());
@@ -547,7 +551,7 @@ mod tests {
 
     #[test]
     fn test_large_alloc() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let sizes = [4097, 8192, 16384, 65536];
             for size in sizes {
@@ -565,7 +569,7 @@ mod tests {
 
     #[test]
     fn test_free_null_pointer() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             rt.free(16, 8, 1, std::ptr::null_mut());
             rt.shutdown();
@@ -574,7 +578,7 @@ mod tests {
 
     #[test]
     fn test_free_list_reuse() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let ptr1 = rt.alloc(32, 8, 1);
             assert!(!ptr1.is_null());
@@ -592,7 +596,7 @@ mod tests {
 
     #[test]
     fn test_multiple_small_allocs() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let mut ptrs = Vec::new();
             for _ in 0..100 {
@@ -618,7 +622,7 @@ mod tests {
 
     #[test]
     fn test_multiple_large_allocs() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let mut ptrs = Vec::new();
             for _ in 0..10 {
@@ -638,7 +642,7 @@ mod tests {
 
     #[test]
     fn test_mixed_small_large() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let small1 = rt.alloc(128, 8, 1);
             let large1 = rt.alloc(16384, 16, 1);
@@ -666,7 +670,7 @@ mod tests {
 
     #[test]
     fn test_alignment_requirements() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         let alignments = [1, 2, 4, 8, 16, 32, 64, 128];
 
         unsafe {
@@ -683,7 +687,7 @@ mod tests {
 
     #[test]
     fn test_write_read_small() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let ptr = rt.alloc(512, 8, 1);
             assert!(!ptr.is_null());
@@ -697,7 +701,7 @@ mod tests {
 
     #[test]
     fn test_write_read_large() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let ptr = rt.alloc(65536, 16, 1);
             assert!(!ptr.is_null());
@@ -711,7 +715,7 @@ mod tests {
 
     #[test]
     fn test_size_class_boundaries() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         let test_sizes = [7, 8, 9, 15, 16, 17, 31, 32, 33, 4095, 4096, 4097];
 
         unsafe {
@@ -728,7 +732,7 @@ mod tests {
 
     #[test]
     fn test_max_alignment() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let ptr = rt.alloc(1024, 256, 1);
             assert!(!ptr.is_null());
@@ -741,7 +745,7 @@ mod tests {
 
     #[test]
     fn test_page_exhaustion() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let mut ptrs = Vec::new();
             for _ in 0..200 {
@@ -761,7 +765,7 @@ mod tests {
     #[test]
     fn test_shutdown_cleanup() {
         // This test intentionally leaks to verify shutdown cleanup.
-        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Ignore);
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Ignore);
         unsafe {
             let _small1 = rt.alloc(128, 8, 1);
             let _small2 = rt.alloc(256, 8, 1);
@@ -774,7 +778,7 @@ mod tests {
 
     #[test]
     fn test_count_parameter() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let ptr = rt.alloc(4, 4, 10);
             assert!(!ptr.is_null());
@@ -789,7 +793,7 @@ mod tests {
 
     #[test]
     fn test_alignment_larger_than_size() {
-        let mut rt = LocalRt::new();
+        let mut rt = AllocLocal::new_raw();
         unsafe {
             let ptr = rt.alloc(4, 64, 1);
             assert!(!ptr.is_null());
@@ -803,7 +807,7 @@ mod tests {
     proptest! {
         #[test]
         fn proptest_random_alloc_free(size in 1u32..10000, align in prop::sample::select(vec![1u32, 2, 4, 8, 16, 32, 64]), count in 1u32..10) {
-            let mut rt = LocalRt::new();
+            let mut rt = AllocLocal::new_raw();
             unsafe {
                 let ptr = rt.alloc(size, align, count);
                 prop_assert!(!ptr.is_null());
@@ -819,7 +823,7 @@ mod tests {
         #[test]
         fn proptest_write_read_random_data(size in 1usize..8192, data in prop::collection::vec(any::<u8>(), 1..8192)) {
             let size = size.min(data.len());
-            let mut rt = LocalRt::new();
+            let mut rt = AllocLocal::new_raw();
             unsafe {
                 let ptr = rt.alloc(size as u32, 8, 1);
                 prop_assert!(!ptr.is_null());
@@ -845,7 +849,7 @@ mod tests {
             align_pow in 0usize..7,
         ) {
             let align = 1u32 << align_pow;
-            let mut rt = LocalRt::new();
+            let mut rt = AllocLocal::new_raw();
             unsafe {
                 let ptr = rt.alloc(size, align, 1);
                 prop_assert!(!ptr.is_null());
@@ -860,7 +864,7 @@ mod tests {
     proptest! {
         #[test]
         fn proptest_alloc_free_patterns(ops in prop::collection::vec((1u32..256, 1u32..5), 1..50)) {
-            let mut rt = LocalRt::new();
+            let mut rt = AllocLocal::new_raw();
             let mut allocations = Vec::new();
 
             unsafe {
@@ -884,7 +888,7 @@ mod tests {
         fn proptest_stress_test(
             ops in prop::collection::vec((1u32..1024, prop::sample::select(vec![1u32, 2, 4, 8])), 1..100)
         ) {
-            let mut rt = LocalRt::new();
+            let mut rt = AllocLocal::new_raw();
 
             unsafe {
                 for (size, align) in ops {
@@ -903,7 +907,7 @@ mod tests {
         #[test]
         fn proptest_size_boundaries(offset in 0i32..10) {
             let boundaries = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
-            let mut rt = LocalRt::new();
+            let mut rt = AllocLocal::new_raw();
 
             unsafe {
                 for base in boundaries {
@@ -921,7 +925,7 @@ mod tests {
     proptest! {
         #[test]
         fn proptest_count_variations(size in 1u32..256, count in 1u32..100) {
-            let mut rt = LocalRt::new();
+            let mut rt = AllocLocal::new_raw();
             unsafe {
                 let ptr = rt.alloc(size, 8, count);
                 prop_assert!(!ptr.is_null());
@@ -941,7 +945,7 @@ mod tests {
     proptest! {
         #[test]
         fn proptest_reuse_freed_blocks(size in prop::sample::select(SIZE_CLASSES.to_vec())) {
-            let mut rt = LocalRt::new();
+            let mut rt = AllocLocal::new_raw();
             unsafe {
                 let mut prev_ptr = std::ptr::null_mut();
                 for i in 0..10 {
@@ -965,7 +969,7 @@ mod tests {
 
     #[test]
     fn test_leak_detection_ignore_mode() {
-        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Ignore);
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Ignore);
         unsafe {
             let _leak1 = rt.alloc(128, 8, 1);
             let _leak2 = rt.alloc(256, 8, 1);
@@ -978,7 +982,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "DATALOVE RUNTIME LEAK DETECTED")]
     fn test_leak_detection_panic_mode_small() {
-        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
         unsafe {
             let _leak = rt.alloc(128, 8, 1);
             rt.shutdown(); // Should panic.
@@ -988,7 +992,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "DATALOVE RUNTIME LEAK DETECTED")]
     fn test_leak_detection_panic_mode_large() {
-        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
         unsafe {
             let _leak = rt.alloc(8192, 16, 1);
             rt.shutdown(); // Should panic.
@@ -998,7 +1002,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "DATALOVE RUNTIME LEAK DETECTED")]
     fn test_leak_detection_panic_mode_multiple() {
-        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
         unsafe {
             let _leak1 = rt.alloc(128, 8, 1);
             let _leak2 = rt.alloc(256, 8, 1);
@@ -1009,7 +1013,7 @@ mod tests {
 
     #[test]
     fn test_no_leak_no_panic() {
-        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
         unsafe {
             let ptr1 = rt.alloc(128, 8, 1);
             let ptr2 = rt.alloc(256, 8, 1);
@@ -1026,7 +1030,7 @@ mod tests {
 
     #[test]
     fn test_leak_detection_counts_bytes_correctly() {
-        let mut rt = LocalRt::with_leak_check_mode(LeakCheckMode::Panic);
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
         unsafe {
             let _leak1 = rt.alloc(100, 8, 1);  // 100 bytes.
             let _leak2 = rt.alloc(50, 8, 2);   // 100 bytes.

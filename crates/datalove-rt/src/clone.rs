@@ -1,6 +1,6 @@
 //! Deep cloning for runtime values.
 
-use crate::{LocalRtHandle, RtStatus, alloc, rtdt};
+use crate::{LocalRtHandle, RtStatus, alloc, rtdt, rt_local};
 
 /// Clone any type into the local heap.
 ///
@@ -58,10 +58,10 @@ unsafe fn clone_impl(
                 int_out.capacity = 0;
             } else {
                 // Allocate new limb buffer.
-                let rt_ref = unsafe { &mut *(rt as *mut alloc::LocalRt) };
+                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
                 let limb_size = std::mem::size_of::<u32>() as u32;
                 let limb_align = std::mem::align_of::<u32>() as u32;
-                let new_data = unsafe { rt_ref.alloc(limb_size, limb_align, num_limbs) as *mut u32 };
+                let new_data = unsafe { rt_ref.alloc.alloc(limb_size, limb_align, num_limbs) as *mut u32 };
 
                 // Copy limbs.
                 unsafe {
@@ -92,8 +92,8 @@ unsafe fn clone_impl(
                 str_out.capacity = 0;
             } else {
                 // Allocate new string buffer.
-                let rt_ref = unsafe { &mut *(rt as *mut alloc::LocalRt) };
-                let new_data = unsafe { rt_ref.alloc(1, 1, str_in.size) };
+                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
+                let new_data = unsafe { rt_ref.alloc.alloc(1, 1, str_in.size) };
 
                 // Copy bytes.
                 unsafe {
@@ -201,9 +201,9 @@ unsafe fn clone_impl(
                 list_out.capacity = 0;
             } else {
                 // Allocate new list buffer.
-                let rt_ref = unsafe { &mut *(rt as *mut alloc::LocalRt) };
+                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
                 let elem_align = unsafe { (*elem_tydesc).align };
-                let new_data = unsafe { rt_ref.alloc(elem_size, elem_align, list_in.size) };
+                let new_data = unsafe { rt_ref.alloc.alloc(elem_size, elem_align, list_in.size) };
 
                 // Clone each element.
                 for i in 0..list_in.size {
@@ -239,7 +239,7 @@ unsafe fn clone_impl(
                 let map_info = unsafe { ty.type_info.map };
                 let key_tydesc = map_info.key_tydesc;
                 let value_tydesc = map_info.value_tydesc;
-                let rt_ref = unsafe { &mut *(rt as *mut alloc::LocalRt) };
+                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
                     crate::btreemap::btreemap_clone_tree(
@@ -272,7 +272,7 @@ unsafe fn clone_impl(
             } else {
                 let set_info = unsafe { ty.type_info.set };
                 let element_tydesc = set_info.element_tydesc;
-                let rt_ref = unsafe { &mut *(rt as *mut alloc::LocalRt) };
+                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
                     crate::set::set_clone_tree(
@@ -391,8 +391,8 @@ mod tests {
     use proptest::prelude::*;
 
     /// Helper to create a test runtime.
-    fn make_rt() -> Box<alloc::LocalRt> {
-        alloc::LocalRt::new()
+    fn make_rt() -> Box<rt_local::RtLocal> {
+        rt_local::RtLocal::new()
     }
 
     /// Helper to create a simple scalar tydesc.
@@ -585,7 +585,7 @@ mod tests {
                 std::ptr::null()
             } else {
                 unsafe {
-                    let ptr = rt.alloc(4, 4, limbs.len() as u32) as *mut u32;
+                    let ptr = rt.alloc.alloc(4, 4, limbs.len() as u32) as *mut u32;
                     for (i, &limb) in limbs.iter().enumerate() {
                         *ptr.add(i) = limb;
                     }
@@ -631,14 +631,14 @@ mod tests {
 
                 // Cleanup.
                 unsafe {
-                    rt.free(4, 4, limbs.len() as u32, value_out.data as *mut u8);
+                    rt.alloc.free(4, 4, limbs.len() as u32, value_out.data as *mut u8);
                 }
             }
 
             // Cleanup input.
             if !limbs.is_empty() {
                 unsafe {
-                    rt.free(4, 4, limbs.len() as u32, limb_data as *mut u8);
+                    rt.alloc.free(4, 4, limbs.len() as u32, limb_data as *mut u8);
                 }
             }
         }
@@ -687,7 +687,7 @@ mod tests {
                 std::ptr::null()
             } else {
                 unsafe {
-                    let ptr = rt.alloc(1, 1, bytes.len() as u32);
+                    let ptr = rt.alloc.alloc(1, 1, bytes.len() as u32);
                     for (i, &byte) in bytes.iter().enumerate() {
                         *ptr.add(i) = byte;
                     }
@@ -732,14 +732,14 @@ mod tests {
 
                 // Cleanup.
                 unsafe {
-                    rt.free(1, 1, bytes.len() as u32, value_out.data as *mut u8);
+                    rt.alloc.free(1, 1, bytes.len() as u32, value_out.data as *mut u8);
                 }
             }
 
             // Cleanup input.
             if !bytes.is_empty() {
                 unsafe {
-                    rt.free(1, 1, bytes.len() as u32, str_data as *mut u8);
+                    rt.alloc.free(1, 1, bytes.len() as u32, str_data as *mut u8);
                 }
             }
         }
@@ -872,7 +872,7 @@ mod tests {
                 std::ptr::null()
             } else {
                 unsafe {
-                    let ptr = rt.alloc(4, 4, elements.len() as u32) as *mut u32;
+                    let ptr = rt.alloc.alloc(4, 4, elements.len() as u32) as *mut u32;
                     for (i, &elem) in elements.iter().enumerate() {
                         *ptr.add(i) = elem;
                     }
@@ -917,14 +917,14 @@ mod tests {
 
                 // Cleanup.
                 unsafe {
-                    rt.free(4, 4, elements.len() as u32, value_out.data as *mut u8);
+                    rt.alloc.free(4, 4, elements.len() as u32, value_out.data as *mut u8);
                 }
             }
 
             // Cleanup input.
             if !elements.is_empty() {
                 unsafe {
-                    rt.free(4, 4, elements.len() as u32, list_data as *mut u8);
+                    rt.alloc.free(4, 4, elements.len() as u32, list_data as *mut u8);
                 }
             }
         }
