@@ -73,88 +73,102 @@ fn instantiate_expr<'db>(
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
 ) -> AnyResult<*const u8> {
+    instantiate_expr_into(db, rt, expr, ty, tydesc_table, std::ptr::null_mut())
+}
+
+/// Instantiate an expression into a runtime value, optionally writing directly to dest_ptr.
+///
+/// If dest_ptr is null, allocates new memory. Otherwise writes to dest_ptr.
+fn instantiate_expr_into<'db>(
+    db: &'db dyn crate::Db,
+    rt: &mut datalove_rt::alloc::LocalRt,
+    expr: ExprFull<'db>,
+    ty: &Type<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    dest_ptr: *mut u8,
+) -> AnyResult<*const u8> {
     let expr_and_heap = expr.expr(db);
     let expr_inner = expr_and_heap.expr(db);
 
     match (expr_inner, ty) {
-        (Expr::True, Type::Bool) => instantiate_bool(rt, true),
-        (Expr::False, Type::Bool) => instantiate_bool(rt, false),
+        (Expr::True, Type::Bool) => instantiate_bool(rt, true, dest_ptr),
+        (Expr::False, Type::Bool) => instantiate_bool(rt, false, dest_ptr),
 
-        (Expr::Int(int_expr), Type::U8) => instantiate_u8(rt, db, int_expr),
-        (Expr::Int(int_expr), Type::I8) => instantiate_i8(rt, db, int_expr),
-        (Expr::Int(int_expr), Type::U16) => instantiate_u16(rt, db, int_expr),
-        (Expr::Int(int_expr), Type::I16) => instantiate_i16(rt, db, int_expr),
-        (Expr::Int(int_expr), Type::U32) => instantiate_u32(rt, db, int_expr),
-        (Expr::Int(int_expr), Type::I32) => instantiate_i32(rt, db, int_expr),
-        (Expr::Int(int_expr), Type::U64) => instantiate_u64(rt, db, int_expr),
-        (Expr::Int(int_expr), Type::I64) => instantiate_i64(rt, db, int_expr),
-        (Expr::Int(int_expr), Type::Int) => instantiate_bigint(rt, db, int_expr),
+        (Expr::Int(int_expr), Type::U8) => instantiate_u8(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::I8) => instantiate_i8(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::U16) => instantiate_u16(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::I16) => instantiate_i16(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::U32) => instantiate_u32(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::I32) => instantiate_i32(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::U64) => instantiate_u64(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::I64) => instantiate_i64(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::Int) => instantiate_bigint(rt, db, int_expr, dest_ptr),
 
-        (Expr::Float(float_expr), Type::F32) => instantiate_f32(rt, db, float_expr),
+        (Expr::Float(float_expr), Type::F32) => instantiate_f32(rt, db, float_expr, dest_ptr),
 
         (Expr::String(string_expr), Type::String) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_string(rt, db, string_expr, tydesc)
+            instantiate_string(rt, db, string_expr, tydesc, dest_ptr)
         }
 
         (Expr::AnonTuple(tuple_expr), Type::AnonTuple(tuple_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tuple(db, rt, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc)
+            instantiate_tuple(db, rt, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::NamedTuple(tuple_expr), Type::NamedTuple(tuple_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tuple(db, rt, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc)
+            instantiate_tuple(db, rt, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::AnonStruct(struct_expr), Type::AnonStruct(struct_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc)
+            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::AnonStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc)
+            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::NamedStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc)
+            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::AnonEnum(enum_expr), Type::AnonEnum(enum_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc)
+            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::AnonEnum(enum_expr), Type::NamedEnum(enum_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc)
+            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::NamedEnum(enum_expr), Type::NamedEnum(enum_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc)
+            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::List(list_expr), Type::List(list_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_list(db, rt, &list_expr.elements(db), list_ty.element_type(db), tydesc_table, tydesc)
+            instantiate_list(db, rt, &list_expr.elements(db), list_ty.element_type(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::None, Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, rt, false, None, opt.inner_type(db), tydesc_table, tydesc)
+            instantiate_option(db, rt, false, None, opt.inner_type(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (_, Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, rt, true, Some(expr), opt.inner_type(db), tydesc_table, tydesc)
+            instantiate_option(db, rt, true, Some(expr), opt.inner_type(db), tydesc_table, tydesc, dest_ptr)
         }
 
         (Expr::Data(data_expr), Type::Data) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_data(db, rt, data_expr.value(db), tydesc_table, tydesc)
+            instantiate_data(db, rt, data_expr.value(db), tydesc_table, tydesc, dest_ptr)
         }
 
         _ => bail!("Unsupported expression/type combination for instantiation"),
@@ -165,114 +179,118 @@ fn instantiate_expr<'db>(
 // Scalar type instantiation
 // ============================================================================
 
-fn instantiate_bool(rt: &mut datalove_rt::alloc::LocalRt, value: bool) -> AnyResult<*const u8> {
+fn instantiate_bool(rt: &mut datalove_rt::alloc::LocalRt, value: bool, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     unsafe {
-        let ptr = rt.alloc(1, 1, 1);
+        let ptr = if dest_ptr.is_null() {
+            rt.alloc(1, 1, 1)
+        } else {
+            dest_ptr
+        };
         *ptr = if value { 1 } else { 0 };
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_u8(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_u8(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: u8 = value_str.parse()?;
 
     unsafe {
-        let ptr = rt.alloc(1, 1, 1);
+        let ptr = if dest_ptr.is_null() { rt.alloc(1, 1, 1) } else { dest_ptr };
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_i8(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_i8(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i8 = value_str.parse()?;
 
     unsafe {
-        let ptr = rt.alloc(1, 1, 1) as *mut i8;
+        let ptr = if dest_ptr.is_null() { rt.alloc(1, 1, 1) } else { dest_ptr } as *mut i8;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_u16(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_u16(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: u16 = value_str.parse()?;
 
     unsafe {
-        let ptr = rt.alloc(2, 2, 1) as *mut u16;
+        let ptr = if dest_ptr.is_null() { rt.alloc(2, 2, 1) } else { dest_ptr } as *mut u16;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_i16(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_i16(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i16 = value_str.parse()?;
 
     unsafe {
-        let ptr = rt.alloc(2, 2, 1) as *mut i16;
+        let ptr = if dest_ptr.is_null() { rt.alloc(2, 2, 1) } else { dest_ptr } as *mut i16;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_u32(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_u32(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: u32 = value_str.parse()?;
 
     unsafe {
-        let ptr = rt.alloc(4, 4, 1) as *mut u32;
+        let ptr = if dest_ptr.is_null() { rt.alloc(4, 4, 1) } else { dest_ptr } as *mut u32;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_i32(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_i32(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i32 = value_str.parse()?;
 
     unsafe {
-        let ptr = rt.alloc(4, 4, 1) as *mut i32;
+        let ptr = if dest_ptr.is_null() { rt.alloc(4, 4, 1) } else { dest_ptr } as *mut i32;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_u64(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_u64(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: u64 = value_str.parse()?;
 
     unsafe {
-        let ptr = rt.alloc(8, 8, 1) as *mut u64;
+        let ptr = if dest_ptr.is_null() { rt.alloc(8, 8, 1) } else { dest_ptr } as *mut u64;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_i64(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_i64(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i64 = value_str.parse()?;
 
     unsafe {
-        let ptr = rt.alloc(8, 8, 1) as *mut i64;
+        let ptr = if dest_ptr.is_null() { rt.alloc(8, 8, 1) } else { dest_ptr } as *mut i64;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_f32(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, float_expr: ExprFloat) -> AnyResult<*const u8> {
+fn instantiate_f32(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, float_expr: ExprFloat, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = float_expr.value(db).as_str(db);
     let value: f32 = value_str.parse()?;
 
     unsafe {
-        let ptr = rt.alloc(4, 4, 1) as *mut f32;
+        let ptr = if dest_ptr.is_null() { rt.alloc(4, 4, 1) } else { dest_ptr } as *mut f32;
         *ptr = value;
         Ok(ptr as *const u8)
     }
 }
 
-fn instantiate_bigint(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt) -> AnyResult<*const u8> {
+fn instantiate_bigint(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     let value_str = int_expr.value(db).as_str(db);
     let value: i128 = value_str.parse()?;
 
@@ -303,11 +321,15 @@ fn instantiate_bigint(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, 
         };
 
         // Allocate Int struct via runtime.
-        let int_ptr = rt.alloc(
-            std::mem::size_of::<rtdt::Int>() as u32,
-            std::mem::align_of::<rtdt::Int>() as u32,
-            1,
-        ) as *mut rtdt::Int;
+        let int_ptr = if dest_ptr.is_null() {
+            rt.alloc(
+                std::mem::size_of::<rtdt::Int>() as u32,
+                std::mem::align_of::<rtdt::Int>() as u32,
+                1,
+            )
+        } else {
+            dest_ptr
+        } as *mut rtdt::Int;
 
         (*int_ptr).data = limbs_ptr;
         (*int_ptr).size_and_sign = if is_negative {
@@ -330,6 +352,7 @@ fn instantiate_string(
     db: &dyn crate::Db,
     string_expr: ExprString,
     string_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     let value_str_raw = string_expr.value(db).as_str(db);
 
@@ -341,11 +364,15 @@ fn instantiate_string(
 
     unsafe {
         // Allocate String struct.
-        let string_ptr = rt.alloc(
-            std::mem::size_of::<rtdt::String>() as u32,
-            std::mem::align_of::<rtdt::String>() as u32,
-            1,
-        ) as *mut rtdt::String;
+        let string_ptr = if dest_ptr.is_null() {
+            rt.alloc(
+                std::mem::size_of::<rtdt::String>() as u32,
+                std::mem::align_of::<rtdt::String>() as u32,
+                1,
+            )
+        } else {
+            dest_ptr
+        } as *mut rtdt::String;
 
         // Create empty string using runtime helper.
         let rt_handle = rt as *mut _ as datalove_rt::LocalRtHandle;
@@ -389,28 +416,22 @@ fn instantiate_tuple<'db>(
     field_types: &[TypeAndHeap<'db>],
     tydesc_table: &mut TyDescTable<'db>,
     tuple_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc) };
 
     let tuple_ptr = unsafe {
-        rt.alloc(layout.size, layout.align, 1)
+        if dest_ptr.is_null() {
+            rt.alloc(layout.size, layout.align, 1)
+        } else {
+            dest_ptr
+        }
     };
 
     for (i, (elem, field_ty)) in elements.iter().zip(field_types.iter()).enumerate() {
-        let field_value = instantiate_expr(db, rt, *elem, field_ty.ty(db), tydesc_table)?;
         let field_offset = layout.field_offsets[i];
-        let field_tydesc = tydesc_table.get_or_create(field_ty.ty(db));
-        let field_size = unsafe { (*field_tydesc).size };
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                field_value,
-                tuple_ptr.add(field_offset as usize),
-                field_size as usize,
-            );
-            // Free the temporary field allocation after copying.
-            rt.free((*field_tydesc).size, (*field_tydesc).align, 1, field_value as *mut u8);
-        }
+        let field_dest = unsafe { tuple_ptr.add(field_offset as usize) };
+        instantiate_expr_into(db, rt, *elem, field_ty.ty(db), tydesc_table, field_dest)?;
     }
 
     Ok(tuple_ptr as *const u8)
@@ -423,39 +444,55 @@ fn instantiate_struct<'db>(
     type_fields: &[TypeNamedField<'db>],
     tydesc_table: &mut TyDescTable<'db>,
     struct_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     let layout = unsafe { rtdt::layout::compute_struct_layout(struct_tydesc) };
 
     let struct_ptr = unsafe {
-        rt.alloc(layout.size, layout.align, 1)
+        if dest_ptr.is_null() {
+            rt.alloc(layout.size, layout.align, 1)
+        } else {
+            dest_ptr
+        }
     };
 
-    let mut field_map: std::collections::HashMap<&str, ExprFull<'db>> = std::collections::HashMap::new();
-    for expr_field in expr_fields {
-        let name = expr_field.name(db).as_str(db);
-        field_map.insert(name, expr_field.value(db));
-    }
+    // For small structs, linear search is faster than HashMap allocation.
+    const SMALL_STRUCT_THRESHOLD: usize = 8;
 
-    for (i, type_field) in type_fields.iter().enumerate() {
-        let field_name = type_field.name(db).as_str(db);
-        let field_ty = type_field.ty(db);
+    if expr_fields.len() <= SMALL_STRUCT_THRESHOLD {
+        // Linear search for small structs.
+        for (i, type_field) in type_fields.iter().enumerate() {
+            let field_name = type_field.name(db).as_str(db);
+            let field_ty = type_field.ty(db);
 
-        let field_expr = field_map.get(field_name)
-            .ok_or_else(|| anyhow!("Missing field: {}", field_name))?;
+            let field_expr = expr_fields
+                .iter()
+                .find(|ef| ef.name(db).as_str(db) == field_name)
+                .ok_or_else(|| anyhow!("Missing field: {}", field_name))?
+                .value(db);
 
-        let field_value = instantiate_expr(db, rt, *field_expr, field_ty.ty(db), tydesc_table)?;
-        let field_offset = layout.field_offsets[i];
-        let field_tydesc = tydesc_table.get_or_create(field_ty.ty(db));
-        let field_size = unsafe { (*field_tydesc).size };
+            let field_offset = layout.field_offsets[i];
+            let field_dest = unsafe { struct_ptr.add(field_offset as usize) };
+            instantiate_expr_into(db, rt, field_expr, field_ty.ty(db), tydesc_table, field_dest)?;
+        }
+    } else {
+        // HashMap for large structs.
+        let mut field_map: std::collections::HashMap<&str, ExprFull<'db>> = std::collections::HashMap::new();
+        for expr_field in expr_fields {
+            let name = expr_field.name(db).as_str(db);
+            field_map.insert(name, expr_field.value(db));
+        }
 
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                field_value,
-                struct_ptr.add(field_offset as usize),
-                field_size as usize,
-            );
-            // Free the temporary field allocation after copying.
-            rt.free((*field_tydesc).size, (*field_tydesc).align, 1, field_value as *mut u8);
+        for (i, type_field) in type_fields.iter().enumerate() {
+            let field_name = type_field.name(db).as_str(db);
+            let field_ty = type_field.ty(db);
+
+            let field_expr = field_map.get(field_name)
+                .ok_or_else(|| anyhow!("Missing field: {}", field_name))?;
+
+            let field_offset = layout.field_offsets[i];
+            let field_dest = unsafe { struct_ptr.add(field_offset as usize) };
+            instantiate_expr_into(db, rt, *field_expr, field_ty.ty(db), tydesc_table, field_dest)?;
         }
     }
 
@@ -470,6 +507,7 @@ fn instantiate_enum<'db>(
     type_variants: &[TypeEnumVariant<'db>],
     tydesc_table: &mut TyDescTable<'db>,
     enum_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     let variant_name_str = variant_name.as_str(db);
     let (variant_index, variant_ty) = type_variants
@@ -481,7 +519,11 @@ fn instantiate_enum<'db>(
     let layout = unsafe { rtdt::layout::compute_enum_layout(enum_tydesc) };
 
     let enum_ptr = unsafe {
-        rt.alloc(layout.size, layout.align, 1)
+        if dest_ptr.is_null() {
+            rt.alloc(layout.size, layout.align, 1)
+        } else {
+            dest_ptr
+        }
     };
 
     unsafe {
@@ -489,20 +531,9 @@ fn instantiate_enum<'db>(
     }
 
     if let (Some(payload_expr), Some(payload_ty)) = (payload_expr, variant_ty.payload(db)) {
-        let payload_value = instantiate_expr(db, rt, payload_expr, payload_ty.ty(db), tydesc_table)?;
-        let payload_tydesc = tydesc_table.get_or_create(payload_ty.ty(db));
-        let payload_size = unsafe { (*payload_tydesc).size } as usize;
         let payload_offset = layout.variant_offsets[variant_index];
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                payload_value,
-                enum_ptr.add(payload_offset as usize),
-                payload_size,
-            );
-            // Free the temporary payload allocation after copying.
-            rt.free((*payload_tydesc).size, (*payload_tydesc).align, 1, payload_value as *mut u8);
-        }
+        let payload_dest = unsafe { enum_ptr.add(payload_offset as usize) };
+        instantiate_expr_into(db, rt, payload_expr, payload_ty.ty(db), tydesc_table, payload_dest)?;
     }
 
     Ok(enum_ptr as *const u8)
@@ -515,6 +546,7 @@ fn instantiate_list<'db>(
     element_type: TypeAndHeap<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _list_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     let element_ty = element_type.ty(db);
     let element_tydesc = tydesc_table.get_or_create(element_ty);
@@ -527,26 +559,23 @@ fn instantiate_list<'db>(
             let array_ptr = rt.alloc(element_size, element_align, elements.len() as u32);
 
             for (i, elem) in elements.iter().enumerate() {
-                let elem_value = instantiate_expr(db, rt, *elem, element_ty, tydesc_table)?;
-
-                std::ptr::copy_nonoverlapping(
-                    elem_value,
-                    array_ptr.add(i * element_size as usize),
-                    element_size as usize,
-                );
-                // Free the temporary element allocation after copying.
-                rt.free(element_size, element_align, 1, elem_value as *mut u8);
+                let elem_dest = array_ptr.add(i * element_size as usize);
+                instantiate_expr_into(db, rt, *elem, element_ty, tydesc_table, elem_dest)?;
             }
             array_ptr as *const u8
         } else {
             std::ptr::null()
         };
 
-        let list_ptr = rt.alloc(
-            std::mem::size_of::<rtdt::List>() as u32,
-            std::mem::align_of::<rtdt::List>() as u32,
-            1,
-        ) as *mut rtdt::List;
+        let list_ptr = if dest_ptr.is_null() {
+            rt.alloc(
+                std::mem::size_of::<rtdt::List>() as u32,
+                std::mem::align_of::<rtdt::List>() as u32,
+                1,
+            )
+        } else {
+            dest_ptr
+        } as *mut rtdt::List;
 
         (*list_ptr).data = data_ptr;
         (*list_ptr).size = elements.len() as u32;
@@ -564,30 +593,24 @@ fn instantiate_option<'db>(
     inner_type: TypeAndHeap<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     option_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc) };
 
     let option_ptr = unsafe {
-        rt.alloc(layout.size, layout.align, 1)
+        if dest_ptr.is_null() {
+            rt.alloc(layout.size, layout.align, 1)
+        } else {
+            dest_ptr
+        }
     };
 
     if is_some {
         unsafe { *option_ptr = rtdt::OptionTag::Some as u8 };
 
         let payload = payload_expr.ok_or_else(|| anyhow!("Some variant missing payload"))?;
-        let payload_value = instantiate_expr(db, rt, payload, inner_type.ty(db), tydesc_table)?;
-        let payload_tydesc = tydesc_table.get_or_create(inner_type.ty(db));
-        let payload_size = unsafe { (*payload_tydesc).size } as usize;
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                payload_value,
-                option_ptr.add(layout.payload_offset as usize),
-                payload_size,
-            );
-            // Free the temporary payload allocation after copying.
-            rt.free((*payload_tydesc).size, (*payload_tydesc).align, 1, payload_value as *mut u8);
-        }
+        let payload_dest = unsafe { option_ptr.add(layout.payload_offset as usize) };
+        instantiate_expr_into(db, rt, payload, inner_type.ty(db), tydesc_table, payload_dest)?;
     } else {
         unsafe { *option_ptr = rtdt::OptionTag::None as u8 };
     }
@@ -601,6 +624,7 @@ fn instantiate_data<'db>(
     inner_expr: ExprFull<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _data_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     let source = bct::input::Source::new(db, "".to_string());
     let resolved = crate::resolve::resolve_names(db, inner_expr);
@@ -613,11 +637,15 @@ fn instantiate_data<'db>(
     let inner_value = instantiate_expr(db, rt, inner_expr, inner_type.ty(db), tydesc_table)?;
 
     let data_ptr = unsafe {
-        rt.alloc(
-            std::mem::size_of::<rtdt::Data>() as u32,
-            std::mem::align_of::<rtdt::Data>() as u32,
-            1,
-        ) as *mut rtdt::Data
+        (if dest_ptr.is_null() {
+            rt.alloc(
+                std::mem::size_of::<rtdt::Data>() as u32,
+                std::mem::align_of::<rtdt::Data>() as u32,
+                1,
+            )
+        } else {
+            dest_ptr
+        }) as *mut rtdt::Data
     };
 
     unsafe {
