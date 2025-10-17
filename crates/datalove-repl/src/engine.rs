@@ -97,92 +97,6 @@ impl ReplHistory {
     }
 }
 
-/// Create a new script unit from source text.
-///
-/// This creates Salsa input structs (ScriptUnit, Source)
-/// which don't require being in a tracked function context.
-fn create_script_unit(
-    db: &dyn datafun::Db,
-    source_text: String,
-) -> datafun::script::ScriptUnit {
-    // Create Source input.
-    let source_input = Source::new(db, source_text);
-
-    // Create new ScriptUnit input.
-    datafun::script::ScriptUnit::new(db, source_input)
-}
-
-/// Tracked function to parse all script units into a single AST Script.
-#[salsa::tracked]
-fn parse_full_script<'db>(
-    db: &'db dyn datafun::Db,
-    script: datafun::script::Script,
-) -> datafun::ast::Script<'db> {
-    // Parse all units and collect their statements into a single ast::Script.
-    let mut all_statements = Vec::new();
-    let units = script.units(db);
-    for unit_idx in 0..units.len() {
-        let parsed_unit = datafun::parser::parse_script_unit(db, script, unit_idx);
-        all_statements.extend(parsed_unit.statements(db).iter().cloned());
-    }
-
-    datafun::ast::Script::new(db, all_statements)
-}
-
-/// Execute a script with the interpreter.
-///
-/// This is NOT a tracked function because InterpContext contains non-Sync types.
-/// The caller must handle execution directly.
-fn execute_with_interpreter_impl(
-    db: &dyn datafun::Db,
-    script: datafun::script::Script,
-) -> Result<datafun::interp::InterpContext<'_>, datafun::interp::InterpError> {
-    // Parse the full script using a tracked function.
-    let parsed_script = parse_full_script(db, script);
-
-    // Type check the script.
-    let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
-    if !tycheck_result.errors(db).is_empty() {
-        return Err(datafun::interp::InterpError::TypeError(
-            format!("{} type error(s)", tycheck_result.errors(db).len())
-        ));
-    }
-
-    // Build type table.
-    let type_table = datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result)
-        .map_err(|e| datafun::interp::InterpError::RuntimeError(format!("failed to build type table: {}", e)))?;
-
-    // Create interpreter context.
-    let mut ctx = datafun::interp::InterpContext::new(db, type_table);
-
-    // Execute the full script.
-    ctx.execute(parsed_script)?;
-
-    Ok(ctx)
-}
-
-/// Create a script for an expression evaluation.
-///
-/// This wraps the expression in a let statement and creates the script,
-/// but does not execute it. The caller must execute and pretty-print.
-fn create_expression_script(
-    db: &dyn datafun::Db,
-    history: &ReplHistory,
-    expression: &str,
-) -> (datafun::script::Script, &'static str) {
-    // Wrap the expression in a let statement with a temporary variable.
-    let temp_var = "_expr_result";
-    let let_statement = format!("let {} = {}", temp_var, expression);
-
-    // Create script unit for the temporary let statement.
-    let temp_unit = create_script_unit(db, let_statement);
-
-    // Build script from history plus the temporary unit.
-    let new_script = history.build_script_with_unit(db, temp_unit);
-
-    (new_script, temp_var)
-}
-
 impl Engine {
     pub fn new() -> AnyResult<Engine> {
         Ok(Engine {
@@ -572,6 +486,97 @@ impl Engine {
         Ok(())
     }
 }
+
+
+
+
+/// Create a new script unit from source text.
+///
+/// This creates Salsa input structs (ScriptUnit, Source)
+/// which don't require being in a tracked function context.
+fn create_script_unit(
+    db: &dyn datafun::Db,
+    source_text: String,
+) -> datafun::script::ScriptUnit {
+    // Create Source input.
+    let source_input = Source::new(db, source_text);
+
+    // Create new ScriptUnit input.
+    datafun::script::ScriptUnit::new(db, source_input)
+}
+
+/// Tracked function to parse all script units into a single AST Script.
+#[salsa::tracked]
+fn parse_full_script<'db>(
+    db: &'db dyn datafun::Db,
+    script: datafun::script::Script,
+) -> datafun::ast::Script<'db> {
+    // Parse all units and collect their statements into a single ast::Script.
+    let mut all_statements = Vec::new();
+    let units = script.units(db);
+    for unit_idx in 0..units.len() {
+        let parsed_unit = datafun::parser::parse_script_unit(db, script, unit_idx);
+        all_statements.extend(parsed_unit.statements(db).iter().cloned());
+    }
+
+    datafun::ast::Script::new(db, all_statements)
+}
+
+/// Execute a script with the interpreter.
+///
+/// This is NOT a tracked function because InterpContext contains non-Sync types.
+/// The caller must handle execution directly.
+fn execute_with_interpreter_impl(
+    db: &dyn datafun::Db,
+    script: datafun::script::Script,
+) -> Result<datafun::interp::InterpContext<'_>, datafun::interp::InterpError> {
+    // Parse the full script using a tracked function.
+    let parsed_script = parse_full_script(db, script);
+
+    // Type check the script.
+    let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
+    if !tycheck_result.errors(db).is_empty() {
+        return Err(datafun::interp::InterpError::TypeError(
+            format!("{} type error(s)", tycheck_result.errors(db).len())
+        ));
+    }
+
+    // Build type table.
+    let type_table = datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result)
+        .map_err(|e| datafun::interp::InterpError::RuntimeError(format!("failed to build type table: {}", e)))?;
+
+    // Create interpreter context.
+    let mut ctx = datafun::interp::InterpContext::new(db, type_table);
+
+    // Execute the full script.
+    ctx.execute(parsed_script)?;
+
+    Ok(ctx)
+}
+
+/// Create a script for an expression evaluation.
+///
+/// This wraps the expression in a let statement and creates the script,
+/// but does not execute it. The caller must execute and pretty-print.
+fn create_expression_script(
+    db: &dyn datafun::Db,
+    history: &ReplHistory,
+    expression: &str,
+) -> (datafun::script::Script, &'static str) {
+    // Wrap the expression in a let statement with a temporary variable.
+    let temp_var = "_expr_result";
+    let let_statement = format!("let {} = {}", temp_var, expression);
+
+    // Create script unit for the temporary let statement.
+    let temp_unit = create_script_unit(db, let_statement);
+
+    // Build script from history plus the temporary unit.
+    let new_script = history.build_script_with_unit(db, temp_unit);
+
+    (new_script, temp_var)
+}
+
+
 
 
 #[cfg(test)]
