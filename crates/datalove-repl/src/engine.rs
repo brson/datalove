@@ -317,10 +317,7 @@ impl Engine {
             &source,
         );
 
-        // Parse the full script for type information.
         let parsed_script = parse_full_script(db, new_script);
-
-        // Type check the script.
         let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
         if !tycheck_result.errors(db).is_empty() {
             let errors: Vec<_> = tycheck_result.errors(db)
@@ -330,26 +327,19 @@ impl Engine {
             return Eval::Error(format!("type error(s): {}", errors.join(", ")));
         }
 
-        // Execute the script and pretty-print the result.
         match execute_with_interpreter_impl(db, new_script) {
             Ok(mut ctx) => {
-                let temp_name = bct::text::InternedText::new(db, S(temp_var));
+                let name = bct::text::InternedText::new(db, S(temp_var));
 
-                // Get the type from the typechecker.
-                let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, temp_name) {
+                let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
                     datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
                 } else {
                     "unknown".to_string()
                 };
 
-                // Get the value by pretty-printing.
-                let value_str = match ctx.pretty_print_variable(temp_name) {
-                    Ok(s) => s,
-                    Err(e) => return Eval::Error(format!("failed to pretty-print: {:?}", e)),
-                };
+                let value_str = ctx.pretty_print_variable(name)
+                    .unwrap_or_else(|e| format!("error: {:?}", e));
 
-                // Return SuccessExpr with the result.
-                // Note: We don't update the history here, so _expr_result won't be in the environment.
                 Eval::SuccessExpr(EvalExpr {
                     expr_kind: "expression".to_string(),
                     ty: ty_str,
