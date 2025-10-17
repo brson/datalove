@@ -522,10 +522,6 @@ fn parse_full_script<'db>(
     datafun::ast::Script::new(db, all_statements)
 }
 
-/// Execute a script with the interpreter.
-///
-/// This is NOT a tracked function because InterpContext contains non-Sync types.
-/// The caller must handle execution directly.
 fn execute_with_interpreter_impl(
     db: &dyn datafun::Db,
     script: datafun::script::Script,
