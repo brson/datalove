@@ -474,6 +474,14 @@ fn eval_function_call<'db>(
     let name = call.name(ctx.db);
     let args = call.args(ctx.db);
 
+    // Check stack depth to prevent overflow.
+    if ctx.call_depth >= crate::interp::MAX_CALL_DEPTH {
+        return Err(InterpError::StackOverflow);
+    }
+
+    // Increment call depth.
+    ctx.call_depth += 1;
+
     // Look up the function definition (need to copy since we'll borrow ctx mutably later).
     let func = *ctx.functions.get(&name)
         .ok_or_else(|| InterpError::UnresolvedName(name.as_str(ctx.db).to_string()))?;
@@ -540,6 +548,9 @@ fn eval_function_call<'db>(
             ctx.variables.insert(param_name, old_val);
         }
     }
+
+    // Decrement call depth before returning.
+    ctx.call_depth -= 1;
 
     result
 }

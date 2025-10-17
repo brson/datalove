@@ -36,7 +36,13 @@ pub enum InterpError {
 
     /// Return value from function (not a real error, used for control flow).
     Return(Value),
+
+    /// Stack overflow (recursion too deep).
+    StackOverflow,
 }
+
+/// Maximum call stack depth to prevent stack overflow.
+pub const MAX_CALL_DEPTH: usize = 1000;
 
 /// Interpreter context.
 ///
@@ -59,6 +65,9 @@ pub struct InterpContext<'db> {
 
     /// Function definitions (name -> definition).
     pub functions: HashMap<InternedText<'db>, StmtFun<'db>>,
+
+    /// Current call stack depth (for recursion protection).
+    pub call_depth: usize,
 }
 
 impl<'db> InterpContext<'db> {
@@ -71,6 +80,7 @@ impl<'db> InterpContext<'db> {
             tydesc_table: crate::datalit::tydesc_table::TyDescTable::new(db),
             variables: HashMap::new(),
             functions: HashMap::new(),
+            call_depth: 0,
         }
     }
 
