@@ -93,7 +93,8 @@ fn instantiate_expr<'db>(
         (Expr::Float(float_expr), Type::F32) => instantiate_f32(rt, db, float_expr),
 
         (Expr::String(string_expr), Type::String) => {
-            instantiate_string(rt, db, string_expr)
+            let tydesc = tydesc_table.get_or_create(ty);
+            instantiate_string(rt, db, string_expr, tydesc)
         }
 
         (Expr::AnonTuple(tuple_expr), Type::AnonTuple(tuple_ty)) => {
@@ -328,6 +329,7 @@ fn instantiate_string(
     rt: &mut datalove_rt::alloc::LocalRt,
     db: &dyn crate::Db,
     string_expr: ExprString,
+    string_tydesc: *const rtdt::TyDesc,
 ) -> AnyResult<*const u8> {
     let value_str_raw = string_expr.value(db).as_str(db);
 
@@ -338,19 +340,6 @@ fn instantiate_string(
     };
 
     unsafe {
-        // Allocate data buffer if non-empty using size=1, count=len.
-        let data_ptr = if !value_str.is_empty() {
-            let ptr = rt.alloc(1, 1, value_str.len() as u32);
-            std::ptr::copy_nonoverlapping(
-                value_str.as_ptr(),
-                ptr,
-                value_str.len(),
-            );
-            ptr as *const u8
-        } else {
-            std::ptr::null()
-        };
-
         // Allocate String struct.
         let string_ptr = rt.alloc(
             std::mem::size_of::<rtdt::String>() as u32,
@@ -358,9 +347,32 @@ fn instantiate_string(
             1,
         ) as *mut rtdt::String;
 
-        (*string_ptr).data = data_ptr;
-        (*string_ptr).size = value_str.len() as u32;
-        (*string_ptr).capacity = value_str.len() as u32;
+        // Create empty string using runtime helper.
+        let rt_handle = rt as *mut _ as datalove_rt::LocalRtHandle;
+        let status = datalove_rt::string::string_create_local(
+            rt_handle,
+            string_ptr as *mut u8,
+            string_tydesc,
+        );
+
+        if status != datalove_rt::RtStatus::Ok {
+            bail!("Failed to create string");
+        }
+
+        // Push the string data if non-empty.
+        if !value_str.is_empty() {
+            let status = datalove_rt::string::string_push_bytes_local(
+                rt_handle,
+                string_ptr as *mut u8,
+                string_tydesc,
+                value_str.as_ptr(),
+                value_str.len() as u32,
+            );
+
+            if status != datalove_rt::RtStatus::Ok {
+                bail!("Failed to push string bytes");
+            }
+        }
 
         Ok(string_ptr as *const u8)
     }
@@ -737,7 +749,7 @@ mod tests {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
             let string = &*(inst.ptr as *const rtdt::String);
             assert_eq!(string.size, 5);
-            assert_eq!(string.capacity, 5);
+            assert!(string.capacity >= 5);
             let str_slice = std::slice::from_raw_parts(string.data, string.size as usize);
             assert_eq!(str_slice, b"hello");
 
