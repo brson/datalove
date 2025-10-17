@@ -290,9 +290,9 @@ fn instantiate_bigint(rt: &mut datalove_rt::alloc::LocalRt, db: &dyn crate::Db, 
     }
 
     unsafe {
-        // Allocate limbs array via runtime.
+        // Allocate limbs array via runtime using size=4, align=4, count=len.
         let limbs_ptr = if !limbs.is_empty() {
-            let ptr = rt.alloc(std::mem::size_of::<u32>() as u32, 4, limbs.len() as u32) as *mut u32;
+            let ptr = rt.alloc(4, 4, limbs.len() as u32) as *mut u32;
             for (i, &limb) in limbs.iter().enumerate() {
                 *ptr.add(i) = limb;
             }
@@ -338,9 +338,9 @@ fn instantiate_string(
     };
 
     unsafe {
-        // Allocate data buffer if non-empty.
+        // Allocate data buffer if non-empty using size=1, count=len.
         let data_ptr = if !value_str.is_empty() {
-            let ptr = rt.alloc(value_str.len() as u32, 1, 1);
+            let ptr = rt.alloc(1, 1, value_str.len() as u32);
             std::ptr::copy_nonoverlapping(
                 value_str.as_ptr(),
                 ptr,
@@ -387,7 +387,8 @@ fn instantiate_tuple<'db>(
     for (i, (elem, field_ty)) in elements.iter().zip(field_types.iter()).enumerate() {
         let field_value = instantiate_expr(db, rt, *elem, field_ty.ty(db), tydesc_table)?;
         let field_offset = layout.field_offsets[i];
-        let field_size = unsafe { (*tydesc_table.get_or_create(field_ty.ty(db))).size };
+        let field_tydesc = tydesc_table.get_or_create(field_ty.ty(db));
+        let field_size = unsafe { (*field_tydesc).size };
 
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -395,6 +396,8 @@ fn instantiate_tuple<'db>(
                 tuple_ptr.add(field_offset as usize),
                 field_size as usize,
             );
+            // Free the temporary field allocation after copying.
+            rt.free((*field_tydesc).size, (*field_tydesc).align, 1, field_value as *mut u8);
         }
     }
 
@@ -430,7 +433,8 @@ fn instantiate_struct<'db>(
 
         let field_value = instantiate_expr(db, rt, *field_expr, field_ty.ty(db), tydesc_table)?;
         let field_offset = layout.field_offsets[i];
-        let field_size = unsafe { (*tydesc_table.get_or_create(field_ty.ty(db))).size };
+        let field_tydesc = tydesc_table.get_or_create(field_ty.ty(db));
+        let field_size = unsafe { (*field_tydesc).size };
 
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -438,6 +442,8 @@ fn instantiate_struct<'db>(
                 struct_ptr.add(field_offset as usize),
                 field_size as usize,
             );
+            // Free the temporary field allocation after copying.
+            rt.free((*field_tydesc).size, (*field_tydesc).align, 1, field_value as *mut u8);
         }
     }
 
@@ -472,7 +478,8 @@ fn instantiate_enum<'db>(
 
     if let (Some(payload_expr), Some(payload_ty)) = (payload_expr, variant_ty.payload(db)) {
         let payload_value = instantiate_expr(db, rt, payload_expr, payload_ty.ty(db), tydesc_table)?;
-        let payload_size = unsafe { (*tydesc_table.get_or_create(payload_ty.ty(db))).size } as usize;
+        let payload_tydesc = tydesc_table.get_or_create(payload_ty.ty(db));
+        let payload_size = unsafe { (*payload_tydesc).size } as usize;
         let payload_offset = layout.variant_offsets[variant_index];
 
         unsafe {
@@ -481,6 +488,8 @@ fn instantiate_enum<'db>(
                 enum_ptr.add(payload_offset as usize),
                 payload_size,
             );
+            // Free the temporary payload allocation after copying.
+            rt.free((*payload_tydesc).size, (*payload_tydesc).align, 1, payload_value as *mut u8);
         }
     }
 
@@ -501,6 +510,7 @@ fn instantiate_list<'db>(
     let element_align = unsafe { (*element_tydesc).align };
 
     unsafe {
+        // Allocate list data using size=element_size, align=element_align, count=len.
         let data_ptr = if !elements.is_empty() {
             let array_ptr = rt.alloc(element_size, element_align, elements.len() as u32);
 
@@ -512,6 +522,8 @@ fn instantiate_list<'db>(
                     array_ptr.add(i * element_size as usize),
                     element_size as usize,
                 );
+                // Free the temporary element allocation after copying.
+                rt.free(element_size, element_align, 1, elem_value as *mut u8);
             }
             array_ptr as *const u8
         } else {
@@ -552,7 +564,8 @@ fn instantiate_option<'db>(
 
         let payload = payload_expr.ok_or_else(|| anyhow!("Some variant missing payload"))?;
         let payload_value = instantiate_expr(db, rt, payload, inner_type.ty(db), tydesc_table)?;
-        let payload_size = unsafe { (*tydesc_table.get_or_create(inner_type.ty(db))).size } as usize;
+        let payload_tydesc = tydesc_table.get_or_create(inner_type.ty(db));
+        let payload_size = unsafe { (*payload_tydesc).size } as usize;
 
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -560,6 +573,8 @@ fn instantiate_option<'db>(
                 option_ptr.add(layout.payload_offset as usize),
                 payload_size,
             );
+            // Free the temporary payload allocation after copying.
+            rt.free((*payload_tydesc).size, (*payload_tydesc).align, 1, payload_value as *mut u8);
         }
     } else {
         unsafe { *option_ptr = rtdt::OptionTag::None as u8 };
@@ -624,13 +639,19 @@ mod tests {
     fn test_instantiate_bool_true() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@true")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
             assert_eq!(*inst.ptr, 1);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -640,13 +661,19 @@ mod tests {
     fn test_instantiate_bool_false() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@false")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
             assert_eq!(*inst.ptr, 0);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -656,13 +683,19 @@ mod tests {
     fn test_instantiate_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@42")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::U32);
             assert_eq!(*(inst.ptr as *const u32), 42);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -672,13 +705,19 @@ mod tests {
     fn test_instantiate_f32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@3.14")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::F32);
             assert_eq!(*(inst.ptr as *const f32), 3.14);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -688,9 +727,11 @@ mod tests {
     fn test_instantiate_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, r#"@"hello""#)?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
@@ -699,6 +740,10 @@ mod tests {
             assert_eq!(string.capacity, 5);
             let str_slice = std::slice::from_raw_parts(string.data, string.size as usize);
             assert_eq!(str_slice, b"hello");
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -708,9 +753,11 @@ mod tests {
     fn test_instantiate_empty_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, r#"@"""#)?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
@@ -718,6 +765,10 @@ mod tests {
             assert_eq!(string.size, 0);
             assert_eq!(string.capacity, 0);
             assert!(string.data.is_null());
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -727,9 +778,11 @@ mod tests {
     fn test_instantiate_tuple_simple() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@(@true, @42)")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
@@ -742,6 +795,10 @@ mod tests {
 
             let u32_value = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
             assert_eq!(u32_value, 42);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -751,9 +808,11 @@ mod tests {
     fn test_instantiate_int_small() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @int / @42")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
@@ -770,9 +829,11 @@ mod tests {
     fn test_instantiate_int_zero() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @int / @0")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
@@ -789,9 +850,11 @@ mod tests {
     fn test_instantiate_anon_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@{x = @1, y = @2}")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
@@ -811,6 +874,11 @@ mod tests {
 
             let y_value = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
             assert_eq!(y_value, 2);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
+            rt.shutdown();
         }
         Ok(())
     }
@@ -819,9 +887,11 @@ mod tests {
     fn test_instantiate_enum_no_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -838,9 +908,11 @@ mod tests {
     fn test_instantiate_enum_with_scalar_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -862,9 +934,11 @@ mod tests {
     fn test_instantiate_list_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@[@1, @2, @3, @4, @5]")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -886,9 +960,11 @@ mod tests {
     fn test_instantiate_empty_list() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @[@u32] / @[]")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -904,9 +980,11 @@ mod tests {
     fn test_instantiate_option_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@u32 / @none")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -920,9 +998,11 @@ mod tests {
     fn test_instantiate_option_some_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@u32 / @42")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -940,9 +1020,11 @@ mod tests {
     fn test_instantiate_list_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, r#"@[@"hello", @"world"]"#)?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -969,9 +1051,11 @@ mod tests {
     fn test_instantiate_nested_option_some_some() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@?@u32 / @42")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -998,9 +1082,11 @@ mod tests {
     fn test_instantiate_named_tuple() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @tuple Point(@u32, @u32) / @tuple Point(@1, @2)")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
@@ -1013,6 +1099,10 @@ mod tests {
 
             let u32_value_2 = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
             assert_eq!(u32_value_2, 2);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1022,9 +1112,11 @@ mod tests {
     fn test_instantiate_int_large() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @int / @1234567890123456789")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
@@ -1038,6 +1130,10 @@ mod tests {
                 reconstructed |= (limb as u64) << (32 * i);
             }
             assert_eq!(reconstructed, 1234567890123456789);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1047,9 +1143,11 @@ mod tests {
     fn test_instantiate_named_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @struct Point {x = @10, y = @20}")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
@@ -1062,6 +1160,10 @@ mod tests {
 
             let y_value = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
             assert_eq!(y_value, 20);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1071,9 +1173,11 @@ mod tests {
     fn test_instantiate_anon_to_named_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @{x = @5, y = @15}")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
@@ -1086,6 +1190,10 @@ mod tests {
 
             let y_value = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
             assert_eq!(y_value, 15);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1095,14 +1203,20 @@ mod tests {
     fn test_instantiate_enum_anon_to_named_coercion() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Error")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
             let discriminant = *(inst.ptr as *const u32);
             assert_eq!(discriminant, 1);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1112,9 +1226,11 @@ mod tests {
     fn test_instantiate_enum_with_tuple_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum { Ok(@(@u32, @u32)), Err(@string) } / @enum Ok(@(@10, @20))")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -1141,6 +1257,10 @@ mod tests {
 
             assert_eq!(first_value, 10);
             assert_eq!(second_value, 20);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1150,9 +1270,11 @@ mod tests {
     fn test_instantiate_enum_with_struct_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @enum { Data(@{x: @u32, y: @u32}), None } / @enum Data(@{x = @5, y = @15})")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
@@ -1179,6 +1301,10 @@ mod tests {
 
             assert_eq!(x_value, 5);
             assert_eq!(y_value, 15);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1188,9 +1314,11 @@ mod tests {
     fn test_instantiate_list_of_tuples() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, "@[@(@1, @2), @(@3, @4), @(@5, @6)]")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
@@ -1215,6 +1343,10 @@ mod tests {
                 assert_eq!(first, (i * 2 + 1) as u32);
                 assert_eq!(second, (i * 2 + 2) as u32);
             }
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1224,9 +1356,11 @@ mod tests {
     fn test_instantiate_option_of_tuple_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@(@u32, @u32) / @none")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1237,6 +1371,10 @@ mod tests {
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tuple);
             let tuple_info = &(*inner_tydesc).type_info.tuple;
             assert_eq!(tuple_info.num_fields, 2);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1246,9 +1384,11 @@ mod tests {
     fn test_instantiate_option_of_tuple_some() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@(@u32, @u32) / @(@10, @20)")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1267,6 +1407,10 @@ mod tests {
             let second = *(payload_ptr.add(tuple_fields[1].offset as usize) as *const u32);
             assert_eq!(first, 10);
             assert_eq!(second, 20);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1276,9 +1420,11 @@ mod tests {
     fn test_instantiate_option_of_struct_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@{x: @u32, y: @u32} / @none")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1289,6 +1435,10 @@ mod tests {
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Struct);
             let struct_info = &(*inner_tydesc).type_info.struct_;
             assert_eq!(struct_info.num_fields, 2);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1298,9 +1448,11 @@ mod tests {
     fn test_instantiate_option_of_struct_some() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@{x: @u32, y: @u32} / @{x = @100, y = @200}")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1319,6 +1471,10 @@ mod tests {
             let y_value = *(payload_ptr.add(struct_fields[1].offset as usize) as *const u32);
             assert_eq!(x_value, 100);
             assert_eq!(y_value, 200);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1328,9 +1484,11 @@ mod tests {
     fn test_instantiate_option_of_list_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@[@u32] / @none")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1339,6 +1497,10 @@ mod tests {
 
             let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::List);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1348,9 +1510,11 @@ mod tests {
     fn test_instantiate_option_of_list_some_empty() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@[@u32] / @[]")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1364,6 +1528,10 @@ mod tests {
             assert_eq!(list.size, 0);
             assert_eq!(list.capacity, 0);
             assert!(list.data.is_null());
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1373,9 +1541,11 @@ mod tests {
     fn test_instantiate_option_of_list_some_nonempty() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@[@u32] / @[@1, @2, @3]")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1391,6 +1561,10 @@ mod tests {
 
             let elements = std::slice::from_raw_parts(list.data as *const u32, list.size as usize);
             assert_eq!(elements, &[1, 2, 3]);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1400,9 +1574,11 @@ mod tests {
     fn test_instantiate_option_of_string_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@string / @none")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1411,6 +1587,10 @@ mod tests {
 
             let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::String);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1420,9 +1600,11 @@ mod tests {
     fn test_instantiate_option_of_enum_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@enum { Ok, Error } / @none")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1433,6 +1615,10 @@ mod tests {
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Enum);
             let enum_info = &(*inner_tydesc).type_info.enum_;
             assert_eq!(enum_info.num_variants, 2);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1442,9 +1628,11 @@ mod tests {
     fn test_instantiate_option_of_enum_some() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@enum { Ok, Error(@string) } / @enum Error(@\"failed\")")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1467,6 +1655,10 @@ mod tests {
             assert_eq!(string.size, 6);
             let str_slice = std::slice::from_raw_parts(string.data, string.size as usize);
             assert_eq!(str_slice, b"failed");
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1476,9 +1668,11 @@ mod tests {
     fn test_instantiate_nested_option_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@?@u32 / @none")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1490,6 +1684,10 @@ mod tests {
 
             let innermost_tydesc = (*inner_tydesc).type_info.option.inner_tydesc;
             assert_eq!((*innermost_tydesc).type_tag, rtdt::TyTag::U32);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1499,14 +1697,20 @@ mod tests {
     fn test_instantiate_nested_option_some_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@?@u32 / @none")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::None as u8);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
@@ -1516,9 +1720,11 @@ mod tests {
     fn test_instantiate_option_of_option_of_tuple() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile(&db, ": @?@?@(@u32, @bool) / @(@5, @true)")?;
-        let mut rt = datalove_rt::alloc::LocalRt::with_leak_check_mode(datalove_rt::alloc::LeakCheckMode::Ignore);
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
@@ -1546,6 +1752,10 @@ mod tests {
             let bool_value = *(inner_payload_ptr.add(tuple_fields[1].offset as usize) as *const u8);
             assert_eq!(u32_value, 5);
             assert_eq!(bool_value, 1);
+
+            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
         Ok(())
