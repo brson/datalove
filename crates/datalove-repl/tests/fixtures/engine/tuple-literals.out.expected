@@ -113,6 +113,11 @@
     },
     "environment": [
       {
+        "name": "mixed",
+        "ty": "(@u32, @string, @bool)",
+        "value": "@(@100, @\"test\", @true)"
+      },
+      {
         "name": "pair",
         "ty": "(@u32, @string)",
         "value": "@(@42, @\"hello\")"
@@ -121,11 +126,6 @@
         "name": "triple",
         "ty": "(@u32, @u32, @u32)",
         "value": "@(@1, @2, @3)"
-      },
-      {
-        "name": "mixed",
-        "ty": "(@u32, @string, @bool)",
-        "value": "@(@100, @\"test\", @true)"
       }
     ]
   },
@@ -145,6 +145,11 @@
     },
     "environment": [
       {
+        "name": "mixed",
+        "ty": "(@u32, @string, @bool)",
+        "value": "@(@100, @\"test\", @true)"
+      },
+      {
         "name": "pair",
         "ty": "(@u32, @string)",
         "value": "@(@42, @\"hello\")"
@@ -153,11 +158,6 @@
         "name": "triple",
         "ty": "(@u32, @u32, @u32)",
         "value": "@(@1, @2, @3)"
-      },
-      {
-        "name": "mixed",
-        "ty": "(@u32, @string, @bool)",
-        "value": "@(@100, @\"test\", @true)"
       }
     ]
   }

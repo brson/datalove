@@ -7,19 +7,12 @@ use bct::input::Source;
 use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, InputParse, Input};
 use crate::datafun;
 
-/// An environment binding from the REPL.
-#[derive(Clone, Debug)]
-struct EnvBinding {
-    name: String,
-    ty: String,
-    value: String,
-}
-
-pub struct Engine {
-    db: datafun::Database,
+pub struct Engine<'db> {
+    db: &'db dyn datafun::Db,
     history: ReplHistory,
-    /// Cached environment from the last successful script evaluation.
-    cached_environment: Vec<EnvBinding>,
+    /// Persistent interpreter context.
+    /// Created on first evaluation and reused for subsequent evaluations.
+    interp_ctx: Option<datafun::interp::InterpContext<'db>>,
 }
 
 struct ReplHistory {
@@ -103,19 +96,18 @@ impl ReplHistory {
     }
 }
 
-impl Engine {
-    pub fn new() -> AnyResult<Engine> {
+impl<'db> Engine<'db> {
+    pub fn new(db: &'db dyn datafun::Db) -> AnyResult<Engine<'db>> {
         Ok(Engine {
-            db: datafun::Database::default(),
+            db,
             history: ReplHistory::new(),
-            cached_environment: Vec::new(),
+            interp_ctx: None,
         })
     }
 
     fn reset(&mut self) {
-        self.db = datafun::Database::default();
         self.history = ReplHistory::new();
-        self.cached_environment = Vec::new();
+        self.interp_ctx = None;
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -222,7 +214,7 @@ impl Engine {
     }
 
     fn eval_script_statement(&mut self, source: String) -> Eval {
-        let new_unit = create_script_unit(&self.db, source.C());
+        let new_unit = create_script_unit(self.db, source.C());
 
         let eval = self.eval_script_with_unit(new_unit);
 
@@ -252,7 +244,7 @@ impl Engine {
     }
     
     fn eval_script_with_unit(&mut self, unit: datafun::script::ScriptUnit) -> Eval {
-        let db = &self.db;
+        let db = self.db;
 
         let new_script = self.history.build_script_with_unit(db, unit);
         let unit_index = new_script.units(db).len() - 1;
@@ -289,41 +281,63 @@ impl Engine {
             }
         }
 
-        let result = execute_with_interpreter_impl(db, new_script);
-        match result {
-            Ok(mut ctx) => {
-                // Extract and cache the environment from this successful execution.
-                let cached_env = extract_environment(db, new_script, parsed_script, &mut ctx);
-                self.cached_environment = cached_env;
+        // Build type table for the full script.
+        let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
+        let type_table = match datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result) {
+            Ok(table) => table,
+            Err(e) => return Eval::Error(format!("type table error: {}", e)),
+        };
 
-                if let datafun::ast::Statement::Let(let_stmt) = unit_statements.last().X() {
-                    let name = let_stmt.name(db);
-                    let name_str = name.as_str(db).to_string();
-
-                    let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
-                        datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
-                    } else {
-                        "unknown".to_string()
-                    };
-
-                    let value_str = ctx.pretty_print_variable(name)
-                        .unwrap_or_else(|e| format!("error: {:?}", e));
-
-                    return Eval::SuccessLet(EvalLet {
-                        name: name_str,
-                        ty: ty_str,
-                        value: value_str,
-                    });
-                }
-
-                Eval::Nothing
-            }
-            Err(e) => Eval::Error(format!("execution error: {:?}", e)),
+        // Create or update the interpreter context.
+        if self.interp_ctx.is_none() {
+            self.interp_ctx = Some(datafun::interp::InterpContext::new(db, type_table));
+        } else {
+            self.interp_ctx.as_mut().unwrap().update_type_table(type_table);
         }
+
+        let ctx = self.interp_ctx.as_mut().unwrap();
+
+        // Collect function definitions from the new unit.
+        for statement in unit_statements {
+            if let datafun::ast::Statement::Fun(fun) = statement {
+                let name = fun.name(db);
+                ctx.functions.insert(name, *fun);
+            }
+        }
+
+        // Execute only the statements from the new unit.
+        for statement in unit_statements {
+            if let Err(e) = ctx.exec_stmt(statement) {
+                return Eval::Error(format!("execution error: {:?}", e));
+            }
+        }
+
+        // Return information about the last statement if it was a let.
+        if let datafun::ast::Statement::Let(let_stmt) = unit_statements.last().X() {
+            let name = let_stmt.name(db);
+            let name_str = name.as_str(db).to_string();
+
+            let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
+                datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
+            } else {
+                "unknown".to_string()
+            };
+
+            let value_str = ctx.pretty_print_variable(name)
+                .unwrap_or_else(|e| format!("error: {:?}", e));
+
+            return Eval::SuccessLet(EvalLet {
+                name: name_str,
+                ty: ty_str,
+                value: value_str,
+            });
+        }
+
+        Eval::Nothing
     }
 
     fn eval_expression(&mut self, source: String) -> Eval {
-        let db = &self.db;
+        let db = self.db;
 
         // Create the script with the expression wrapped in a let statement.
         // This is temporary - we won't persist it to the history.
@@ -343,41 +357,113 @@ impl Engine {
             return Eval::Error(format!("type error(s): {}", errors.join(", ")));
         }
 
-        match execute_with_interpreter_impl(db, new_script) {
-            Ok(mut ctx) => {
-                let name = bct::text::InternedText::new(db, S(temp_var));
+        // Build type table for the full script (including temp expression).
+        let type_table = match datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result) {
+            Ok(table) => table,
+            Err(e) => return Eval::Error(format!("type table error: {}", e)),
+        };
 
+        // Create or update the interpreter context.
+        if self.interp_ctx.is_none() {
+            self.interp_ctx = Some(datafun::interp::InterpContext::new(db, type_table));
+        } else {
+            self.interp_ctx.as_mut().unwrap().update_type_table(type_table);
+        }
+
+        let ctx = self.interp_ctx.as_mut().unwrap();
+
+        // Parse the temporary unit to get the let statement.
+        let units = new_script.units(db);
+        let temp_unit_index = units.len() - 1;
+        let parsed_temp_unit = datafun::parser::parse_script_unit(db, new_script, temp_unit_index);
+        let temp_statements = parsed_temp_unit.statements(db);
+
+        // Execute the temporary let statement.
+        for statement in temp_statements {
+            if let Err(e) = ctx.exec_stmt(statement) {
+                return Eval::Error(format!("execution error: {:?}", e));
+            }
+        }
+
+        let name = bct::text::InternedText::new(db, S(temp_var));
+
+        let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
+            datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
+        } else {
+            "unknown".to_string()
+        };
+
+        let value_str = ctx.pretty_print_variable(name)
+            .unwrap_or_else(|e| format!("error: {:?}", e));
+
+        // Remove the temporary variable from the context.
+        if let Some(mut value) = ctx.variables.remove(&name) {
+            unsafe {
+                value.free(&mut ctx.rt);
+            }
+        }
+
+        Eval::SuccessExpr(EvalExpr {
+            expr_kind: "expression".to_string(),
+            ty: ty_str,
+            value: value_str,
+        })
+    }
+
+    /// Get current environment bindings (functions and let statements).
+    /// Returns a list of (name, type, value) triples.
+    pub fn get_environment(&mut self) -> Vec<(String, String, String)> {
+        let mut bindings = Vec::new();
+
+        if let Some(ctx) = &mut self.interp_ctx {
+            let db = self.db;
+
+            // Build the full script for type lookup.
+            let script = self.history.build_script(db);
+            let parsed_script = parse_full_script(db, script);
+
+            // Add functions.
+            for (name, _fun) in &ctx.functions {
+                bindings.push((
+                    name.as_str(db).to_string(),
+                    "function".to_string(),
+                    "".to_string(),
+                ));
+            }
+
+            // Collect variable names first to avoid borrow checker issues.
+            let var_names: Vec<_> = ctx.variables.keys().copied().collect();
+
+            // Add variables with types and values.
+            for name in var_names {
+                // Get the type from the typechecker.
                 let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
                     datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
                 } else {
                     "unknown".to_string()
                 };
 
+                // Get the value by pretty-printing.
                 let value_str = ctx.pretty_print_variable(name)
-                    .unwrap_or_else(|e| format!("error: {:?}", e));
+                    .unwrap_or_else(|_| "error".to_string());
 
-                Eval::SuccessExpr(EvalExpr {
-                    expr_kind: "expression".to_string(),
-                    ty: ty_str,
-                    value: value_str,
-                })
+                bindings.push((
+                    name.as_str(db).to_string(),
+                    ty_str,
+                    value_str,
+                ));
             }
-            Err(e) => Eval::Error(format!("execution error: {:?}", e)),
         }
-    }
 
-    /// Get current environment bindings (functions and let statements).
-    /// Returns a list of (name, type, value) triples.
-    pub fn get_environment(&self) -> Vec<(String, String, String)> {
-        self.cached_environment
-            .iter()
-            .map(|binding| (binding.name.clone(), binding.ty.clone(), binding.value.clone()))
-            .collect()
+        // Sort bindings by name for deterministic output.
+        bindings.sort_by(|a, b| a.0.cmp(&b.0));
+
+        bindings
     }
 
     /// Execute a script file line by line and output JSON results.
-    pub fn run_script(script_path: &std::path::Path) -> AnyResult<()> {
-        let mut engine = Self::new()?;
+    pub fn run_script(db: &'db dyn datafun::Db, script_path: &std::path::Path) -> AnyResult<()> {
+        let mut engine = Self::new(db)?;
         let contents = std::fs::read_to_string(script_path)
             .context("failed to read script file")?;
 
@@ -436,94 +522,6 @@ fn parse_full_script<'db>(
     datafun::ast::Script::new(db, all_statements)
 }
 
-fn execute_with_interpreter_impl(
-    db: &dyn datafun::Db,
-    script: datafun::script::Script,
-) -> Result<datafun::interp::InterpContext<'_>, datafun::interp::InterpError> {
-    // Parse the full script using a tracked function.
-    let parsed_script = parse_full_script(db, script);
-
-    // Type check the script.
-    let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
-    if !tycheck_result.errors(db).is_empty() {
-        return Err(datafun::interp::InterpError::TypeError(
-            format!("{} type error(s)", tycheck_result.errors(db).len())
-        ));
-    }
-
-    // Build type table.
-    let type_table = datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result)
-        .map_err(|e| datafun::interp::InterpError::RuntimeError(format!("failed to build type table: {}", e)))?;
-
-    // Create interpreter context.
-    let mut ctx = datafun::interp::InterpContext::new(db, type_table);
-
-    // Execute the full script.
-    ctx.execute(parsed_script)?;
-
-    Ok(ctx)
-}
-
-/// Extract environment bindings from a successful script execution.
-fn extract_environment<'a>(
-    db: &'a dyn datafun::Db,
-    script: datafun::script::Script,
-    parsed_script: datafun::ast::Script,
-    ctx: &mut datafun::interp::InterpContext<'a>,
-) -> Vec<EnvBinding> {
-    let mut bindings = Vec::new();
-
-    // Get resolved function units.
-    let fun_resolution = datafun::resolution::resolve_functions(db, script);
-    let green_units = fun_resolution.green_units(db);
-
-    // Extract function names from green units.
-    for &fun_idx in green_units {
-        let parsed = datafun::parser::parse_script_unit(db, script, fun_idx);
-        for stmt in parsed.statements(db) {
-            if let datafun::ast::Statement::Fun(fun) = stmt {
-                let name = fun.name(db).as_str(db).to_string();
-                bindings.push(EnvBinding {
-                    name,
-                    ty: "function".to_string(),
-                    value: "".to_string(),
-                });
-            }
-        }
-    }
-
-    // Extract let bindings with types and values.
-    let units = script.units(db);
-    for unit_idx in 0..units.len() {
-        let parsed = datafun::parser::parse_script_unit(db, script, unit_idx);
-        for stmt in parsed.statements(db) {
-            if let datafun::ast::Statement::Let(let_stmt) = stmt {
-                let name = let_stmt.name(db);
-                let name_str = name.as_str(db).to_string();
-
-                // Get the type from the typechecker.
-                let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
-                    datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
-                } else {
-                    "unknown".to_string()
-                };
-
-                // Get the value by pretty-printing.
-                let value_str = ctx.pretty_print_variable(name)
-                    .unwrap_or_else(|_| "error".to_string());
-
-                bindings.push(EnvBinding {
-                    name: name_str,
-                    ty: ty_str,
-                    value: value_str,
-                });
-            }
-        }
-    }
-
-    bindings
-}
-
 /// Create a script for an expression evaluation.
 ///
 /// This wraps the expression in a let statement and creates the script,
@@ -555,7 +553,8 @@ mod tests {
 
     #[test]
     fn test_execute_with_interpreter() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         // Add a simple let statement.
         let parse_result = engine.parse_input(Input::Input("let x = 42".to_string()));
@@ -577,7 +576,8 @@ mod tests {
 
     #[test]
     fn test_eval_expression() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         // First add a simple let binding to verify the system works.
         let parse_result = engine.parse_input(Input::Input("let x = @42".to_string()));
@@ -611,7 +611,8 @@ mod tests {
 
     #[test]
     fn test_eval_expression_with_previous_bindings() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         // Add a let statement.
         let parse_result = engine.parse_input(Input::Input("let x = 10".to_string()));
@@ -644,7 +645,8 @@ mod tests {
 
     #[test]
     fn test_parse_error_handling() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         // Try to evaluate invalid syntax.
         let parse_result = engine.parse_input(Input::Input("let x =".to_string()));
@@ -666,7 +668,8 @@ mod tests {
 
     #[test]
     fn test_eval_let_returns_typechecker_type() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         // Test u32 literal - typechecker should infer u32 type.
         let parse_result = engine.parse_input(Input::Input("let x = 42".to_string()));
@@ -688,7 +691,8 @@ mod tests {
 
     #[test]
     fn test_eval_let_sequential() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         // First let binding.
         let parse_result = engine.parse_input(Input::Input("let x = 10".to_string()));
@@ -727,7 +731,8 @@ mod tests {
 
     #[test]
     fn test_eval_let_multiple_vars() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         // Define multiple variables.
         let vars = vec![
@@ -758,7 +763,8 @@ mod tests {
 
     #[test]
     fn test_eval_struct_literal() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         let parse_result = engine.parse_input(Input::Input("let x = @{a = @1, b = @2}".to_string()));
         match parse_result {
@@ -778,7 +784,8 @@ mod tests {
 
     #[test]
     fn test_eval_list_literal() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         let parse_result = engine.parse_input(Input::Input("let x = @[@1, @2, @3]".to_string()));
         match parse_result {
@@ -798,7 +805,8 @@ mod tests {
 
     #[test]
     fn test_eval_tuple_literal() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         let parse_result = engine.parse_input(Input::Input("let x = @(@42, @\"hello\")".to_string()));
         match parse_result {
@@ -818,7 +826,8 @@ mod tests {
 
     #[test]
     fn test_eval_struct_expression() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         // Test evaluating a struct expression (without let).
         let parse_result = engine.parse_input(Input::Input("@{x = @10, y = @20}".to_string()));
@@ -838,7 +847,8 @@ mod tests {
 
     #[test]
     fn test_eval_list_expression() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         // Test evaluating a list expression.
         let parse_result = engine.parse_input(Input::Input("@[@100, @200, @300]".to_string()));
@@ -859,7 +869,8 @@ mod tests {
 
     #[test]
     fn test_eval_struct_with_multiple_fields() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         let parse_result = engine.parse_input(Input::Input("let x = @{a = @1, b = @2, c = @3}".to_string()));
         match parse_result {
@@ -881,7 +892,8 @@ mod tests {
 
     #[test]
     fn test_eval_list_with_strings() {
-        let mut engine = Engine::new().unwrap();
+        let db = datafun::Database::default();
+        let mut engine = Engine::new(&db).unwrap();
 
         let parse_result = engine.parse_input(Input::Input("let x = @[@\"a\", @\"b\", @\"c\"]".to_string()));
         match parse_result {

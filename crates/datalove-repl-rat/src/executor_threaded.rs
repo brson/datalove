@@ -30,7 +30,9 @@ impl ReplExecutor for ThreadedExecutor {
         // Spawn worker thread.
         thread::spawn(move || {
             // Construct Engine in worker thread.
-            let mut engine = repl::Engine::new().X();
+            // Database is created here and lives for the lifetime of the thread.
+            let db = repl::datafun::Database::default();
+            let engine = repl::Engine::new(&db).X();
             worker_thread(engine, worker_rx, worker_tx);
         });
 

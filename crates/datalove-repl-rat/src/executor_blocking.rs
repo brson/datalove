@@ -9,14 +9,20 @@ use std::collections::VecDeque;
 /// Executes parse and eval operations synchronously on the same thread.
 /// Results are queued and retrieved via polling.
 pub struct BlockingExecutor {
-    engine: repl::Engine,
+    engine: repl::Engine<'static>,
     response_queue: VecDeque<WorkerResponse>,
 }
 
 impl ReplExecutor for BlockingExecutor {
     fn new() -> Self {
+        // Create database with static lifetime by leaking it.
+        // This is acceptable for WASM/browser environments where the
+        // executor lives for the lifetime of the page.
+        let db: &'static repl::datafun::Database = Box::leak(Box::new(repl::datafun::Database::default()));
+        let engine = repl::Engine::new(db).unwrap();
+
         Self {
-            engine: repl::Engine::new().unwrap(),
+            engine,
             response_queue: VecDeque::new(),
         }
     }

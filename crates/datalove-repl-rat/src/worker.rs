@@ -31,8 +31,9 @@ pub fn worker_main() -> Result<(), JsValue> {
         .dyn_into::<DedicatedWorkerGlobalScope>()
         .map_err(|_| JsValue::from_str("Not running in a worker context"))?;
 
-    // Create the REPL engine.
-    let mut engine = repl::Engine::new()
+    // Create the REPL engine with leaked database (lives for worker lifetime).
+    let db: &'static repl::datafun::Database = Box::leak(Box::new(repl::datafun::Database::default()));
+    let mut engine = repl::Engine::new(db)
         .map_err(|e| JsValue::from_str(&format!("Failed to create engine: {}", e)))?;
 
     web_sys::console::log_1(&"Worker: Engine created successfully".into());

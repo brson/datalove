@@ -113,6 +113,11 @@
     },
     "environment": [
       {
+        "name": "bigger",
+        "ty": "[@u32]",
+        "value": "@[@10, @20, @30, @40, @50]"
+      },
+      {
         "name": "nums",
         "ty": "[@u32]",
         "value": "@[@1, @2, @3]"
@@ -121,11 +126,6 @@
         "name": "words",
         "ty": "[@string]",
         "value": "@[@\"hello\", @\"world\"]"
-      },
-      {
-        "name": "bigger",
-        "ty": "[@u32]",
-        "value": "@[@10, @20, @30, @40, @50]"
       }
     ]
   },
@@ -145,6 +145,11 @@
     },
     "environment": [
       {
+        "name": "bigger",
+        "ty": "[@u32]",
+        "value": "@[@10, @20, @30, @40, @50]"
+      },
+      {
         "name": "nums",
         "ty": "[@u32]",
         "value": "@[@1, @2, @3]"
@@ -153,11 +158,6 @@
         "name": "words",
         "ty": "[@string]",
         "value": "@[@\"hello\", @\"world\"]"
-      },
-      {
-        "name": "bigger",
-        "ty": "[@u32]",
-        "value": "@[@10, @20, @30, @40, @50]"
       }
     ]
   }

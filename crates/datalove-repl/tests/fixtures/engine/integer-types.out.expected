@@ -251,14 +251,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -278,14 +278,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -301,14 +301,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -324,14 +324,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -347,14 +347,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -370,14 +370,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -393,14 +393,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -416,14 +416,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -439,14 +439,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -462,14 +462,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -485,14 +485,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -508,14 +508,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -531,14 +531,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -554,14 +554,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -577,14 +577,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -600,14 +600,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -623,14 +623,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -646,14 +646,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -669,14 +669,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -692,14 +692,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -715,14 +715,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -738,14 +738,14 @@
     },
     "environment": [
       {
-        "name": "u32_min",
-        "ty": "u32",
-        "value": "@0"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
+      },
+      {
+        "name": "u32_min",
+        "ty": "u32",
+        "value": "@0"
       }
     ]
   },
@@ -765,9 +765,9 @@
     },
     "environment": [
       {
-        "name": "u32_min",
+        "name": "u32_div",
         "ty": "u32",
-        "value": "@0"
+        "value": "@1000"
       },
       {
         "name": "u32_max",
@@ -775,9 +775,9 @@
         "value": "@4294967295"
       },
       {
-        "name": "u32_div",
+        "name": "u32_min",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@0"
       }
     ]
   },
@@ -797,9 +797,9 @@
     },
     "environment": [
       {
-        "name": "u32_min",
+        "name": "u32_div",
         "ty": "u32",
-        "value": "@0"
+        "value": "@1000"
       },
       {
         "name": "u32_max",
@@ -807,9 +807,9 @@
         "value": "@4294967295"
       },
       {
-        "name": "u32_div",
+        "name": "u32_min",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@0"
       }
     ]
   },
@@ -825,9 +825,9 @@
     },
     "environment": [
       {
-        "name": "u32_min",
+        "name": "u32_div",
         "ty": "u32",
-        "value": "@0"
+        "value": "@1000"
       },
       {
         "name": "u32_max",
@@ -835,9 +835,9 @@
         "value": "@4294967295"
       },
       {
-        "name": "u32_div",
+        "name": "u32_min",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@0"
       }
     ]
   },
@@ -853,9 +853,9 @@
     },
     "environment": [
       {
-        "name": "u32_min",
+        "name": "u32_div",
         "ty": "u32",
-        "value": "@0"
+        "value": "@1000"
       },
       {
         "name": "u32_max",
@@ -863,9 +863,9 @@
         "value": "@4294967295"
       },
       {
-        "name": "u32_div",
+        "name": "u32_min",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@0"
       }
     ]
   },
@@ -881,9 +881,9 @@
     },
     "environment": [
       {
-        "name": "u32_min",
+        "name": "u32_div",
         "ty": "u32",
-        "value": "@0"
+        "value": "@1000"
       },
       {
         "name": "u32_max",
@@ -891,9 +891,9 @@
         "value": "@4294967295"
       },
       {
-        "name": "u32_div",
+        "name": "u32_min",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@0"
       }
     ]
   },
@@ -909,9 +909,9 @@
     },
     "environment": [
       {
-        "name": "u32_min",
+        "name": "u32_div",
         "ty": "u32",
-        "value": "@0"
+        "value": "@1000"
       },
       {
         "name": "u32_max",
@@ -919,9 +919,9 @@
         "value": "@4294967295"
       },
       {
-        "name": "u32_div",
+        "name": "u32_min",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@0"
       }
     ]
   },
@@ -937,9 +937,9 @@
     },
     "environment": [
       {
-        "name": "u32_min",
+        "name": "u32_div",
         "ty": "u32",
-        "value": "@0"
+        "value": "@1000"
       },
       {
         "name": "u32_max",
@@ -947,9 +947,9 @@
         "value": "@4294967295"
       },
       {
-        "name": "u32_div",
+        "name": "u32_min",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@0"
       }
     ]
   },
@@ -965,9 +965,9 @@
     },
     "environment": [
       {
-        "name": "u32_min",
+        "name": "u32_div",
         "ty": "u32",
-        "value": "@0"
+        "value": "@1000"
       },
       {
         "name": "u32_max",
@@ -975,9 +975,9 @@
         "value": "@4294967295"
       },
       {
-        "name": "u32_div",
+        "name": "u32_min",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@0"
       }
     ]
   }

@@ -190,6 +190,14 @@ impl<'db> InterpContext<'db> {
         let value = self.variables.get(&name).unwrap();
         value.pretty_print(&mut self.rt)
     }
+
+    /// Update the type table.
+    ///
+    /// Used by the REPL to incrementally update the type table
+    /// without recreating the entire context.
+    pub fn update_type_table(&mut self, type_table: crate::type_table::TypeTable) {
+        self.type_table = type_table;
+    }
 }
 
 impl<'db> Drop for InterpContext<'db> {
