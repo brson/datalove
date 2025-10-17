@@ -306,16 +306,6 @@ impl Engine {
         }
     }
 
-    /// Execute or re-execute the full script using the interpreter.
-    ///
-    /// Returns the InterpContext after execution, which the caller must handle.
-    fn execute_with_interpreter(
-        &self,
-        script: datafun::script::Script,
-    ) -> Result<datafun::interp::InterpContext<'_>, datafun::interp::InterpError> {
-        execute_with_interpreter_impl(&self.db, script)
-    }
-
     fn eval_expression(&mut self, source: String) -> Eval {
         let db = &self.db;
 
