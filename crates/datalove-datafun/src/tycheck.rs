@@ -595,4 +595,94 @@ mod tests {
         // Should have a type mismatch error.
         assert!(tycheck_result.errors(&db).len() > 0);
     }
+
+    // Tests for complex datalit expressions enabled by direct token parsing
+
+    #[test]
+    fn test_tycheck_datalit_tuple() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @(1, 2, 3)"));
+        let script = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, script);
+
+        // Should have no errors - tuple of integers.
+        assert_eq!(tycheck_result.errors(&db).len(), 0);
+    }
+
+    #[test]
+    fn test_tycheck_datalit_list() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @[1, 2, 3]"));
+        let script = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, script);
+
+        // Should have no errors - list of integers.
+        assert_eq!(tycheck_result.errors(&db).len(), 0);
+    }
+
+    #[test]
+    fn test_tycheck_datalit_map() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @map { @1 = @10, @2 = @20 }"));
+        let script = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, script);
+
+        // Should have no errors - map with integer keys and integer values.
+        assert_eq!(tycheck_result.errors(&db).len(), 0);
+    }
+
+    #[test]
+    fn test_tycheck_datalit_nested_tuple_in_list() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @[(1, 2), (3, 4)]"));
+        let script = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, script);
+
+        // Should have no errors - list of tuples.
+        assert_eq!(tycheck_result.errors(&db).len(), 0);
+    }
+
+    #[test]
+    fn test_tycheck_datalit_nested_list_in_tuple() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @(@[@1, @2, @3], @100)"));
+        let script = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, script);
+
+        // Should have no errors - tuple with nested list.
+        assert_eq!(tycheck_result.errors(&db).len(), 0);
+    }
+
+    #[test]
+    fn test_tycheck_datalit_set() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @set { @1, @2, @3 }"));
+        let script = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, script);
+
+        // Should have no errors - set of integers.
+        assert_eq!(tycheck_result.errors(&db).len(), 0);
+    }
+
+    #[test]
+    fn test_tycheck_datalit_deeply_nested() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @(@[@(@1, @2)], @[@(@3, @4)])"));
+        let script = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, script);
+
+        // Should have no errors - deeply nested structure.
+        assert_eq!(tycheck_result.errors(&db).len(), 0);
+    }
+
+    #[test]
+    fn test_tycheck_datalit_tuple_in_list() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @[@(@1, @2), @(@3, @4), @(@5, @6)]"));
+        let script = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, script);
+
+        // Should have no errors - list of tuples.
+        assert_eq!(tycheck_result.errors(&db).len(), 0);
+    }
 }

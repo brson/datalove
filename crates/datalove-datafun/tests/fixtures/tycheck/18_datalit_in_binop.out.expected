@@ -1,0 +1,21 @@
+{
+  "errors": [
+    {
+      "kind": "InvalidOperandType",
+      "op": "Add",
+      "type": "(u32, u32)"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "(u32, u32)"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "(u32, u32)"
+    }
+  ]
+}

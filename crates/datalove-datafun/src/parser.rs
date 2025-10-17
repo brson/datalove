@@ -1077,4 +1077,153 @@ mod tests {
             _ => panic!("expected let statement"),
         }
     }
+
+    // Tests for complex datalit expressions enabled by direct token parsing
+
+    #[test]
+    fn test_parse_datalit_tuple() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @(1, 2, 3)"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::Datalit(_) => {
+                        // Successfully parsed tuple as datalit
+                    }
+                    _ => panic!("expected datalit expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_datalit_list() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @[1, 2, 3]"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::Datalit(_) => {
+                        // Successfully parsed list as datalit
+                    }
+                    _ => panic!("expected datalit expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_datalit_map() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @map { @1 = @10, @2 = @20 }"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::Datalit(_) => {
+                        // Successfully parsed map as datalit
+                    }
+                    _ => panic!("expected datalit expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_datalit_nested_tuple_in_list() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @[(1, 2), (3, 4)]"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::Datalit(_) => {
+                        // Successfully parsed nested structure
+                    }
+                    _ => panic!("expected datalit expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_datalit_nested_list_in_tuple() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @(@[@1, @2, @3], @100)"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::Datalit(_) => {
+                        // Successfully parsed nested list in tuple
+                    }
+                    _ => panic!("expected datalit expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_datalit_set() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @set { @1, @2, @3 }"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::Datalit(_) => {
+                        // Successfully parsed set as datalit
+                    }
+                    _ => panic!("expected datalit expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_datalit_deeply_nested() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("let x = @(@[@(@1, @2)], @[@(@3, @4)])"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Let(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "x");
+                match stmt.value(db).expr(db) {
+                    ast::ExprFunKind::Datalit(_) => {
+                        // Successfully parsed deeply nested structure
+                    }
+                    _ => panic!("expected datalit expression"),
+                }
+            }
+            _ => panic!("expected let statement"),
+        }
+    }
 }

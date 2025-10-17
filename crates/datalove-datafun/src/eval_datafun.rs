@@ -573,4 +573,233 @@ mod tests {
             _ => panic!("Expected U32 value for c"),
         }
     }
+
+    // Tests for complex datalit expressions enabled by direct token parsing
+
+    #[test]
+    fn test_eval_datalit_tuple() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @(1, 2, 3)"));
+        let script = crate::parser::parse(&db, source);
+
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        let mut ctx = InterpContext::new(&db, type_table);
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        let x_name = bct::text::InternedText::new(&db, S("x"));
+        let x_value = ctx.lookup_variable(x_name).expect("x not found");
+
+        // Verify it's a tuple value.
+        match x_value {
+            Value::Tuple { .. } => {
+                // Successfully created tuple
+            }
+            _ => panic!("Expected Tuple value for x"),
+        }
+    }
+
+    #[test]
+    fn test_eval_datalit_list() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @[1, 2, 3]"));
+        let script = crate::parser::parse(&db, source);
+
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        let mut ctx = InterpContext::new(&db, type_table);
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        let x_name = bct::text::InternedText::new(&db, S("x"));
+        let x_value = ctx.lookup_variable(x_name).expect("x not found");
+
+        // Verify it's a list value.
+        match x_value {
+            Value::List { .. } => {
+                // Successfully created list
+            }
+            _ => panic!("Expected List value for x"),
+        }
+    }
+
+    #[test]
+    fn test_eval_datalit_map() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @map { @1 = @10, @2 = @20 }"));
+        let script = crate::parser::parse(&db, source);
+
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        let mut ctx = InterpContext::new(&db, type_table);
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        let x_name = bct::text::InternedText::new(&db, S("x"));
+        let x_value = ctx.lookup_variable(x_name).expect("x not found");
+
+        // Verify it's a map value.
+        match x_value {
+            Value::Map { .. } => {
+                // Successfully created map
+            }
+            _ => panic!("Expected Map value for x"),
+        }
+    }
+
+    #[test]
+    fn test_eval_datalit_nested_tuple_in_list() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @[(1, 2), (3, 4)]"));
+        let script = crate::parser::parse(&db, source);
+
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        let mut ctx = InterpContext::new(&db, type_table);
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        let x_name = bct::text::InternedText::new(&db, S("x"));
+        let x_value = ctx.lookup_variable(x_name).expect("x not found");
+
+        // Verify it's a list value containing tuples.
+        match x_value {
+            Value::List { .. } => {
+                // Successfully created nested structure
+            }
+            _ => panic!("Expected List value for x"),
+        }
+    }
+
+    #[test]
+    fn test_eval_datalit_nested_list_in_tuple() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @(@[@1, @2, @3], @100)"));
+        let script = crate::parser::parse(&db, source);
+
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        let mut ctx = InterpContext::new(&db, type_table);
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        let x_name = bct::text::InternedText::new(&db, S("x"));
+        let x_value = ctx.lookup_variable(x_name).expect("x not found");
+
+        // Verify it's a tuple value with nested list.
+        match x_value {
+            Value::Tuple { .. } => {
+                // Successfully created nested tuple with list
+            }
+            _ => panic!("Expected Tuple value for x"),
+        }
+    }
+
+    #[test]
+    fn test_eval_datalit_set() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @set { @1, @2, @3 }"));
+        let script = crate::parser::parse(&db, source);
+
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        let mut ctx = InterpContext::new(&db, type_table);
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        let x_name = bct::text::InternedText::new(&db, S("x"));
+        let x_value = ctx.lookup_variable(x_name).expect("x not found");
+
+        // Verify it's a set value.
+        match x_value {
+            Value::Set { .. } => {
+                // Successfully created set
+            }
+            _ => panic!("Expected Set value for x"),
+        }
+    }
+
+    #[test]
+    fn test_eval_datalit_deeply_nested() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @(@[@(@1, @2)], @[@(@3, @4)])"));
+        let script = crate::parser::parse(&db, source);
+
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        let mut ctx = InterpContext::new(&db, type_table);
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        let x_name = bct::text::InternedText::new(&db, S("x"));
+        let x_value = ctx.lookup_variable(x_name).expect("x not found");
+
+        // Verify it's a tuple with deeply nested structure.
+        match x_value {
+            Value::Tuple { .. } => {
+                // Successfully created deeply nested structure
+            }
+            _ => panic!("Expected Tuple value for x"),
+        }
+    }
+
+    #[test]
+    fn test_eval_variable_reference_tuple() {
+        let db = crate::Database::default();
+        let source = bct::input::Source::new(&db, S("let x = @(1, 2, 3)\nlet y = x"));
+        let script = crate::parser::parse(&db, source);
+
+        let tycheck_result = type_check(&db, script);
+        assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
+
+        let type_table = TypeTable::build(&db, script, tycheck_result)
+            .expect("Failed to build type table");
+
+        let mut ctx = InterpContext::new(&db, type_table);
+        let result = ctx.execute(script);
+        assert!(result.is_ok(), "Failed to execute script: {:?}", result);
+
+        let x_name = bct::text::InternedText::new(&db, S("x"));
+        let y_name = bct::text::InternedText::new(&db, S("y"));
+
+        let x_value = ctx.lookup_variable(x_name).expect("x not found");
+        let y_value = ctx.lookup_variable(y_name).expect("y not found");
+
+        // Both should be tuples.
+        match (x_value, y_value) {
+            (Value::Tuple { .. }, Value::Tuple { .. }) => {
+                // Successfully cloned tuple value
+            }
+            _ => panic!("Expected Tuple values for x and y"),
+        }
+    }
 }
