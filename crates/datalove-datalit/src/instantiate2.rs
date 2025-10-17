@@ -179,6 +179,11 @@ fn instantiate_expr_into<'db>(
             instantiate_data(db, rt, data_expr.value(db), tydesc_table, tydesc, dest_ptr)
         }
 
+        (Expr::Err(err_expr), Type::Error) => {
+            let tydesc = tydesc_table.get_or_create(ty);
+            instantiate_error(db, rt, err_expr.value(db), tydesc_table, tydesc, dest_ptr)
+        }
+
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
@@ -584,6 +589,37 @@ fn instantiate_data<'db>(
     unsafe {
         std::ptr::write(
             data_ptr,
+            rtdt::Data::from_pointers(inner_tydesc, inner_value)
+        );
+    }
+
+    Ok(dest_ptr as *const u8)
+}
+
+fn instantiate_error<'db>(
+    db: &'db dyn crate::Db,
+    rt: &mut datalove_rt::alloc::LocalRt,
+    inner_expr: ExprFull<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    _error_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
+) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let resolved = crate::resolve::resolve_names(db, inner_expr);
+    let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
+
+    let inner_type = typechecked.root_type(db)
+        .ok_or_else(|| anyhow!("Cannot determine type of error value"))?;
+
+    let inner_tydesc = tydesc_table.get_or_create(inner_type.ty(db));
+    let inner_value = instantiate_expr(db, rt, inner_expr, inner_type.ty(db), tydesc_table)?;
+
+    let error_ptr = dest_ptr as *mut rtdt::Error;
+
+    unsafe {
+        // Error has same layout as Data, so we write it as Data.
+        std::ptr::write(
+            error_ptr as *mut rtdt::Data,
             rtdt::Data::from_pointers(inner_tydesc, inner_value)
         );
     }
@@ -1728,6 +1764,39 @@ mod tests {
 
             datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst.ptr as *mut u8, inst.tydesc);
             datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+            let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
+            rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_error() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, "@error @42")?;
+        let rt = datalove_rt::alloc::LocalRt::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::alloc::LocalRt) };
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Error);
+
+            let error_ptr = inst.ptr as *const rtdt::Error;
+            let inner_tydesc = (*error_ptr).tydesc();
+            let inner_value_ptr = (*error_ptr).value_ptr();
+
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::U32);
+            let inner_value = *(inner_value_ptr as *const u32);
+            assert_eq!(inner_value, 42);
+
+            // Note: Error destructor not yet implemented, so we manually free allocations.
+            // Free inner value (u32).
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inner_tydesc, 1, inner_value_ptr as *mut u8);
+            // Free error wrapper.
+            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
+
             let rt = Box::from_raw(rt_handle as *mut datalove_rt::alloc::LocalRt);
             rt.shutdown();
         }
