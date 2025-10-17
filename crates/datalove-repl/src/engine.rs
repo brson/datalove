@@ -10,6 +10,8 @@ use crate::datafun;
 pub struct Engine {
     db: datafun::Database,
     history: ReplHistory,
+    /// Cached environment from the last successful script evaluation.
+    cached_environment: Vec<(String, String, String)>,
 }
 
 struct ReplHistory {
@@ -98,12 +100,14 @@ impl Engine {
         Ok(Engine {
             db: datafun::Database::default(),
             history: ReplHistory::new(),
+            cached_environment: Vec::new(),
         })
     }
 
     fn reset(&mut self) {
         self.db = datafun::Database::default();
         self.history = ReplHistory::new();
+        self.cached_environment = Vec::new();
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -280,6 +284,10 @@ impl Engine {
         let result = execute_with_interpreter_impl(db, new_script);
         match result {
             Ok(mut ctx) => {
+                // Extract and cache the environment from this successful execution.
+                let cached_env = extract_environment(db, new_script, parsed_script, &mut ctx);
+                self.cached_environment = cached_env;
+
                 if let datafun::ast::Statement::Let(let_stmt) = unit_statements.last().X() {
                     let name = let_stmt.name(db);
                     let name_str = name.as_str(db).to_string();
@@ -353,76 +361,7 @@ impl Engine {
     /// Get current environment bindings (functions and let statements).
     /// Returns a list of (name, type, value) triples.
     pub fn get_environment(&self) -> Vec<(String, String, String)> {
-        let mut bindings = Vec::new();
-
-        // Build a script from the current history.
-        let script = self.history.build_script(&self.db);
-
-        let db = &self.db;
-
-        // Get resolved function units.
-        let fun_resolution = datafun::resolution::resolve_functions(db, script);
-        let green_units = fun_resolution.green_units(db);
-
-        // Extract function names from green units.
-        for &fun_idx in green_units {
-            let parsed = datafun::parser::parse_script_unit(db, script, fun_idx);
-            for stmt in parsed.statements(db) {
-                if let datafun::ast::Statement::Fun(fun) = stmt {
-                    let name = fun.name(db).as_str(db).to_string();
-                    bindings.push((name, "function".to_string(), "".to_string()));
-                }
-            }
-        }
-
-        // Parse the full script for typechecking and interpretation.
-        let parsed_script = parse_full_script(db, script);
-
-        // Execute the script to get values.
-        let mut ctx = match execute_with_interpreter_impl(db, script) {
-            Ok(ctx) => ctx,
-            Err(_) => {
-                // If execution failed, still return let bindings but with error markers.
-                let units = script.units(db);
-                for unit_idx in 0..units.len() {
-                    let parsed = datafun::parser::parse_script_unit(db, script, unit_idx);
-                    for stmt in parsed.statements(db) {
-                        if let datafun::ast::Statement::Let(let_stmt) = stmt {
-                            let name = let_stmt.name(db).as_str(db).to_string();
-                            bindings.push((name, "error".to_string(), "".to_string()));
-                        }
-                    }
-                }
-                return bindings;
-            }
-        };
-
-        // Extract let bindings with types and values.
-        let units = script.units(db);
-        for unit_idx in 0..units.len() {
-            let parsed = datafun::parser::parse_script_unit(db, script, unit_idx);
-            for stmt in parsed.statements(db) {
-                if let datafun::ast::Statement::Let(let_stmt) = stmt {
-                    let name = let_stmt.name(db);
-                    let name_str = name.as_str(db).to_string();
-
-                    // Get the type from the typechecker.
-                    let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
-                        datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
-                    } else {
-                        "unknown".to_string()
-                    };
-
-                    // Get the value by pretty-printing.
-                    let value_str = ctx.pretty_print_variable(name)
-                        .unwrap_or_else(|_| "error".to_string());
-
-                    bindings.push((name_str, ty_str, value_str));
-                }
-            }
-        }
-
-        bindings
+        self.cached_environment.clone()
     }
 
     /// Execute a script file line by line and output JSON results.
@@ -512,6 +451,58 @@ fn execute_with_interpreter_impl(
     ctx.execute(parsed_script)?;
 
     Ok(ctx)
+}
+
+/// Extract environment bindings from a successful script execution.
+fn extract_environment<'a>(
+    db: &'a dyn datafun::Db,
+    script: datafun::script::Script,
+    parsed_script: datafun::ast::Script,
+    ctx: &mut datafun::interp::InterpContext<'a>,
+) -> Vec<(String, String, String)> {
+    let mut bindings = Vec::new();
+
+    // Get resolved function units.
+    let fun_resolution = datafun::resolution::resolve_functions(db, script);
+    let green_units = fun_resolution.green_units(db);
+
+    // Extract function names from green units.
+    for &fun_idx in green_units {
+        let parsed = datafun::parser::parse_script_unit(db, script, fun_idx);
+        for stmt in parsed.statements(db) {
+            if let datafun::ast::Statement::Fun(fun) = stmt {
+                let name = fun.name(db).as_str(db).to_string();
+                bindings.push((name, "function".to_string(), "".to_string()));
+            }
+        }
+    }
+
+    // Extract let bindings with types and values.
+    let units = script.units(db);
+    for unit_idx in 0..units.len() {
+        let parsed = datafun::parser::parse_script_unit(db, script, unit_idx);
+        for stmt in parsed.statements(db) {
+            if let datafun::ast::Statement::Let(let_stmt) = stmt {
+                let name = let_stmt.name(db);
+                let name_str = name.as_str(db).to_string();
+
+                // Get the type from the typechecker.
+                let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
+                    datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
+                } else {
+                    "unknown".to_string()
+                };
+
+                // Get the value by pretty-printing.
+                let value_str = ctx.pretty_print_variable(name)
+                    .unwrap_or_else(|_| "error".to_string());
+
+                bindings.push((name_str, ty_str, value_str));
+            }
+        }
+    }
+
+    bindings
 }
 
 /// Create a script for an expression evaluation.
