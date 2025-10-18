@@ -1,0 +1,5 @@
+fun get_value(): u32
+    ret @42
+end fun
+
+let output = get_value()

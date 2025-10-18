@@ -1,0 +1,9 @@
+fun return_const(n: u32): u32
+    if n .< @2
+        ret n
+    else
+        ret @5
+    end if
+end fun
+
+let output = return_const(@10)

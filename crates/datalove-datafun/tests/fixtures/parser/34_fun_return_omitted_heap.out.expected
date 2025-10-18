@@ -1,0 +1,19 @@
+{
+  "statements": [
+    {
+      "kind": "Fun",
+      "name": "get_value",
+      "params": [],
+      "return_type": {
+        "heap": "Omitted",
+        "type_hint": "U32"
+      },
+      "body": [
+        {
+          "kind": "ParseError",
+          "message": "unexpected statement"
+        }
+      ]
+    }
+  ]
+}

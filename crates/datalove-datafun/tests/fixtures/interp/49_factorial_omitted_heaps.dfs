@@ -1,0 +1,9 @@
+fun simple_recursion(n: u32): u32
+    if n .< @2
+        ret @1
+    else
+        ret simple_recursion(@0)
+    end if
+end fun
+
+let output = simple_recursion(@5)

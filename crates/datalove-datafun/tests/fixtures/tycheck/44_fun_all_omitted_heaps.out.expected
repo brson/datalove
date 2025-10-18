@@ -1,0 +1,20 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "process",
+      "params": [
+        {
+          "name": "x",
+          "type": "u32"
+        },
+        {
+          "name": "y",
+          "type": "string"
+        }
+      ],
+      "return_type": "bool"
+    }
+  ]
+}

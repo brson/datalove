@@ -1,0 +1,11 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get_value",
+      "params": [],
+      "return_type": "u32"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+fun maybe_divide(x: u32, y: u32): ?u32
+    if y == @0
+        @none
+    else
+        @some(x /# y)
+    end if
+end fun

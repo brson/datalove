@@ -1,0 +1,52 @@
+{
+  "statements": [
+    {
+      "kind": "Fun",
+      "name": "maybe_add",
+      "params": [
+        {
+          "name": "x",
+          "mode": "In",
+          "type_hint": {
+            "heap": "Omitted",
+            "type_hint": {
+              "Option": {
+                "inner_type": {
+                  "heap": "Omitted",
+                  "type_hint": "U32"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "y",
+          "mode": "In",
+          "type_hint": {
+            "heap": "Omitted",
+            "type_hint": {
+              "Option": {
+                "inner_type": {
+                  "heap": "Omitted",
+                  "type_hint": "U32"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "return_type": {
+        "heap": "Omitted",
+        "type_hint": {
+          "Result": {
+            "inner_type": {
+              "heap": "Omitted",
+              "type_hint": "U32"
+            }
+          }
+        }
+      },
+      "body": []
+    }
+  ]
+}

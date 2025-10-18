@@ -1,0 +1,26 @@
+{
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "u64",
+      "kind": "TypeMismatch"
+    },
+    {
+      "kind": "DatalitError",
+      "message": "CannotSynthesize"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "factorial",
+      "params": [
+        {
+          "name": "n",
+          "type": "u64"
+        }
+      ],
+      "return_type": "u64"
+    }
+  ]
+}
