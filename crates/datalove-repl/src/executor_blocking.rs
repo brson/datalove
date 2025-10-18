@@ -1,7 +1,9 @@
 //! Blocking single-threaded executor for WASM.
 
-use crate::repl;
-use crate::executor::{ReplExecutor, WorkerResponse};
+use crate::app::{ReplExecutor, WorkerResponse};
+use crate::{Input, Command};
+use crate::datafun;
+use crate::engine::Engine;
 use std::collections::VecDeque;
 
 /// Blocking single-threaded executor.
@@ -9,7 +11,7 @@ use std::collections::VecDeque;
 /// Executes parse and eval operations synchronously on the same thread.
 /// Results are queued and retrieved via polling.
 pub struct BlockingExecutor {
-    engine: repl::Engine<'static>,
+    engine: Engine<'static>,
     response_queue: VecDeque<WorkerResponse>,
 }
 
@@ -18,8 +20,8 @@ impl ReplExecutor for BlockingExecutor {
         // Create database with static lifetime by leaking it.
         // This is acceptable for WASM/browser environments where the
         // executor lives for the lifetime of the page.
-        let db: &'static repl::datafun::Database = Box::leak(Box::new(repl::datafun::Database::default()));
-        let engine = repl::Engine::new(db).unwrap();
+        let db: &'static datafun::Database = Box::leak(Box::new(datafun::Database::default()));
+        let engine = Engine::new(db).unwrap();
 
         Self {
             engine,
@@ -27,7 +29,7 @@ impl ReplExecutor for BlockingExecutor {
         }
     }
 
-    fn submit_parse(&mut self, id: u64, input: repl::Input) {
+    fn submit_parse(&mut self, id: u64, input: Input) {
         // Parse the input.
         let parse = self.engine.parse_input(input);
         self.response_queue.push_back(WorkerResponse::ParseResult {
@@ -36,7 +38,7 @@ impl ReplExecutor for BlockingExecutor {
         });
     }
 
-    fn submit_eval(&mut self, id: u64, command: repl::Command) {
+    fn submit_eval(&mut self, id: u64, command: Command) {
         // Evaluate the command.
         let eval = self.engine.eval(command);
 

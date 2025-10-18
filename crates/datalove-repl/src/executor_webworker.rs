@@ -8,14 +8,14 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
-use crate::executor::{ReplExecutor, WorkerResponse};
-use crate::repl;
+use crate::app::{ReplExecutor, WorkerResponse};
+use crate::{Input, Command};
 
 /// Request sent from main thread to worker.
 #[derive(Debug, Serialize, Deserialize)]
 enum WorkerRequest {
-    Parse { id: u64, input: repl::Input },
-    Eval { id: u64, command: repl::Command },
+    Parse { id: u64, input: Input },
+    Eval { id: u64, command: Command },
 }
 
 /// Web Worker-based executor for WASM platforms.
@@ -90,7 +90,7 @@ impl ReplExecutor for WebWorkerExecutor {
         }
     }
 
-    fn submit_parse(&mut self, id: u64, input: repl::Input) {
+    fn submit_parse(&mut self, id: u64, input: Input) {
         web_sys::console::log_1(&format!("WebWorkerExecutor: Submitting parse request id={}", id).into());
 
         let request = WorkerRequest::Parse { id, input };
@@ -102,7 +102,7 @@ impl ReplExecutor for WebWorkerExecutor {
         }
     }
 
-    fn submit_eval(&mut self, id: u64, command: repl::Command) {
+    fn submit_eval(&mut self, id: u64, command: Command) {
         web_sys::console::log_1(&format!("WebWorkerExecutor: Submitting eval request id={}", id).into());
 
         let request = WorkerRequest::Eval { id, command };

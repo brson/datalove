@@ -1,16 +1,18 @@
 //! Native multi-threaded executor using std::thread.
 
 use rmx::prelude::*;
-use crate::repl;
-use crate::executor::{ReplExecutor, WorkerResponse};
+use crate::app::{ReplExecutor, WorkerResponse};
+use crate::{Input, Command};
+use crate::datafun;
+use crate::engine::Engine;
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
 
 /// Request sent to the worker thread.
 #[derive(Debug)]
 enum WorkerRequest {
-    Parse { id: u64, input: repl::Input },
-    Eval { id: u64, command: repl::Command },
+    Parse { id: u64, input: Input },
+    Eval { id: u64, command: Command },
     Shutdown,
 }
 
@@ -32,8 +34,8 @@ impl ReplExecutor for ThreadedExecutor {
         thread::spawn(move || {
             // Construct Engine in worker thread.
             // Database is created here and lives for the lifetime of the thread.
-            let db = repl::datafun::Database::default();
-            let engine = repl::Engine::new(&db).X();
+            let db = datafun::Database::default();
+            let engine = Engine::new(&db).X();
             worker_thread(engine, worker_rx, worker_tx);
         });
 
@@ -43,11 +45,11 @@ impl ReplExecutor for ThreadedExecutor {
         }
     }
 
-    fn submit_parse(&mut self, id: u64, input: repl::Input) {
+    fn submit_parse(&mut self, id: u64, input: Input) {
         let _ = self.worker_tx.send(WorkerRequest::Parse { id, input });
     }
 
-    fn submit_eval(&mut self, id: u64, command: repl::Command) {
+    fn submit_eval(&mut self, id: u64, command: Command) {
         let _ = self.worker_tx.send(WorkerRequest::Eval { id, command });
     }
 
@@ -58,7 +60,7 @@ impl ReplExecutor for ThreadedExecutor {
 
 /// Worker thread that handles parse and eval operations.
 fn worker_thread(
-    mut engine: repl::Engine,
+    mut engine: Engine,
     rx: Receiver<WorkerRequest>,
     tx: Sender<WorkerResponse>,
 ) {

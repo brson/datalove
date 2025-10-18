@@ -6,22 +6,15 @@ use rmx::prelude::*;
 
 use datalove_repl as repl;
 pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus};
+pub use repl::{ThreadedExecutor, BlockingExecutor};
 
-mod executor;
-mod executor_threaded;
-mod executor_blocking;
+#[cfg(target_arch = "wasm32")]
+pub use repl::WebWorkerExecutor;
+
+#[cfg(target_arch = "wasm32")]
+pub use repl::worker;
+
 mod render;
-
-#[cfg(target_arch = "wasm32")]
-mod executor_webworker;
-
-#[cfg(target_arch = "wasm32")]
-pub mod worker;
-
-pub use executor::{ThreadedExecutor, BlockingExecutor};
-
-#[cfg(target_arch = "wasm32")]
-pub use executor_webworker::WebWorkerExecutor;
 
 use tui_textarea::TextArea;
 

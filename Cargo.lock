@@ -1444,13 +1444,17 @@ name = "datalove-repl"
 version = "0.1.0"
 dependencies = [
  "bct",
+ "console_error_panic_hook",
  "datalove-datafun",
  "datalove-datalit",
+ "js-sys",
  "rustmax",
  "salsa",
  "serde",
  "serde_json",
  "termcolor",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
