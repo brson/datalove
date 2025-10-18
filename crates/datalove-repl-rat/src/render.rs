@@ -300,7 +300,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
 /// Render the input panel with multiline indicators.
 fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect) {
     let title = if app.multiline_mode() {
-        "Input [Alt+Enter to submit]"
+        "Input [Alt+Enter]"
     } else {
         "Input [Enter]"
     };
