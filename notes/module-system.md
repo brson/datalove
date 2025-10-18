@@ -35,7 +35,7 @@ Always three parts - lib - pkg - module.
 Bring items in modules into scope is done with `import` statements:
 
 ```
-require sys/std/u32
+require module sys/std/u32
 
 import u32.negate
 
