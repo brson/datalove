@@ -11,10 +11,10 @@ use ratatui::{
     Frame,
 };
 
-use crate::{App, ReplExecutor, EntryStatus};
+use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus};
 
 /// Render the UI.
-pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
+pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>) {
     // Three-panel layout: history (top), input (middle), debug (bottom).
     // Single-line mode: Input centered like a Cylon visor.
     // Multi-line mode: Input grows downward from center to 1/3 screen.
@@ -44,34 +44,34 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
         .split(f.area());
 
     // History panel - scrollable display of interactive cards.
-    render_history(f, app, chunks[0]);
+    render_history(f, &app.repl, chunks[0]);
 
     // Input panel - current text input with multiline indicators.
     render_input(f, app, chunks[1]);
 
     // Debug panel - table of variables and values.
-    render_debug_pane(f, app, chunks[2]);
+    render_debug_pane(f, &app.repl, chunks[2]);
 
     // Render menu if open.
     if app.menu_is_open() {
-        render_menu(f, app);
+        render_menu(f, &app.repl);
     }
 
     // Render crash modal if present (takes priority over menu).
-    if let Some(msg) = app.crash_modal_message() {
-        render_crash_modal(f, app, msg);
+    if let Some(msg) = app.repl.crash_modal_message() {
+        render_crash_modal(f, &app.repl, msg);
     }
 }
 
 /// Render the history panel with interactive cards.
-fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
+fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) {
     let history_block = Block::default()
         .borders(Borders::ALL)
         .title("History");
 
     let mut lines: Vec<Line> = Vec::new();
 
-    for entry in app.history() {
+    for entry in repl.history() {
         // Input line with prompt.
         // Truncate multiline input to first line with ellipsis.
         let display_input = if entry.input.contains('\n') {
@@ -298,7 +298,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
 }
 
 /// Render the input panel with multiline indicators.
-fn render_input<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
+fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect) {
     let title = if app.multiline_mode() {
         "Input [Alt+Enter to submit]"
     } else {
@@ -323,12 +323,12 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
     f.render_widget(&textarea, area);
 }
 
-fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
+fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) {
     let debug_block = Block::default()
         .borders(Borders::ALL)
         .title("Environment");
 
-    if app.environment().is_empty() {
+    if repl.environment().is_empty() {
         // Display empty state message as a paragraph.
         let lines = vec![
             Line::from(vec![
@@ -351,7 +351,7 @@ fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
         .height(1);
 
         // Create data rows.
-        let rows = app.environment().iter().map(|(name, ty, value)| {
+        let rows = repl.environment().iter().map(|(name, ty, value)| {
             Row::new(vec![
                 Cell::from(name.as_str()).style(Style::default().fg(Color::Cyan)),
                 Cell::from(ty.as_str()).style(Style::default().fg(Color::Yellow)),
@@ -376,7 +376,7 @@ fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
 }
 
 /// Render the ESC menu popup.
-fn render_menu<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
+fn render_menu<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>) {
     let area = centered_rect(20, 20, f.area());
 
     // Clear the background.
@@ -388,12 +388,12 @@ fn render_menu<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
         .title("Menu");
 
     let menu_items = vec![
-        if app.menu_selection() == 0 {
+        if repl.menu_selection() == 0 {
             Line::from("> Resume").style(Style::default().fg(Color::Yellow))
         } else {
             Line::from("  Resume")
         },
-        if app.menu_selection() == 1 {
+        if repl.menu_selection() == 1 {
             Line::from("> Exit").style(Style::default().fg(Color::Yellow))
         } else {
             Line::from("  Exit")
@@ -407,7 +407,7 @@ fn render_menu<E: ReplExecutor>(f: &mut Frame, app: &App<E>) {
 }
 
 /// Render the crash modal popup.
-fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, app: &App<E>, msg: &str) {
+fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, msg: &str) {
     let area = centered_rect(60, 40, f.area());
 
     // Clear the background.
@@ -430,7 +430,7 @@ fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, app: &App<E>, msg: &str) {
     ];
 
     // Add stderr log path if available.
-    if let Some(log_path) = app.stderr_log_path() {
+    if let Some(log_path) = repl.stderr_log_path() {
         lines.push(Line::from(""));
         lines.push(Line::from(""));
         lines.push(Line::from("Full panic trace written to:"));

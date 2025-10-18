@@ -29,6 +29,17 @@ use tui_textarea::TextArea;
 
 use executor::WorkerResponse;
 
+/// Actions that the core app requests from the UI layer.
+#[derive(Debug, Clone)]
+pub enum UiAction {
+    /// No action needed.
+    None,
+    /// Set the input widget to multiline mode with the given lines.
+    SetMultilineInput { lines: Vec<String> },
+    /// Clear the input widget.
+    ClearInput,
+}
+
 /// A single REPL history entry.
 ///
 /// There is one of these for every line/multiline sent to the repl engine.
@@ -76,14 +87,12 @@ impl HistoryEntry {
     }
 }
 
-/// Application state.
-pub struct App<E: ReplExecutor> {
+/// Core REPL application state, completely UI-agnostic.
+pub struct ReplApp<E: ReplExecutor> {
     /// Executor for parse and eval operations.
     executor: E,
     /// Next request ID.
     next_id: u64,
-    /// Text area for input.
-    textarea: TextArea<'static>,
     /// History of REPL entries (interactive cards).
     history: Vec<HistoryEntry>,
     /// Current environment variables (for debug pane).
@@ -102,14 +111,12 @@ pub struct App<E: ReplExecutor> {
     stderr_log_path: Option<std::path::PathBuf>,
 }
 
-impl<E: ReplExecutor> App<E> {
-    /// Create a new app with the given executor type.
-    /// The executor will construct its own Engine internally.
-    pub fn with_executor() -> Self {
+impl<E: ReplExecutor> ReplApp<E> {
+    /// Create a new core REPL app.
+    pub fn new() -> Self {
         Self {
             executor: E::new(),
             next_id: 0,
-            textarea: TextArea::default(),
             history: Vec::new(),
             environment: Vec::new(),
             multiline_mode: false,
@@ -121,11 +128,10 @@ impl<E: ReplExecutor> App<E> {
         }
     }
 
-    pub fn with_executor_and_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
+    pub fn with_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
         Self {
             executor: E::new(),
             next_id: 0,
-            textarea: TextArea::default(),
             history: Vec::new(),
             environment: Vec::new(),
             multiline_mode: false,
@@ -137,50 +143,32 @@ impl<E: ReplExecutor> App<E> {
         }
     }
 
-    /// Handle a key event for text input.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn handle_input_key(&mut self, key: crossterm::event::KeyEvent) {
-        self.textarea.input(key);
-    }
+    /// Submit input text for processing.
+    ///
+    /// Takes input as a parameter instead of reading from UI widget.
+    /// Returns UiAction to tell UI what to do (usually ClearInput).
+    pub fn submit_input(&mut self, input_text: String) -> UiAction {
+        if input_text.is_empty() {
+            return UiAction::None;
+        }
 
-    /// Get the current input text.
-    pub fn input_text(&self) -> String {
-        self.textarea.lines().join("\n")
-    }
+        let input = if !self.multiline_mode {
+            repl::Input::Input(input_text.C())
+        } else {
+            repl::Input::Multiline(input_text.C())
+        };
 
-    /// Get a reference to the textarea for rendering.
-    pub fn textarea(&self) -> &TextArea<'static> {
-        &self.textarea
-    }
+        self.multiline_mode = false;
 
-    /// Get a mutable reference to the textarea.
-    pub fn textarea_mut(&mut self) -> &mut TextArea<'static> {
-        &mut self.textarea
-    }
+        let id = self.next_id;
+        self.next_id += 1;
 
-    /// Delete the character before the cursor.
-    pub fn delete_char(&mut self) {
-        self.textarea.delete_char();
-    }
+        let entry = HistoryEntry::new(input_text, id);
+        self.history.push(entry);
 
-    /// Move the cursor left.
-    pub fn move_cursor_left(&mut self) {
-        self.textarea.move_cursor(tui_textarea::CursorMove::Back);
-    }
+        self.executor.submit_parse_and_eval(id, input);
 
-    /// Move the cursor right.
-    pub fn move_cursor_right(&mut self) {
-        self.textarea.move_cursor(tui_textarea::CursorMove::Forward);
-    }
-
-    /// Insert a character at the cursor position.
-    pub fn enter_char(&mut self, c: char) {
-        self.textarea.insert_char(c);
-    }
-
-    /// Submit the current input.
-    pub fn submit_input(&mut self) {
-        self.handle_input()
+        UiAction::ClearInput
     }
 
     /// Open the ESC menu.
@@ -270,72 +258,146 @@ impl<E: ReplExecutor> App<E> {
     }
 }
 
-/// Platform-specific constructors.
-#[cfg(not(target_arch = "wasm32"))]
-impl App<ThreadedExecutor> {
-    /// Create a new app using the threaded executor (native platforms).
-    pub fn new() -> Self {
-        Self::with_executor()
-    }
-
-    /// Create a new app with stderr log path (for crash reporting).
-    pub fn new_with_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
-        Self::with_executor_and_stderr_log(stderr_log_path)
-    }
+/// Ratatui-specific REPL application wrapper.
+pub struct RatatuiApp<E: ReplExecutor> {
+    /// Core UI-agnostic REPL logic.
+    pub repl: ReplApp<E>,
+    /// Ratatui text area widget.
+    textarea: TextArea<'static>,
 }
 
-#[cfg(target_arch = "wasm32")]
-impl App<WebWorkerExecutor> {
-    /// Create a new app using the web worker executor (WASM).
+impl<E: ReplExecutor> RatatuiApp<E> {
+    /// Create a new Ratatui app.
     pub fn new() -> Self {
-        Self::with_executor()
+        Self {
+            repl: ReplApp::new(),
+            textarea: TextArea::default(),
+        }
+    }
+
+    pub fn new_with_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
+        Self {
+            repl: ReplApp::with_stderr_log(stderr_log_path),
+            textarea: TextArea::default(),
+        }
+    }
+
+    /// Get reference to the textarea for rendering.
+    pub fn textarea(&self) -> &TextArea<'static> {
+        &self.textarea
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn handle_input_key(&mut self, key: crossterm::event::KeyEvent) {
+        self.textarea.input(key);
+    }
+
+    pub fn delete_char(&mut self) {
+        self.textarea.delete_char();
+    }
+
+    pub fn move_cursor_left(&mut self) {
+        self.textarea.move_cursor(tui_textarea::CursorMove::Back);
+    }
+
+    pub fn move_cursor_right(&mut self) {
+        self.textarea.move_cursor(tui_textarea::CursorMove::Forward);
+    }
+
+    pub fn enter_char(&mut self, c: char) {
+        self.textarea.insert_char(c);
+    }
+
+    /// Submit the current input.
+    pub fn submit_input(&mut self) {
+        let input_text = self.textarea.lines().join("\n");
+        let action = self.repl.submit_input(input_text);
+        self.process_ui_action(action);
+    }
+
+    /// Poll for executor results and process UI actions.
+    pub fn poll_results(&mut self) {
+        for action in self.repl.poll_results() {
+            self.process_ui_action(action);
+        }
+    }
+
+    fn process_ui_action(&mut self, action: UiAction) {
+        match action {
+            UiAction::SetMultilineInput { lines } => {
+                self.textarea = TextArea::from(lines);
+                self.textarea.move_cursor(tui_textarea::CursorMove::Bottom);
+            }
+            UiAction::ClearInput => {
+                self.textarea = TextArea::default();
+            }
+            UiAction::None => {}
+        }
+    }
+
+    // Delegated methods.
+    pub fn open_menu(&mut self) {
+        self.repl.open_menu();
+    }
+
+    pub fn close_menu(&mut self) {
+        self.repl.close_menu();
+    }
+
+    pub fn menu_up(&mut self) {
+        self.repl.menu_up();
+    }
+
+    pub fn menu_down(&mut self) {
+        self.repl.menu_down();
+    }
+
+    pub fn execute_menu_action(&mut self) {
+        self.repl.execute_menu_action();
+    }
+
+    pub fn dismiss_crash_modal(&mut self) {
+        self.repl.dismiss_crash_modal();
+    }
+
+    pub fn set_should_exit(&mut self, val: bool) {
+        self.repl.set_should_exit(val);
+    }
+
+    pub fn menu_is_open(&self) -> bool {
+        self.repl.menu_is_open()
+    }
+
+    pub fn multiline_mode(&self) -> bool {
+        self.repl.multiline_mode()
+    }
+
+    pub fn should_exit(&self) -> bool {
+        self.repl.should_exit()
+    }
+
+    pub fn crash_modal_is_open(&self) -> bool {
+        self.repl.crash_modal_message().is_some()
+    }
+
+    pub fn has_pending_work(&self) -> bool {
+        self.repl.has_pending_work()
     }
 }
 
 /// Re-export the UI rendering function from the render module.
 pub use render::ui;
 
-impl<E: ReplExecutor> App<E> {
-    /// Submit input for async processing.
-    pub fn handle_input(&mut self) {
-        // Don't submit if there's already a request in flight.
-        if self.has_pending_work() {
-            todo!(); // need to do something smart here
-        }
+impl<E: ReplExecutor> ReplApp<E> {
+    /// Poll for results from executor and return UI actions to process.
+    pub fn poll_results(&mut self) -> Vec<UiAction> {
+        let mut actions = Vec::new();
 
-        let input_text = self.input_text();
-
-        if input_text.is_empty() {
-            return;
-        }
-
-        let input = if !self.multiline_mode {
-            repl::Input::Input(input_text.C())
-        } else {
-            repl::Input::Multiline(input_text.C())
-        };
-
-        // Clear the textarea and reset multiline mode.
-        self.textarea = TextArea::default();
-        self.multiline_mode = false;
-
-        // Assign a request ID.
-        let id = self.next_id;
-        self.next_id += 1;
-
-        // Create a new history entry with pending status and request ID.
-        let entry = HistoryEntry::new(input_text, id);
-        self.history.push(entry);
-
-        // Send request to executor.
-        self.executor.submit_parse_and_eval(id, input);
-    }
-
-    pub fn poll_results(&mut self) {
         while let Some(response) = self.executor.try_recv_response() {
             match response {
                 WorkerResponse::ParseResult { id, parse } => {
-                    self.handle_parse_result(id, parse);
+                    let action = self.handle_parse_result(id, parse);
+                    actions.push(action);
                 }
                 WorkerResponse::EvalResult { id, eval } => {
                     self.handle_eval_result(id, eval);
@@ -345,9 +407,11 @@ impl<E: ReplExecutor> App<E> {
                 }
             }
         }
+
+        actions
     }
 
-    fn handle_parse_result(&mut self, id: u64, parse: repl::InputParse) {
+    fn handle_parse_result(&mut self, id: u64, parse: repl::InputParse) -> UiAction {
         let entry = self.history.last_mut().X();
 
         assert_eq!(entry.id, id);
@@ -356,24 +420,22 @@ impl<E: ReplExecutor> App<E> {
             repl::InputParse::Empty => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Empty;
+                UiAction::None
             }
             repl::InputParse::ReadMultiline(input) => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::ReadMultiline;
+                self.multiline_mode = true;
 
                 assert!(!input.contains('\n'));
-                let lines = vec![
-                    input,
-                    String::new(),
-                ];
-                self.textarea = TextArea::from(lines);
-                self.textarea.move_cursor(tui_textarea::CursorMove::Bottom);
-
-                self.multiline_mode = true;
+                UiAction::SetMultilineInput {
+                    lines: vec![input, String::new()]
+                }
             }
             repl::InputParse::Command(command) => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Evaluating { command };
+                UiAction::None
             }
             repl::InputParse::CrashReset(msg) => {
                 // Engine crashed and reset during parse.
@@ -386,6 +448,7 @@ impl<E: ReplExecutor> App<E> {
                 self.history.clear();
                 self.environment.clear();
                 self.crash_modal = Some(msg);
+                UiAction::ClearInput
             }
         }
     }

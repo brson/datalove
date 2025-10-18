@@ -47,7 +47,7 @@ pub fn run() -> AnyResult<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run it, passing the stderr log path.
-    let mut app = datalove_repl_rat::App::new_with_stderr_log(stderr_log_path);
+    let mut app = datalove_repl_rat::RatatuiApp::<datalove_repl_rat::ThreadedExecutor>::new_with_stderr_log(stderr_log_path);
     let res = run_app(&mut terminal, &mut app);
 
     // Restore terminal.
@@ -65,7 +65,7 @@ pub fn run() -> AnyResult<()> {
 /// Run the application loop.
 fn run_app<B, E>(
     terminal: &mut Terminal<B>,
-    app: &mut datalove_repl_rat::App<E>,
+    app: &mut datalove_repl_rat::RatatuiApp<E>,
 ) -> AnyResult<()>
 where
     B: ratatui::backend::Backend,
@@ -95,7 +95,7 @@ where
 /// Run the application loop with a provided event source.
 pub fn run_app_with_events<B, E>(
     terminal: &mut Terminal<B>,
-    app: &mut datalove_repl_rat::App<E>,
+    app: &mut datalove_repl_rat::RatatuiApp<E>,
     events: &mut dyn Iterator<Item = Event>,
 ) -> AnyResult<()>
 where
@@ -128,7 +128,7 @@ where
 
 /// Handle a key event.
 fn handle_key_event<E: datalove_repl_rat::ReplExecutor>(
-    app: &mut datalove_repl_rat::App<E>,
+    app: &mut datalove_repl_rat::RatatuiApp<E>,
     key: crossterm::event::KeyEvent,
 ) {
     // Only process press events, not repeat/release.

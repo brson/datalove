@@ -68,13 +68,13 @@ pub fn start() -> Result<(), wasm_bindgen::JsValue> {
 #[cfg(not(target_arch = "wasm32"))]
 struct ReplApp {
     terminal: Terminal<RataguiBackend<EmbeddedGraphics>>,
-    app: datalove_repl_rat::App<datalove_repl_rat::ThreadedExecutor>,
+    app: datalove_repl_rat::RatatuiApp<datalove_repl_rat::ThreadedExecutor>,
 }
 
 #[cfg(target_arch = "wasm32")]
 struct ReplApp {
     terminal: Terminal<RataguiBackend<EmbeddedGraphics>>,
-    app: datalove_repl_rat::App<datalove_repl_rat::WebWorkerExecutor>,
+    app: datalove_repl_rat::RatatuiApp<datalove_repl_rat::WebWorkerExecutor>,
 }
 
 impl ReplApp {
@@ -97,7 +97,7 @@ impl ReplApp {
 
         Self {
             terminal,
-            app: datalove_repl_rat::App::new(),
+            app: datalove_repl_rat::RatatuiApp::new(),
         }
     }
 }
