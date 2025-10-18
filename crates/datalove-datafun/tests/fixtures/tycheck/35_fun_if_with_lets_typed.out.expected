@@ -1,0 +1,16 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "process",
+      "params": [
+        {
+          "name": "n",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "@u32"
+    }
+  ]
+}

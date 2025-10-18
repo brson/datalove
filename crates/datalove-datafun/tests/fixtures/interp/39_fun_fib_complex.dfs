@@ -1,0 +1,11 @@
+fun fib(n: @u32): @u32
+  if n <= @1
+    ret @1
+  else
+    let a = fib(n - @1)
+    let b = fib(n - @2)
+    ret a + b
+  end if
+end fun
+
+let output = fib(@6)

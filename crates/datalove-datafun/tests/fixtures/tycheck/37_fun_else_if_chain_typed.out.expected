@@ -1,0 +1,29 @@
+{
+  "errors": [
+    {
+      "kind": "DatalitError",
+      "message": "CannotSynthesize"
+    },
+    {
+      "kind": "DatalitError",
+      "message": "CannotSynthesize"
+    },
+    {
+      "kind": "DatalitError",
+      "message": "CannotSynthesize"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "grade",
+      "params": [
+        {
+          "name": "score",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "@u32"
+    }
+  ]
+}

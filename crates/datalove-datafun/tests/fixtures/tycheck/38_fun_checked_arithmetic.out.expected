@@ -1,0 +1,20 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "safe_add",
+      "params": [
+        {
+          "name": "a",
+          "type": "@u32"
+        },
+        {
+          "name": "b",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "!@u32"
+    }
+  ]
+}

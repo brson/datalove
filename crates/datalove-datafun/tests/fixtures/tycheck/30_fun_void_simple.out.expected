@@ -1,0 +1,18 @@
+{
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "do_nothing",
+      "params": [],
+      "return_type": "?"
+    }
+  ]
+}

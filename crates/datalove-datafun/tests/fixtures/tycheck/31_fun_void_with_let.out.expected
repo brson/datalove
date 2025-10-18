@@ -1,0 +1,23 @@
+{
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "process",
+      "params": [
+        {
+          "name": "x",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "?"
+    }
+  ]
+}

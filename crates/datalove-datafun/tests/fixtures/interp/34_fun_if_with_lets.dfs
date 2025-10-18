@@ -1,0 +1,11 @@
+fun process(n: @u32): @u32
+  if n .> @0
+    let doubled = n * @2
+    ret doubled
+  else
+    let zero = @0
+    ret zero
+  end if
+end fun
+
+let output = process(@5)

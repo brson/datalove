@@ -1,0 +1,16 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "shadow",
+      "params": [
+        {
+          "name": "x",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "@u32"
+    }
+  ]
+}

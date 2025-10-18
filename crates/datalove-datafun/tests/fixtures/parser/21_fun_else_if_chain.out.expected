@@ -1,0 +1,205 @@
+{
+  "statements": [
+    {
+      "kind": "Fun",
+      "name": "grade",
+      "params": [
+        {
+          "name": "score",
+          "mode": "In",
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        }
+      ],
+      "return_type": {
+        "heap": "Local",
+        "type_hint": "U32"
+      },
+      "body": [
+        {
+          "kind": "If",
+          "condition": {
+            "expr": {
+              "kind": "BinOp",
+              "op": "Gt",
+              "lhs": {
+                "expr": {
+                  "kind": "Name",
+                  "name": "score"
+                }
+              },
+              "rhs": {
+                "expr": {
+                  "kind": "Datalit",
+                  "value": {
+                    "type_hint": null,
+                    "expr": {
+                      "heap": "Omitted",
+                      "expr": {
+                        "ParseError": {
+                          "message": "expected heap sigil @ or # before expression"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then_body": [
+            {
+              "kind": "Ret",
+              "value": {
+                "expr": {
+                  "kind": "Datalit",
+                  "value": {
+                    "type_hint": null,
+                    "expr": {
+                      "heap": "Local",
+                      "expr": {
+                        "Int": {
+                          "value": "4"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "else_body": [
+            {
+              "kind": "If",
+              "condition": {
+                "expr": {
+                  "kind": "BinOp",
+                  "op": "Gt",
+                  "lhs": {
+                    "expr": {
+                      "kind": "Name",
+                      "name": "score"
+                    }
+                  },
+                  "rhs": {
+                    "expr": {
+                      "kind": "Datalit",
+                      "value": {
+                        "type_hint": null,
+                        "expr": {
+                          "heap": "Omitted",
+                          "expr": {
+                            "ParseError": {
+                              "message": "expected heap sigil @ or # before expression"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "Ret",
+                  "value": {
+                    "expr": {
+                      "kind": "Datalit",
+                      "value": {
+                        "type_hint": null,
+                        "expr": {
+                          "heap": "Local",
+                          "expr": {
+                            "Int": {
+                              "value": "3"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ],
+              "else_body": [
+                {
+                  "kind": "If",
+                  "condition": {
+                    "expr": {
+                      "kind": "BinOp",
+                      "op": "Gt",
+                      "lhs": {
+                        "expr": {
+                          "kind": "Name",
+                          "name": "score"
+                        }
+                      },
+                      "rhs": {
+                        "expr": {
+                          "kind": "Datalit",
+                          "value": {
+                            "type_hint": null,
+                            "expr": {
+                              "heap": "Omitted",
+                              "expr": {
+                                "ParseError": {
+                                  "message": "expected heap sigil @ or # before expression"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then_body": [
+                    {
+                      "kind": "Ret",
+                      "value": {
+                        "expr": {
+                          "kind": "Datalit",
+                          "value": {
+                            "type_hint": null,
+                            "expr": {
+                              "heap": "Local",
+                              "expr": {
+                                "Int": {
+                                  "value": "2"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "else_body": [
+                    {
+                      "kind": "Ret",
+                      "value": {
+                        "expr": {
+                          "kind": "Datalit",
+                          "value": {
+                            "type_hint": null,
+                            "expr": {
+                              "heap": "Local",
+                              "expr": {
+                                "Int": {
+                                  "value": "1"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

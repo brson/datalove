@@ -1,0 +1,218 @@
+{
+  "statements": [
+    {
+      "kind": "Fun",
+      "name": "complex",
+      "params": [
+        {
+          "name": "a",
+          "mode": "In",
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        },
+        {
+          "name": "b",
+          "mode": "In",
+          "type_hint": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        }
+      ],
+      "return_type": {
+        "heap": "Local",
+        "type_hint": "U32"
+      },
+      "body": [
+        {
+          "kind": "Let",
+          "name": "sum",
+          "type_hint": null,
+          "value": {
+            "expr": {
+              "kind": "BinOp",
+              "op": "Add",
+              "lhs": {
+                "expr": {
+                  "kind": "Name",
+                  "name": "a"
+                }
+              },
+              "rhs": {
+                "expr": {
+                  "kind": "Name",
+                  "name": "b"
+                }
+              }
+            }
+          }
+        },
+        {
+          "kind": "If",
+          "condition": {
+            "expr": {
+              "kind": "BinOp",
+              "op": "Gt",
+              "lhs": {
+                "expr": {
+                  "kind": "Name",
+                  "name": "sum"
+                }
+              },
+              "rhs": {
+                "expr": {
+                  "kind": "Datalit",
+                  "value": {
+                    "type_hint": null,
+                    "expr": {
+                      "heap": "Local",
+                      "expr": {
+                        "Int": {
+                          "value": "10"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then_body": [
+            {
+              "kind": "Let",
+              "name": "x",
+              "type_hint": null,
+              "value": {
+                "expr": {
+                  "kind": "BinOp",
+                  "op": "Sub",
+                  "lhs": {
+                    "expr": {
+                      "kind": "Name",
+                      "name": "sum"
+                    }
+                  },
+                  "rhs": {
+                    "expr": {
+                      "kind": "Datalit",
+                      "value": {
+                        "type_hint": null,
+                        "expr": {
+                          "heap": "Local",
+                          "expr": {
+                            "Int": {
+                              "value": "10"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "kind": "If",
+              "condition": {
+                "expr": {
+                  "kind": "BinOp",
+                  "op": "Gt",
+                  "lhs": {
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x"
+                    }
+                  },
+                  "rhs": {
+                    "expr": {
+                      "kind": "Datalit",
+                      "value": {
+                        "type_hint": null,
+                        "expr": {
+                          "heap": "Local",
+                          "expr": {
+                            "Int": {
+                              "value": "5"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "Let",
+                  "name": "y",
+                  "type_hint": null,
+                  "value": {
+                    "expr": {
+                      "kind": "BinOp",
+                      "op": "Mul",
+                      "lhs": {
+                        "expr": {
+                          "kind": "Name",
+                          "name": "x"
+                        }
+                      },
+                      "rhs": {
+                        "expr": {
+                          "kind": "Datalit",
+                          "value": {
+                            "type_hint": null,
+                            "expr": {
+                              "heap": "Local",
+                              "expr": {
+                                "Int": {
+                                  "value": "2"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "kind": "Ret",
+                  "value": {
+                    "expr": {
+                      "kind": "Name",
+                      "name": "y"
+                    }
+                  }
+                }
+              ],
+              "else_body": [
+                {
+                  "kind": "Ret",
+                  "value": {
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "else_body": [
+            {
+              "kind": "Ret",
+              "value": {
+                "expr": {
+                  "kind": "Name",
+                  "name": "sum"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

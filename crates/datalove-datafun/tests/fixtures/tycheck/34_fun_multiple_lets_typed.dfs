@@ -1,0 +1,6 @@
+fun compute(a: @u32, b: @u32): @u32
+  let x = a + b
+  let y = x * @2
+  let z = y - @1
+  ret z
+end fun
