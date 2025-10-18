@@ -21,7 +21,6 @@ pub struct PackageWorld {
 
 pub struct Package {
     pub name: PackageName,
-    pub main_module: ModuleName,
     pub modules: BTreeMap<ModuleName, PackageModule>,
 }
 
@@ -72,41 +71,21 @@ async fn load_library(
 pub async fn package_from_dir(
     dir: PathBuf,
 ) -> AnyResult<Package> {
-    let Some(name) = dir.file_name() else {
+    let Some(file_name) = dir.file_name() else {
         bail!("no file name for dir '{dir:?}'")
     };
-    let Some(name) = name.to_str() else {
-        bail!("non-utf8 module directory '{name:?}'");
+    let Some(name) = file_name.to_str() else {
+        bail!("non-utf8 module directory '{file_name:?}'");
     };
-    let main_file = dir.join(&format!("{name}.dfm"));
-    let package = package_from_source_file(main_file, Some(S(name))).await?;
+    let name = S(name);
+    let package = package_from_source_files(dir, name).await?;
     Ok(package)
 }
 
-pub async fn package_from_source_file(
-    file: PathBuf,
-    package_name: Option<PackageName>,
+pub async fn package_from_source_files(
+    dir: PathBuf,
+    package_name: PackageName,
 ) -> AnyResult<Package> {
-    if let Some(ext) = file.extension() {
-        if ext != "dfm" {
-            bail!("file {}, does not end with '.dfm' extension", file.display());
-        }
-    } else {
-        bail!("file {}, does not end with '.dfm' extension", file.display());
-    }
-
-    let (file, dir) = if let Some(parent) = file.parent() {
-        if parent == Path::new("") {
-            let file = PathBuf::from(".").join(file);
-            let parent = PathBuf::from(".");
-            (file, parent)
-        } else {
-            let parent = parent.to_owned();
-            (file, parent)
-        }
-    } else {
-        bail!("file {} has strange directory", file.display());
-    };
     let (tx, mut rx) = mpsc::channel(1);
     {
         thread::spawn(move || {
@@ -116,7 +95,6 @@ pub async fn package_from_source_file(
         });
     }
 
-    let mut main_module = None;
     let mut modules = BTreeMap::new();
 
     while let Some(next) = rx.next().await {
@@ -125,27 +103,15 @@ pub async fn package_from_source_file(
                 return Err(e);
             }
             Ok(module) => {
-                if module.path == file {
-                    main_module = Some(module.name.C());
-                }
                 modules.insert(module.name.C(), module);
             }
         }
     }
 
-    match main_module {
-        None => {
-            bail!("main module not found at {}", file.display());
-        }
-        Some(main_module) => {
-            let name = package_name.unwrap_or_else(|| main_module.C());
-            return Ok(Package {
-                name,
-                main_module,
-                modules,
-            });
-        }
-    }
+    Ok(Package {
+        name: package_name,
+        modules,
+    })
 }
 
 fn send_modules_blocking(
