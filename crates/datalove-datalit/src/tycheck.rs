@@ -185,6 +185,19 @@ pub fn type_check<'db>(
     expr: ExprFull<'db>,
     resolved: ResolvedExpr<'db>,
 ) -> TypecheckResult<'db> {
+    type_check_with_expected(db, expr, resolved, None)
+}
+
+/// Type check an expression with an optional expected type.
+///
+/// When expected type is provided, uses checking mode (bidirectional typing).
+/// Otherwise uses synthesis mode.
+pub fn type_check_with_expected<'db>(
+    db: &'db dyn crate::Db,
+    expr: ExprFull<'db>,
+    resolved: ResolvedExpr<'db>,
+    expected: Option<TypeAndHeap<'db>>,
+) -> TypecheckResult<'db> {
     let mut ctx = TypeContext::new(db, resolved);
 
     // Check for resolution errors first.
@@ -193,11 +206,23 @@ pub fn type_check<'db>(
         ctx.add_error(TypeError::UnresolvedName(name));
     }
 
-    let root_type = match synthesize(&mut ctx, expr) {
-        Ok(ty) => Some(ty),
-        Err(e) => {
-            ctx.add_error(e);
-            None
+    let root_type = if let Some(expected_ty) = expected {
+        // Use checking mode when expected type is provided.
+        match check(&mut ctx, expr, expected_ty) {
+            Ok(()) => Some(expected_ty),
+            Err(e) => {
+                ctx.add_error(e);
+                None
+            }
+        }
+    } else {
+        // Use synthesis mode when no expected type.
+        match synthesize(&mut ctx, expr) {
+            Ok(ty) => Some(ty),
+            Err(e) => {
+                ctx.add_error(e);
+                None
+            }
         }
     };
 

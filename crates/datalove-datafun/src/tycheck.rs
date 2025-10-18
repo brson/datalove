@@ -546,18 +546,63 @@ fn check_expr<'db>(
     expected: TypeAndHeap<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
+    let expr_kind = expr.expr(db);
 
-    // Try synthesis first.
-    let synthesized = synthesize_expr(ctx, expr)?;
+    match expr_kind {
+        ExprFunKind::Datalit(datalit_expr) => {
+            // If expected type is a datalit type, use bidirectional typing.
+            if let Type::Datalit(expected_datalit_ty) = expected.ty(db) {
+                // Convert datafun TypeAndHeap back to datalit TypeAndHeap.
+                let expected_datalit = datalit::tycheck::TypeAndHeap::new(
+                    db,
+                    expected.heap(db),
+                    expected_datalit_ty.clone(),
+                );
 
-    // Check if types match.
-    if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
-        Ok(())
-    } else {
-        Err(TypeError::TypeMismatch {
-            expected: type_to_string(db, expected.ty(db)),
-            actual: type_to_string(db, synthesized.ty(db)),
-        })
+                // Resolve names and type check with expected type.
+                let resolved = datalit::resolve::resolve_names(db, datalit_expr);
+                let tycheck_result = datalit::tycheck::type_check_with_expected(
+                    db,
+                    datalit_expr,
+                    resolved,
+                    Some(expected_datalit),
+                );
+
+                // Check for errors.
+                if !tycheck_result.errors(db).is_empty() {
+                    let first_error = &tycheck_result.errors(db)[0];
+                    let error_msg = format!("{:?}", first_error.error(db));
+                    return Err(TypeError::DatalitError(error_msg));
+                }
+
+                Ok(())
+            } else {
+                // Expected type is not a datalit type (e.g., function type).
+                // Fall back to synthesis + comparison.
+                let synthesized = synthesize_expr(ctx, expr)?;
+                if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+                    Ok(())
+                } else {
+                    Err(TypeError::TypeMismatch {
+                        expected: type_to_string(db, expected.ty(db)),
+                        actual: type_to_string(db, synthesized.ty(db)),
+                    })
+                }
+            }
+        }
+
+        // For non-datalit expressions, use synthesis + comparison.
+        _ => {
+            let synthesized = synthesize_expr(ctx, expr)?;
+            if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+                Ok(())
+            } else {
+                Err(TypeError::TypeMismatch {
+                    expected: type_to_string(db, expected.ty(db)),
+                    actual: type_to_string(db, synthesized.ty(db)),
+                })
+            }
+        }
     }
 }
 
