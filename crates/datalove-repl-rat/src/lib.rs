@@ -468,13 +468,20 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
                 }
             }
             EntryStatus::Error => {
+                // Try to extract error message from eval_result.
+                let error_msg = if let Some(repl::Eval::Error(e)) = &entry.eval_result {
+                    format!("error: {}", e)
+                } else {
+                    "error".to_string()
+                };
+
                 lines.push(Line::from(vec![
                     ratatui::text::Span::styled(
                         "  ✗ ",
                         Style::default().fg(Color::Red),
                     ),
                     ratatui::text::Span::styled(
-                        "error",
+                        error_msg,
                         Style::default().fg(Color::Red),
                     ),
                 ]));
