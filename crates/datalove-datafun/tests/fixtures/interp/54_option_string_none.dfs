@@ -1,0 +1,2 @@
+// Test Option type with string payload - None variant
+let output: ?string = @none

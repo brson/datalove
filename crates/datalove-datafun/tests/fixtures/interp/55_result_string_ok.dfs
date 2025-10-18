@@ -1,0 +1,2 @@
+// Test Result type with string Ok payload (automatic coercion)
+let output: !string = "success message"

@@ -1,0 +1,12 @@
+// Test Option type with string payload (automatic coercion)
+fun make_some_string(): ?string
+    ret "hello"
+end fun
+
+fun make_none_string(): ?string
+    ret @none
+end fun
+
+fun accept_option_string(val: ?string): ?string
+    ret val
+end fun

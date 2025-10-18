@@ -1,0 +1,33 @@
+{
+  "errors": [
+    {
+      "kind": "DatalitError",
+      "message": "TypeMismatch { expected: \"@?string\", actual: \"string\" }"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "make_some_string",
+      "params": [],
+      "return_type": "?string"
+    },
+    {
+      "kind": "function",
+      "name": "make_none_string",
+      "params": [],
+      "return_type": "?string"
+    },
+    {
+      "kind": "function",
+      "name": "accept_option_string",
+      "params": [
+        {
+          "name": "val",
+          "type": "?string"
+        }
+      ],
+      "return_type": "?string"
+    }
+  ]
+}

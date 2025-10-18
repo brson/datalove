@@ -1,0 +1,8 @@
+// Test Result type with string Ok payload (automatic coercion)
+fun make_ok_string(): !string
+    ret "success"
+end fun
+
+fun accept_result_string(val: !string): !string
+    ret val
+end fun

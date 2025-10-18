@@ -1,0 +1,8 @@
+// Test Result type with Err containing string error message
+fun make_error_string(): !string
+    ret @error @"something went wrong"
+end fun
+
+fun accept_result_string(val: !string): !string
+    ret val
+end fun

@@ -1,0 +1,2 @@
+// Test Option type with string payload - Some variant (automatic coercion)
+let output: ?string = "hello world"

@@ -1,0 +1,2 @@
+// Test Result type with Err containing string error message
+let output: !string = @error @"operation failed"
