@@ -59,16 +59,24 @@ pub struct StmtRet<'db> {
     pub value: ExprFun<'db>,
 }
 
+#[derive(Clone, Hash)]
+#[derive(salsa::Update)]
+pub enum StmtRequire<'db> {
+    Module(StmtRequireModule<'db>),
+    Data(StmtRequireData<'db>),
+}
+
 #[salsa::tracked]
-pub struct StmtRequire<'db> {
-    pub kind: RequireKind,
-    // For RequireKind::Data
+pub struct StmtRequireModule<'db> {
+    pub import_space: InternedText<'db>,
+    pub package_alias: InternedText<'db>,
+    pub module_alias: InternedText<'db>,
+}
+
+#[salsa::tracked]
+pub struct StmtRequireData<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    // For RequireKind::Module (lib/pkg/module)
-    pub import_space: Option<InternedText<'db>>,     // "sys", "local", "main"
-    pub package_alias: Option<InternedText<'db>>,    // "std"
-    pub module_alias: Option<InternedText<'db>>,     // "bool"
 }
 
 #[salsa::tracked]
@@ -78,13 +86,6 @@ pub struct StmtIf<'db> {
     pub then_body: Vec<Statement<'db>>,
     #[returns(ref)]
     pub else_body: Option<Vec<Statement<'db>>>,
-}
-
-#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub enum RequireKind {
-    Module,
-    Data,
 }
 
 #[salsa::tracked]

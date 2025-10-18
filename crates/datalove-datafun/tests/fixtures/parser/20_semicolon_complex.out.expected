@@ -2,13 +2,14 @@
   "statements": [
     {
       "kind": "Require",
-      "kind": "Module",
-      "name": "",
-      "type_hint": null
+      "variant": "Module",
+      "import_space": "sys",
+      "package_alias": "std",
+      "module_alias": "bool"
     },
     {
       "kind": "Require",
-      "kind": "Data",
+      "variant": "Data",
       "name": "values",
       "type_hint": null
     },

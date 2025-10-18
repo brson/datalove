@@ -348,23 +348,10 @@ impl<'db> Parser<'db> {
     ) -> ast::Statement<'db> {
         self.eat_word(tokens, "require");
 
-        let kind = match self.peek_word(tokens) {
+        match self.peek_word(tokens) {
             Some("module") => {
                 self.eat_word(tokens, "module");
-                ast::RequireKind::Module
-            }
-            Some("data") => {
-                self.eat_word(tokens, "data");
-                ast::RequireKind::Data
-            }
-            _ => {
-                let message = InternedText::new(self.db, "expected 'module' or 'data' after 'require'".S());
-                return ast::Statement::ParseError(ast::StmtParseError::new(self.db, message));
-            }
-        };
 
-        match kind {
-            ast::RequireKind::Module => {
                 // Parse 3-part path: lib/pkg/module
                 let import_space = self.need_name(tokens);
 
@@ -386,17 +373,18 @@ impl<'db> Parser<'db> {
 
                 let module_alias = self.need_name(tokens);
 
-                ast::Statement::Require(ast::StmtRequire::new(
-                    self.db,
-                    kind,
-                    InternedText::new(self.db, "".S()), // unused for Module
-                    None, // unused for Module
-                    Some(import_space),
-                    Some(package_alias),
-                    Some(module_alias),
+                ast::Statement::Require(ast::StmtRequire::Module(
+                    ast::StmtRequireModule::new(
+                        self.db,
+                        import_space,
+                        package_alias,
+                        module_alias,
+                    )
                 ))
             }
-            ast::RequireKind::Data => {
+            Some("data") => {
+                self.eat_word(tokens, "data");
+
                 let name = self.need_name(tokens);
 
                 // Optional type hint: `: type`
@@ -407,15 +395,17 @@ impl<'db> Parser<'db> {
                     None
                 };
 
-                ast::Statement::Require(ast::StmtRequire::new(
-                    self.db,
-                    kind,
-                    name,
-                    type_hint,
-                    None, // unused for Data
-                    None, // unused for Data
-                    None, // unused for Data
+                ast::Statement::Require(ast::StmtRequire::Data(
+                    ast::StmtRequireData::new(
+                        self.db,
+                        name,
+                        type_hint,
+                    )
                 ))
+            }
+            _ => {
+                let message = InternedText::new(self.db, "expected 'module' or 'data' after 'require'".S());
+                ast::Statement::ParseError(ast::StmtParseError::new(self.db, message))
             }
         }
     }
@@ -969,13 +959,12 @@ mod tests {
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
-            ast::Statement::Require(stmt) => {
-                assert_eq!(stmt.kind(db), ast::RequireKind::Module);
-                assert_eq!(stmt.import_space(db).X().as_str(db), "sys");
-                assert_eq!(stmt.package_alias(db).X().as_str(db), "std");
-                assert_eq!(stmt.module_alias(db).X().as_str(db), "bool");
+            ast::Statement::Require(ast::StmtRequire::Module(stmt)) => {
+                assert_eq!(stmt.import_space(db).as_str(db), "sys");
+                assert_eq!(stmt.package_alias(db).as_str(db), "std");
+                assert_eq!(stmt.module_alias(db).as_str(db), "bool");
             }
-            _ => panic!("expected require statement"),
+            _ => panic!("expected require module statement"),
         }
     }
 
@@ -1235,13 +1224,12 @@ mod tests {
         let statements = script.statements(db);
         assert_eq!(statements.len(), 2);
         match &statements[0] {
-            ast::Statement::Require(stmt) => {
-                assert_eq!(stmt.kind(db), ast::RequireKind::Module);
-                assert_eq!(stmt.import_space(db).X().as_str(db), "sys");
-                assert_eq!(stmt.package_alias(db).X().as_str(db), "std");
-                assert_eq!(stmt.module_alias(db).X().as_str(db), "bool");
+            ast::Statement::Require(ast::StmtRequire::Module(stmt)) => {
+                assert_eq!(stmt.import_space(db).as_str(db), "sys");
+                assert_eq!(stmt.package_alias(db).as_str(db), "std");
+                assert_eq!(stmt.module_alias(db).as_str(db), "bool");
             }
-            _ => panic!("expected require statement"),
+            _ => panic!("expected require module statement"),
         }
         match &statements[1] {
             ast::Statement::Let(stmt) => {

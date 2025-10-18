@@ -58,16 +58,23 @@ pub struct StmtRet {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct StmtRequire {
-    pub kind: RequireKind,
-    pub name: String,
-    pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
+#[serde(tag = "variant")]
+pub enum StmtRequire {
+    Module(StmtRequireModule),
+    Data(StmtRequireData),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum RequireKind {
-    Module,
-    Data,
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtRequireModule {
+    pub import_space: String,
+    pub package_alias: String,
+    pub module_alias: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtRequireData {
+    pub name: String,
+    pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -157,7 +164,7 @@ impl Statement {
             crate::ast::Statement::Let(s) => Statement::Let(StmtLet::from_ast(db, *s)),
             crate::ast::Statement::Fun(s) => Statement::Fun(StmtFun::from_ast(db, *s)),
             crate::ast::Statement::Ret(s) => Statement::Ret(StmtRet::from_ast(db, *s)),
-            crate::ast::Statement::Require(s) => Statement::Require(StmtRequire::from_ast(db, *s)),
+            crate::ast::Statement::Require(s) => Statement::Require(StmtRequire::from_ast(db, s)),
             crate::ast::Statement::If(s) => Statement::If(StmtIf::from_ast(db, *s)),
             crate::ast::Statement::ParseError(s) => Statement::ParseError(StmtParseError::from_ast(db, *s)),
         }
@@ -215,20 +222,21 @@ impl StmtRet {
 }
 
 impl StmtRequire {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::StmtRequire<'db>) -> Self {
-        StmtRequire {
-            kind: RequireKind::from_ast(ast.kind(db)),
-            name: ast.name(db).as_str(db).to_string(),
-            type_hint: ast.type_hint(db).map(|th| crate::datalit::ast_serde::TypeHintAndHeap::from_ast(db, th)),
-        }
-    }
-}
-
-impl RequireKind {
-    pub fn from_ast(ast: crate::ast::RequireKind) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: &crate::ast::StmtRequire<'db>) -> Self {
         match ast {
-            crate::ast::RequireKind::Module => RequireKind::Module,
-            crate::ast::RequireKind::Data => RequireKind::Data,
+            crate::ast::StmtRequire::Module(m) => {
+                StmtRequire::Module(StmtRequireModule {
+                    import_space: m.import_space(db).as_str(db).to_string(),
+                    package_alias: m.package_alias(db).as_str(db).to_string(),
+                    module_alias: m.module_alias(db).as_str(db).to_string(),
+                })
+            }
+            crate::ast::StmtRequire::Data(d) => {
+                StmtRequire::Data(StmtRequireData {
+                    name: d.name(db).as_str(db).to_string(),
+                    type_hint: d.type_hint(db).map(|th| crate::datalit::ast_serde::TypeHintAndHeap::from_ast(db, th)),
+                })
+            }
         }
     }
 }

@@ -40,19 +40,13 @@ fn module_import_demands<'db>(
 
     for statement in ast.statements(db) {
         match statement {
-            ast::Statement::Require(require) => {
-                if require.kind(db) == ast::RequireKind::Module {
-                    let import_space = require.import_space(db).X();
-                    let package_alias = require.package_alias(db).X();
-                    let module_alias = require.module_alias(db).X();
-
-                    let demand = (
-                        import_space.as_str(db).S(),
-                        package_alias.as_str(db).S(),
-                        module_alias.as_str(db).S(),
-                    );
-                    demands.push(demand);
-                }
+            ast::Statement::Require(ast::StmtRequire::Module(require)) => {
+                let demand = (
+                    require.import_space(db).as_str(db).S(),
+                    require.package_alias(db).as_str(db).S(),
+                    require.module_alias(db).as_str(db).S(),
+                );
+                demands.push(demand);
             }
             _ => { /* pass */ },
         }

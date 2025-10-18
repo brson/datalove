@@ -2,7 +2,7 @@
   "statements": [
     {
       "kind": "Require",
-      "kind": "Data",
+      "variant": "Data",
       "name": "lookup_tables",
       "type_hint": null
     }
