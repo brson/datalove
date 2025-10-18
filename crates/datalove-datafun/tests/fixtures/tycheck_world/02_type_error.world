@@ -1,0 +1,19 @@
+----------
+module sys/std/u32
+----------
+
+fun negate(x: @u32): @u32
+  ret @0
+end fun
+
+----------
+module sys/util/math
+----------
+
+require module sys/std/u32
+
+import u32.negate
+
+fun bad_function(n: @u32): @u32
+  ret negate(@"hello")
+end fun

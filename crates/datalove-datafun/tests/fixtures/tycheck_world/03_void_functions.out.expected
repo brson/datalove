@@ -1,0 +1,28 @@
+{
+  "modules": {
+    "debug": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "debug_value",
+          "params": [
+            "@u32"
+          ],
+          "return_type": "void"
+        }
+      ]
+    },
+    "u32": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "print_number",
+          "params": [
+            "@u32"
+          ],
+          "return_type": "void"
+        }
+      ]
+    }
+  }
+}

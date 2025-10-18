@@ -1,0 +1,18 @@
+----------
+module sys/std/u32
+----------
+
+fun print_number(x: @u32)
+end fun
+
+----------
+module sys/util/debug
+----------
+
+require module sys/std/u32
+
+import u32.print_number
+
+fun debug_value(n: @u32)
+  let _ = print_number(n)
+end fun

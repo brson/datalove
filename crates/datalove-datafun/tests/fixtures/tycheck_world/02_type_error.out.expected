@@ -1,0 +1,33 @@
+{
+  "modules": {
+    "math": {
+      "errors": [
+        {
+          "kind": "DatalitError",
+          "message": "TypeMismatch { expected: \"u32\", actual: \"string\" }"
+        }
+      ],
+      "functions": [
+        {
+          "name": "bad_function",
+          "params": [
+            "@u32"
+          ],
+          "return_type": "@u32"
+        }
+      ]
+    },
+    "u32": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "negate",
+          "params": [
+            "@u32"
+          ],
+          "return_type": "@u32"
+        }
+      ]
+    }
+  }
+}

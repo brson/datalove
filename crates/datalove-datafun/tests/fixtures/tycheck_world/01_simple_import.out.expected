@@ -1,0 +1,45 @@
+{
+  "modules": {
+    "math": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "double_negate",
+          "params": [
+            "@u32"
+          ],
+          "return_type": "@u32"
+        },
+        {
+          "name": "add_three",
+          "params": [
+            "@u32",
+            "@u32",
+            "@u32"
+          ],
+          "return_type": "@u32"
+        }
+      ]
+    },
+    "u32": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "negate",
+          "params": [
+            "@u32"
+          ],
+          "return_type": "@u32"
+        },
+        {
+          "name": "add",
+          "params": [
+            "@u32",
+            "@u32"
+          ],
+          "return_type": "@u32"
+        }
+      ]
+    }
+  }
+}
