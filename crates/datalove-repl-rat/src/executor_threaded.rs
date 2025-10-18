@@ -9,7 +9,8 @@ use std::thread;
 /// Request sent to the worker thread.
 #[derive(Debug)]
 enum WorkerRequest {
-    ParseAndEval { id: u64, input: repl::Input },
+    Parse { id: u64, input: repl::Input },
+    Eval { id: u64, command: repl::Command },
     Shutdown,
 }
 
@@ -42,8 +43,12 @@ impl ReplExecutor for ThreadedExecutor {
         }
     }
 
-    fn submit_parse_and_eval(&mut self, id: u64, input: repl::Input) {
-        let _ = self.worker_tx.send(WorkerRequest::ParseAndEval { id, input });
+    fn submit_parse(&mut self, id: u64, input: repl::Input) {
+        let _ = self.worker_tx.send(WorkerRequest::Parse { id, input });
+    }
+
+    fn submit_eval(&mut self, id: u64, command: repl::Command) {
+        let _ = self.worker_tx.send(WorkerRequest::Eval { id, command });
     }
 
     fn try_recv_response(&mut self) -> Option<WorkerResponse> {
@@ -59,23 +64,23 @@ fn worker_thread(
 ) {
     loop {
         match rx.recv() {
-            Ok(WorkerRequest::ParseAndEval { id, input }) => {
+            Ok(WorkerRequest::Parse { id, input }) => {
                 // Parse the input.
                 let parse = engine.parse_input(input);
                 let _ = tx.send(WorkerResponse::ParseResult {
                     id,
-                    parse: parse.clone(),
+                    parse,
                 });
+            }
+            Ok(WorkerRequest::Eval { id, command }) => {
+                // Evaluate the command.
+                let eval = engine.eval(command);
 
-                // Evaluate if we got a command.
-                if let repl::InputParse::Command(command) = parse {
-                    let eval = engine.eval(command);
-                    let _ = tx.send(WorkerResponse::EvalResult { id, eval });
+                // Get updated environment.
+                let environment = engine.get_environment();
 
-                    // Send updated environment.
-                    let environment = engine.get_environment();
-                    let _ = tx.send(WorkerResponse::EnvironmentUpdate { environment });
-                }
+                // Send eval result with environment.
+                let _ = tx.send(WorkerResponse::EvalResult { id, eval, environment });
             }
             Ok(WorkerRequest::Shutdown) => {
                 // todo actually send this

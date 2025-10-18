@@ -13,9 +13,9 @@ use crate::repl;
 
 /// Request sent from main thread to worker.
 #[derive(Debug, Serialize, Deserialize)]
-struct WorkerRequest {
-    id: u64,
-    input: repl::Input,
+enum WorkerRequest {
+    Parse { id: u64, input: repl::Input },
+    Eval { id: u64, command: repl::Command },
 }
 
 /// Web Worker-based executor for WASM platforms.
@@ -90,10 +90,22 @@ impl ReplExecutor for WebWorkerExecutor {
         }
     }
 
-    fn submit_parse_and_eval(&mut self, id: u64, input: repl::Input) {
-        web_sys::console::log_1(&format!("WebWorkerExecutor: Submitting request id={}", id).into());
+    fn submit_parse(&mut self, id: u64, input: repl::Input) {
+        web_sys::console::log_1(&format!("WebWorkerExecutor: Submitting parse request id={}", id).into());
 
-        let request = WorkerRequest { id, input };
+        let request = WorkerRequest::Parse { id, input };
+        let json = serde_json::to_string(&request)
+            .expect("Failed to serialize request");
+
+        if let Err(e) = self.worker.post_message(&JsValue::from_str(&json)) {
+            web_sys::console::error_1(&format!("Failed to post message to worker: {:?}", e).into());
+        }
+    }
+
+    fn submit_eval(&mut self, id: u64, command: repl::Command) {
+        web_sys::console::log_1(&format!("WebWorkerExecutor: Submitting eval request id={}", id).into());
+
+        let request = WorkerRequest::Eval { id, command };
         let json = serde_json::to_string(&request)
             .expect("Failed to serialize request");
 

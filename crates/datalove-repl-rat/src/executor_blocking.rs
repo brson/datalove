@@ -27,23 +27,24 @@ impl ReplExecutor for BlockingExecutor {
         }
     }
 
-    fn submit_parse_and_eval(&mut self, id: u64, input: repl::Input) {
+    fn submit_parse(&mut self, id: u64, input: repl::Input) {
         // Parse the input.
         let parse = self.engine.parse_input(input);
         self.response_queue.push_back(WorkerResponse::ParseResult {
             id,
-            parse: parse.clone(),
+            parse,
         });
+    }
 
-        // Evaluate if we got a command.
-        if let repl::InputParse::Command(command) = parse {
-            let eval = self.engine.eval(command);
-            self.response_queue.push_back(WorkerResponse::EvalResult { id, eval });
+    fn submit_eval(&mut self, id: u64, command: repl::Command) {
+        // Evaluate the command.
+        let eval = self.engine.eval(command);
 
-            // Send updated environment.
-            let environment = self.engine.get_environment();
-            self.response_queue.push_back(WorkerResponse::EnvironmentUpdate { environment });
-        }
+        // Get updated environment.
+        let environment = self.engine.get_environment();
+
+        // Send eval result with environment.
+        self.response_queue.push_back(WorkerResponse::EvalResult { id, eval, environment });
     }
 
     fn try_recv_response(&mut self) -> Option<WorkerResponse> {

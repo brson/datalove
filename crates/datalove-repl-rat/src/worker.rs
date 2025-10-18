@@ -10,9 +10,9 @@ use crate::executor::WorkerResponse;
 
 /// Request sent from main thread to worker.
 #[derive(Debug, Serialize, Deserialize)]
-struct WorkerRequest {
-    id: u64,
-    input: repl::Input,
+enum WorkerRequest {
+    Parse { id: u64, input: repl::Input },
+    Eval { id: u64, command: repl::Command },
 }
 
 /// Entry point for the Web Worker.
@@ -59,43 +59,43 @@ pub fn worker_main() -> Result<(), JsValue> {
             }
         };
 
-        web_sys::console::log_1(&format!("Worker: Processing request id={}", request.id).into());
+        match request {
+            WorkerRequest::Parse { id, input } => {
+                web_sys::console::log_1(&format!("Worker: Processing parse request id={}", id).into());
 
-        // Parse the input.
-        let parse = engine.parse_input(request.input);
-        let parse_response = WorkerResponse::ParseResult {
-            id: request.id,
-            parse: parse.clone(),
-        };
+                // Parse the input.
+                let parse = engine.parse_input(input);
+                let parse_response = WorkerResponse::ParseResult {
+                    id,
+                    parse,
+                };
 
-        // Send parse result back to main thread.
-        let parse_json = serde_json::to_string(&parse_response).unwrap();
-        if let Err(e) = post_message(&parse_json) {
-            web_sys::console::error_1(&format!("Worker: Failed to send parse result: {:?}", e).into());
-            return;
-        }
-
-        // Evaluate if we got a command.
-        if let repl::InputParse::Command(command) = parse {
-            let eval = engine.eval(command);
-            let eval_response = WorkerResponse::EvalResult {
-                id: request.id,
-                eval,
-            };
-
-            // Send eval result back to main thread.
-            let eval_json = serde_json::to_string(&eval_response).unwrap();
-            if let Err(e) = post_message(&eval_json) {
-                web_sys::console::error_1(&format!("Worker: Failed to send eval result: {:?}", e).into());
-                return;
+                // Send parse result back to main thread.
+                let parse_json = serde_json::to_string(&parse_response).unwrap();
+                if let Err(e) = post_message(&parse_json) {
+                    web_sys::console::error_1(&format!("Worker: Failed to send parse result: {:?}", e).into());
+                }
             }
+            WorkerRequest::Eval { id, command } => {
+                web_sys::console::log_1(&format!("Worker: Processing eval request id={}", id).into());
 
-            // Send updated environment.
-            let environment = engine.get_environment();
-            let env_response = WorkerResponse::EnvironmentUpdate { environment };
-            let env_json = serde_json::to_string(&env_response).unwrap();
-            if let Err(e) = post_message(&env_json) {
-                web_sys::console::error_1(&format!("Worker: Failed to send environment update: {:?}", e).into());
+                // Evaluate the command.
+                let eval = engine.eval(command);
+
+                // Get updated environment.
+                let environment = engine.get_environment();
+
+                // Send eval result with environment.
+                let eval_response = WorkerResponse::EvalResult {
+                    id,
+                    eval,
+                    environment,
+                };
+
+                let eval_json = serde_json::to_string(&eval_response).unwrap();
+                if let Err(e) = post_message(&eval_json) {
+                    web_sys::console::error_1(&format!("Worker: Failed to send eval result: {:?}", e).into());
+                }
             }
         }
     }) as Box<dyn FnMut(MessageEvent)>);

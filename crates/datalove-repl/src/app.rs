@@ -68,8 +68,7 @@ impl HistoryEntry {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum WorkerResponse {
     ParseResult { id: u64, parse: repl::InputParse },
-    EvalResult { id: u64, eval: repl::Eval },
-    EnvironmentUpdate { environment: Vec<(String, String, String)> },
+    EvalResult { id: u64, eval: repl::Eval, environment: Vec<(String, String, String)> },
 }
 
 /// Trait for executing REPL parse and eval operations.
@@ -81,8 +80,11 @@ pub trait ReplExecutor {
     /// Create a new executor (constructs its own Engine internally).
     fn new() -> Self where Self: Sized;
 
-    /// Submit a parse-and-eval request.
-    fn submit_parse_and_eval(&mut self, id: u64, input: repl::Input);
+    /// Submit a parse request.
+    fn submit_parse(&mut self, id: u64, input: repl::Input);
+
+    /// Submit an eval request.
+    fn submit_eval(&mut self, id: u64, command: repl::Command);
 
     /// Try to receive a response.
     /// Returns None if no response is available.
@@ -168,7 +170,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         let entry = HistoryEntry::new(input_text, id);
         self.history.push(entry);
 
-        self.executor.submit_parse_and_eval(id, input);
+        self.executor.submit_parse(id, input);
 
         UiAction::ClearInput
     }
@@ -183,11 +185,8 @@ impl<E: ReplExecutor> ReplApp<E> {
                     let action = self.handle_parse_result(id, parse);
                     actions.push(action);
                 }
-                WorkerResponse::EvalResult { id, eval } => {
-                    self.handle_eval_result(id, eval);
-                }
-                WorkerResponse::EnvironmentUpdate { environment } => {
-                    self.environment = environment;
+                WorkerResponse::EvalResult { id, eval, environment } => {
+                    self.handle_eval_result(id, eval, environment);
                 }
             }
         }
@@ -218,7 +217,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             }
             repl::InputParse::Command(command) => {
                 entry.parse_result = Some(parse);
-                entry.status = EntryStatus::Evaluating { command };
+                entry.status = EntryStatus::Evaluating { command: command.clone() };
+                self.executor.submit_eval(id, command);
                 UiAction::None
             }
             repl::InputParse::CrashReset(msg) => {
@@ -237,7 +237,7 @@ impl<E: ReplExecutor> ReplApp<E> {
         }
     }
 
-    fn handle_eval_result(&mut self, id: u64, eval: repl::Eval) {
+    fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<(String, String, String)>) {
         let entry = self.history.last_mut().X();
 
         assert_eq!(entry.id, id);
@@ -275,6 +275,9 @@ impl<E: ReplExecutor> ReplApp<E> {
                 self.crash_modal = Some(msg.clone());
             }
         }
+
+        // Update environment from the eval response.
+        self.environment = environment;
 
         self.multiline_mode = false;
     }
