@@ -1,0 +1,10 @@
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": "Bool"
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": "True"
+  }
+}

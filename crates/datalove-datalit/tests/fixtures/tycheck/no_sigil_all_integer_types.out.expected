@@ -1,0 +1,157 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonTuple": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "1"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "-1"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "100"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "-100"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "1000"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "-1000"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "10000"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "-10000"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            }
+          ]
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "AnonTuple": {
+          "fields": [
+            {
+              "heap": "Omitted",
+              "type_hint": "U8"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "I8"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "U16"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "I16"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "U32"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "I32"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "U64"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "I64"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "fields": [
+      "u8",
+      "i8",
+      "u16",
+      "i16",
+      "u32",
+      "i32",
+      "u64",
+      "i64"
+    ],
+    "heap": "",
+    "kind": "AnonTuple"
+  }
+}

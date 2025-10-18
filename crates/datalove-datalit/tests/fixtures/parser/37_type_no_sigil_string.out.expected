@@ -1,0 +1,14 @@
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": "String"
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "String": {
+        "value": "\"hello\""
+      }
+    }
+  }
+}

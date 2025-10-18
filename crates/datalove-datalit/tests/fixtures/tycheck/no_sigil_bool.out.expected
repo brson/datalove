@@ -1,0 +1,14 @@
+{
+  "ast": {
+    "expr": {
+      "expr": "True",
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": "Bool"
+    }
+  },
+  "errors": [],
+  "root_type": "bool"
+}

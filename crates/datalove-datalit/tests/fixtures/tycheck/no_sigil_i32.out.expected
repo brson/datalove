@@ -1,0 +1,18 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Int": {
+          "value": "-42"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": "I32"
+    }
+  },
+  "errors": [],
+  "root_type": "i32"
+}

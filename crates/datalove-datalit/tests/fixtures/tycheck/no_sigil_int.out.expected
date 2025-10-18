@@ -1,0 +1,18 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Int": {
+          "value": "999999999"
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": "Int"
+    }
+  },
+  "errors": [],
+  "root_type": "int"
+}

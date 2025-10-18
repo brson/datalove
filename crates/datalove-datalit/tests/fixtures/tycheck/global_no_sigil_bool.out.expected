@@ -1,0 +1,20 @@
+{
+  "ast": {
+    "expr": {
+      "expr": "True",
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Global",
+      "type_hint": "Bool"
+    }
+  },
+  "errors": [
+    {
+      "actual_heap": "@",
+      "expected_heap": "#",
+      "kind": "HeapMismatch"
+    }
+  ],
+  "root_type": null
+}

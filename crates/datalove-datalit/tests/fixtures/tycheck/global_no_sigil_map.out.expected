@@ -1,0 +1,83 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Map": {
+          "entries": [
+            {
+              "key": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              },
+              "value": {
+                "expr": {
+                  "expr": {
+                    "String": {
+                      "value": "\"a\""
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "key": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              },
+              "value": {
+                "expr": {
+                  "expr": {
+                    "String": {
+                      "value": "\"b\""
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Global"
+    },
+    "type_hint": {
+      "heap": "Global",
+      "type_hint": {
+        "Map": {
+          "key_type": {
+            "heap": "Omitted",
+            "type_hint": "U32"
+          },
+          "value_type": {
+            "heap": "Omitted",
+            "type_hint": "String"
+          }
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "heap": "#",
+    "key_type": "u32",
+    "kind": "Map",
+    "value_type": "string"
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Map": {
+          "entries": [
+            {
+              "key": {
+                "expr": {
+                  "expr": {
+                    "String": {
+                      "value": "\"point\""
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              },
+              "value": {
+                "expr": {
+                  "expr": {
+                    "List": {
+                      "elements": [
+                        {
+                          "expr": {
+                            "expr": {
+                              "AnonStruct": {
+                                "fields": [
+                                  {
+                                    "name": "x",
+                                    "value": {
+                                      "expr": {
+                                        "expr": {
+                                          "Int": {
+                                            "value": "1"
+                                          }
+                                        },
+                                        "heap": "Local"
+                                      },
+                                      "type_hint": null
+                                    }
+                                  },
+                                  {
+                                    "name": "y",
+                                    "value": {
+                                      "expr": {
+                                        "expr": {
+                                          "String": {
+                                            "value": "\"a\""
+                                          }
+                                        },
+                                        "heap": "Local"
+                                      },
+                                      "type_hint": null
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "heap": "Local"
+                          },
+                          "type_hint": null
+                        },
+                        {
+                          "expr": {
+                            "expr": "None",
+                            "heap": "Local"
+                          },
+                          "type_hint": null
+                        }
+                      ]
+                    }
+                  },
+                  "heap": "Omitted"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "Map": {
+          "key_type": {
+            "heap": "Omitted",
+            "type_hint": "String"
+          },
+          "value_type": {
+            "heap": "Omitted",
+            "type_hint": {
+              "List": {
+                "element_type": {
+                  "heap": "Omitted",
+                  "type_hint": {
+                    "Option": {
+                      "inner_type": {
+                        "heap": "Omitted",
+                        "type_hint": {
+                          "AnonStruct": {
+                            "fields": [
+                              {
+                                "name": "x",
+                                "type_hint": {
+                                  "heap": "Omitted",
+                                  "type_hint": "U32"
+                                }
+                              },
+                              {
+                                "name": "y",
+                                "type_hint": {
+                                  "heap": "Omitted",
+                                  "type_hint": "String"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "heap": "",
+    "key_type": "string",
+    "kind": "Map",
+    "value_type": {
+      "element_type": {
+        "heap": "",
+        "inner_type": {
+          "fields": [
+            {
+              "name": "x",
+              "type": "u32"
+            },
+            {
+              "name": "y",
+              "type": "string"
+            }
+          ],
+          "heap": "",
+          "kind": "AnonStruct"
+        },
+        "kind": "Option"
+      },
+      "heap": "",
+      "kind": "List"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Int": {
+          "value": "42"
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Global",
+      "type_hint": "U32"
+    }
+  },
+  "errors": [],
+  "root_type": "#u32"
+}

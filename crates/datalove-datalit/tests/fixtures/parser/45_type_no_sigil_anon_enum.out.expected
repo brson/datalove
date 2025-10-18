@@ -1,0 +1,34 @@
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": {
+      "AnonEnum": {
+        "variants": [
+          {
+            "name": "Ok",
+            "payload": null
+          }
+        ]
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "AnonEnum": {
+        "variant_name": "Ok",
+        "payload": {
+          "type_hint": null,
+          "expr": {
+            "heap": "Local",
+            "expr": {
+              "Int": {
+                "value": "42"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

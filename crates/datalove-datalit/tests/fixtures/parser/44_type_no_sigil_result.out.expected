@@ -1,0 +1,21 @@
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": {
+      "Result": {
+        "inner_type": {
+          "heap": "Omitted",
+          "type_hint": "U32"
+        }
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "Int": {
+        "value": "42"
+      }
+    }
+  }
+}

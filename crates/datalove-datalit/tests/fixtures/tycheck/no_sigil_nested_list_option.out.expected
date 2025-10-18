@@ -1,0 +1,70 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "List": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "42"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": "None",
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "100"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            }
+          ]
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "List": {
+          "element_type": {
+            "heap": "Omitted",
+            "type_hint": {
+              "Option": {
+                "inner_type": {
+                  "heap": "Omitted",
+                  "type_hint": "U32"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "element_type": {
+      "heap": "",
+      "inner_type": "u32",
+      "kind": "Option"
+    },
+    "heap": "",
+    "kind": "List"
+  }
+}

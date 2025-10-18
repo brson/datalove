@@ -65,6 +65,7 @@ struct DynParser<'db> {
 impl<'db> DynParser<'db> {
     fn parse_type_hint_and_heap(&mut self) -> ast::TypeHintAndHeap<'db> {
         // Heap sigils: @ for local, # for global.
+        // If omitted, defaults to Heap::Omitted (inferred).
         let heap = if self.peek_sigil(Sigil::At) {
             self.eat_sigil(Sigil::At);
             ast::Heap::Local
@@ -72,10 +73,8 @@ impl<'db> DynParser<'db> {
             self.eat_sigil(Sigil::Hash);
             ast::Heap::Global
         } else {
-            // Parse error: missing heap sigil. Use Omitted heap and create error node.
-            let message = InternedText::new(self.db, "expected heap sigil @ or # before type".S());
-            let error_node = ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message));
-            return ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+            // No heap sigil - default to Omitted (inferred).
+            ast::Heap::Omitted
         };
         let type_hint = self.parse_type_hint();
         ast::TypeHintAndHeap::new(self.db, heap, type_hint)

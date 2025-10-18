@@ -1,0 +1,14 @@
+{
+  "type_hint": {
+    "heap": "Global",
+    "type_hint": "U32"
+  },
+  "expr": {
+    "heap": "Global",
+    "expr": {
+      "Int": {
+        "value": "42"
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": "U32"
+  },
+  "expr": {
+    "heap": "Omitted",
+    "expr": {
+      "Int": {
+        "value": "42"
+      }
+    }
+  }
+}

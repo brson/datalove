@@ -1,0 +1,46 @@
+{
+  "type_hint": {
+    "heap": "Omitted",
+    "type_hint": {
+      "AnonTuple": {
+        "fields": [
+          {
+            "heap": "Omitted",
+            "type_hint": "Bool"
+          },
+          {
+            "heap": "Omitted",
+            "type_hint": "U32"
+          }
+        ]
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "AnonTuple": {
+        "elements": [
+          {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": "True"
+            }
+          },
+          {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

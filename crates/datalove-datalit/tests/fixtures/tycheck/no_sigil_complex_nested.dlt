@@ -1,0 +1,1 @@
+: map<string, [?{x: u32, y: string}]> / @map{@"point" = [@{x = @1, y = @"a"}, @none]}

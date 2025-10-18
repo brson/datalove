@@ -227,6 +227,11 @@ fn synthesize<'db>(
     // Otherwise, synthesize from the expression.
     let expr_and_heap = expr.expr(db);
     let heap = expr_and_heap.heap(db);
+    // Resolve Omitted heap to Local (the default).
+    let heap = match heap {
+        Heap::Omitted => Heap::Local,
+        other => other,
+    };
     let expr_inner = expr_and_heap.expr(db);
 
     let ty = match expr_inner {
@@ -1009,13 +1014,14 @@ pub fn convert_type_hint<'db>(
 }
 
 /// Check if two heaps are compatible.
+/// Omitted heap is generic and compatible with any heap.
 fn heaps_compatible(h1: Heap, h2: Heap) -> bool {
     match (h1, h2) {
         (Heap::Local, Heap::Local) => true,
         (Heap::Global, Heap::Global) => true,
-        (Heap::Omitted, Heap::Local) => true,
-        (Heap::Local, Heap::Omitted) => true,
-        (Heap::Omitted, Heap::Omitted) => true,
+        // Omitted is compatible with any heap (generic).
+        (Heap::Omitted, _) => true,
+        (_, Heap::Omitted) => true,
         _ => false,
     }
 }
