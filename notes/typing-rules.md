@@ -587,12 +587,19 @@ e ⇐ @?T
 
 **Note**: This allows implicit wrapping in Some. Values that successfully check against type T can also check against @?T.
 
+**CRITICAL IMPLEMENTATION NOTE**: This rule MUST be checked BEFORE Check-Subsume in the implementation. Otherwise, synthesizable expressions (like string literals, booleans) will match Check-Subsume first and fail to coerce to Option types. See `crates/datalove-datalit/src/tycheck.rs` lines 499-520.
+
 Example:
 ```
 : @?@u32 / @42
            ↑
       @42 ⇐ @u32  ✓
       @42 ⇐ @?@u32  ✓ (implicit Some wrapping)
+
+: @?@string / "hello"
+              ↑
+      "hello" ⇐ @string  ✓
+      "hello" ⇐ @?@string  ✓ (implicit Some wrapping)
 ```
 
 ### Rule: Check-ResultErr (implicit Err wrapping)
@@ -620,12 +627,19 @@ e ⇐ @!T
 
 **Note**: This allows implicit wrapping in Ok. Values that successfully check against type T can also check against @!T.
 
+**CRITICAL IMPLEMENTATION NOTE**: This rule MUST be checked BEFORE Check-Subsume in the implementation, just like Check-Option. See `crates/datalove-datalit/src/tycheck.rs` lines 499-520.
+
 Example:
 ```
 : @!@u32 / @42
            ↑
       @42 ⇐ @u32  ✓
       @42 ⇐ @!@u32  ✓ (implicit Ok wrapping)
+
+: @!@string / "success"
+              ↑
+      "success" ⇐ @string  ✓
+      "success" ⇐ @!@string  ✓ (implicit Ok wrapping)
 ```
 
 ### Rule: Check-Error

@@ -496,6 +496,29 @@ fn check<'db>(
     let expected_type = expected.ty(db);
 
     match (expr_inner, expected_type) {
+        // Rule: Check-None
+        (Expr::None, Type::Option(_)) => Ok(()),
+
+        // Rule: Check-Option (implicit wrapping)
+        // IMPORTANT: This must come before Check-Subsume to allow string literals to coerce to Option<string>
+        (_, Type::Option(opt)) => {
+            // Try to check against inner type (implicit Some wrapping).
+            check(ctx, expr, opt.inner_type(db))
+        }
+
+        // Rule: Check-ResultErr (implicit Err wrapping)
+        (Expr::Err(_), Type::Result(_)) => {
+            // Error expressions can check against any Result type (implicit Err wrapping).
+            Ok(())
+        }
+
+        // Rule: Check-Result (implicit Ok wrapping)
+        // IMPORTANT: This must come before Check-Subsume to allow string literals to coerce to Result<string>
+        (_, Type::Result(res)) => {
+            // Try to check against inner type (implicit Ok wrapping).
+            check(ctx, expr, res.inner_type(db))
+        }
+
         // Rule: Check-Subsume - try synthesis first.
         // IMPORTANT: Synthesize from the inner expression without type hint to avoid infinite recursion.
         (Expr::True | Expr::False | Expr::String(_), _) => {
@@ -811,27 +834,6 @@ fn check<'db>(
             }
 
             Ok(())
-        }
-
-        // Rule: Check-None
-        (Expr::None, Type::Option(_)) => Ok(()),
-
-        // Rule: Check-Option (implicit wrapping)
-        (_, Type::Option(opt)) => {
-            // Try to check against inner type (implicit Some wrapping).
-            check(ctx, expr, opt.inner_type(db))
-        }
-
-        // Rule: Check-ResultErr (implicit Err wrapping)
-        (Expr::Err(_), Type::Result(_)) => {
-            // Error expressions can check against any Result type (implicit Err wrapping).
-            Ok(())
-        }
-
-        // Rule: Check-Result (implicit Ok wrapping)
-        (_, Type::Result(res)) => {
-            // Try to check against inner type (implicit Ok wrapping).
-            check(ctx, expr, res.inner_type(db))
         }
 
         // Rule: Check-Data

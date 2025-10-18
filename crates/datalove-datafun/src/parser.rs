@@ -165,7 +165,7 @@ impl<'db> Parser<'db> {
         // Need `=` sigil
         self.need_sigil(tokens, Sigil::Equals);
 
-        // Parse the value expression using datalit parser
+        // Parse the value expression.
         let value = self.parse_expr_full(tokens);
 
         ast::Statement::Let(ast::StmtLet::new(

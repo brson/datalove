@@ -1,10 +1,5 @@
 {
-  "errors": [
-    {
-      "kind": "DatalitError",
-      "message": "TypeMismatch { expected: \"@!string\", actual: \"string\" }"
-    }
-  ],
+  "errors": [],
   "judgements": [
     {
       "kind": "function",

@@ -23,7 +23,7 @@
   "errors": [
     {
       "actual": "string",
-      "expected": "@!@u32",
+      "expected": "u32",
       "kind": "TypeMismatch"
     }
   ],
