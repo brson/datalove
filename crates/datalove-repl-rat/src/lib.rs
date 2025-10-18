@@ -339,12 +339,20 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
 
     for entry in &app.history {
         // Input line with prompt.
+        // Truncate multiline input to first line with ellipsis.
+        let display_input = if entry.input.contains('\n') {
+            let first_line = entry.input.lines().next().unwrap_or("");
+            format!("{}…", first_line)
+        } else {
+            entry.input.clone()
+        };
+
         lines.push(Line::from(vec![
             ratatui::text::Span::styled(
                 "> ",
                 Style::default().fg(Color::Cyan),
             ),
-            ratatui::text::Span::raw(&entry.input),
+            ratatui::text::Span::raw(display_input),
         ]));
 
         // Output/status line.
