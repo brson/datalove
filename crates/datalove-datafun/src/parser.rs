@@ -494,21 +494,16 @@ impl<'db> Parser<'db> {
         // This avoids the issue of the datalit parser consuming too many tokens
 
         // Heap sigils: @ for local, # for global.
+        // If omitted, defaults to Heap::Omitted (inferred).
         let heap = if self.peek_sigil(tokens, Sigil::At) {
             self.eat_sigil(tokens, Sigil::At);
             datalit::ast::Heap::Local
         } else if self.peek_sigil(tokens, Sigil::Hash) {
             self.eat_sigil(tokens, Sigil::Hash);
             datalit::ast::Heap::Global
-        } else if self.peek_sigil(tokens, Sigil::Exclamation) || self.peek_sigil(tokens, Sigil::Question) {
-            // Result/option types can omit heap
-            datalit::ast::Heap::Omitted
         } else {
-            let message = InternedText::new(self.db, "expected heap sigil @ or # before type".S());
-            let error_node = datalit::ast::TypeHint::ParseError(
-                datalit::ast::TypeHintParseError::new(self.db, message)
-            );
-            return datalit::ast::TypeHintAndHeap::new(self.db, datalit::ast::Heap::Omitted, error_node);
+            // No heap sigil - default to Omitted (inferred).
+            datalit::ast::Heap::Omitted
         };
 
         // Check for ? or ! prefix for Option/Result types.
