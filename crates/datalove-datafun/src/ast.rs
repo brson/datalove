@@ -62,8 +62,13 @@ pub struct StmtRet<'db> {
 #[salsa::tracked]
 pub struct StmtRequire<'db> {
     pub kind: RequireKind,
+    // For RequireKind::Data
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    // For RequireKind::Module (lib/pkg/module)
+    pub import_space: Option<InternedText<'db>>,     // "sys", "local", "main"
+    pub package_alias: Option<InternedText<'db>>,    // "std"
+    pub module_alias: Option<InternedText<'db>>,     // "bool"
 }
 
 #[salsa::tracked]

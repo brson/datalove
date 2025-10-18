@@ -17,6 +17,12 @@ pub mod interp;
 pub mod eval_datalit;
 pub mod eval_datafun;
 
+// Module system.
+pub mod package;
+pub mod package_load;
+pub mod import_demands;
+pub mod package_resolve;
+
 pub use datalove_datalit as datalit;
 
 // Re-export Db trait for external use.

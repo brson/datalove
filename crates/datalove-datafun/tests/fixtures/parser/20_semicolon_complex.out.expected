@@ -3,7 +3,7 @@
     {
       "kind": "Require",
       "kind": "Module",
-      "name": "std",
+      "name": "",
       "type_hint": null
     },
     {

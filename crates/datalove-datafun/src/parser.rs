@@ -363,22 +363,61 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let name = self.need_name(tokens);
+        match kind {
+            ast::RequireKind::Module => {
+                // Parse 3-part path: lib/pkg/module
+                let import_space = self.need_name(tokens);
 
-        // Optional type hint: `: type`
-        let type_hint = if self.peek_sigil(tokens, Sigil::Colon) {
-            self.eat_sigil(tokens, Sigil::Colon);
-            Some(self.parse_type_hint_and_heap(tokens))
-        } else {
-            None
-        };
+                // Need forward slash
+                if !self.peek_sigil(tokens, Sigil::SlashForward) {
+                    let message = InternedText::new(self.db, "expected '/' after import space".S());
+                    return ast::Statement::ParseError(ast::StmtParseError::new(self.db, message));
+                }
+                self.eat_sigil(tokens, Sigil::SlashForward);
 
-        ast::Statement::Require(ast::StmtRequire::new(
-            self.db,
-            kind,
-            name,
-            type_hint,
-        ))
+                let package_alias = self.need_name(tokens);
+
+                // Need forward slash
+                if !self.peek_sigil(tokens, Sigil::SlashForward) {
+                    let message = InternedText::new(self.db, "expected '/' after package alias".S());
+                    return ast::Statement::ParseError(ast::StmtParseError::new(self.db, message));
+                }
+                self.eat_sigil(tokens, Sigil::SlashForward);
+
+                let module_alias = self.need_name(tokens);
+
+                ast::Statement::Require(ast::StmtRequire::new(
+                    self.db,
+                    kind,
+                    InternedText::new(self.db, "".S()), // unused for Module
+                    None, // unused for Module
+                    Some(import_space),
+                    Some(package_alias),
+                    Some(module_alias),
+                ))
+            }
+            ast::RequireKind::Data => {
+                let name = self.need_name(tokens);
+
+                // Optional type hint: `: type`
+                let type_hint = if self.peek_sigil(tokens, Sigil::Colon) {
+                    self.eat_sigil(tokens, Sigil::Colon);
+                    Some(self.parse_type_hint_and_heap(tokens))
+                } else {
+                    None
+                };
+
+                ast::Statement::Require(ast::StmtRequire::new(
+                    self.db,
+                    kind,
+                    name,
+                    type_hint,
+                    None, // unused for Data
+                    None, // unused for Data
+                    None, // unused for Data
+                ))
+            }
+        }
     }
 
     fn parse_if(
@@ -925,15 +964,16 @@ mod tests {
     #[test]
     fn test_parse_require() {
         let ref db = crate::Database::default();
-        let source = Source::new(db, S("require module std"));
+        let source = Source::new(db, S("require module sys/std/bool"));
         let script = parse(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
             ast::Statement::Require(stmt) => {
                 assert_eq!(stmt.kind(db), ast::RequireKind::Module);
-                assert_eq!(stmt.name(db).as_str(db), "std");
-                assert!(stmt.type_hint(db).is_none());
+                assert_eq!(stmt.import_space(db).X().as_str(db), "sys");
+                assert_eq!(stmt.package_alias(db).X().as_str(db), "std");
+                assert_eq!(stmt.module_alias(db).X().as_str(db), "bool");
             }
             _ => panic!("expected require statement"),
         }
@@ -1190,14 +1230,16 @@ mod tests {
     #[test]
     fn test_parse_require_with_semicolon() {
         let ref db = crate::Database::default();
-        let source = Source::new(db, S("require module std; let x = @42"));
+        let source = Source::new(db, S("require module sys/std/bool; let x = @42"));
         let script = parse(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 2);
         match &statements[0] {
             ast::Statement::Require(stmt) => {
                 assert_eq!(stmt.kind(db), ast::RequireKind::Module);
-                assert_eq!(stmt.name(db).as_str(db), "std");
+                assert_eq!(stmt.import_space(db).X().as_str(db), "sys");
+                assert_eq!(stmt.package_alias(db).X().as_str(db), "std");
+                assert_eq!(stmt.module_alias(db).X().as_str(db), "bool");
             }
             _ => panic!("expected require statement"),
         }
