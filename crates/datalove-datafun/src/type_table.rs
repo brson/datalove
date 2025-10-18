@@ -123,7 +123,7 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
                     }
                 }
             }
-            Statement::Require(_) | Statement::ParseError(_) => {}
+            Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {}
         }
         Ok(())
     }

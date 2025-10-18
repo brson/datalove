@@ -18,6 +18,7 @@ pub enum Statement {
     Fun(StmtFun),
     Ret(StmtRet),
     Require(StmtRequire),
+    Import(StmtImport),
     If(StmtIf),
     ParseError(StmtParseError),
 }
@@ -75,6 +76,12 @@ pub struct StmtRequireModule {
 pub struct StmtRequireData {
     pub name: String,
     pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtImport {
+    pub module_name: String,
+    pub item_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -165,6 +172,7 @@ impl Statement {
             crate::ast::Statement::Fun(s) => Statement::Fun(StmtFun::from_ast(db, *s)),
             crate::ast::Statement::Ret(s) => Statement::Ret(StmtRet::from_ast(db, *s)),
             crate::ast::Statement::Require(s) => Statement::Require(StmtRequire::from_ast(db, s)),
+            crate::ast::Statement::Import(s) => Statement::Import(StmtImport::from_ast(db, *s)),
             crate::ast::Statement::If(s) => Statement::If(StmtIf::from_ast(db, *s)),
             crate::ast::Statement::ParseError(s) => Statement::ParseError(StmtParseError::from_ast(db, *s)),
         }
@@ -237,6 +245,15 @@ impl StmtRequire {
                     type_hint: d.type_hint(db).map(|th| crate::datalit::ast_serde::TypeHintAndHeap::from_ast(db, th)),
                 })
             }
+        }
+    }
+}
+
+impl StmtImport {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::StmtImport<'db>) -> Self {
+        StmtImport {
+            module_name: ast.module_name(db).as_str(db).to_string(),
+            item_name: ast.item_name(db).as_str(db).to_string(),
         }
     }
 }

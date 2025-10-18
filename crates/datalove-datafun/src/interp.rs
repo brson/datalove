@@ -131,6 +131,11 @@ impl<'db> InterpContext<'db> {
                 Err(InterpError::NotImplemented("require statement".to_string()))
             }
 
+            Statement::Import(_) => {
+                // TODO: implement module imports.
+                Err(InterpError::NotImplemented("import statement".to_string()))
+            }
+
             Statement::If(stmt) => {
                 let condition = stmt.condition(self.db);
                 let then_body = stmt.then_body(self.db);

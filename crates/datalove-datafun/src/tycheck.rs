@@ -1,8 +1,11 @@
 use rmx::prelude::*;
 use bct::text::InternedText;
 use std::collections::HashMap;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use crate::ast::*;
 use crate::datalit;
+use bct;
 
 /// Type representation for datafun (extends datalit types with function types).
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -12,6 +15,8 @@ pub enum Type<'db> {
     Datalit(datalit::tycheck::Type<'db>),
     /// Function type: (param_types) -> return_type.
     Function(TypeFunction<'db>),
+    /// Void/unit type for functions with no return value.
+    Void,
 }
 
 #[salsa::tracked]
@@ -53,6 +58,33 @@ pub struct TypecheckResult<'db> {
 
     /// Type errors encountered.
     pub errors: Vec<TypeErrorEntry<'db>>,
+}
+
+/// Exported function signatures from a module.
+#[salsa::tracked]
+pub struct ModuleExports<'db> {
+    /// Package module this is for.
+    pub package_module: bct::package2::PackageModule,
+
+    /// Function signatures as a vector of (name, type) pairs.
+    /// Using Vec because salsa::tracked requires Hash, which HashMap doesn't implement.
+    #[returns(ref)]
+    pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+}
+
+/// Result of typechecking an entire package world.
+#[salsa::tracked]
+pub struct PackageWorldTypecheckResult<'db> {
+    /// The package world module graph.
+    pub graph: bct::package_resolve2::PackageWorldModuleGraph<'db>,
+
+    /// Type errors encountered, per module.
+    #[returns(ref)]
+    pub module_errors: BTreeMap<bct::package2::PackageModule, Vec<TypeError>>,
+
+    /// Module exports, per module.
+    #[returns(ref)]
+    pub module_exports: BTreeMap<bct::package2::PackageModule, ModuleExports<'db>>,
 }
 
 /// Context for typechecking.
@@ -155,6 +187,105 @@ pub fn lookup_variable_type<'db>(
     ctx.lookup_variable(name)
 }
 
+/// Typecheck an entire package world module graph.
+///
+/// This processes all modules in dependency order, allowing imports
+/// to reference functions from already-typechecked modules.
+#[salsa::tracked]
+pub fn typecheck_package_world<'db>(
+    db: &'db dyn crate::Db,
+    graph: bct::package_resolve2::PackageWorldModuleGraph<'db>,
+) -> PackageWorldTypecheckResult<'db> {
+    let mut module_errors: BTreeMap<bct::package2::PackageModule, Vec<TypeError>> = BTreeMap::new();
+    let mut module_exports_map: BTreeMap<bct::package2::PackageModule, ModuleExports<'db>> = BTreeMap::new();
+
+    // Sort modules in dependency order.
+    let sorted_modules = match topological_sort_modules(db, graph) {
+        Ok(modules) => modules,
+        Err(e) => {
+            // If we can't sort, just process modules in arbitrary order.
+            // Errors will be recorded per module.
+            graph.map(db).keys().copied().collect()
+        }
+    };
+
+    // Process each module in dependency order.
+    for module in sorted_modules {
+        // Parse the module.
+        let source = module.text(db);
+        let script = crate::parser::parse(db, source);
+
+        // Build module alias map for this module.
+        let alias_map = build_module_alias_map(db, script, graph, module);
+
+        // Create type context for this module.
+        let mut ctx = TypeContext::new(db);
+
+        // Add imported functions to context.
+        // Scan for import statements and resolve them.
+        for statement in script.statements(db) {
+            if let Statement::Import(import) = statement {
+                let module_name = import.module_name(db);
+                let item_name = import.item_name(db);
+
+                // Look up the module in the alias map.
+                if let Some(&imported_module) = alias_map.get(&module_name) {
+                    // Look up the module exports.
+                    if let Some(exports) = module_exports_map.get(&imported_module) {
+                        // Look up the function in the exports.
+                        let func_opt = exports.functions(db).iter()
+                            .find(|(name, _)| *name == item_name)
+                            .map(|(_, func_type)| *func_type);
+
+                        if let Some(func_type) = func_opt {
+                            // Add the function to the context.
+                            ctx.add_function(item_name, func_type);
+                        } else {
+                            ctx.add_error(TypeError::UnresolvedName(
+                                format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
+                            ));
+                        }
+                    } else {
+                        // Module not found in exports (might be a cycle or missing).
+                        ctx.add_error(TypeError::UnresolvedName(
+                            format!("module {}", module_name.as_str(db))
+                        ));
+                    }
+                } else {
+                    // Module alias not found.
+                    ctx.add_error(TypeError::UnresolvedName(
+                        format!("module alias {}", module_name.as_str(db))
+                    ));
+                }
+            }
+        }
+
+        // First pass: collect all function signatures from this module.
+        for statement in script.statements(db) {
+            if let Statement::Fun(stmt) = statement {
+                collect_function_signature(&mut ctx, stmt);
+            }
+        }
+
+        // Second pass: type check all statements.
+        for statement in script.statements(db) {
+            check_statement(&mut ctx, statement);
+        }
+
+        // Collect errors for this module.
+        if !ctx.errors.is_empty() {
+            module_errors.insert(module, ctx.errors.clone());
+        }
+
+        // Collect exports for this module.
+        let exports_functions = collect_module_exports(db, script);
+        let exports = ModuleExports::new(db, module, exports_functions);
+        module_exports_map.insert(module, exports);
+    }
+
+    PackageWorldTypecheckResult::new(db, graph, module_errors, module_exports_map)
+}
+
 /// Collect function signature without checking body (first pass).
 fn collect_function_signature<'db>(
     ctx: &mut TypeContext<'db>,
@@ -177,7 +308,7 @@ fn collect_function_signature<'db>(
         }
     }
 
-    // Convert return type.
+    // Convert return type (default to Void if not specified).
     let ret_ty = match return_type {
         Some(type_hint) => {
             match convert_type_hint(db, type_hint) {
@@ -189,8 +320,8 @@ fn collect_function_signature<'db>(
             }
         }
         None => {
-            ctx.add_error(TypeError::CannotSynthesize);
-            return;
+            // Functions without explicit return type default to void.
+            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, Type::Void)
         }
     };
 
@@ -309,6 +440,11 @@ fn check_statement<'db>(
 
         Statement::Require(_) => {
             // TODO: implement require type checking.
+        }
+
+        Statement::Import(_) => {
+            // TODO: implement import type checking.
+            // This will be handled in typecheck_package_world.
         }
 
         Statement::If(stmt) => {
@@ -536,6 +672,7 @@ fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
             )
         }
         Type::Function(_) => false,
+        Type::Void => false,
     }
 }
 
@@ -660,7 +797,175 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             let ret = type_to_string(db, func.return_type(db).ty(db));
             format!("({}) -> {}", params.join(", "), ret)
         }
+        Type::Void => "void".to_string(),
     }
+}
+
+/// Topologically sort modules by dependencies.
+/// Returns modules in dependency order (leaves first).
+fn topological_sort_modules<'db>(
+    db: &'db dyn crate::Db,
+    graph: bct::package_resolve2::PackageWorldModuleGraph<'db>,
+) -> Result<Vec<bct::package2::PackageModule>, TypeError> {
+    use std::collections::VecDeque;
+
+    let map = graph.map(db);
+
+    // Build dependency maps:
+    // dependencies: module -> set of modules it depends on
+    // dependents: module -> set of modules that depend on it
+    let mut dependencies: BTreeMap<bct::package2::PackageModule, BTreeSet<bct::package2::PackageModule>> = BTreeMap::new();
+    let mut dependents: BTreeMap<bct::package2::PackageModule, BTreeSet<bct::package2::PackageModule>> = BTreeMap::new();
+
+    for &module in map.keys() {
+        dependencies.insert(module, BTreeSet::new());
+        dependents.insert(module, BTreeSet::new());
+    }
+
+    for (&module, deps) in map.iter() {
+        for (_, resolved) in deps.iter() {
+            if let bct::package_resolve2::ResolvedPackageModule::Resolved(dep_module) = resolved {
+                dependencies.get_mut(&module).unwrap().insert(*dep_module);
+                dependents.get_mut(dep_module).unwrap().insert(module);
+            }
+        }
+    }
+
+    // Calculate in-degree for each module (number of dependencies).
+    let mut in_degree: HashMap<bct::package2::PackageModule, usize> = HashMap::new();
+    for (&module, deps) in &dependencies {
+        in_degree.insert(module, deps.len());
+    }
+
+    // Start with modules that have no dependencies (in-degree 0).
+    let mut queue: VecDeque<bct::package2::PackageModule> = VecDeque::new();
+    for (&module, &degree) in &in_degree {
+        if degree == 0 {
+            queue.push_back(module);
+        }
+    }
+
+    let mut sorted = Vec::new();
+
+    while let Some(module) = queue.pop_front() {
+        sorted.push(module);
+
+        // For each module that depends on this one, decrease its in-degree.
+        if let Some(dependent_modules) = dependents.get(&module) {
+            for &dependent in dependent_modules {
+                let degree = in_degree.get_mut(&dependent).unwrap();
+                *degree -= 1;
+                if *degree == 0 {
+                    queue.push_back(dependent);
+                }
+            }
+        }
+    }
+
+    // If sorted doesn't contain all modules, there's a cycle (shouldn't happen with validated graph).
+    if sorted.len() != map.len() {
+        return Err(TypeError::DatalitError("cycle in module dependencies".to_string()));
+    }
+
+    Ok(sorted)
+}
+
+/// Build module alias map from require module statements.
+/// Maps module aliases to their resolved PackageModules.
+fn build_module_alias_map<'db>(
+    db: &'db dyn crate::Db,
+    script: Script<'db>,
+    graph: bct::package_resolve2::PackageWorldModuleGraph<'db>,
+    current_module: bct::package2::PackageModule,
+) -> HashMap<InternedText<'db>, bct::package2::PackageModule> {
+    let mut alias_map = HashMap::new();
+
+    // Get the dependencies for this module from the graph.
+    let map = graph.map(db);
+    if let Some(deps) = map.get(&current_module) {
+        // Build a map from import demands to resolved modules.
+        let mut demand_to_module = HashMap::new();
+        for (demand, resolved) in deps {
+            if let bct::package_resolve2::ResolvedPackageModule::Resolved(module) = resolved {
+                demand_to_module.insert(demand, *module);
+            }
+        }
+
+        // Scan script for require module statements and map aliases.
+        for statement in script.statements(db) {
+            if let Statement::Require(StmtRequire::Module(req)) = statement {
+                let import_space = req.import_space(db);
+                let package_alias = req.package_alias(db);
+                let module_alias = req.module_alias(db);
+
+                let demand = (
+                    import_space.as_str(db).S(),
+                    package_alias.as_str(db).S(),
+                    module_alias.as_str(db).S(),
+                );
+
+                if let Some(&resolved_module) = demand_to_module.get(&demand) {
+                    alias_map.insert(module_alias, resolved_module);
+                }
+            }
+        }
+    }
+
+    alias_map
+}
+
+/// Collect function signatures exported from a module.
+fn collect_module_exports<'db>(
+    db: &'db dyn crate::Db,
+    script: Script<'db>,
+) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
+    let mut functions = Vec::new();
+
+    // Collect all top-level function signatures.
+    for statement in script.statements(db) {
+        if let Statement::Fun(stmt) = statement {
+            let name = stmt.name(db);
+            let params = stmt.params(db);
+            let return_type = stmt.return_type(db);
+
+            // Convert parameter types.
+            let mut param_types = Vec::new();
+            let mut has_error = false;
+            for param in params {
+                match convert_type_hint(db, param.type_hint(db)) {
+                    Ok(ty) => param_types.push(ty),
+                    Err(_) => {
+                        has_error = true;
+                        break;
+                    }
+                }
+            }
+
+            if has_error {
+                continue;
+            }
+
+            // Convert return type (default to Void if not specified).
+            let ret_ty = match return_type {
+                Some(type_hint) => {
+                    match convert_type_hint(db, type_hint) {
+                        Ok(ty) => ty,
+                        Err(_) => continue,
+                    }
+                }
+                None => {
+                    // Functions without explicit return type default to void.
+                    TypeAndHeap::new(db, datalit::ast::Heap::Omitted, Type::Void)
+                }
+            };
+
+            // Create function type.
+            let func_type = TypeFunction::new(db, param_types, ret_ty);
+            functions.push((name, func_type));
+        }
+    }
+
+    functions
 }
 
 #[cfg(test)]

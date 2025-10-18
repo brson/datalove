@@ -17,6 +17,7 @@ pub enum Statement<'db> {
     Fun(StmtFun<'db>),
     Ret(StmtRet<'db>),
     Require(StmtRequire<'db>),
+    Import(StmtImport<'db>),
     If(StmtIf<'db>),
     ParseError(StmtParseError<'db>),
 }
@@ -77,6 +78,12 @@ pub struct StmtRequireModule<'db> {
 pub struct StmtRequireData<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+}
+
+#[salsa::tracked]
+pub struct StmtImport<'db> {
+    pub module_name: InternedText<'db>,
+    pub item_name: InternedText<'db>,
 }
 
 #[salsa::tracked]

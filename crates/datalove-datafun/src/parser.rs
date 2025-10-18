@@ -137,6 +137,7 @@ impl<'db> Parser<'db> {
             Some("fun") => self.parse_fun(&mut tokens, remaining_lines),
             Some("ret") => self.parse_ret(&mut tokens),
             Some("require") => self.parse_require(&mut tokens),
+            Some("import") => self.parse_import(&mut tokens),
             Some("if") => self.parse_if(&mut tokens, remaining_lines),
             _ => {
                 let message = InternedText::new(self.db, "unexpected statement".S());
@@ -408,6 +409,34 @@ impl<'db> Parser<'db> {
                 ast::Statement::ParseError(ast::StmtParseError::new(self.db, message))
             }
         }
+    }
+
+    fn parse_import(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> ast::Statement<'db> {
+        self.eat_word(tokens, "import");
+
+        // Parse module name.
+        let module_name = self.need_name(tokens);
+
+        // Need dot sigil.
+        if !self.peek_sigil(tokens, Sigil::Dot) {
+            let message = InternedText::new(self.db, "expected '.' after module name".S());
+            return ast::Statement::ParseError(ast::StmtParseError::new(self.db, message));
+        }
+        self.eat_sigil(tokens, Sigil::Dot);
+
+        // Parse item name.
+        let item_name = self.need_name(tokens);
+
+        ast::Statement::Import(
+            ast::StmtImport::new(
+                self.db,
+                module_name,
+                item_name,
+            )
+        )
     }
 
     fn parse_if(
@@ -960,6 +989,44 @@ mod tests {
                 assert_eq!(stmt.module_alias(db).as_str(db), "bool");
             }
             _ => panic!("expected require module statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_import() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("import u32.negate"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Import(stmt) => {
+                assert_eq!(stmt.module_name(db).as_str(db), "u32");
+                assert_eq!(stmt.item_name(db).as_str(db), "negate");
+            }
+            _ => panic!("expected import statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_import_with_require() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("require module sys/std/u32\nimport u32.negate"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 2);
+        match &statements[0] {
+            ast::Statement::Require(ast::StmtRequire::Module(stmt)) => {
+                assert_eq!(stmt.module_alias(db).as_str(db), "u32");
+            }
+            _ => panic!("expected require module statement"),
+        }
+        match &statements[1] {
+            ast::Statement::Import(stmt) => {
+                assert_eq!(stmt.module_name(db).as_str(db), "u32");
+                assert_eq!(stmt.item_name(db).as_str(db), "negate");
+            }
+            _ => panic!("expected import statement"),
         }
     }
 
