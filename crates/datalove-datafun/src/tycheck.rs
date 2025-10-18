@@ -160,6 +160,81 @@ pub fn type_check<'db>(
     TypecheckResult::new(db, script, errors)
 }
 
+/// Typecheck a script with package world support.
+///
+/// This version of type_check allows scripts to import functions from modules
+/// in the package world.
+#[salsa::tracked]
+pub fn type_check_with_package_world<'db>(
+    db: &'db dyn crate::Db,
+    script: Script<'db>,
+    package_world: crate::package::PackageWorld,
+    package_world_typecheck: PackageWorldTypecheckResult<'db>,
+) -> TypecheckResult<'db> {
+    let mut ctx = TypeContext::new(db);
+
+    // Build module alias map from require statements.
+    let graph = package_world_typecheck.graph(db);
+    let module_exports_map = package_world_typecheck.module_exports(db);
+    let alias_map = build_script_module_alias_map(db, script, package_world, graph);
+
+    // Process import statements to populate function signatures.
+    for statement in script.statements(db) {
+        if let Statement::Import(import) = statement {
+            let module_name = import.module_name(db);
+            let item_name = import.item_name(db);
+
+            // Look up the module in the alias map.
+            if let Some(&imported_module) = alias_map.get(&module_name) {
+                // Look up the module exports.
+                if let Some(exports) = module_exports_map.get(&imported_module) {
+                    // Look up the function in the exports.
+                    let func_opt = exports.functions(db).iter()
+                        .find(|(name, _)| *name == item_name)
+                        .map(|(_, func_type)| *func_type);
+
+                    if let Some(func_type) = func_opt {
+                        // Add the function to the context.
+                        ctx.add_function(item_name, func_type);
+                    } else {
+                        ctx.add_error(TypeError::UnresolvedName(
+                            format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
+                        ));
+                    }
+                } else {
+                    ctx.add_error(TypeError::UnresolvedName(
+                        format!("module {} (not typechecked)", module_name.as_str(db))
+                    ));
+                }
+            } else {
+                ctx.add_error(TypeError::UnresolvedName(
+                    format!("module {} (not required)", module_name.as_str(db))
+                ));
+            }
+        }
+    }
+
+    // First pass: collect all function signatures.
+    for statement in script.statements(db) {
+        if let Statement::Fun(stmt) = statement {
+            collect_function_signature(&mut ctx, stmt);
+        }
+    }
+
+    // Second pass: type check all statements (including function bodies).
+    for statement in script.statements(db) {
+        check_statement(&mut ctx, statement);
+    }
+
+    let errors = ctx
+        .errors
+        .into_iter()
+        .map(|e| TypeErrorEntry::new(db, e))
+        .collect();
+
+    TypecheckResult::new(db, script, errors)
+}
+
 /// Look up the type of a variable after typechecking.
 ///
 /// This re-runs typechecking to get the variable type.
@@ -907,6 +982,59 @@ fn build_module_alias_map<'db>(
                 if let Some(&resolved_module) = demand_to_module.get(&demand) {
                     alias_map.insert(module_alias, resolved_module);
                 }
+            }
+        }
+    }
+
+    alias_map
+}
+
+/// Build module alias map for a script (not a module in package world).
+///
+/// This maps module aliases (from require statements) to actual package modules.
+pub fn build_script_module_alias_map<'db>(
+    db: &'db dyn crate::Db,
+    script: Script<'db>,
+    package_world: crate::package::PackageWorld,
+    _graph: bct::package_resolve2::PackageWorldModuleGraph<'db>,
+) -> HashMap<InternedText<'db>, bct::package2::PackageModule> {
+    let mut alias_map = HashMap::new();
+
+    // Build a map from (import_space, package_name, module_name) to PackageModule.
+    // We need to traverse the package world structure to find modules by their hierarchy.
+    let mut hierarchy_map = HashMap::new();
+
+    // Create the package world map.
+    let world_map = crate::package::package_world_map(db, package_world);
+
+    for (import_space, packages) in world_map.map(db) {
+        for (package_name, package) in packages {
+            for (module_name, module) in package.modules(db) {
+                let key = (
+                    import_space.as_str().S(),
+                    package_name.as_str().S(),
+                    module_name.as_str().S(),
+                );
+                hierarchy_map.insert(key, *module);
+            }
+        }
+    }
+
+    // Scan script for require module statements and map to modules.
+    for statement in script.statements(db) {
+        if let Statement::Require(StmtRequire::Module(req)) = statement {
+            let import_space = req.import_space(db);
+            let package_alias = req.package_alias(db);
+            let module_alias = req.module_alias(db);
+
+            let key = (
+                import_space.as_str(db).S(),
+                package_alias.as_str(db).S(),
+                module_alias.as_str(db).S(),
+            );
+
+            if let Some(&module) = hierarchy_map.get(&key) {
+                alias_map.insert(module_alias, module);
             }
         }
     }

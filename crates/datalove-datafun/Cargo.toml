@@ -36,3 +36,8 @@ harness = false
 name = "tycheck_world_tests"
 path = "tests/tycheck_world_tests.rs"
 harness = false
+
+[[test]]
+name = "interp_with_package_tests"
+path = "tests/interp_with_package_tests.rs"
+harness = false

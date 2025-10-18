@@ -66,6 +66,10 @@ pub struct InterpContext<'db> {
     /// Function definitions (name -> definition).
     pub functions: HashMap<InternedText<'db>, StmtFun<'db>>,
 
+    /// Module function definitions (module_alias -> (function_name -> definition)).
+    /// Used for resolving import statements.
+    module_functions: HashMap<InternedText<'db>, HashMap<InternedText<'db>, StmtFun<'db>>>,
+
     /// Current call stack depth (for recursion protection).
     pub call_depth: usize,
 }
@@ -80,8 +84,45 @@ impl<'db> InterpContext<'db> {
             tydesc_table: crate::datalit::tydesc_table::TyDescTable::new(db),
             variables: HashMap::new(),
             functions: HashMap::new(),
+            module_functions: HashMap::new(),
             call_depth: 0,
         }
+    }
+
+    /// Create interpreter context with package world support.
+    ///
+    /// This pre-loads all module functions from the package world,
+    /// enabling import statements to work.
+    pub fn with_package_world(
+        db: &'db dyn crate::Db,
+        type_table: TypeTable,
+        script: &crate::ast::Script<'db>,
+        package_world: crate::package::PackageWorld,
+        typecheck_result: &crate::tycheck::PackageWorldTypecheckResult<'db>,
+    ) -> Self {
+        let mut ctx = Self::new(db, type_table);
+
+        // Build module alias map from require statements.
+        let graph = typecheck_result.graph(db);
+        let alias_map = crate::tycheck::build_script_module_alias_map(db, *script, package_world, graph);
+
+        // For each required module, parse it and collect function definitions.
+        for (module_alias, package_module) in alias_map {
+            let source = package_module.text(db);
+            let module_script = crate::parser::parse(db, source);
+
+            let mut module_funcs = HashMap::new();
+            for statement in module_script.statements(db) {
+                if let crate::ast::Statement::Fun(fun) = statement {
+                    let name = fun.name(db);
+                    module_funcs.insert(name, *fun);
+                }
+            }
+
+            ctx.module_functions.insert(module_alias, module_funcs);
+        }
+
+        ctx
     }
 
     /// Execute a script.
@@ -127,13 +168,32 @@ impl<'db> InterpContext<'db> {
             }
 
             Statement::Require(_) => {
-                // TODO: implement module loading.
-                Err(InterpError::NotImplemented("require statement".to_string()))
+                // Require statements are processed during context creation.
+                // No runtime action needed.
+                Ok(())
             }
 
-            Statement::Import(_) => {
-                // TODO: implement module imports.
-                Err(InterpError::NotImplemented("import statement".to_string()))
+            Statement::Import(stmt) => {
+                let module_name = stmt.module_name(self.db);
+                let item_name = stmt.item_name(self.db);
+
+                // Look up the module in module_functions.
+                if let Some(module_funcs) = self.module_functions.get(&module_name) {
+                    // Look up the function in the module.
+                    if let Some(func) = module_funcs.get(&item_name) {
+                        // Add the function to the local function table.
+                        self.functions.insert(item_name, *func);
+                        Ok(())
+                    } else {
+                        Err(InterpError::UnresolvedName(
+                            format!("{}.{}", module_name.as_str(self.db), item_name.as_str(self.db))
+                        ))
+                    }
+                } else {
+                    Err(InterpError::UnresolvedName(
+                        format!("module {} (not required)", module_name.as_str(self.db))
+                    ))
+                }
             }
 
             Statement::If(stmt) => {

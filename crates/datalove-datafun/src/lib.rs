@@ -22,6 +22,7 @@ pub mod package_load;
 pub mod package_load_worldfile;
 pub mod import_demands;
 pub mod package_resolve;
+pub mod script_world;
 
 pub use datalove_datalit as datalit;
 

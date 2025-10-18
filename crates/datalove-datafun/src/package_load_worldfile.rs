@@ -4,6 +4,12 @@ use rmx::std::io::Read;
 
 use crate::package_load::{PackageWorld, Package, PackageModule, PackageName, ModuleName};
 
+/// Result of loading a worldfile that may contain both modules and a script.
+pub struct WorldfileWithScript {
+    pub package_world: PackageWorld,
+    pub script: Option<String>,
+}
+
 /// Load a package world from a worldfile format byte stream.
 ///
 /// The worldfile format consists of sections separated by "----------" lines.
@@ -29,10 +35,37 @@ use crate::package_load::{PackageWorld, Package, PackageModule, PackageName, Mod
 pub fn load_world_from_worldfile(
     mut reader: impl Read,
 ) -> AnyResult<PackageWorld> {
+    let result = load_worldfile_with_script(reader)?;
+    Ok(result.package_world)
+}
+
+/// Load a worldfile that may contain both modules and a script.
+///
+/// The worldfile format supports an optional "script" section:
+/// ```notrust
+/// ----------
+/// module sys/std/u32
+/// ----------
+///
+/// fun add(x: @u32, y: @u32): @u32
+///   ret x + y
+/// end fun
+///
+/// ----------
+/// script
+/// ----------
+///
+/// require module sys/std/u32
+/// import u32.add
+/// let output = add(@5, @10)
+/// ```
+pub fn load_worldfile_with_script(
+    mut reader: impl Read,
+) -> AnyResult<WorldfileWithScript> {
     let mut content = String::new();
     reader.read_to_string(&mut content)?;
 
-    let sections = parse_worldfile(&content)?;
+    let (sections, script) = parse_worldfile(&content)?;
 
     let mut pkglib_system = BTreeMap::new();
     let mut pkglib_local = BTreeMap::new();
@@ -50,18 +83,23 @@ pub fn load_world_from_worldfile(
                 modules: BTreeMap::new(),
             });
 
+        let module_path_str = format!("{}/{}/{}", section.library, section.package, section.module);
+
         let module = PackageModule {
             name: section.module.C(),
-            path: format!("{}/{}/{}", section.library, section.package, section.module).into(),
+            path: module_path_str.C().into(),
             text: section.source,
         };
 
         package.modules.insert(section.module, module);
     }
 
-    Ok(PackageWorld {
-        pkglib_system,
-        pkglib_local,
+    Ok(WorldfileWithScript {
+        package_world: PackageWorld {
+            pkglib_system,
+            pkglib_local,
+        },
+        script,
     })
 }
 
@@ -72,8 +110,9 @@ struct Section {
     source: String,
 }
 
-fn parse_worldfile(content: &str) -> AnyResult<Vec<Section>> {
+fn parse_worldfile(content: &str) -> AnyResult<(Vec<Section>, Option<String>)> {
     let mut sections = Vec::new();
+    let mut script = None;
     let lines: Vec<&str> = content.lines().collect();
     let mut i = 0;
 
@@ -97,19 +136,46 @@ fn parse_worldfile(content: &str) -> AnyResult<Vec<Section>> {
             bail!("unexpected end of file after separator");
         }
 
-        // Read the path.
-        let path_line = lines[i].trim();
-        if path_line.is_empty() {
-            bail!("expected 'module library/package/module' at line {}, found empty line", i + 1);
+        // Read the header line.
+        let header_line = lines[i].trim();
+        if header_line.is_empty() {
+            bail!("expected 'module library/package/module' or 'script' at line {}, found empty line", i + 1);
         }
 
-        let Some(path) = path_line.strip_prefix("module ") else {
-            bail!("expected 'module' prefix at line {}, found '{path_line}'", i + 1);
+        // Check if this is a script section.
+        if header_line == "script" {
+            i += 1;
+
+            if i >= lines.len() {
+                bail!("unexpected end of file after 'script' header");
+            }
+
+            // Expect second separator.
+            if !is_separator(lines[i]) {
+                bail!("expected '----------' separator at line {}, found '{}'", i + 1, lines[i]);
+            }
+
+            i += 1;
+
+            // Read script source until next separator or end.
+            let mut script_lines = Vec::new();
+            while i < lines.len() && !is_separator(lines[i]) {
+                script_lines.push(lines[i]);
+                i += 1;
+            }
+
+            script = Some(script_lines.join("\n"));
+            continue;
+        }
+
+        // Otherwise, it must be a module section.
+        let Some(path) = header_line.strip_prefix("module ") else {
+            bail!("expected 'module' prefix or 'script' at line {}, found '{header_line}'", i + 1);
         };
 
         let parts: Vec<&str> = path.split('/').collect();
         if parts.len() != 3 {
-            bail!("path must be 'module library/package/module', got '{path_line}'");
+            bail!("path must be 'module library/package/module', got '{header_line}'");
         }
 
         let library = S(parts[0]);
@@ -146,7 +212,7 @@ fn parse_worldfile(content: &str) -> AnyResult<Vec<Section>> {
         });
     }
 
-    Ok(sections)
+    Ok((sections, script))
 }
 
 fn is_separator(line: &str) -> bool {
@@ -274,5 +340,61 @@ end fun
         assert!(sys_collections.modules.contains_key("list"));
         assert!(sys_collections.modules.contains_key("map"));
         assert!(sys_collections.modules.contains_key("set"));
+    }
+
+    #[test]
+    fn test_worldfile_with_script() {
+        let worldfile = r#"
+----------
+module sys/std/u32
+----------
+
+fun add(x: @u32, y: @u32): @u32
+  ret x + y
+end fun
+
+----------
+script
+----------
+
+require module sys/std/u32
+import u32.add
+let output = add(@5, @10)
+"#;
+
+        let result = load_worldfile_with_script(worldfile.as_bytes()).X();
+
+        // Check package world.
+        assert_eq!(result.package_world.pkglib_system.len(), 1);
+        let sys_std = result.package_world.pkglib_system.get("std").X();
+        assert_eq!(sys_std.modules.len(), 1);
+        assert!(sys_std.modules.contains_key("u32"));
+
+        // Check script.
+        assert!(result.script.is_some());
+        let script = result.script.unwrap();
+        assert!(script.contains("require module sys/std/u32"));
+        assert!(script.contains("import u32.add"));
+        assert!(script.contains("let output = add(@5, @10)"));
+    }
+
+    #[test]
+    fn test_worldfile_without_script() {
+        let worldfile = r#"
+----------
+module sys/std/bool
+----------
+
+fun foo()
+end fun
+"#;
+
+        let result = load_worldfile_with_script(worldfile.as_bytes()).X();
+
+        // Check package world.
+        assert_eq!(result.package_world.pkglib_system.len(), 1);
+
+        // Check no script.
+        assert!(result.script.is_none());
     }
 }

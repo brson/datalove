@@ -1,0 +1,17 @@
+----------
+module sys/std/u32
+----------
+
+fun add(x: @u32, y: @u32): @u32
+  ret x + y
+end fun
+
+----------
+script
+----------
+
+require module sys/std/u32
+
+import u32.add
+
+let output = add(@5, @10)
