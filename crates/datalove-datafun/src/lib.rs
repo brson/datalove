@@ -19,6 +19,7 @@ pub mod eval_datafun;
 // Module system.
 pub mod package;
 pub mod package_load;
+pub mod package_load_worldfile;
 pub mod import_demands;
 pub mod package_resolve;
 
