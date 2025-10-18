@@ -1,0 +1,2 @@
+// Test Result type with Err value (direct assignment, no cloning)
+let output: !u32 = @error @"something went wrong"

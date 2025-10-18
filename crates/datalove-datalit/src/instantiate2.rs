@@ -174,6 +174,16 @@ fn instantiate_expr_into<'db>(
             instantiate_option(db, rt, true, Some(expr), opt.inner_type(db), tydesc_table, tydesc, dest_ptr)
         }
 
+        (Expr::Err(err_expr), Type::Result(res)) => {
+            let tydesc = tydesc_table.get_or_create(ty);
+            instantiate_result(db, rt, false, None, Some(err_expr.value(db)), res.inner_type(db), tydesc_table, tydesc, dest_ptr)
+        }
+
+        (_, Type::Result(res)) => {
+            let tydesc = tydesc_table.get_or_create(ty);
+            instantiate_result(db, rt, true, Some(expr), None, res.inner_type(db), tydesc_table, tydesc, dest_ptr)
+        }
+
         (Expr::Data(data_expr), Type::Data) => {
             let tydesc = tydesc_table.get_or_create(ty);
             instantiate_data(db, rt, data_expr.value(db), tydesc_table, tydesc, dest_ptr)
@@ -570,6 +580,56 @@ fn instantiate_option<'db>(
         instantiate_expr_into(db, rt, payload, inner_type.ty(db), tydesc_table, payload_dest)?;
     } else {
         unsafe { *dest_ptr = rtdt::OptionTag::None as u8 };
+    }
+
+    Ok(dest_ptr as *const u8)
+}
+
+fn instantiate_result<'db>(
+    db: &'db dyn crate::Db,
+    rt: &mut datalove_rt::rt_local::RtLocal,
+    is_ok: bool,
+    ok_payload_expr: Option<ExprFull<'db>>,
+    err_payload_expr: Option<ExprFull<'db>>,
+    ok_type: TypeAndHeap<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    result_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
+) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc) };
+
+    if is_ok {
+        unsafe { *dest_ptr = rtdt::ResultTag::Ok as u8 };
+
+        let payload = ok_payload_expr.ok_or_else(|| anyhow!("Ok variant missing payload"))?;
+        let payload_dest = unsafe { dest_ptr.add(layout.payload_offset as usize) };
+        instantiate_expr_into(db, rt, payload, ok_type.ty(db), tydesc_table, payload_dest)?;
+    } else {
+        unsafe { *dest_ptr = rtdt::ResultTag::Err as u8 };
+
+        let err_payload = err_payload_expr.ok_or_else(|| anyhow!("Err variant missing payload"))?;
+        let payload_dest = unsafe { dest_ptr.add(layout.payload_offset as usize) };
+
+        // Instantiate the error payload (which is an Error type).
+        let resolved = crate::resolve::resolve_names(db, err_payload);
+        let typechecked = crate::tycheck::type_check(db, err_payload, resolved);
+
+        let inner_type = typechecked.root_type(db)
+            .ok_or_else(|| anyhow!("Cannot determine type of error value"))?;
+
+        let inner_tydesc = tydesc_table.get_or_create(inner_type.ty(db));
+        let inner_value = instantiate_expr(db, rt, err_payload, inner_type.ty(db), tydesc_table)?;
+
+        let error_ptr = payload_dest as *mut rtdt::Error;
+
+        unsafe {
+            // Error has same layout as Data, so we write it as Data.
+            std::ptr::write(
+                error_ptr as *mut rtdt::Data,
+                rtdt::Data::from_pointers(inner_tydesc, inner_value)
+            );
+        }
     }
 
     Ok(dest_ptr as *const u8)
@@ -1927,6 +1987,59 @@ mod tests {
             datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst.tydesc, 1, inst.ptr as *mut u8);
             let rt = Box::from_raw(rt_handle as *mut datalove_rt::rt_local::RtLocal);
             rt.shutdown();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_result_ok_u32() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @!@u32 / @42")?;
+        let rt = datalove_rt::rt_local::RtLocal::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::rt_local::RtLocal) };
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Result);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::ResultTag::Ok as u8);
+
+            let layout = rtdt::layout::compute_result_layout(inst.tydesc);
+            let payload_ptr = inst.ptr.add(layout.payload_offset as usize) as *const u32;
+            assert_eq!(*payload_ptr, 42);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_result_err() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile(&db, ": @!@u32 / @error @\"oops\"")?;
+        let rt = datalove_rt::rt_local::RtLocal::new();
+        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::rt_local::RtLocal) };
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Result);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::ResultTag::Err as u8);
+
+            let layout = rtdt::layout::compute_result_layout(inst.tydesc);
+            let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
+
+            // The error payload is an Error type (which has same layout as Data).
+            let error_ptr = payload_ptr as *const rtdt::Error;
+            let inner_tydesc = (*error_ptr).tydesc();
+            let inner_value_ptr = (*error_ptr).value_ptr();
+
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::String);
+            let string_ptr = inner_value_ptr as *const rtdt::String;
+            let string_bytes = std::slice::from_raw_parts((*string_ptr).data, (*string_ptr).size as usize);
+            assert_eq!(string_bytes, b"oops");
         }
         Ok(())
     }
