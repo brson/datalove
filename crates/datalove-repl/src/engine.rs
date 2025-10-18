@@ -284,7 +284,8 @@ impl<'db> Engine<'db> {
 
         // Build type table for the full script.
         let tycheck_result = datafun::tycheck::type_check(db, parsed_script);
-        let type_table = match datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result) {
+        let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(db);
+        let type_table = match datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result, &mut tydesc_table) {
             Ok(table) => table,
             Err(e) => return Eval::Error(format!("type table error: {}", e)),
         };
@@ -355,7 +356,8 @@ impl<'db> Engine<'db> {
         }
 
         // Build type table for the full script (including temp expression).
-        let type_table = match datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result) {
+        let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(db);
+        let type_table = match datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result, &mut tydesc_table) {
             Ok(table) => table,
             Err(e) => return Eval::Error(format!("type table error: {}", e)),
         };

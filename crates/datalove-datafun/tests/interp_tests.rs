@@ -20,7 +20,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     }
 
     // Build type table.
-    let type_table = datafun::type_table::TypeTable::build(&db, script, tycheck_result)
+    let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(&db);
+    let type_table = datafun::type_table::TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
         .map_err(|e| format!("Failed to build type table: {}", e))?;
 
     // Create interpreter context.

@@ -10,7 +10,6 @@ pub mod resolution;
 pub mod tycheck;
 
 // Interpreter modules.
-pub mod tydesc_gen;
 pub mod type_table;
 pub mod value;
 pub mod interp;

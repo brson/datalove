@@ -7,8 +7,7 @@ use salsa::plumbing::AsId;
 use datalove_rtdt as rtdt;
 use crate::ast::*;
 use crate::datalit;
-use crate::tycheck::{Type, TypecheckResult};
-use crate::tydesc_gen::TyDescCache;
+use crate::tycheck::TypecheckResult;
 
 /// Table mapping expression IDs to their type descriptors.
 ///
@@ -19,9 +18,6 @@ pub struct TypeTable {
 
     /// Type descriptors for datafun expressions, indexed by expression ID.
     datafun_expr_types: Vec<*const rtdt::TyDesc>,
-
-    /// Cache that owns all TyDesc allocations.
-    _cache: TyDescCache,
 }
 
 impl TypeTable {
@@ -30,7 +26,6 @@ impl TypeTable {
         TypeTable {
             expr_types: Vec::new(),
             datafun_expr_types: Vec::new(),
-            _cache: TyDescCache::new(),
         }
     }
 
@@ -39,15 +34,15 @@ impl TypeTable {
         db: &'db dyn crate::Db,
         script: Script<'db>,
         tycheck_result: TypecheckResult<'db>,
+        tydesc_table: &mut datalit::tydesc_table::TyDescTable<'db>,
     ) -> Result<Self, String> {
         if !tycheck_result.errors(db).is_empty() {
             return Err(format!("Type errors found: {} errors", tycheck_result.errors(db).len()));
         }
 
-        let mut cache = TyDescCache::new();
         let mut builder = TypeTableBuilder {
             db,
-            cache: &mut cache,
+            tydesc_table,
             expr_types: Vec::new(),
             datafun_expr_types: Vec::new(),
         };
@@ -58,7 +53,6 @@ impl TypeTable {
         Ok(TypeTable {
             expr_types: builder.expr_types,
             datafun_expr_types: builder.datafun_expr_types,
-            _cache: cache,
         })
     }
 
@@ -90,7 +84,7 @@ impl TypeTable {
 /// Builder for type table.
 struct TypeTableBuilder<'a, 'db> {
     db: &'db dyn crate::Db,
-    cache: &'a mut TyDescCache,
+    tydesc_table: &'a mut datalit::tydesc_table::TyDescTable<'db>,
     expr_types: Vec<*const rtdt::TyDesc>,
     datafun_expr_types: Vec<*const rtdt::TyDesc>,
 }
@@ -191,8 +185,8 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
         let tycheck_result = datalit::tycheck::type_check(self.db, expr, resolved);
 
         if let Some(root_type) = tycheck_result.root_type(self.db) {
-            let datafun_type = Type::Datalit(root_type.ty(self.db).clone());
-            let tydesc = self.cache.generate(self.db, &datafun_type);
+            let datalit_type = root_type.ty(self.db);
+            let tydesc = self.tydesc_table.get_or_create(datalit_type);
 
             // Store in the table at the expression's ID index.
             let id = expr.as_id();
@@ -299,12 +293,13 @@ mod tests {
     fn build_type_table_from_source<'db>(
         db: &'db dyn crate::Db,
         source_text: &str,
-    ) -> Result<(Script<'db>, TypeTable), String> {
+    ) -> Result<(Script<'db>, TypeTable, datalit::tydesc_table::TyDescTable<'db>), String> {
         let source = Source::new(db, source_text.S());
         let script = crate::parser::parse(db, source);
         let tycheck_result = crate::tycheck::type_check(db, script);
-        let type_table = TypeTable::build(db, script, tycheck_result)?;
-        Ok((script, type_table))
+        let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(db);
+        let type_table = TypeTable::build(db, script, tycheck_result, &mut tydesc_table)?;
+        Ok((script, type_table, tydesc_table))
     }
 
     #[test]
@@ -321,14 +316,15 @@ mod tests {
         let source = Source::new(db, S("let x = undefined"));
         let script = crate::parser::parse(db, source);
         let tycheck_result = crate::tycheck::type_check(db, script);
-        let result = TypeTable::build(db, script, tycheck_result);
+        let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(db);
+        let result = TypeTable::build(db, script, tycheck_result, &mut tydesc_table);
         assert!(result.is_err(), "Expected build to fail with type errors");
     }
 
     #[test]
     fn test_get_expr_type_for_u32_literal() {
         let ref db = crate::Database::default();
-        let (script, type_table) = build_type_table_from_source(db, "let x = @42")
+        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, "let x = @42")
             .expect("Failed to build type table");
 
         // Get the expression from the let statement.
@@ -358,7 +354,7 @@ mod tests {
     #[test]
     fn test_get_expr_type_for_another_u32_literal() {
         let ref db = crate::Database::default();
-        let (script, type_table) = build_type_table_from_source(db, "let x = @123")
+        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, "let x = @123")
             .expect("Failed to build type table");
 
         let statements = script.statements(db);
@@ -386,7 +382,7 @@ mod tests {
     #[test]
     fn test_get_datafun_expr_type() {
         let ref db = crate::Database::default();
-        let (script, type_table) = build_type_table_from_source(db, "let x = @42")
+        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, "let x = @42")
             .expect("Failed to build type table");
 
         let statements = script.statements(db);
@@ -412,7 +408,7 @@ mod tests {
     #[test]
     fn test_get_expr_type_returns_null_for_missing() {
         let ref db = crate::Database::default();
-        let (_, type_table) = build_type_table_from_source(db, "let x = @42")
+        let (_, type_table, _tydesc_table) = build_type_table_from_source(db, "let x = @42")
             .expect("Failed to build type table");
 
         // Create a new expression that's not in the type table.
@@ -441,7 +437,7 @@ mod tests {
     fn test_type_table_with_multiple_expressions() {
         let ref db = crate::Database::default();
         let source_text = "let x = @42\nlet y = @100\nlet z = @999";
-        let (script, type_table) = build_type_table_from_source(db, source_text)
+        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, source_text)
             .expect("Failed to build type table");
 
         let statements = script.statements(db);
@@ -472,7 +468,7 @@ mod tests {
     fn test_type_table_with_function() {
         let ref db = crate::Database::default();
         let source_text = "fun foo(): @u32\n  ret @42\nend fun";
-        let (script, type_table) = build_type_table_from_source(db, source_text)
+        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, source_text)
             .expect("Failed to build type table");
 
         let statements = script.statements(db);
@@ -510,7 +506,7 @@ mod tests {
         // Test with a simple let, since binops require variables which don't typecheck.
         // This test just verifies that expressions inside let statements get their types stored.
         let source_text = "let x = @42\nlet y = @100";
-        let (script, type_table) = build_type_table_from_source(db, source_text)
+        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, source_text)
             .expect("Failed to build type table");
 
         let statements = script.statements(db);

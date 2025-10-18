@@ -573,7 +573,8 @@ mod tests {
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         // Build type table.
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         // Create interpreter context.
@@ -610,7 +611,8 @@ mod tests {
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         // Build type table.
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         // Create interpreter context.
@@ -643,7 +645,8 @@ mod tests {
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         // Build type table.
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         // Create interpreter context.
@@ -676,7 +679,8 @@ mod tests {
         let tycheck_result = type_check(&db, script);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
@@ -704,7 +708,8 @@ mod tests {
         let tycheck_result = type_check(&db, script);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
@@ -732,7 +737,8 @@ mod tests {
         let tycheck_result = type_check(&db, script);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
@@ -760,7 +766,8 @@ mod tests {
         let tycheck_result = type_check(&db, script);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
@@ -788,7 +795,8 @@ mod tests {
         let tycheck_result = type_check(&db, script);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
@@ -816,7 +824,8 @@ mod tests {
         let tycheck_result = type_check(&db, script);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
@@ -844,7 +853,8 @@ mod tests {
         let tycheck_result = type_check(&db, script);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
@@ -872,7 +882,8 @@ mod tests {
         let tycheck_result = type_check(&db, script);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
-        let type_table = TypeTable::build(&db, script, tycheck_result)
+        let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
