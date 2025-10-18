@@ -10,13 +10,11 @@ pub type PackageName = String;
 pub type ModuleName = String;
 
 pub struct PackageWorldConfig {
-    pub file_package_main: PathBuf,
     pub dir_pkglib_system: PathBuf,
     pub dir_pkglib_local: Option<PathBuf>,
 }
 
 pub struct PackageWorld {
-    pub package_main: Package,
     pub pkglib_system: BTreeMap<PackageName, Package>,
     pub pkglib_local: BTreeMap<PackageName, Package>,
 }
@@ -37,10 +35,6 @@ pub struct PackageModule {
 pub async fn load_world(
     config: PackageWorldConfig,
 ) -> AnyResult<PackageWorld> {
-    let package_main = package_from_source_file(
-        config.file_package_main.C(),
-        None,
-    ).await?;
     let pkglib_system = load_library(&config.dir_pkglib_system).await?;
     let pkglib_local = if let Some(ref dir) = config.dir_pkglib_local {
         load_library(dir).await?
@@ -48,7 +42,7 @@ pub async fn load_world(
         BTreeMap::new()
     };
     Ok(PackageWorld {
-        package_main, pkglib_system, pkglib_local,
+        pkglib_system, pkglib_local,
     })
 }
 

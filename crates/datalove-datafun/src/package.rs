@@ -7,7 +7,6 @@ use bct::package_resolve2::PackageWorldMap;
 
 #[salsa::input]
 pub struct PackageWorld {
-    pub package_main: Package,
     #[returns(ref)]
     pub pkglib_system: BTreeMap<PackageName, Package>,
     #[returns(ref)]
@@ -22,7 +21,6 @@ pub fn import_from_loader<'db>(
 ) -> PackageWorld {
     PackageWorld::new(
         db,
-        make_package(db, package_world_raw.package_main),
         make_library(db, package_world_raw.pkglib_system),
         make_library(db, package_world_raw.pkglib_local),
     )
@@ -73,15 +71,11 @@ pub fn package_world_map<'db>(
     db: &'db dyn crate::Db,
     package_world: PackageWorld,
 ) -> PackageWorldMap<'db> {
-    let main = BTreeMap::from([(
-        package_world.package_main(db).name(db).C(),
-        package_world.package_main(db).C())]);
     let pkglib_system = package_world.pkglib_system(db).C();
     let pkglib_local = package_world.pkglib_local(db).C();
     PackageWorldMap::new(
         db,
         BTreeMap::from([
-            (S("main"), main),
             (S("sys"), pkglib_system),
             (S("local"), pkglib_local),
         ]),
