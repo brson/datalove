@@ -1,0 +1,17 @@
+fun test_result_destructuring(a: @!u8): u8
+    if a |value|
+        ret value
+    else |error|
+        ret 255
+    end if
+end fun
+
+fun test_result_else_binding(a: @!u32): u32
+    if a |value|
+        ret value
+    else |error|
+        // Error type is bound in the else clause.
+        // For now, just return a literal since we can't inspect the error value.
+        ret 0
+    end if
+end fun

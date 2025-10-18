@@ -1,0 +1,7 @@
+fun test_result_missing_error_binding(a: @!u8): u8
+    if a |value|
+        ret value
+    else
+        ret 255
+    end if
+end fun

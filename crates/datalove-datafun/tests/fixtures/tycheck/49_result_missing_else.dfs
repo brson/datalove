@@ -1,0 +1,5 @@
+fun test_result_missing_else(a: @!u8): u8
+    if a |value|
+        ret value
+    end if
+end fun

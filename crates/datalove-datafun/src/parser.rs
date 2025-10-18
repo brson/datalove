@@ -449,6 +449,16 @@ impl<'db> Parser<'db> {
         // Parse condition expression.
         let condition = self.parse_expr_full(tokens);
 
+        // Parse optional then binding: |identifier|
+        let then_binding = if self.peek_sigil(tokens, Sigil::Pipe) {
+            self.eat_sigil(tokens, Sigil::Pipe);
+            let binding = self.need_name(tokens);
+            self.need_sigil(tokens, Sigil::Pipe);
+            Some(binding)
+        } else {
+            None
+        };
+
         // Parse then body until we hit "else" or "end if".
         let mut then_body = vec![];
         let mut found_else = false;
@@ -466,7 +476,6 @@ impl<'db> Parser<'db> {
             if line.len() >= 1 {
                 if let Some(TreeToken::Token(t1)) = line.get(0) {
                     if let Some("else") = t1.word_str(self.db) {
-                        remaining_lines.next(); // consume "else" line
                         found_else = true;
                         break;
                     }
@@ -480,8 +489,23 @@ impl<'db> Parser<'db> {
             }
         }
 
-        // Parse else body if we found "else".
-        let else_body = if found_else {
+        // Parse else binding and body if we found "else".
+        let (else_binding, else_body) = if found_else {
+            // Consume the "else" line and parse any binding.
+            let (_, else_line) = remaining_lines.next().X();
+            let mut else_tokens = else_line.into_iter().peekable();
+            self.eat_word(&mut else_tokens, "else");
+
+            // Parse optional else binding: |identifier|
+            let else_binding = if self.peek_sigil(&mut else_tokens, Sigil::Pipe) {
+                self.eat_sigil(&mut else_tokens, Sigil::Pipe);
+                let binding = self.need_name(&mut else_tokens);
+                self.need_sigil(&mut else_tokens, Sigil::Pipe);
+                Some(binding)
+            } else {
+                None
+            };
+
             let mut body = vec![];
 
             while let Some((_, line)) = remaining_lines.peek() {
@@ -501,15 +525,17 @@ impl<'db> Parser<'db> {
                 }
             }
 
-            Some(body)
+            (else_binding, Some(body))
         } else {
-            None
+            (None, None)
         };
 
         ast::Statement::If(ast::StmtIf::new(
             self.db,
             condition,
+            then_binding,
             then_body,
+            else_binding,
             else_body,
         ))
     }

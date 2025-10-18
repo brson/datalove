@@ -1,0 +1,16 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test_option_destructuring",
+      "params": [
+        {
+          "name": "a",
+          "type": "?u8"
+        }
+      ],
+      "return_type": "u8"
+    }
+  ]
+}

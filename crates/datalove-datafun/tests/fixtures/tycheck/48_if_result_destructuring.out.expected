@@ -1,0 +1,27 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test_result_destructuring",
+      "params": [
+        {
+          "name": "a",
+          "type": "!u8"
+        }
+      ],
+      "return_type": "u8"
+    },
+    {
+      "kind": "function",
+      "name": "test_result_else_binding",
+      "params": [
+        {
+          "name": "a",
+          "type": "!u32"
+        }
+      ],
+      "return_type": "u32"
+    }
+  ]
+}

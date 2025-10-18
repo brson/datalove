@@ -89,8 +89,10 @@ pub struct StmtImport<'db> {
 #[salsa::tracked]
 pub struct StmtIf<'db> {
     pub condition: ExprFun<'db>,
+    pub then_binding: Option<InternedText<'db>>,
     #[returns(ref)]
     pub then_body: Vec<Statement<'db>>,
+    pub else_binding: Option<InternedText<'db>>,
     #[returns(ref)]
     pub else_body: Option<Vec<Statement<'db>>>,
 }

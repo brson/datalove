@@ -51,6 +51,9 @@ fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_jso
                 "message": msg
             })
         }
+        TypeError::ResultRequiresErrorBinding => {
+            json!("ResultRequiresErrorBinding")
+        }
     }
 }
 

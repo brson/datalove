@@ -42,6 +42,7 @@ pub enum TypeError {
     ArityMismatch { expected: usize, actual: usize },
     NotAFunction(String),
     DatalitError(String),
+    ResultRequiresErrorBinding,
 }
 
 /// Type error entry with location info.
@@ -524,29 +525,112 @@ fn check_statement<'db>(
 
         Statement::If(stmt) => {
             let condition = stmt.condition(db);
+            let then_binding = stmt.then_binding(db);
             let then_body = stmt.then_body(db);
+            let else_binding = stmt.else_binding(db);
             let else_body = stmt.else_body(db);
 
-            // Check condition is bool type.
-            let bool_type = TypeAndHeap::new(
-                db,
-                datalit::ast::Heap::Omitted,
-                Type::Datalit(datalit::tycheck::Type::Bool),
-            );
+            // If there's a binding, this is destructuring syntax.
+            if let Some(binding_name) = then_binding {
+                // Synthesize the condition type.
+                let condition_ty = match synthesize_expr(ctx, condition) {
+                    Ok(ty) => ty,
+                    Err(e) => {
+                        ctx.add_error(e);
+                        return;
+                    }
+                };
 
-            if let Err(e) = check_expr(ctx, condition, bool_type) {
-                ctx.add_error(e);
-            }
+                // Extract inner type from Option or Result.
+                let inner_ty = match condition_ty.ty(db) {
+                    Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
+                        opt.inner_type(db)
+                    }
+                    Type::Datalit(datalit::tycheck::Type::Result(res)) => {
+                        // Result destructuring requires error-binding else branch.
+                        if else_body.is_none() || else_binding.is_none() {
+                            ctx.add_error(TypeError::ResultRequiresErrorBinding);
+                            return;
+                        }
+                        res.inner_type(db)
+                    }
+                    _ => {
+                        ctx.add_error(TypeError::TypeMismatch {
+                            expected: "Option or Result".S(),
+                            actual: "other type".S(),
+                        });
+                        return;
+                    }
+                };
 
-            // Type check then body.
-            for stmt in then_body {
-                check_statement(ctx, stmt);
-            }
+                // Convert datalit TypeAndHeap to datafun TypeAndHeap.
+                let inner_heap = inner_ty.heap(db);
+                let inner_type = Type::Datalit(inner_ty.ty(db).clone());
+                let binding_ty = TypeAndHeap::new(db, inner_heap, inner_type);
 
-            // Type check else body if present.
-            if let Some(else_stmts) = else_body {
-                for stmt in else_stmts {
+                // Add binding to context for then body.
+                ctx.variables.insert(binding_name, binding_ty);
+
+                // Type check then body.
+                for stmt in then_body {
                     check_statement(ctx, stmt);
+                }
+
+                // Remove binding from context.
+                ctx.variables.remove(&binding_name);
+
+                // Type check else body if present.
+                if let Some(else_stmts) = else_body {
+                    // If there's an else binding, bind error type for Result.
+                    if let Some(else_binding_name) = else_binding {
+                        if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty.ty(db) {
+                            // Bind Error type.
+                            let error_ty = TypeAndHeap::new(
+                                db,
+                                datalit::ast::Heap::Omitted,
+                                Type::Datalit(datalit::tycheck::Type::Error),
+                            );
+                            ctx.variables.insert(else_binding_name, error_ty);
+
+                            for stmt in else_stmts {
+                                check_statement(ctx, stmt);
+                            }
+
+                            ctx.variables.remove(&else_binding_name);
+                        } else {
+                            ctx.add_error(TypeError::TypeMismatch {
+                                expected: "Result type for else binding".S(),
+                                actual: "other type".S(),
+                            });
+                        }
+                    } else {
+                        for stmt in else_stmts {
+                            check_statement(ctx, stmt);
+                        }
+                    }
+                }
+            } else {
+                // No binding: check condition is bool type.
+                let bool_type = TypeAndHeap::new(
+                    db,
+                    datalit::ast::Heap::Omitted,
+                    Type::Datalit(datalit::tycheck::Type::Bool),
+                );
+
+                if let Err(e) = check_expr(ctx, condition, bool_type) {
+                    ctx.add_error(e);
+                }
+
+                // Type check then body.
+                for stmt in then_body {
+                    check_statement(ctx, stmt);
+                }
+
+                // Type check else body if present.
+                if let Some(else_stmts) = else_body {
+                    for stmt in else_stmts {
+                        check_statement(ctx, stmt);
+                    }
                 }
             }
         }

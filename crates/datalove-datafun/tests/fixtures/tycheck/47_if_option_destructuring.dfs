@@ -1,0 +1,7 @@
+fun test_option_destructuring(a: ?u8): u8
+    if a |value|
+        ret value
+    else
+        ret 255
+    end if
+end fun

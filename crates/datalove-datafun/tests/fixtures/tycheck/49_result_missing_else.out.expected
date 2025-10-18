@@ -1,0 +1,18 @@
+{
+  "errors": [
+    "ResultRequiresErrorBinding"
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test_result_missing_else",
+      "params": [
+        {
+          "name": "a",
+          "type": "!u8"
+        }
+      ],
+      "return_type": "u8"
+    }
+  ]
+}
