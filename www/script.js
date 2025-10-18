@@ -86,8 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let i = 0;
 
         while (i < text.length) {
-            // Comments (% or //)
-            if (text[i] === '%' || (text[i] === '/' && text[i+1] === '/')) {
+            if (text[i] === '/' && text[i+1] === '/') {
                 const start = i;
                 while (i < text.length && text[i] !== '\n') i++;
                 tokens.push({ type: 'comment', text: text.slice(start, i) });

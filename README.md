@@ -35,7 +35,7 @@ for expressing most typical data structures:
 Datalit is a serialization format:
 
 ```datalove
-% Personal info
+// Personal info
 {
   name = "Ada",
   born = 1815,
@@ -58,8 +58,8 @@ The syntax for this is `: <type> / <expr>`.
 You'll probably get used to it.
 
 ```datalove
-% This is the type of the literal we're about to write.
-% When you see ":" in Datalove it is always followed by a type.
+// This is the type of the literal we're about to write.
+// When you see ":" in Datalove it is always followed by a type.
 : {
   name: string,
   born: u32,
@@ -68,16 +68,16 @@ You'll probably get used to it.
     kind: enum { Friend, Family },
     name: string,
   }>,
-} / {                      % After "/" is the literal expression.
+} / {                      // After "/" is the literal expression.
   name = "Ada",    
   born = 1815,
-  interests = : [string] / [           % Here's another type hint.
+  interests = : [string] / [           // Here's another type hint.
     "mathematics", "poetry", "music",
   ],
   address_book = set {
     struct AddressEntry {
       kind = enum Friend,
-      name = : string / "Charles",    % And another!
+      name = : string / "Charles",    // And another!
     },
     struct AddressEntry {
       kind = enum Family,
@@ -300,13 +300,13 @@ let a = 1 +% 1
 let a = 1 -% 1
 let a = 1 *% 1
 let a = 1 /% 1
-let a = -%a      % yup
+let a = -%a      // yup
 
 let a = 1 +| 1
 let a = 1 -| 1
 let a = 1 *| 1
 let a = 1 /| 1
-let a = -|a      % yup
+let a = -|a      // yup
 ```
 
 And early-return varieties:

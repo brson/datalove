@@ -1,5 +1,5 @@
 (define-generic-mode 'la2-mode
-  '("%") 
+  '("//") 
   '(
     "let"
     "var"
