@@ -14,3 +14,4 @@
 - logic programming features:
   - generators, choice points, memoization
 - explicit linear-type destructors
+- token types for efficient errors

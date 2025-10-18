@@ -215,6 +215,119 @@ like a dynamic scripting language.
 
 ## Design notes
 
+
+### Option and result handling
+
+The option and result types are prefixes like zig:
+
+```
+// option
+let a: ?u32 = ...
+let b: ?[u32] = ...
+// result
+let c: !u32 = ...
+let d: ![u32] = ...
+```
+
+Option and result construction:
+
+```
+// "some" values are automatically coerced
+let a: ?u32 = 3
+let b: ?u32 = u32.add_or_none(1, 2)
+// "none" checks to any option type
+let c: ?u32 = none
+
+// "ok" values are automatically coerced
+let a: !u32 = 3
+let b: !u32 = u32.add_or_error(1, 2)
+// "error" checks to any result type
+let c: ?u32 = error "oops"
+```
+
+Destructuring option and result is like zig:
+
+```
+let a: ?u8 = 1
+
+var c: u8 = 0
+if a |value|
+  c = value
+else
+  c = 255
+end if
+```
+
+```
+let a: !u8 = 1
+
+var c: u8 = 0
+if a |value|
+  c = value
+else |error|
+  ret error
+end if
+```
+
+Note that branching on error values is not like zig
+and uses reflection, not shown here.
+
+Early return with postfix `?` and `!`:
+
+```
+fun transform_option(val: ?u32): ?u32
+  let val = val? // early option return
+  ret val +? 1   // early option return on overflow
+end
+
+fun transform_result(val: !u32): !u32
+  let val = val! // early result return
+  ret val +! 1   // early result return on overflow
+end
+```
+
+### Math ops and error handling
+
+Bigint (`int`) and floats support bare math ops,
+`+ - * /` and unary `-`.
+
+Fixed ints do not, not even unary `-`.
+
+They support zig-like `+%` (wrapping) and `+|` saturating ops:
+
+```
+let a = 1 +% 1
+let a = 1 -% 1
+let a = 1 *% 1
+let a = 1 /% 1
+let a = -%a      % yup
+
+let a = 1 +| 1
+let a = 1 -| 1
+let a = 1 *| 1
+let a = 1 /| 1
+let a = -|a      % yup
+```
+
+And early-return varieties:
+
+```
+let a = 1 +? 1
+let a = 1 -? 1
+let a = 1 *? 1
+let a = 1 /? 1
+let a = -?a
+
+let a = 1 +! 1
+let a = 1 -! 1
+let a = 1 *! 1
+let a = 1 /! 1
+let a = -!a
+```
+
+If we decide to let funs panic we'll also add panicking variations.
+
+
 ### † Pure functions + mutable-reference argument modes
 
 Datalove at first does not look pure functional because
