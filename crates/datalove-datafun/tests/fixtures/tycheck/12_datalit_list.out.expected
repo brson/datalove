@@ -4,7 +4,7 @@
     {
       "kind": "variable",
       "name": "x",
-      "type": "[@u32]"
+      "type": "[u32]"
     }
   ]
 }

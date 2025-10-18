@@ -252,11 +252,6 @@ fn synthesize<'db>(
     // Otherwise, synthesize from the expression.
     let expr_and_heap = expr.expr(db);
     let heap = expr_and_heap.heap(db);
-    // Resolve Omitted heap to Local (the default).
-    let heap = match heap {
-        Heap::Omitted => Heap::Local,
-        other => other,
-    };
     let expr_inner = expr_and_heap.expr(db);
 
     let ty = match expr_inner {
