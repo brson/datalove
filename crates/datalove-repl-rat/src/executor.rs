@@ -1,33 +1,8 @@
-//! Executor trait for abstracting REPL parse/eval execution.
+//! Executor module for local re-exports.
 
-use crate::repl;
-use serde::{Serialize, Deserialize};
+// Import trait and types (used by implementation modules).
+pub(crate) use datalove_repl::app::{ReplExecutor, WorkerResponse};
 
-/// Response from the worker/executor.
-#[derive(Debug, Serialize, Deserialize)]
-pub enum WorkerResponse {
-    ParseResult { id: u64, parse: repl::InputParse },
-    EvalResult { id: u64, eval: repl::Eval },
-    EnvironmentUpdate { environment: Vec<(String, String, String)> },
-}
-
-/// Trait for executing REPL parse and eval operations.
-///
-/// Implementations can be synchronous or asynchronous,
-/// single-threaded or multi-threaded.
-/// Each executor constructs its own Engine internally.
-pub trait ReplExecutor {
-    /// Create a new executor (constructs its own Engine internally).
-    fn new() -> Self where Self: Sized;
-
-    /// Submit a parse-and-eval request.
-    fn submit_parse_and_eval(&mut self, id: u64, input: repl::Input);
-
-    /// Try to receive a response.
-    /// Returns None if no response is available.
-    fn try_recv_response(&mut self) -> Option<WorkerResponse>;
-}
-
-// Re-export executor implementations.
+// Re-export executor implementations only.
 pub use crate::executor_threaded::ThreadedExecutor;
 pub use crate::executor_blocking::BlockingExecutor;

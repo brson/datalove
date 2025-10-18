@@ -12,6 +12,8 @@ pub use datalove_datafun as datafun;
 mod engine;
 pub use engine::Engine;
 
+pub mod app;
+
 const REPL_COMMAND_SIGIL: char = '/';
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
