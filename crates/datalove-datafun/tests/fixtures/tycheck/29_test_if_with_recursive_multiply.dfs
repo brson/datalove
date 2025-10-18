@@ -1,5 +1,5 @@
 fun test(n: @u32): @u32
-  if n .<= @1
+  if n <= @1
     ret @1
   else
     ret n * test(n - @1)

@@ -1,5 +1,5 @@
 fun fib(n: @u32): @u32
-  if n .<= @1
+  if n <= @1
     ret @1
   else
     let a = fib(n - @1)

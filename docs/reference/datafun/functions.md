@@ -69,7 +69,7 @@ With conditional statements, you can write terminating recursive functions like 
 
 ```datafun
 fun factorial(n: @u32): @u32
-  if n .<= @1
+  if n <= @1
     ret @1
   else
     ret n * factorial(n - @1)
@@ -154,7 +154,7 @@ end fun
 **Conditional in recursion:**
 ```datafun
 fun factorial(n: @u32): @u32
-  if n .<= @1
+  if n <= @1
     ret @1
   else
     ret n * factorial(n - @1)

@@ -23,7 +23,7 @@
           "condition": {
             "expr": {
               "kind": "BinOp",
-              "op": "Gt",
+              "op": "Ge",
               "lhs": {
                 "expr": {
                   "kind": "Name",
@@ -36,10 +36,10 @@
                   "value": {
                     "type_hint": null,
                     "expr": {
-                      "heap": "Omitted",
+                      "heap": "Local",
                       "expr": {
-                        "ParseError": {
-                          "message": "expected heap sigil @ or # before expression"
+                        "Int": {
+                          "value": "90"
                         }
                       }
                     }
@@ -75,7 +75,7 @@
               "condition": {
                 "expr": {
                   "kind": "BinOp",
-                  "op": "Gt",
+                  "op": "Ge",
                   "lhs": {
                     "expr": {
                       "kind": "Name",
@@ -88,10 +88,10 @@
                       "value": {
                         "type_hint": null,
                         "expr": {
-                          "heap": "Omitted",
+                          "heap": "Local",
                           "expr": {
-                            "ParseError": {
-                              "message": "expected heap sigil @ or # before expression"
+                            "Int": {
+                              "value": "80"
                             }
                           }
                         }
@@ -127,7 +127,7 @@
                   "condition": {
                     "expr": {
                       "kind": "BinOp",
-                      "op": "Gt",
+                      "op": "Ge",
                       "lhs": {
                         "expr": {
                           "kind": "Name",
@@ -140,10 +140,10 @@
                           "value": {
                             "type_hint": null,
                             "expr": {
-                              "heap": "Omitted",
+                              "heap": "Local",
                               "expr": {
-                                "ParseError": {
-                                  "message": "expected heap sigil @ or # before expression"
+                                "Int": {
+                                  "value": "70"
                                 }
                               }
                             }
