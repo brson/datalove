@@ -27,6 +27,24 @@ require module sys/std/int
 
 Always three parts - lib - pkg - module.
 
+
+## Imports
+
+`require` statements establish module linkage and bring module names into scope.
+
+Bring items in modules into scope is done with `import` statements:
+
+```
+require sys/std/u32
+
+import u32.negate
+
+fun double_negate(n: u32): u23
+  ret negate(n)
+end fun
+```
+
+
 ## Implementation Status
 
 ### Completed
