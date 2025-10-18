@@ -426,6 +426,19 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, app: &App<E>, area: Rect) {
                                 ratatui::text::Span::raw(&eval_expr.value),
                             ]));
                         }
+                        repl::Eval::SuccessFun(eval_fun) => {
+                            lines.push(Line::from(vec![
+                                ratatui::text::Span::styled(
+                                    "  ✓ ",
+                                    Style::default().fg(Color::Green),
+                                ),
+                                ratatui::text::Span::raw("fun "),
+                                ratatui::text::Span::styled(
+                                    &eval_fun.name,
+                                    Style::default().fg(Color::Cyan),
+                                ),
+                            ]));
+                        }
                         repl::Eval::Error(e) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(
@@ -830,6 +843,9 @@ impl<E: ReplExecutor> App<E> {
                 entry.status = EntryStatus::Success;
             }
             repl::Eval::SuccessExpr(_) => {
+                entry.status = EntryStatus::Success;
+            }
+            repl::Eval::SuccessFun(_) => {
                 entry.status = EntryStatus::Success;
             }
             repl::Eval::CallerInterpret(cmd) => {

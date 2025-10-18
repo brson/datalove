@@ -1,0 +1,312 @@
+[
+  {
+    "input": "fun inc(x: @u32): @u32\n  ret x + @1\nend fun",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "fun inc(x: @u32): @u32\n  ret x + @1\nend fun"
+      }
+    },
+    "eval": {
+      "SuccessFun": {
+        "name": "inc"
+      }
+    },
+    "environment": [
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "fun double(x: @u32): @u32\n  ret x + x\nend fun",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "fun double(x: @u32): @u32\n  ret x + x\nend fun"
+      }
+    },
+    "eval": {
+      "SuccessFun": {
+        "name": "double"
+      }
+    },
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "inc(@5)",
+    "parse": {
+      "Command": {
+        "Expression": "inc(@5)"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@6"
+      }
+    },
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "double(@5)",
+    "parse": {
+      "Command": {
+        "Expression": "double(@5)"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@10"
+      }
+    },
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "double(inc(@5))",
+    "parse": {
+      "Command": {
+        "Expression": "double(inc(@5))"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@12"
+      }
+    },
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "inc(double(@5))",
+    "parse": {
+      "Command": {
+        "Expression": "inc(double(@5))"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@11"
+      }
+    },
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "fun multiply(a: @u32, b: @u32): @u32\n  ret a * b\nend fun",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "fun multiply(a: @u32, b: @u32): @u32\n  ret a * b\nend fun"
+      }
+    },
+    "eval": {
+      "SuccessFun": {
+        "name": "multiply"
+      }
+    },
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "multiply",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun"
+      }
+    },
+    "eval": {
+      "SuccessFun": {
+        "name": "add"
+      }
+    },
+    "environment": [
+      {
+        "name": "add",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "multiply",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "fun compute(x: @u32, y: @u32): @u32\n  let a = add(x, y)\n  let b = multiply(a, @2)\n  ret b\nend fun",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "fun compute(x: @u32, y: @u32): @u32\n  let a = add(x, y)\n  let b = multiply(a, @2)\n  ret b\nend fun"
+      }
+    },
+    "eval": {
+      "SuccessFun": {
+        "name": "compute"
+      }
+    },
+    "environment": [
+      {
+        "name": "add",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "multiply",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  },
+  {
+    "input": "compute(@3, @4)",
+    "parse": {
+      "Command": {
+        "Expression": "compute(@3, @4)"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@14"
+      }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "unknown",
+        "value": "@7"
+      },
+      {
+        "name": "add",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "b",
+        "ty": "unknown",
+        "value": "@14"
+      },
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": ""
+      },
+      {
+        "name": "multiply",
+        "ty": "function",
+        "value": ""
+      }
+    ]
+  }
+]

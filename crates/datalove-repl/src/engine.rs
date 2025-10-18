@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 use bct::input::Source;
 
-use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, InputParse, Input};
+use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, EvalFun, InputParse, Input};
 use crate::datafun;
 
 pub struct Engine<'db> {
@@ -228,7 +228,7 @@ impl<'db> Engine<'db> {
                     false,
                 );
             }
-            Eval::SuccessLet(_) | Eval::SuccessExpr(_) => {
+            Eval::SuccessLet(_) | Eval::SuccessExpr(_) | Eval::SuccessFun(_) => {
                 self.history.add_script_entry(
                     Command::ScriptStatement(source),
                     eval.C(),
@@ -310,28 +310,40 @@ impl<'db> Engine<'db> {
             }
         }
 
-        // Return information about the last statement if it was a let.
-        if let datafun::ast::Statement::Let(let_stmt) = unit_statements.last().X() {
-            let name = let_stmt.name(db);
-            let name_str = name.as_str(db).to_string();
+        // Return information about the last statement.
+        match unit_statements.last().X() {
+            datafun::ast::Statement::Let(let_stmt) => {
+                let name = let_stmt.name(db);
+                let name_str = name.as_str(db).to_string();
 
-            let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
-                datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
-            } else {
-                "unknown".to_string()
-            };
+                let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
+                    datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
+                } else {
+                    "unknown".to_string()
+                };
 
-            let value_str = ctx.pretty_print_variable(name)
-                .unwrap_or_else(|e| format!("error: {:?}", e));
+                let value_str = ctx.pretty_print_variable(name)
+                    .unwrap_or_else(|e| format!("error: {:?}", e));
 
-            return Eval::SuccessLet(EvalLet {
-                name: name_str,
-                ty: ty_str,
-                value: value_str,
-            });
+                return Eval::SuccessLet(EvalLet {
+                    name: name_str,
+                    ty: ty_str,
+                    value: value_str,
+                });
+            }
+            datafun::ast::Statement::Fun(fun) => {
+                let name = fun.name(db);
+                let name_str = name.as_str(db).to_string();
+
+                return Eval::SuccessFun(EvalFun {
+                    name: name_str,
+                });
+            }
+            _ => {
+                // Other statement types (if any) result in Nothing.
+                Eval::Nothing
+            }
         }
-
-        Eval::Nothing
     }
 
     fn eval_expression(&mut self, source: String) -> Eval {

@@ -59,10 +59,16 @@ pub struct EvalExpr {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalFun {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Eval {
     Nothing,
     SuccessLet(EvalLet),
     SuccessExpr(EvalExpr),
+    SuccessFun(EvalFun),
     Error(String),
     CallerInterpret(ReplCommand),
     CrashReset(String),

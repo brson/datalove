@@ -68,7 +68,14 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             continue;
         }
 
-        let parse_result = engine.parse_input(repl::Input::Input(input.to_string()));
+        // Detect if input contains newlines and use appropriate input type.
+        let repl_input = if input.contains('\n') {
+            repl::Input::Multiline(input.to_string())
+        } else {
+            repl::Input::Input(input.to_string())
+        };
+
+        let parse_result = engine.parse_input(repl_input);
 
         let eval_result = match &parse_result {
             repl::InputParse::Command(cmd) => {
