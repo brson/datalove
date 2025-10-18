@@ -234,16 +234,17 @@ Option and result construction:
 ```
 // "some" values are automatically coerced
 let a: ?u32 = 3
-let b: ?u32 = u32.add_or_none(1, 2)
+let b: ?u32 = u32.min_value()
 // "none" checks to any option type
 let c: ?u32 = none
 
 // "ok" values are automatically coerced
 let a: !u32 = 3
-let b: !u32 = u32.add_or_error(1, 2)
+let b: !u32 = u32.min_value()
 // "error" checks to any result type
 let c: ?u32 = error "oops"
 ```
+
 
 Destructuring option and result is like zig:
 
