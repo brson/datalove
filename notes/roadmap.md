@@ -8,6 +8,10 @@
 - maps and sets
 - interp tests for math ops
 
+## testing
+
+- runtime value generator for proptesting
+
 ## repl
 
 - ux
