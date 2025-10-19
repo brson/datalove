@@ -570,6 +570,18 @@ impl<'db> Parser<'db> {
             self.eat_sigil(tokens, Sigil::Exclamation);
             let inner_type = self.parse_type_hint_and_heap(tokens);
             datalit::ast::TypeHint::Result(datalit::ast::TypeHintResult::new(self.db, inner_type))
+        } else if matches!(tokens.peek(), Some(TreeToken::Branch(Sigil::BracketOpen, _))) {
+            // List type: [element_type]
+            // Delegate to a helper function to avoid monomorphization issues.
+            match tokens.next() {
+                Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
+                    self.parse_list_type_hint(iter)
+                }
+                _ => {
+                    let message = InternedText::new(self.db, "expected list type".S());
+                    datalit::ast::TypeHint::ParseError(datalit::ast::TypeHintParseError::new(self.db, message))
+                }
+            }
         } else {
             // Parse base type keyword
             match self.peek_word(tokens) {
@@ -595,6 +607,20 @@ impl<'db> Parser<'db> {
         };
 
         datalit::ast::TypeHintAndHeap::new(self.db, heap, type_hint)
+    }
+
+    fn parse_list_type_hint(
+        &mut self,
+        iter: BracerIter<'db>,
+    ) -> datalit::ast::TypeHint<'db> {
+        let tokens: Vec<TreeToken<'db>> = iter.filter_map(|t| t.without_space(self.db)).collect();
+        if tokens.is_empty() {
+            let message = InternedText::new(self.db, "list type must have element type".S());
+            return datalit::ast::TypeHint::ParseError(datalit::ast::TypeHintParseError::new(self.db, message));
+        }
+        let mut tokens = tokens.into_iter().peekable();
+        let element_type = self.parse_type_hint_and_heap(&mut tokens);
+        datalit::ast::TypeHint::List(datalit::ast::TypeHintList::new(self.db, element_type))
     }
 
     fn parse_expr_full(
@@ -1036,6 +1062,37 @@ mod tests {
                 assert_eq!(stmt.params(db)[0].name(db).as_str(db), "accum");
                 assert_eq!(stmt.params(db)[1].name(db).as_str(db), "amount");
                 assert!(stmt.return_type(db).is_some());
+            }
+            _ => panic!("expected fun statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_fun_with_list_param() {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S("fun identity(a: @[@u32]): @[@u32]\n  ret a\nend fun"));
+        let script = parse(db, source);
+        let statements = script.statements(db);
+        assert_eq!(statements.len(), 1);
+        match &statements[0] {
+            ast::Statement::Fun(stmt) => {
+                assert_eq!(stmt.name(db).as_str(db), "identity");
+                assert_eq!(stmt.params(db).len(), 1);
+                assert_eq!(stmt.params(db)[0].name(db).as_str(db), "a");
+                // Check that return type is present
+                assert!(stmt.return_type(db).is_some());
+
+                // Check if it's a ParseError
+                let param_type = stmt.params(db)[0].type_hint(db);
+                match param_type.type_hint(db) {
+                    datalit::ast::TypeHint::ParseError(_) => {
+                        panic!("Parameter type hint is a ParseError!");
+                    }
+                    datalit::ast::TypeHint::List(_) => {
+                        // Good!
+                    }
+                    _ => panic!("Expected List type hint"),
+                }
             }
             _ => panic!("expected fun statement"),
         }

@@ -155,6 +155,8 @@ end if
   - `64_if_result_bool.dfs` ✓ PASSING - Result destructuring with bool payload
   - `83_if_option_int.dfs` ✓ PASSING - Option destructuring with Int (bigint) payload
   - `84_if_result_int.dfs` ✓ PASSING - Result destructuring with Int (bigint) payload
+  - `87_if_option_list.dfs` ✓ PASSING - Option destructuring with List payload (heap-allocated)
+  - `88_if_result_list.dfs` ✓ PASSING - Result destructuring with List payload (heap-allocated)
   - `89_if_option_option.dfs` ✓ PASSING - Option<Option<u32>> destructuring
   - `90_if_result_result.dfs` ✓ PASSING - Result<Result<u32>> destructuring
   - `91_if_option_result.dfs` ✓ PASSING - Option<Result<u32>> destructuring
@@ -165,12 +167,13 @@ end if
 - Bindings add variables to type context during type checking
 - Variables are removed from context after body is checked
 - Runtime execution: Bindings are added to interpreter variable scope, executed, then removed and freed
-- All 68 interpreter tests passing (including 13 if-destructuring tests for Option/Result)
-- **FIXED (2025-10-18)**: Payload extraction now supports ALL types including heap-allocated types (String, Int, Option, Result)
+- All 70 interpreter tests passing (including 15 if-destructuring tests for Option/Result)
+- **FIXED (2025-10-18)**: Payload extraction now supports ALL types including heap-allocated types (String, Int, List, Option, Result)
   - Implementation uses `rt::clone::clone_value()` to deep clone heap-allocated payloads
   - Inline primitive types supported: bool, u32, f32
-  - Heap types supported: Int (bigint), String, Option, Result
-  - Types not yet supported in datafun functions: u8, i8, u16, i16, i32, u64, i64, f64, Tuple, Struct, Enum, List, Map, Set
+  - Heap types supported: Int (bigint), String, List, Option, Result
+  - **FIXED (2025-10-18)**: List types now supported in datafun function signatures
+  - Types not yet supported in datafun functions: u8, i8, u16, i16, i32, u64, i64, f64, Tuple, Struct, Enum, Map, Set
 
 ---
 
