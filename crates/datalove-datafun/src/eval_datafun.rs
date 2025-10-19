@@ -1654,7 +1654,7 @@ mod tests {
     #[test]
     fn test_variable_reference_in_expression() {
         let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = @10\nlet y = x + @5"));
+        let source = bct::input::Source::new(&db, S("let x = 3.5\nlet y = x + 1.5"));
         let script = crate::parser::parse(&db, source);
 
         // Type check the script.
@@ -1673,22 +1673,22 @@ mod tests {
         let result = ctx.execute(script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
-        // Verify that y = x + 5 = 15.
+        // Verify that y = x + 1.5 = 5.0.
         let y_name = bct::text::InternedText::new(&db, S("y"));
         let y_value = ctx.lookup_variable(y_name).expect("y not found");
 
         match y_value {
-            Value::U32(y) => {
-                assert_eq!(*y, 15);
+            Value::F32(y) => {
+                assert_eq!(*y, 5.0);
             }
-            _ => panic!("Expected U32 value for y"),
+            _ => panic!("Expected F32 value for y"),
         }
     }
 
     #[test]
     fn test_multiple_variable_references() {
         let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let a = @100\nlet b = a\nlet c = a + b"));
+        let source = bct::input::Source::new(&db, S("let a = 100.0\nlet b = a\nlet c = a + b"));
         let script = crate::parser::parse(&db, source);
 
         // Type check the script.
@@ -1712,10 +1712,10 @@ mod tests {
         let c_value = ctx.lookup_variable(c_name).expect("c not found");
 
         match c_value {
-            Value::U32(c) => {
-                assert_eq!(*c, 200);
+            Value::F32(c) => {
+                assert_eq!(*c, 200.0);
             }
-            _ => panic!("Expected U32 value for c"),
+            _ => panic!("Expected F32 value for c"),
         }
     }
 

@@ -808,6 +808,9 @@ fn synthesize_binop<'db>(
         });
     }
 
+    // Check that the operation is valid for the operand type.
+    validate_operation_for_type(db, op, operand_ty)?;
+
     // Determine result type based on operator.
     use BinOp::*;
     let result_ty = match op {
@@ -1069,6 +1072,64 @@ fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
         Type::Function(_) => false,
         Type::Void => false,
     }
+}
+
+/// Validate that a binary operation is supported for the given type.
+///
+/// Rules per README:
+/// - Floats (f32): bare ops only (+ - * /)
+/// - Bigints (int): bare ops except div (+ - *), plus /? and /!
+/// - Fixed ints: checked and optional ops only (+! -! *! /! +? -? *? /?)
+fn validate_operation_for_type<'db>(
+    db: &'db dyn crate::Db,
+    op: BinOp,
+    ty: &Type<'db>,
+) -> Result<(), TypeError> {
+    use BinOp::*;
+
+    let datalit_ty = match ty {
+        Type::Datalit(dt) => dt,
+        _ => return Ok(()), // Non-datalit types already handled elsewhere.
+    };
+
+    let is_valid = match datalit_ty {
+        // Floats: only bare ops.
+        datalit::tycheck::Type::F32 => {
+            matches!(op, Add | Sub | Mul | Div)
+        }
+
+        // Bigints: bare ops except div, plus /? and /!
+        datalit::tycheck::Type::Int => {
+            matches!(op, Add | Sub | Mul | DivOptional | DivChecked)
+        }
+
+        // Fixed ints: only checked and optional ops.
+        datalit::tycheck::Type::U8 |
+        datalit::tycheck::Type::I8 |
+        datalit::tycheck::Type::U16 |
+        datalit::tycheck::Type::I16 |
+        datalit::tycheck::Type::U32 |
+        datalit::tycheck::Type::I32 |
+        datalit::tycheck::Type::U64 |
+        datalit::tycheck::Type::I64 => {
+            matches!(
+                op,
+                AddChecked | SubChecked | MulChecked | DivChecked |
+                AddOptional | SubOptional | MulOptional | DivOptional
+            )
+        }
+
+        _ => true, // Non-numeric types already handled.
+    };
+
+    if !is_valid {
+        return Err(TypeError::InvalidOperandType {
+            op: format!("{:?}", op),
+            ty: type_to_string(db, ty),
+        });
+    }
+
+    Ok(())
 }
 
 /// Check an expression against an expected type.
@@ -1511,7 +1572,7 @@ mod tests {
     #[test]
     fn test_tycheck_fun_params() {
         let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun"));
+        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): ?@u32\n  ret a +? b\nend fun"));
         let script = crate::parser::parse(&db, source);
         let tycheck_result = type_check(&db, script);
 
