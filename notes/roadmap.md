@@ -20,6 +20,7 @@
 ## cleanup
 
 - runtime safety
+- remove rt dep from datalit?
 
 ## documentation
 
@@ -36,6 +37,8 @@
 
 ## near future
 
+- type declarations
+- name resolution for named types
 - generics
 - argument modes
 - move semantics
