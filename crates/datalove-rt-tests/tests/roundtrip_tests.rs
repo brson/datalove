@@ -125,80 +125,14 @@ fn compile_and_instantiate<'db>(
     Ok((inst_value, typechecked))
 }
 
-/// Pretty-print a runtime value to a string.
-fn rt_pretty_print(
+/// Pretty-print a runtime value to a string with type hint.
+fn rt_pretty_print<'db>(
+    db: &'db datalit::Database,
+    ty: &datalit::tycheck::TypeAndHeap<'db>,
     value_ref: *const u8,
     tydesc_ref: *const rt::rtdt::TyDesc,
 ) -> Result<String, String> {
-    unsafe {
-        // Initialize runtime.
-        let rt_handle = rt::dtlv_rti_init();
-        if rt_handle.is_null() {
-            return Err("Failed to initialize runtime".to_string());
-        }
-
-        // Create string tydesc.
-        let string_tydesc = rt::rtdt::TyDesc {
-            type_tag: rt::rtdt::TyTag::String,
-            size: std::mem::size_of::<rt::rtdt::String>() as u32,
-            align: std::mem::align_of::<rt::rtdt::String>() as u32,
-            type_info: rt::rtdt::TyInfo {
-                nothing: rt::rtdt::TyInfoNothing,
-            },
-        };
-
-        // Create output string.
-        let mut output_string = std::mem::MaybeUninit::<rt::rtdt::String>::uninit();
-        let status = rt::dtlv_rti_string_create_local(
-            rt_handle,
-            output_string.as_mut_ptr() as *mut u8,
-            &string_tydesc,
-        );
-
-        if status != rt::RtStatus::Ok {
-            rt::dtlv_rti_shutdown(rt_handle);
-            return Err("Failed to create output string".to_string());
-        }
-
-        let mut output_string = output_string.assume_init();
-
-        // Pretty-print value.
-        let status = rt::dtlv_rti_pretty_print_local(
-            rt_handle,
-            value_ref,
-            tydesc_ref,
-            &mut output_string as *mut rt::rtdt::String as *mut u8,
-            &string_tydesc,
-        );
-
-        if status != rt::RtStatus::Ok {
-            rt::dtlv_rti_string_destroy_local(
-                rt_handle,
-                &mut output_string as *mut rt::rtdt::String as *mut u8,
-                &string_tydesc,
-            );
-            rt::dtlv_rti_shutdown(rt_handle);
-            return Err("Failed to pretty-print value".to_string());
-        }
-
-        // Extract string contents.
-        let result = if output_string.data.is_null() || output_string.size == 0 {
-            String::new()
-        } else {
-            let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
-            String::from_utf8_lossy(bytes).to_string()
-        };
-
-        // Cleanup.
-        rt::dtlv_rti_string_destroy_local(
-            rt_handle,
-            &mut output_string as *mut rt::rtdt::String as *mut u8,
-            &string_tydesc,
-        );
-        rt::dtlv_rti_shutdown(rt_handle);
-
-        Ok(result)
-    }
+    datalit::pretty::pretty_print_runtime_value(db, ty, value_ref, tydesc_ref)
 }
 
 /// Round-trip test: parse -> instantiate -> rt pretty-print -> parse -> instantiate -> rt pretty-print.
@@ -218,7 +152,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let type1 = tycheck1.root_type(&db).X();
 
     // Step 2: Pretty-print using runtime pretty printer.
-    let pretty1 = rt_pretty_print(inst1.ptr, inst1.tydesc)?;
+    let pretty1 = rt_pretty_print(&db, &type1, inst1.ptr, inst1.tydesc)?;
 
     // Step 3: Parse, type check, and instantiate the pretty-printed output.
     let (inst2, tycheck2) = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &pretty1)?;
@@ -227,7 +161,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let type2 = tycheck2.root_type(&db).X();
 
     // Step 4: Pretty-print again.
-    let pretty2 = rt_pretty_print(inst2.ptr, inst2.tydesc)?;
+    let pretty2 = rt_pretty_print(&db, &type2, inst2.ptr, inst2.tydesc)?;
 
     // Step 5: Parse and typecheck the second pretty-print to get the third type.
     let source3 = bct::input::Source::new(&db, pretty2.S());

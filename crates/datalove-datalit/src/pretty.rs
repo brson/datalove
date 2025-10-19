@@ -1,6 +1,7 @@
 use rmx::prelude::*;
 use bct::text::InternedText;
 use crate::ast::*;
+use crate::tycheck::*;
 
 /// Pretty print a datalove literal expression.
 ///
@@ -13,6 +14,254 @@ pub fn pretty_print<'db>(
     let mut output = String::new();
     pretty_expr_full(db, expr, &mut output, 0);
     output
+}
+
+/// Pretty print a runtime value with type hint.
+///
+/// Combines the type from typechecking with the runtime value to produce
+/// output in the format `: @type / @value`.
+pub fn pretty_print_runtime_value<'db>(
+    db: &'db dyn crate::Db,
+    ty: &TypeAndHeap<'db>,
+    value_ptr: *const u8,
+    tydesc_ptr: *const datalove_rt::rtdt::TyDesc,
+) -> Result<String, String> {
+    unsafe {
+        // Initialize runtime for pretty printing.
+        let rt_handle = datalove_rt::dtlv_rti_init();
+        if rt_handle.is_null() {
+            return Err("Failed to initialize runtime".to_string());
+        }
+
+        // Create string tydesc.
+        let string_tydesc = datalove_rt::rtdt::TyDesc {
+            type_tag: datalove_rt::rtdt::TyTag::String,
+            size: std::mem::size_of::<datalove_rt::rtdt::String>() as u32,
+            align: std::mem::align_of::<datalove_rt::rtdt::String>() as u32,
+            type_info: datalove_rt::rtdt::TyInfo {
+                nothing: datalove_rt::rtdt::TyInfoNothing,
+            },
+        };
+
+        // Create output string.
+        let mut output_string = std::mem::MaybeUninit::<datalove_rt::rtdt::String>::uninit();
+        let status = datalove_rt::dtlv_rti_string_create_local(
+            rt_handle,
+            output_string.as_mut_ptr() as *mut u8,
+            &string_tydesc,
+        );
+
+        if status != datalove_rt::RtStatus::Ok {
+            datalove_rt::dtlv_rti_shutdown(rt_handle);
+            return Err("Failed to create output string".to_string());
+        }
+
+        let mut output_string = output_string.assume_init();
+
+        // Pretty-print value using runtime.
+        let status = datalove_rt::dtlv_rti_pretty_print_local(
+            rt_handle,
+            value_ptr,
+            tydesc_ptr,
+            &mut output_string as *mut datalove_rt::rtdt::String as *mut u8,
+            &string_tydesc,
+        );
+
+        if status != datalove_rt::RtStatus::Ok {
+            datalove_rt::dtlv_rti_string_destroy_local(
+                rt_handle,
+                &mut output_string as *mut datalove_rt::rtdt::String as *mut u8,
+                &string_tydesc,
+            );
+            datalove_rt::dtlv_rti_shutdown(rt_handle);
+            return Err("Failed to pretty-print value".to_string());
+        }
+
+        // Extract value string.
+        let value_str = if output_string.data.is_null() || output_string.size == 0 {
+            String::new()
+        } else {
+            let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
+            String::from_utf8_lossy(bytes).to_string()
+        };
+
+        // Cleanup runtime string.
+        datalove_rt::dtlv_rti_string_destroy_local(
+            rt_handle,
+            &mut output_string as *mut datalove_rt::rtdt::String as *mut u8,
+            &string_tydesc,
+        );
+        datalove_rt::dtlv_rti_shutdown(rt_handle);
+
+        // Build type hint string.
+        let mut type_str = String::new();
+        type_str.push_str(": ");
+        pretty_type_and_heap(db, ty, &mut type_str);
+        type_str.push_str(" / ");
+        type_str.push_str(&value_str);
+
+        Ok(type_str)
+    }
+}
+
+fn pretty_type_and_heap<'db>(
+    db: &'db dyn crate::Db,
+    ty: &TypeAndHeap<'db>,
+    out: &mut String,
+) {
+    // Print heap sigil.
+    match ty.heap(db) {
+        Heap::Local => out.push('@'),
+        Heap::Global => out.push('#'),
+        Heap::Omitted => {}
+    }
+
+    pretty_type(db, ty.ty(db), out);
+}
+
+fn pretty_type<'db>(
+    db: &'db dyn crate::Db,
+    ty: &Type<'db>,
+    out: &mut String,
+) {
+    match ty {
+        Type::Bool => out.push_str("bool"),
+        Type::U8 => out.push_str("u8"),
+        Type::I8 => out.push_str("i8"),
+        Type::U16 => out.push_str("u16"),
+        Type::I16 => out.push_str("i16"),
+        Type::U32 => out.push_str("u32"),
+        Type::I32 => out.push_str("i32"),
+        Type::U64 => out.push_str("u64"),
+        Type::I64 => out.push_str("i64"),
+        Type::F32 => out.push_str("f32"),
+        Type::Int => out.push_str("int"),
+        Type::String => out.push_str("string"),
+        Type::Data => out.push_str("data"),
+        Type::Error => out.push_str("error"),
+
+        Type::AnonTuple(t) => {
+            out.push('(');
+            let fields = t.fields(db);
+            for (i, field) in fields.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                pretty_type_and_heap(db, field, out);
+            }
+            out.push(')');
+        }
+
+        Type::NamedTuple(t) => {
+            out.push_str("tuple ");
+            out.push_str(t.name(db).as_str(db));
+            out.push_str(" (");
+            let fields = t.fields(db);
+            for (i, field) in fields.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                pretty_type_and_heap(db, field, out);
+            }
+            out.push(')');
+        }
+
+        Type::AnonStruct(s) => {
+            out.push('{');
+            let fields = s.fields(db);
+            for (i, field) in fields.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(field.name(db).as_str(db));
+                out.push_str(": ");
+                pretty_type_and_heap(db, &field.ty(db), out);
+            }
+            out.push('}');
+        }
+
+        Type::NamedStruct(s) => {
+            out.push_str("struct ");
+            out.push_str(s.name(db).as_str(db));
+            out.push_str(" {");
+            let fields = s.fields(db);
+            for (i, field) in fields.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(field.name(db).as_str(db));
+                out.push_str(": ");
+                pretty_type_and_heap(db, &field.ty(db), out);
+            }
+            out.push('}');
+        }
+
+        Type::AnonEnum(e) => {
+            out.push_str("enum {");
+            let variants = e.variants(db);
+            for (i, variant) in variants.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(variant.name(db).as_str(db));
+                if let Some(payload) = variant.payload(db) {
+                    out.push('(');
+                    pretty_type_and_heap(db, &payload, out);
+                    out.push(')');
+                }
+            }
+            out.push('}');
+        }
+
+        Type::NamedEnum(e) => {
+            out.push_str("enum ");
+            out.push_str(e.name(db).as_str(db));
+            out.push_str(" {");
+            let variants = e.variants(db);
+            for (i, variant) in variants.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(variant.name(db).as_str(db));
+                if let Some(payload) = variant.payload(db) {
+                    out.push('(');
+                    pretty_type_and_heap(db, &payload, out);
+                    out.push(')');
+                }
+            }
+            out.push('}');
+        }
+
+        Type::List(l) => {
+            out.push('[');
+            pretty_type_and_heap(db, &l.element_type(db), out);
+            out.push(']');
+        }
+
+        Type::Map(m) => {
+            out.push_str("map<");
+            pretty_type_and_heap(db, &m.key_type(db), out);
+            out.push_str(", ");
+            pretty_type_and_heap(db, &m.value_type(db), out);
+            out.push('>');
+        }
+
+        Type::Set(s) => {
+            out.push_str("set<");
+            pretty_type_and_heap(db, &s.element_type(db), out);
+            out.push('>');
+        }
+
+        Type::Option(o) => {
+            out.push('?');
+            pretty_type_and_heap(db, &o.inner_type(db), out);
+        }
+
+        Type::Result(r) => {
+            out.push('!');
+            pretty_type_and_heap(db, &r.inner_type(db), out);
+        }
+    }
 }
 
 fn pretty_expr_full<'db>(
