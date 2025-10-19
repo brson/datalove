@@ -7,6 +7,7 @@
 
 ## Future
 
+- ergonomic bitops and bitfields
 - `datalove lit-tycheck` - run the type checker and report
 - `datalove lit-pretty` - pritty printer
 - `datalove lit-op` - run built-in operations
