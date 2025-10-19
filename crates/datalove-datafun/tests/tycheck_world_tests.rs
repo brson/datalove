@@ -54,6 +54,26 @@ fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_jso
         TypeError::ResultRequiresErrorBinding => {
             json!("ResultRequiresErrorBinding")
         }
+        TypeError::TryOutsideFunction { operator } => {
+            json!({
+                "kind": "TryOutsideFunction",
+                "operator": operator
+            })
+        }
+        TypeError::TryTypeMismatch { operator, actual_type } => {
+            json!({
+                "kind": "TryTypeMismatch",
+                "operator": operator,
+                "actual_type": actual_type
+            })
+        }
+        TypeError::TryReturnTypeMismatch { operator, return_type } => {
+            json!({
+                "kind": "TryReturnTypeMismatch",
+                "operator": operator,
+                "return_type": return_type
+            })
+        }
     }
 }
 

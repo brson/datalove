@@ -1,0 +1,26 @@
+{
+  "errors": [
+    {
+      "actual_type": "u32",
+      "kind": "TryTypeMismatch",
+      "operator": "?"
+    },
+    {
+      "kind": "DatalitError",
+      "message": "CannotSynthesize"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "try_non_option",
+      "params": [
+        {
+          "name": "val",
+          "type": "u32"
+        }
+      ],
+      "return_type": "?u32"
+    }
+  ]
+}

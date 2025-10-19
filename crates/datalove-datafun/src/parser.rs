@@ -638,6 +638,10 @@ impl<'db> Parser<'db> {
     ) -> ast::ExprFun<'db> {
         let mut lhs = self.parse_expr_primary(tokens);
 
+        // Check for postfix try operators (? and !)
+        // These have highest precedence and are parsed before binary operators.
+        lhs = self.parse_postfix_try_operators(tokens, lhs);
+
         loop {
             // Check for binary operator
             let op = match self.peek_binop(tokens) {
@@ -663,6 +667,40 @@ impl<'db> Parser<'db> {
         }
 
         lhs
+    }
+
+    // Parse postfix try operators (? and !).
+    // These are postfix operators that unwrap Option/Result with early return.
+    fn parse_postfix_try_operators(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        mut expr: ast::ExprFun<'db>,
+    ) -> ast::ExprFun<'db> {
+        loop {
+            match tokens.peek() {
+                Some(TreeToken::Token(token)) => {
+                    match token.kind(self.db) {
+                        TokenKind::Sigil(Sigil::Question) => {
+                            tokens.next(); // consume ?
+                            expr = ast::ExprFun::new(
+                                self.db,
+                                ast::ExprFunKind::TryOption(ast::ExprTryOption::new(self.db, expr))
+                            );
+                        }
+                        TokenKind::Sigil(Sigil::Exclamation) => {
+                            tokens.next(); // consume !
+                            expr = ast::ExprFun::new(
+                                self.db,
+                                ast::ExprFunKind::TryResult(ast::ExprTryResult::new(self.db, expr))
+                            );
+                        }
+                        _ => break,
+                    }
+                }
+                _ => break,
+            }
+        }
+        expr
     }
 
     // Get operator precedence (higher number = higher precedence).

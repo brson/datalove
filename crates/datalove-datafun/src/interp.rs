@@ -37,6 +37,12 @@ pub enum InterpError {
     /// Return value from function (not a real error, used for control flow).
     Return(Value),
 
+    /// Early return with None from try-option operator (? on None).
+    ReturnNone,
+
+    /// Early return with Error from try-result operator (! on Err).
+    ReturnError(Value),
+
     /// Stack overflow (recursion too deep).
     StackOverflow,
 }
@@ -441,7 +447,7 @@ impl<'db> InterpContext<'db> {
     /// Create a Value from a pointer and type descriptor.
     ///
     /// This clones the value at the given pointer into a new allocation.
-    fn value_from_ptr(
+    pub(crate) fn value_from_ptr(
         rt: &mut rt::rt_local::RtLocal,
         ptr: *const u8,
         tydesc: *const rtdt::TyDesc

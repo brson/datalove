@@ -1,0 +1,15 @@
+{
+  "errors": [
+    {
+      "kind": "TryOutsideFunction",
+      "operator": "?"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "@?u32"
+    }
+  ]
+}

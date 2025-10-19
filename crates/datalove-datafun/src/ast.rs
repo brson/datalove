@@ -119,6 +119,9 @@ pub enum ExprFunKind<'db> {
     BinOp(ExprBinOp<'db>),
     // Function call
     FunctionCall(ExprFunctionCall<'db>),
+    // Try operators (postfix ? and !)
+    TryOption(ExprTryOption<'db>),
+    TryResult(ExprTryResult<'db>),
     // Parse error
     ParseError(ExprFunParseError<'db>),
 }
@@ -171,6 +174,16 @@ pub enum BinOp {
     Ge,  // >=
     Eq,  // ==
     Ne,  // !=
+}
+
+#[salsa::tracked]
+pub struct ExprTryOption<'db> {
+    pub operand: ExprFun<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprTryResult<'db> {
+    pub operand: ExprFun<'db>,
 }
 
 #[salsa::tracked]

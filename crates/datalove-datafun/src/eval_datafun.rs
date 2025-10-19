@@ -27,6 +27,10 @@ pub fn eval_expr_with_expected<'db>(
 
         ExprFunKind::FunctionCall(call) => eval_function_call(ctx, call),
 
+        ExprFunKind::TryOption(try_op) => eval_try_option(ctx, try_op),
+
+        ExprFunKind::TryResult(try_op) => eval_try_result(ctx, try_op),
+
         ExprFunKind::ParseError(err) => {
             let message = err.message(ctx.db);
             Err(InterpError::RuntimeError(
@@ -472,6 +476,116 @@ fn eval_ne(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
         _ => Err(InterpError::TypeError(
             "Unsupported types for inequality".to_string(),
         )),
+    }
+}
+
+/// Evaluate a try-option operator (?).
+/// If the operand is None, returns early with ReturnNone.
+/// If the operand is Some(value), returns the unwrapped value.
+fn eval_try_option<'db>(
+    ctx: &mut InterpContext<'db>,
+    try_op: crate::ast::ExprTryOption<'db>,
+) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
+    let operand = try_op.operand(ctx.db);
+    let operand_value = eval_expr(ctx, operand)?;
+
+    // The operand must be an Option value.
+    let (ptr, tydesc) = match operand_value {
+        Value::Option { ptr, tydesc } => (ptr, tydesc),
+        _ => {
+            return Err(InterpError::TypeError(
+                "Try-option operator (?) requires Option type".to_string(),
+            ));
+        }
+    };
+
+    // Read the OptionTag.
+    let tag = unsafe { *(ptr as *const u8) as u8 };
+    let option_tag = if tag == rtdt::OptionTag::Some as u8 {
+        rtdt::OptionTag::Some
+    } else {
+        rtdt::OptionTag::None
+    };
+
+    match option_tag {
+        rtdt::OptionTag::None => {
+            // Early return with None.
+            Err(InterpError::ReturnNone)
+        }
+        rtdt::OptionTag::Some => {
+            // Extract the Some value using the same pattern as if-destructuring.
+            let layout = unsafe { rtdt::layout::compute_option_layout(tydesc) };
+            let payload_ptr = unsafe { ptr.add(layout.payload_offset as usize) };
+
+            // Get the inner type descriptor.
+            let inner_tydesc = unsafe { (*tydesc).type_info.option.inner_tydesc };
+
+            // Create a Value for the payload (clones it).
+            InterpContext::value_from_ptr(&mut ctx.rt, payload_ptr, inner_tydesc)
+        }
+    }
+}
+
+/// Evaluate a try-result operator (!).
+/// If the operand is Err, returns early with ReturnError.
+/// If the operand is Ok(value), returns the unwrapped value.
+fn eval_try_result<'db>(
+    ctx: &mut InterpContext<'db>,
+    try_op: crate::ast::ExprTryResult<'db>,
+) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
+    let operand = try_op.operand(ctx.db);
+    let operand_value = eval_expr(ctx, operand)?;
+
+    // The operand must be a Result value.
+    let (ptr, tydesc) = match operand_value {
+        Value::Result { ptr, tydesc } => (ptr, tydesc),
+        _ => {
+            return Err(InterpError::TypeError(
+                "Try-result operator (!) requires Result type".to_string(),
+            ));
+        }
+    };
+
+    // Read the ResultTag.
+    let tag = unsafe { *(ptr as *const u8) as u8 };
+    let result_tag = if tag == rtdt::ResultTag::Ok as u8 {
+        rtdt::ResultTag::Ok
+    } else {
+        rtdt::ResultTag::Err
+    };
+
+    match result_tag {
+        rtdt::ResultTag::Err => {
+            // Extract the Error value and return early.
+            let layout = unsafe { rtdt::layout::compute_result_layout(tydesc) };
+            let payload_ptr = unsafe { ptr.add(layout.payload_offset as usize) };
+
+            // The error payload is of type Error (same layout as Data).
+            // Error contains tydesc + value pointer.
+            let error_ptr = payload_ptr as *const rtdt::Error;
+            let error_tydesc = unsafe { (*error_ptr).tydesc() };
+            let error_value_ptr = unsafe { (*error_ptr).value_ptr() };
+
+            // Create a Value for the error (clones it).
+            let error_value = InterpContext::value_from_ptr(&mut ctx.rt, error_value_ptr, error_tydesc)?;
+
+            Err(InterpError::ReturnError(error_value))
+        }
+        rtdt::ResultTag::Ok => {
+            // Extract the Ok value using the same pattern as if-destructuring.
+            let layout = unsafe { rtdt::layout::compute_result_layout(tydesc) };
+            let payload_ptr = unsafe { ptr.add(layout.payload_offset as usize) };
+
+            // Get the Ok type descriptor.
+            let ok_tydesc = unsafe { (*tydesc).type_info.result.ok_tydesc };
+
+            // Create a Value for the payload (clones it).
+            InterpContext::value_from_ptr(&mut ctx.rt, payload_ptr, ok_tydesc)
+        }
     }
 }
 

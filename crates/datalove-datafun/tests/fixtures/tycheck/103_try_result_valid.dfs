@@ -1,0 +1,5 @@
+// Demonstrates that ! operator correctly unwraps Result and validates type checking.
+fun use_try_result(val: !u32): !u32
+  let unwrapped: u32 = val!
+  ret 42
+end

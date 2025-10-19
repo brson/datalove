@@ -43,6 +43,9 @@ pub enum TypeError {
     NotAFunction(String),
     DatalitError(String),
     ResultRequiresErrorBinding,
+    TryOutsideFunction { operator: String },
+    TryTypeMismatch { operator: String, actual_type: String },
+    TryReturnTypeMismatch { operator: String, return_type: String },
 }
 
 /// Type error entry with location info.
@@ -689,6 +692,14 @@ fn synthesize_expr<'db>(
             synthesize_function_call(ctx, call)
         }
 
+        ExprFunKind::TryOption(try_op) => {
+            synthesize_try_option(ctx, try_op)
+        }
+
+        ExprFunKind::TryResult(try_op) => {
+            synthesize_try_result(ctx, try_op)
+        }
+
         ExprFunKind::ParseError(_) => {
             Err(TypeError::CannotSynthesize)
         }
@@ -810,6 +821,100 @@ fn synthesize_function_call<'db>(
 
     // Return the function's return type.
     Ok(return_type)
+}
+
+/// Synthesize type for try-option operator (?).
+fn synthesize_try_option<'db>(
+    ctx: &mut TypeContext<'db>,
+    try_op: ExprTryOption<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let operand = try_op.operand(db);
+
+    // Verify we're inside a function.
+    let expected_return = ctx.expected_return_type
+        .ok_or_else(|| TypeError::TryOutsideFunction { operator: "?".to_string() })?;
+
+    // Synthesize operand type.
+    let operand_ty = synthesize_expr(ctx, operand)?;
+
+    // Operand must be Option<T>.
+    let inner_ty = match operand_ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
+            opt.inner_type(db)
+        }
+        _ => {
+            return Err(TypeError::TryTypeMismatch {
+                operator: "?".to_string(),
+                actual_type: type_to_string(db, operand_ty.ty(db)),
+            });
+        }
+    };
+
+    // Function return type must be Option<U> for some U.
+    match expected_return.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Option(_)) => {
+            // OK, function returns Option type.
+        }
+        _ => {
+            return Err(TypeError::TryReturnTypeMismatch {
+                operator: "?".to_string(),
+                return_type: type_to_string(db, expected_return.ty(db)),
+            });
+        }
+    }
+
+    // Return the unwrapped type T.
+    let heap = inner_ty.heap(db);
+    let ty = Type::Datalit(inner_ty.ty(db).clone());
+    Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+/// Synthesize type for try-result operator (!).
+fn synthesize_try_result<'db>(
+    ctx: &mut TypeContext<'db>,
+    try_op: ExprTryResult<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let operand = try_op.operand(db);
+
+    // Verify we're inside a function.
+    let expected_return = ctx.expected_return_type
+        .ok_or_else(|| TypeError::TryOutsideFunction { operator: "!".to_string() })?;
+
+    // Synthesize operand type.
+    let operand_ty = synthesize_expr(ctx, operand)?;
+
+    // Operand must be Result<T>.
+    let inner_ty = match operand_ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Result(res)) => {
+            res.inner_type(db)
+        }
+        _ => {
+            return Err(TypeError::TryTypeMismatch {
+                operator: "!".to_string(),
+                actual_type: type_to_string(db, operand_ty.ty(db)),
+            });
+        }
+    };
+
+    // Function return type must be Result<U> for some U.
+    match expected_return.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Result(_)) => {
+            // OK, function returns Result type.
+        }
+        _ => {
+            return Err(TypeError::TryReturnTypeMismatch {
+                operator: "!".to_string(),
+                return_type: type_to_string(db, expected_return.ty(db)),
+            });
+        }
+    }
+
+    // Return the unwrapped type T.
+    let heap = inner_ty.heap(db);
+    let ty = Type::Datalit(inner_ty.ty(db).clone());
+    Ok(TypeAndHeap::new(db, heap, ty))
 }
 
 /// Check if a type is numeric.

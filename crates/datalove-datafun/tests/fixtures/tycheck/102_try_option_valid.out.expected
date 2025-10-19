@@ -1,0 +1,16 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "use_try_option",
+      "params": [
+        {
+          "name": "val",
+          "type": "?u32"
+        }
+      ],
+      "return_type": "?u32"
+    }
+  ]
+}

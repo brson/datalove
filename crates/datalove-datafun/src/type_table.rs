@@ -168,6 +168,14 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
                 }
                 // TODO: Store the result type of the function call.
             }
+            ExprFunKind::TryOption(try_op) => {
+                self.visit_datafun_expr(try_op.operand(self.db))?;
+                // TODO: Store the result type of the try operator.
+            }
+            ExprFunKind::TryResult(try_op) => {
+                self.visit_datafun_expr(try_op.operand(self.db))?;
+                // TODO: Store the result type of the try operator.
+            }
             ExprFunKind::ParseError(_) => {}
         }
         Ok(())
