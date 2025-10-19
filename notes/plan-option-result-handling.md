@@ -18,9 +18,8 @@ The README specifies these features:
 2. [x] `none` and `error` literals
 3. [x] If-destructuring with `|binding|` pattern matching
 4. [ ] Postfix `?` and `!` operators for early return (type checking only, runtime incomplete)
-5. [ ] Math operators with suffixes for fixed ints (`+%`, `+|`, `+?`, `+!`, and unary `-`)
 
-Note: Binary operators with suffixes (`+%`, `+|`, `+?`, `+!`) are already implemented for fixed ints. Only unary operators need implementation.
+Note: Binary operators with suffixes (`+?`, `+!`) are already implemented for fixed ints. Only unary operators need implementation.
 
 ---
 
@@ -345,7 +344,7 @@ The recommended order for implementing remaining phases:
 
 ## Notes
 
-- Binary operators with suffixes (`+%`, `+|`, `+?`, `+!`) are already implemented
+- Binary operators with suffixes (`+?`, `+!`) are already implemented
 - The type system uses bidirectional type checking (check and synth modes)
 - AST uses salsa::tracked structs for incremental compilation
 - Follow existing patterns in tycheck.rs for new type checking rules
