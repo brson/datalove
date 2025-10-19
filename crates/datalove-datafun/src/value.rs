@@ -307,27 +307,24 @@ impl Value {
     /// Pretty-print this value using the runtime pretty printer.
     ///
     /// Returns a string representation in valid datalit syntax.
-    pub fn pretty_print(&self, rt: &mut rt::rt_local::RtLocal) -> Result<String, crate::interp::InterpError> {
+    pub fn pretty_print<'db>(
+        &self,
+        rt: &mut rt::rt_local::RtLocal,
+        tydesc_table: &mut crate::datalit::tydesc_table::TyDescTable<'db>,
+    ) -> Result<String, crate::interp::InterpError> {
         unsafe {
             // Get runtime handle.
             let rt_handle = rt as *mut _ as rt::LocalRtHandle;
 
-            // Create string type descriptor.
-            let string_tydesc = rtdt::TyDesc {
-                type_tag: rtdt::TyTag::String,
-                size: std::mem::size_of::<rtdt::String>() as u32,
-                align: std::mem::align_of::<rtdt::String>() as u32,
-                type_info: rtdt::TyInfo {
-                    nothing: rtdt::TyInfoNothing,
-                },
-            };
+            // Get string type descriptor from table.
+            let string_tydesc = tydesc_table.get_or_create(&crate::datalit::tycheck::Type::String);
 
             // Create output string.
             let mut output_string = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let status = rt::dtlv_rti_string_create_local(
                 rt_handle,
                 output_string.as_mut_ptr() as *mut u8,
-                &string_tydesc,
+                string_tydesc,
             );
 
             if status != rt::RtStatus::Ok {
@@ -338,44 +335,21 @@ impl Value {
 
             let mut output_string = output_string.assume_init();
 
-            // Create type descriptors for inline values outside the match to ensure they live long enough.
-            let bool_tydesc = rtdt::TyDesc {
-                type_tag: rtdt::TyTag::Bool,
-                size: 1,
-                align: 1,
-                type_info: rtdt::TyInfo {
-                    nothing: rtdt::TyInfoNothing,
-                },
-            };
-
-            let u32_tydesc = rtdt::TyDesc {
-                type_tag: rtdt::TyTag::U32,
-                size: 4,
-                align: 4,
-                type_info: rtdt::TyInfo {
-                    nothing: rtdt::TyInfoNothing,
-                },
-            };
-
-            let f32_tydesc = rtdt::TyDesc {
-                type_tag: rtdt::TyTag::F32,
-                size: 4,
-                align: 4,
-                type_info: rtdt::TyInfo {
-                    nothing: rtdt::TyInfoNothing,
-                },
-            };
+            // Get type descriptors for inline values from table.
+            let bool_tydesc = tydesc_table.get_or_create(&crate::datalit::tycheck::Type::Bool);
+            let u32_tydesc = tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32);
+            let f32_tydesc = tydesc_table.get_or_create(&crate::datalit::tycheck::Type::F32);
 
             // Get value pointer and type descriptor.
             let (value_ptr, tydesc_ptr) = match self {
                 Value::Bool(b) => {
-                    (b as *const bool as *const u8, &bool_tydesc as *const rtdt::TyDesc)
+                    (b as *const bool as *const u8, bool_tydesc)
                 }
                 Value::U32(n) => {
-                    (n as *const u32 as *const u8, &u32_tydesc as *const rtdt::TyDesc)
+                    (n as *const u32 as *const u8, u32_tydesc)
                 }
                 Value::F32(f) => {
-                    (f as *const f32 as *const u8, &f32_tydesc as *const rtdt::TyDesc)
+                    (f as *const f32 as *const u8, f32_tydesc)
                 }
                 Value::Int { ptr, tydesc } => (*ptr as *const u8, *tydesc),
                 Value::String { ptr, tydesc } => (*ptr as *const u8, *tydesc),
@@ -397,14 +371,14 @@ impl Value {
                 value_ptr,
                 tydesc_ptr,
                 &mut output_string as *mut rtdt::String as *mut u8,
-                &string_tydesc,
+                string_tydesc,
             );
 
             if status != rt::RtStatus::Ok {
                 rt::dtlv_rti_string_destroy_local(
                     rt_handle,
                     &mut output_string as *mut rtdt::String as *mut u8,
-                    &string_tydesc,
+                    string_tydesc,
                 );
                 return Err(crate::interp::InterpError::RuntimeError(
                     "Failed to pretty-print value".to_string(),
@@ -423,7 +397,7 @@ impl Value {
             rt::dtlv_rti_string_destroy_local(
                 rt_handle,
                 &mut output_string as *mut rtdt::String as *mut u8,
-                &string_tydesc,
+                string_tydesc,
             );
 
             Ok(result)

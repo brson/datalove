@@ -489,7 +489,7 @@ impl<'db> InterpContext<'db> {
 
         // Get the value (need to work around borrow checker).
         let value = self.variables.get(&name).unwrap();
-        value.pretty_print(&mut self.rt)
+        value.pretty_print(&mut self.rt, &mut self.tydesc_table)
     }
 
     /// Update the type table.
