@@ -1,14 +1,17 @@
 // Datalove REPL Web Application
 
-import init, { WebReplApp } from './pkg/datalove_web.js';
-
 let app = null;
+
+// Wait for Trunk to initialize the WASM module.
+window.addEventListener('TrunkApplicationStarted', async (e) => {
+    await main();
+});
 
 // Main entry point.
 async function main() {
     try {
-        // Initialize WASM module.
-        await init();
+        // Get WASM bindings provided by Trunk.
+        const { WebReplApp } = window.wasmBindings;
 
         // Create REPL app.
         app = new WebReplApp();
@@ -305,6 +308,3 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
-
-// Start the app.
-main();
