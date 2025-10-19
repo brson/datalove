@@ -3,3 +3,4 @@ target/
 crates/datalove-repl-egui/dist
 crates/datalove-repl-egui/worker-dist
 crates/datalove-repl-worker/dist
+crates/datalove-web/dist

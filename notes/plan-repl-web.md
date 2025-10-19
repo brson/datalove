@@ -619,3 +619,37 @@ Output will be in `dist/` directory.
   - Worker needs to be accessible at known path
 - Should we add TypeScript definitions for better JS ergonomics?
 - Performance considerations for large history (virtual scrolling?)
+
+## Current Blocker: WASM Compilation Issue
+
+**Status**: Web frontend code is complete but cannot build due to wasm-bindgen processing error.
+
+**Error**:
+```
+thread 'main' panicked at crates/wasm-interpreter/src/lib.rs:245:21:
+datalove_repl::engine::parse_full_script::_::__ctor::hcfcc3ad4802a3877:
+Read a negative address value from the stack. Did we run out of memory?
+```
+
+**Root Cause**: wasm-bindgen's wasm-interpreter fails when processing the compiled WASM binary. The issue occurs in Salsa-generated code for `parse_full_script`, suggesting that Salsa's compile-time initialization or const evaluation creates code paths that the wasm-interpreter cannot handle.
+
+**Investigation**:
+1. Cargo build to wasm32-unknown-unknown succeeds - WASM binary is generated
+2. wasm-bindgen processing fails during optimization/validation phase
+3. Error occurs regardless of whether using BlockingExecutor or WebWorkerExecutor
+4. The panic is in wasm-bindgen's internal wasm-interpreter, not in our code
+
+**Potential Solutions**:
+
+1. **Salsa Configuration**: Check if Salsa has WASM-specific configuration or features that avoid problematic code generation
+2. **Lazy Initialization**: Modify Engine/BlockingExecutor to delay Salsa database creation until first use (not during `new()`)
+3. **Simpler Backend**: Create a WASM-specific backend that doesn't use Salsa, or uses a simpler evaluation strategy
+4. **wasm-bindgen Options**: Try different wasm-bindgen flags (--no-demangle, --weak-refs, etc.)
+5. **Compiler Flags**: Experiment with different Rust codegen options for WASM target
+6. **Salsa Update**: Check if newer Salsa versions have better WASM support
+
+**Next Steps**:
+1. Investigate Salsa's WASM compatibility and configuration options
+2. Try lazy initialization pattern for Engine
+3. Consider creating a minimal WASM-compatible evaluator as interim solution
+4. Check if datalove-datafun or datalove-datalit can compile to WASM independently

@@ -1,0 +1,8 @@
+# Cargo configuration for datalove2 project
+
+# Increase WASM stack size to fix wasm-bindgen interpreter memory issues.
+# Default is 1MB (1048576 bytes), we're increasing to 4MB (4194304 bytes).
+# This helps wasm-bindgen's internal interpreter process complex
+# initialization code, particularly from Salsa-generated constructors.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-args=-z stack-size=4194304"]

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datalove REPL</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- History Panel -->
+        <div id="history-panel" class="panel">
+            <div class="panel-title">History</div>
+            <div id="history-content"></div>
+        </div>
+
+        <!-- Input Panel -->
+        <div id="input-panel" class="panel">
+            <div class="panel-title">
+                Input <span id="submit-hint">[Enter]</span>
+            </div>
+            <textarea id="input-area" rows="1" autofocus></textarea>
+        </div>
+
+        <!-- Environment Panel -->
+        <div id="env-panel" class="panel">
+            <div class="panel-title">Environment</div>
+            <div id="env-content">
+                <table id="env-table"></table>
+                <div id="env-empty">(no variables defined)</div>
+            </div>
+        </div>
+
+        <!-- Menu Modal -->
+        <div id="menu-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>Menu</h3>
+                <div class="menu-options">
+                    <button id="menu-resume" class="menu-option">Resume</button>
+                    <button id="menu-exit" class="menu-option">Exit</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Crash Modal -->
+        <div id="crash-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>💥 Crash</h3>
+                <pre id="crash-message"></pre>
+                <button id="crash-close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
