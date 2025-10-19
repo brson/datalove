@@ -342,16 +342,15 @@ unsafe fn pretty_result(
         let result = &*(value_ref as *const rtdt::Result);
         let ok_ty = tydesc.result_ok_ty();
 
-        // Calculate payload offset (need to account for both ok and error types).
-        let payload_offset = align_up(1, ok_ty.align() as usize);
-        let payload_value = value_ref.add(payload_offset);
+        // Calculate payload offset using the correct layout that accounts for both ok and error types.
+        let layout = rtdt::layout::compute_result_layout(tydesc.as_ptr());
+        let payload_value = value_ref.add(layout.payload_offset as usize);
 
         match result.tag {
             rtdt::ResultTag::Ok => {
                 pretty_value(rt, payload_value, ok_ty, string_mut, string_tydesc)
             }
             rtdt::ResultTag::Err => {
-                push_str(rt, string_mut, string_tydesc, b"error ")?;
                 // Error is always a dynamic type.
                 pretty_error(rt, payload_value, string_mut, string_tydesc)
             }
