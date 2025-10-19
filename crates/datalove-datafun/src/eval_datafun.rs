@@ -593,6 +593,12 @@ fn eval_function_call<'db>(
         "Function did not return a value".to_string(),
     ));
 
+    // Get the function's return type for handling early returns.
+    let return_type_hint = func.return_type(ctx.db);
+    let return_type = return_type_hint.and_then(|type_hint| {
+        crate::eval_datalit::convert_type_hint_tracked(ctx.db, type_hint)
+    });
+
     for stmt in body {
         match ctx.exec_stmt(stmt) {
             Ok(()) => {
@@ -602,6 +608,94 @@ fn eval_function_call<'db>(
                 // Got a return value.
                 result = Ok(value);
                 break;
+            }
+            Err(InterpError::ReturnNone) => {
+                // Early return from try-option operator (?).
+                // Create a None value of the function's return type.
+                if let Some(rt_type) = return_type {
+                    let tydesc = ctx.tydesc_table.get_or_create(rt_type.ty(ctx.db));
+                    let mut none_value = unsafe { Value::alloc_option(&mut ctx.rt, tydesc) };
+                    // Write None tag.
+                    unsafe {
+                        *(none_value.as_mut_ptr()) = datalove_rtdt::OptionTag::None as u8;
+                    }
+                    result = Ok(none_value);
+                    break;
+                } else {
+                    result = Err(InterpError::RuntimeError(
+                        "Cannot create None return value: function has no type annotation".to_string()
+                    ));
+                    break;
+                }
+            }
+            Err(InterpError::ReturnError(mut error_value)) => {
+                // Early return from try-result operator (!).
+                // Create an Err value wrapping the error.
+                if let Some(rt_type) = return_type {
+                    let tydesc = ctx.tydesc_table.get_or_create(rt_type.ty(ctx.db));
+                    let mut err_result = unsafe { Value::alloc_result(&mut ctx.rt, tydesc) };
+
+                    // Write Err tag.
+                    let layout = unsafe { datalove_rtdt::layout::compute_result_layout(tydesc) };
+                    unsafe {
+                        *(err_result.as_mut_ptr()) = datalove_rtdt::ResultTag::Err as u8;
+                    }
+
+                    // Write Error payload at the correct offset.
+                    let payload_ptr = unsafe { err_result.as_mut_ptr().add(layout.payload_offset as usize) };
+                    let error_ptr = payload_ptr as *mut datalove_rtdt::Error;
+
+                    // Extract the inner value's tydesc and ptr.
+                    // We need to write a Data/Error structure containing (tydesc, value_ptr).
+                    let (inner_tydesc, inner_ptr): (*const datalove_rtdt::TyDesc, *const u8) = match &error_value {
+                        Value::Bool(b) => {
+                            // For inline values, we need to allocate them on the heap first.
+                            // This is complex, so for now we'll leave it unimplemented.
+                            result = Err(InterpError::NotImplemented(
+                                "Error value handling for inline types not yet implemented".to_string()
+                            ));
+                            break;
+                        }
+                        Value::U32(_) | Value::F32(_) => {
+                            result = Err(InterpError::NotImplemented(
+                                "Error value handling for inline types not yet implemented".to_string()
+                            ));
+                            break;
+                        }
+                        Value::Int { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::String { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::Tuple { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::Struct { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::Enum { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::List { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::Map { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::Set { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::Option { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::Result { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::Data { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                        Value::Error { ptr, tydesc } => (*tydesc, *ptr as *const u8),
+                    };
+
+                    // Write the Error structure as Data (same layout).
+                    unsafe {
+                        std::ptr::write(
+                            error_ptr as *mut datalove_rtdt::Data,
+                            datalove_rtdt::Data::from_pointers(inner_tydesc, inner_ptr)
+                        );
+                    }
+
+                    // Transfer ownership - the error_value is now owned by the Result.
+                    // We must not free it.
+                    std::mem::forget(error_value);
+
+                    result = Ok(err_result);
+                    break;
+                } else {
+                    result = Err(InterpError::RuntimeError(
+                        "Cannot create Err return value: function has no type annotation".to_string()
+                    ));
+                    break;
+                }
             }
             Err(e) => {
                 // Propagate other errors.

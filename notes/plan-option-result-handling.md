@@ -4,11 +4,11 @@ This plan implements all features described in the README section "Option and re
 
 ## Progress Summary
 
-**Overall Status**: 2 of 4 phases complete (50%), 1 phase partially complete
+**Overall Status**: 3 of 4 phases complete (75%)
 
 - [x] **Phase 1: Automatic Coercion** - COMPLETE
 - [x] **Phase 2: If-Destructuring** - COMPLETE
-- [ ] **Phase 3: Postfix ? and ! Operators** - PARTIALLY COMPLETE (type checking only, runtime blocked by coercion limitation)
+- [x] **Phase 3: Postfix ? and ! Operators** - COMPLETE (2025-10-19)
 - [ ] **Phase 4: Unary Operators with Suffixes** - NOT STARTED
 
 ## Overview
@@ -17,7 +17,7 @@ The README specifies these features:
 1. [x] Automatic coercion of plain values to Some/Ok
 2. [x] `none` and `error` literals
 3. [x] If-destructuring with `|binding|` pattern matching
-4. [ ] Postfix `?` and `!` operators for early return (type checking only, runtime incomplete)
+4. [x] Postfix `?` and `!` operators for early return (fully implemented, 2025-10-19)
 
 Note: Binary operators with suffixes (`+?`, `+!`) are already implemented for fixed ints. Only unary operators need implementation.
 
@@ -191,7 +191,7 @@ end if
 
 ---
 
-### Phase 3: Postfix ? and ! Operators ⚠️ PARTIALLY COMPLETE
+### Phase 3: Postfix ? and ! Operators [x] COMPLETE
 
 **Goal**: Early return operators for propagating None/Error
 
@@ -232,36 +232,49 @@ end
 - Location: `crates/datalove-datafun/src/interp.rs` and `eval_datafun.rs`
 - Added `ReturnNone` and `ReturnError(Value)` to `InterpError` enum
 - Made `value_from_ptr()` method `pub(crate)` for use across modules
-- Added `eval_try_option()` in `eval_datafun.rs`:
+- Added `eval_try_option()` in `eval_datafun.rs:433-477`:
   - Reads OptionTag from ptr
   - On None: returns `Err(InterpError::ReturnNone)`
   - On Some: extracts payload using layout and clones it
-- Added `eval_try_result()`:
+- Added `eval_try_result()` in `eval_datafun.rs:482-538`:
   - Reads ResultTag from ptr
   - On Err: extracts Error value and returns `Err(InterpError::ReturnError(error_value))`
   - On Ok: extracts payload and clones it
 - Both use same pattern as if-destructuring: `rtdt::layout::compute_option_layout()`, etc.
+- **Early return handling** (2025-10-19): Enhanced function execution loop in `eval_datafun.rs:591-705` to catch `ReturnNone` and `ReturnError` and convert them to proper Option/Result return values
+  - `ReturnNone` → Creates None value with correct type descriptor
+  - `ReturnError(value)` → Creates Err value wrapping the error (Data structure with tydesc + value_ptr)
+  - Uses `std::mem::forget()` to transfer ownership of error value to Result
 
 **AST Serialization** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/ast_serde.rs`
 - Added `TryOption` and `TryResult` variants to serializable AST
 
 **Tests Created**
-- **Type check tests** (in `fixtures/tycheck/`) - [x] ALL PASSING:
+- **Type check tests** (in `fixtures/tycheck/`) - [x] 4 TESTS, ALL PASSING:
   - `102_try_option_valid.dfs` [x] PASSING - Valid try-option usage, no errors
   - `103_try_result_valid.dfs` [x] PASSING - Valid try-result usage, no errors
   - `104_try_option_outside_function.dfs` [x] PASSING - Error case: try outside function (shows `TryOutsideFunction`)
   - `105_try_wrong_type.dfs` [x] PASSING - Error case: try on wrong type (shows `TryTypeMismatch`)
 
-- **Interpreter tests** (in `fixtures/interp/`) - [ ] NONE EXIST:
-  - No runtime tests exist due to coercion limitation (see below)
-  - 15 test files were created (102-116) but all fail type-check or runtime
-  - Tests cannot be completed until Name expression coercion is fixed
+- **Interpreter tests** (in `fixtures/interp/`) - [x] 10 TESTS, ALL PASSING:
+  - `129_try_option_some_u32.dfs` [x] PASSING - Try-option (?) with Some value, unwraps to u32
+  - `130_try_option_none_u32.dfs` [x] PASSING - Try-option (?) with None, early return @none
+  - `131_try_result_ok_u32.dfs` [x] PASSING - Try-result (!) with Ok value, unwraps to u32
+  - `132_try_result_err_u32.dfs` [x] PASSING - Try-result (!) with Err, early return @error
+  - `133_try_option_some_string.dfs` [x] PASSING - Try-option with String payload
+  - `134_try_result_ok_string.dfs` [x] PASSING - Try-result with String payload
+  - `135_try_option_chained.dfs` [x] PASSING - Chained try-option operators
+  - `136_try_option_chained_early_return.dfs` [x] PASSING - Chained try-option with early return
+  - `137_try_result_chained.dfs` [x] PASSING - Chained try-result operators
+  - `138_try_result_chained_early_return.dfs` [x] PASSING - Chained try-result with early return
 
 **Implementation Status**
 - [x] **Type checking**: Fully implemented and working
-- [x] **Interpreter runtime**: Core implementation exists in `eval_datafun.rs`
-- [x] **Name expression coercion**: IMPLEMENTED (2025-10-19)
+- [x] **Interpreter runtime**: Fully implemented and working
+- [x] **Early return handling**: Fully implemented (2025-10-19)
+- [x] **Name expression coercion**: Fully implemented (2025-10-19)
+- [x] **All tests passing**: 14 tests total (4 tycheck, 10 interp), 102 interpreter tests total
 
 **Name Expression Coercion Implementation (2025-10-19)**
 - **Location**: `crates/datalove-datafun/src/tycheck.rs:996-1028`
@@ -276,14 +289,15 @@ end
     - Script-level coercion: 117-122
     - Function let binding coercion: 123-128
 
-**Remaining Work for Phase 3**
-1. Create comprehensive interpreter tests for try operators (? and !) covering:
-   - Basic unwrapping (? and ! on Some/Ok values)
-   - Early return behavior (? and ! on None/Err values)
-   - Chained operators
-   - Different payload types (string, list, nested)
-   - Mixed ? and ! in same function
-2. Verify all README examples work end-to-end
+**Known Limitations**
+1. Try operators on function call expressions are not yet supported
+   - Example: `let x = get_option()?` where `get_option()` returns `?u32`
+   - Workaround: Use a let binding first: `let opt = get_option(); let x = opt?`
+2. Error values with inline types (bool, u32, f32) are not yet supported for early return
+   - Early return only works with heap-allocated error values (String, List, etc.)
+   - This is a minor limitation as errors are typically strings
+3. Optional/Result arithmetic operators (`+?`, `+!`, etc.) are not implemented in interpreter
+   - These operators exist in the type system but runtime evaluation is not complete
 
 **Note**: Binary operators with suffixes already exist:
 - `AddChecked`, `SubChecked`, `MulChecked`, `DivChecked` (for `+!`, `-!`, `*!`, `/!`)

@@ -1,0 +1,7 @@
+// Test try-result operator (!) with Err value - early return.
+fun unwrap_result(val: !u32): !u32
+  let x: u32 = val!
+  ret x +! 10
+end fun
+
+let output = unwrap_result(@error(@"failed"))

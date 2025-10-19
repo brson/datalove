@@ -1,0 +1,8 @@
+// Test try-result operator (!) with Ok(string).
+fun process_string(val: !string): !string
+  let x: string = val!
+  ret x
+end fun
+
+let input: !string = @"success"
+let output = process_string(input)
