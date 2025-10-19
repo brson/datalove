@@ -93,7 +93,7 @@ pub struct PackageWorldTypecheckResult<'db> {
 }
 
 /// Context for typechecking.
-struct TypeContext<'db> {
+pub struct TypeContext<'db> {
     db: &'db dyn crate::Db,
     /// Variable bindings (name -> type).
     variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
@@ -105,7 +105,7 @@ struct TypeContext<'db> {
 }
 
 impl<'db> TypeContext<'db> {
-    fn new(db: &'db dyn crate::Db) -> Self {
+    pub fn new(db: &'db dyn crate::Db) -> Self {
         TypeContext {
             db,
             variables: HashMap::new(),
@@ -123,7 +123,7 @@ impl<'db> TypeContext<'db> {
         self.variables.insert(name, ty);
     }
 
-    fn add_function(&mut self, name: InternedText<'db>, func_type: TypeFunction<'db>) {
+    pub fn add_function(&mut self, name: InternedText<'db>, func_type: TypeFunction<'db>) {
         self.functions.insert(name, func_type);
     }
 
@@ -133,6 +133,11 @@ impl<'db> TypeContext<'db> {
 
     fn lookup_function(&self, name: InternedText<'db>) -> Option<TypeFunction<'db>> {
         self.functions.get(&name).copied()
+    }
+
+    /// Synthesize the type of an expression.
+    pub fn synthesize_expr(&mut self, expr: ExprFun<'db>) -> Result<TypeAndHeap<'db>, TypeError> {
+        synthesize_expr(self, expr)
     }
 }
 

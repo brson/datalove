@@ -98,6 +98,18 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
         Ok(())
     }
 
+    /// Get the type descriptor for a datafun expression.
+    fn get_datafun_expr_type(&self, expr: ExprFun<'db>) -> *const rtdt::TyDesc {
+        let id = expr.as_id();
+        let index = id.index() as usize;
+
+        if index < self.datafun_expr_types.len() {
+            self.datafun_expr_types[index]
+        } else {
+            std::ptr::null()
+        }
+    }
+
     /// Visit a statement.
     fn visit_statement(&mut self, statement: &Statement<'db>) -> Result<(), String> {
         match statement {
@@ -166,14 +178,42 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
                 for arg in call.args(self.db) {
                     self.visit_datafun_expr(*arg)?;
                 }
-                // TODO: Store the result type of the function call.
+                // We don't try to store the return type of function calls here.
+                // The type will be determined at runtime when the function is actually called.
             }
             ExprFunKind::Tuple(tuple) => {
                 // Visit all element expressions.
-                for elem in tuple.elements(self.db) {
+                let elements = tuple.elements(self.db);
+                let mut element_tydescs = Vec::new();
+
+                for elem in elements {
                     self.visit_datafun_expr(*elem)?;
+
+                    // Try to get the type descriptor for this element.
+                    let elem_tydesc = self.get_datafun_expr_type(*elem);
+                    if !elem_tydesc.is_null() {
+                        element_tydescs.push(elem_tydesc);
+                    }
+                    // If we can't get the type, we won't be able to build the tuple type.
+                    // This can happen for imported functions. Skip storing the tuple type.
                 }
-                // TODO: Store the result type of the tuple.
+
+                // Only create a tuple type descriptor if we got all element types.
+                if element_tydescs.len() == elements.len() {
+                    let tuple_tydesc = self.tydesc_table.get_or_create_tuple(&element_tydescs);
+
+                    // Store the type for this tuple expression.
+                    let tuple_id = expr.as_id();
+                    let tuple_index = tuple_id.index() as usize;
+
+                    if tuple_index >= self.datafun_expr_types.len() {
+                        self.datafun_expr_types.resize(tuple_index + 1, std::ptr::null());
+                    }
+
+                    self.datafun_expr_types[tuple_index] = tuple_tydesc;
+                }
+                // If we couldn't get all element types, the tuple type won't be stored.
+                // The evaluator will need to handle this case.
             }
             ExprFunKind::TryOption(try_op) => {
                 self.visit_datafun_expr(try_op.operand(self.db))?;

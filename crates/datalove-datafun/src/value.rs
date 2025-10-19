@@ -264,7 +264,7 @@ impl Value {
             Value::Bool(_) | Value::U32(_) | Value::F32(_) => {
                 // Inline values don't have a stored tydesc.
                 // Callers should handle this case.
-                std::ptr::null()
+                bug!();
             }
             Value::Int { tydesc, .. }
             | Value::String { tydesc, .. }
@@ -278,6 +278,32 @@ impl Value {
             | Value::Result { tydesc, .. }
             | Value::Data { tydesc, .. }
             | Value::Error { tydesc, .. } => *tydesc,
+        }
+    }
+
+    /// Get the type descriptor for this value.
+    ///
+    /// Returns null for inline primitive types (Bool, U32, F32) which don't have
+    /// a tydesc pointer stored with them.
+    pub fn get_tydesc(&self) -> *const rtdt::TyDesc {
+        match self {
+            Value::Bool(_) | Value::U32(_) | Value::F32(_) => {
+                // Primitive inline values don't have a stored tydesc.
+                // The caller would need to construct these based on the value type.
+                std::ptr::null()
+            }
+            Value::Int { tydesc, .. } |
+            Value::String { tydesc, .. } |
+            Value::Tuple { tydesc, .. } |
+            Value::Struct { tydesc, .. } |
+            Value::Enum { tydesc, .. } |
+            Value::List { tydesc, .. } |
+            Value::Map { tydesc, .. } |
+            Value::Set { tydesc, .. } |
+            Value::Option { tydesc, .. } |
+            Value::Result { tydesc, .. } |
+            Value::Data { tydesc, .. } |
+            Value::Error { tydesc, .. } => *tydesc,
         }
     }
 

@@ -50,6 +50,66 @@ impl<'db> TyDescTable<'db> {
         ptr
     }
 
+    /// Create a tuple type descriptor from raw element type descriptors.
+    ///
+    /// This is used when building tuples from datafun expressions where we
+    /// already have the runtime type descriptors for each element.
+    pub fn get_or_create_tuple(&mut self, element_tydescs: &[*const rtdt::TyDesc]) -> *const rtdt::TyDesc {
+        // Create temporary field info array with placeholder offsets.
+        let mut temp_field_info = Vec::new();
+        for &elem_tydesc in element_tydescs {
+            temp_field_info.push(rtdt::TyInfoTupleField {
+                offset: 0,
+                tydesc: elem_tydesc,
+            });
+        }
+
+        // Compute layout.
+        let layout = unsafe {
+            let temp_tydesc = rtdt::TyDesc {
+                type_tag: rtdt::TyTag::Tuple,
+                size: 0,
+                align: 1,
+                type_info: rtdt::TyInfo {
+                    tuple: rtdt::TyInfoTuple {
+                        num_fields: element_tydescs.len() as u32,
+                        fields: temp_field_info.as_ptr(),
+                    },
+                },
+            };
+            rtdt::layout::compute_tuple_layout(&temp_tydesc)
+        };
+
+        // Create final field info array with computed offsets.
+        let mut field_info = Vec::new();
+        for (i, &elem_tydesc) in element_tydescs.iter().enumerate() {
+            field_info.push(rtdt::TyInfoTupleField {
+                offset: layout.field_offsets[i],
+                tydesc: elem_tydesc,
+            });
+        }
+
+        // Store field array and get stable pointer.
+        self.tuple_fields.push(field_info);
+        let fields_ptr = self.tuple_fields.last().unwrap().as_ptr();
+
+        let tydesc = Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Tuple,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo {
+                tuple: rtdt::TyInfoTuple {
+                    num_fields: element_tydescs.len() as u32,
+                    fields: fields_ptr,
+                },
+            },
+        });
+
+        let ptr = &*tydesc as *const rtdt::TyDesc;
+        self.tydescs.push(tydesc);
+        ptr
+    }
+
     /// Create a new TyDesc for the given type.
     fn create_tydesc(&mut self, ty: &Type<'db>) -> Box<rtdt::TyDesc> {
         match ty {

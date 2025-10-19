@@ -27,7 +27,7 @@ pub fn eval_expr_with_expected<'db>(
 
         ExprFunKind::FunctionCall(call) => eval_function_call(ctx, call),
 
-        ExprFunKind::Tuple(tuple) => eval_tuple(ctx, tuple),
+        ExprFunKind::Tuple(tuple) => eval_tuple(ctx, expr, tuple),
 
         ExprFunKind::TryOption(try_op) => eval_try_option(ctx, try_op),
 
@@ -738,17 +738,212 @@ fn eval_function_call<'db>(
 }
 
 /// Evaluate a tuple expression.
-///
-/// TODO: This is a simplified implementation that needs proper type tracking.
 fn eval_tuple<'db>(
     ctx: &mut InterpContext<'db>,
+    tuple_expr: ExprFun<'db>,
     tuple: crate::ast::ExprTuple<'db>,
 ) -> InterpResult {
-    // For now, return an error indicating tuples are not yet fully supported.
-    // The typechecker allows them, but runtime evaluation needs more work.
-    Err(InterpError::RuntimeError(
-        "Datafun tuple evaluation not yet fully implemented".to_string()
-    ))
+    use datalove_rtdt as rtdt;
+
+    let elements = tuple.elements(ctx.db);
+
+    // First, evaluate all element expressions.
+    let mut element_values = Vec::new();
+    for elem in elements {
+        let value = eval_expr(ctx, *elem)?;
+        element_values.push(value);
+    }
+
+    // Try to get the tuple type descriptor from the type table.
+    let tuple_tydesc = ctx.type_table.get_datafun_expr_type(tuple_expr);
+
+    // If we don't have a pre-computed tuple type (e.g., because some elements
+    // are calls to imported functions), we need to build it from the element types.
+    let tuple_tydesc = if !tuple_tydesc.is_null() {
+        tuple_tydesc
+    } else {
+        // Build tuple type from element values.
+        let mut element_tydescs = Vec::new();
+        for elem_value in &element_values {
+            let elem_tydesc = elem_value.get_tydesc();
+            // For primitive inline values, we need to create their tydescs.
+            let elem_tydesc = if !elem_tydesc.is_null() {
+                elem_tydesc
+            } else {
+                match elem_value {
+                    Value::Bool(_) => {
+                        use crate::datalit::tycheck::Type;
+                        ctx.tydesc_table.get_or_create(&Type::Bool)
+                    }
+                    Value::U32(_) => {
+                        use crate::datalit::tycheck::Type;
+                        ctx.tydesc_table.get_or_create(&Type::U32)
+                    }
+                    Value::F32(_) => {
+                        use crate::datalit::tycheck::Type;
+                        ctx.tydesc_table.get_or_create(&Type::F32)
+                    }
+                    _ => {
+                        return Err(InterpError::RuntimeError(
+                            "Cannot determine type of tuple element".to_string()
+                        ));
+                    }
+                }
+            };
+            element_tydescs.push(elem_tydesc);
+        }
+
+        // Create tuple type descriptor.
+        ctx.tydesc_table.get_or_create_tuple(&element_tydescs)
+    };
+
+    // Allocate memory for the tuple.
+    let mut tuple_value = unsafe { Value::alloc_tuple(&mut ctx.rt, tuple_tydesc) };
+
+    // Get the tuple pointer.
+    let tuple_ptr = match &mut tuple_value {
+        Value::Tuple { ptr, .. } => *ptr,
+        _ => unreachable!("alloc_tuple should return a Tuple value"),
+    };
+
+    // Compute the layout to get field offsets.
+    let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc) };
+
+    // Copy each element into the tuple at the correct offset.
+    for (i, mut elem_value) in element_values.into_iter().enumerate() {
+        let field_offset = layout.field_offsets[i];
+        let field_dest = unsafe { tuple_ptr.add(field_offset as usize) };
+
+        // Copy the element value into the tuple field.
+        match &mut elem_value {
+            Value::Bool(b) => {
+                unsafe {
+                    *(field_dest as *mut bool) = *b;
+                }
+            }
+            Value::U32(n) => {
+                unsafe {
+                    *(field_dest as *mut u32) = *n;
+                }
+            }
+            Value::F32(f) => {
+                unsafe {
+                    *(field_dest as *mut f32) = *f;
+                }
+            }
+            Value::Int { ptr, tydesc } => {
+                // Transfer ownership of the pointer.
+                unsafe {
+                    *(field_dest as *mut *mut rtdt::Int) = *ptr;
+                }
+                // Prevent double-free by nulling out the source.
+                *ptr = std::ptr::null_mut();
+            }
+            Value::String { ptr, tydesc } => {
+                // Transfer ownership of the pointer.
+                unsafe {
+                    *(field_dest as *mut *mut rtdt::String) = *ptr;
+                }
+                // Prevent double-free by nulling out the source.
+                *ptr = std::ptr::null_mut();
+            }
+            Value::Tuple { ptr, tydesc } => {
+                // Get the field tydesc from the tuple type info.
+                let field_tydesc = unsafe {
+                    let tuple_info = (*tuple_tydesc).type_info.tuple;
+                    let field_info = &*tuple_info.fields.add(i);
+                    field_info.tydesc
+                };
+                let size = unsafe { (*field_tydesc).size };
+                // Copy the entire tuple data.
+                unsafe {
+                    std::ptr::copy_nonoverlapping(*ptr, field_dest, size as usize);
+                }
+                // Prevent double-free by nulling out the source.
+                *ptr = std::ptr::null_mut();
+            }
+            Value::Struct { ptr, tydesc } => {
+                let field_tydesc = unsafe {
+                    let tuple_info = (*tuple_tydesc).type_info.tuple;
+                    let field_info = &*tuple_info.fields.add(i);
+                    field_info.tydesc
+                };
+                let size = unsafe { (*field_tydesc).size };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(*ptr, field_dest, size as usize);
+                }
+                *ptr = std::ptr::null_mut();
+            }
+            Value::Enum { ptr, tydesc } => {
+                let field_tydesc = unsafe {
+                    let tuple_info = (*tuple_tydesc).type_info.tuple;
+                    let field_info = &*tuple_info.fields.add(i);
+                    field_info.tydesc
+                };
+                let size = unsafe { (*field_tydesc).size };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(*ptr, field_dest, size as usize);
+                }
+                *ptr = std::ptr::null_mut();
+            }
+            Value::List { ptr, tydesc } => {
+                unsafe {
+                    *(field_dest as *mut *mut rtdt::List) = *ptr;
+                }
+                *ptr = std::ptr::null_mut();
+            }
+            Value::Map { ptr, tydesc } => {
+                unsafe {
+                    *(field_dest as *mut *mut rtdt::Map) = *ptr;
+                }
+                *ptr = std::ptr::null_mut();
+            }
+            Value::Set { ptr, tydesc } => {
+                unsafe {
+                    *(field_dest as *mut *mut rtdt::Set) = *ptr;
+                }
+                *ptr = std::ptr::null_mut();
+            }
+            Value::Option { ptr, tydesc } => {
+                let field_tydesc = unsafe {
+                    let tuple_info = (*tuple_tydesc).type_info.tuple;
+                    let field_info = &*tuple_info.fields.add(i);
+                    field_info.tydesc
+                };
+                let size = unsafe { (*field_tydesc).size };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(*ptr, field_dest, size as usize);
+                }
+                *ptr = std::ptr::null_mut();
+            }
+            Value::Result { ptr, tydesc } => {
+                let field_tydesc = unsafe {
+                    let tuple_info = (*tuple_tydesc).type_info.tuple;
+                    let field_info = &*tuple_info.fields.add(i);
+                    field_info.tydesc
+                };
+                let size = unsafe { (*field_tydesc).size };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(*ptr, field_dest, size as usize);
+                }
+                *ptr = std::ptr::null_mut();
+            }
+            Value::Data { ptr, tydesc } => {
+                unsafe {
+                    *(field_dest as *mut *mut rtdt::Data) = *ptr;
+                }
+                *ptr = std::ptr::null_mut();
+            }
+            Value::Error { ptr, tydesc } => {
+                unsafe {
+                    *(field_dest as *mut *mut rtdt::Error) = *ptr;
+                }
+                *ptr = std::ptr::null_mut();
+            }
+        }
+    }
+
+    Ok(tuple_value)
 }
 
 #[cfg(test)]
