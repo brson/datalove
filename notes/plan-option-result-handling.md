@@ -261,25 +261,29 @@ end
 **Implementation Status**
 - [x] **Type checking**: Fully implemented and working
 - [x] **Interpreter runtime**: Core implementation exists in `eval_datafun.rs`
-- [ ] **End-to-end usage**: Blocked by coercion limitation
+- [x] **Name expression coercion**: IMPLEMENTED (2025-10-19)
 
-**Critical Limitation - Prevents Phase Completion**
-- **Problem**: Coercion only works for Datalit expressions, not Name expressions
-- **Impact**: The unwrapped result of `val?` or `val!` is a Name expression (variable reference)
-- **Consequence**: Cannot use unwrapped values in contexts requiring automatic coercion
-- **Example**: `let unwrapped = val?; ret unwrapped + 1` fails because `unwrapped` cannot be coerced
-- **Workaround**: Type check tests return literals (`ret 42`) instead of using unwrapped variables
-- **Status**: This limitation prevents writing realistic runtime tests that match README examples
+**Name Expression Coercion Implementation (2025-10-19)**
+- **Location**: `crates/datalove-datafun/src/tycheck.rs:996-1028`
+- **What was fixed**: Enhanced `check_expr` to support automatic coercion from `T` to `Option<T>` and `Result<T>` for Name expressions (variable references)
+- **How it works**: When checking a Name expression against an expected Option/Result type, the type checker now checks if the synthesized type matches the inner type and allows implicit wrapping
+- **Impact**: Unblocks usage of variables in contexts requiring Option/Result coercion, including let bindings inside functions
+- **Tests added**:
+  - Type checker tests: `106-112_name_coercion_*.dfs` (7 tests, all passing)
+    - Script-level coercion: 106-109
+    - Function let binding coercion: 110-112
+  - Interpreter tests: `117-128_name_coercion_*.dfs` (12 tests, all passing)
+    - Script-level coercion: 117-122
+    - Function let binding coercion: 123-128
 
 **Remaining Work for Phase 3**
-1. Fix Name expression coercion in type checker
-2. Create comprehensive interpreter tests covering:
+1. Create comprehensive interpreter tests for try operators (? and !) covering:
    - Basic unwrapping (? and ! on Some/Ok values)
    - Early return behavior (? and ! on None/Err values)
    - Chained operators
    - Different payload types (string, list, nested)
    - Mixed ? and ! in same function
-3. Verify all README examples work end-to-end
+2. Verify all README examples work end-to-end
 
 **Note**: Binary operators with suffixes already exist:
 - `AddChecked`, `SubChecked`, `MulChecked`, `DivChecked` (for `+!`, `-!`, `*!`, `/!`)
