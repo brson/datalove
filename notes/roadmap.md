@@ -12,6 +12,7 @@
 ## testing
 
 - runtime value generator for proptesting
+- have exampletest apply test filter
 
 ## repl
 
