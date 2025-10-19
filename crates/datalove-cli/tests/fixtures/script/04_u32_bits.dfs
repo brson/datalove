@@ -1,0 +1,5 @@
+require module sys/std/u32
+
+import u32.bits
+
+let output = bits()

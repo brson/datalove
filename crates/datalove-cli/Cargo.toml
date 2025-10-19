@@ -21,3 +21,11 @@ comrak = "0.32"
 [[bin]]
 name = "datalove"
 path = "src/main.rs"
+
+[dev-dependencies]
+datalove-exampletest.path = "../datalove-exampletest"
+
+[[test]]
+name = "script_tests"
+path = "tests/script_tests.rs"
+harness = false
