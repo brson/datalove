@@ -317,12 +317,16 @@ unsafe fn clone_impl(
 
             let ok_ty = ty.result_ok_ty();
 
+            // Compute correct payload offset using max of ok_align and error_align.
+            // This must match the layout computation in rtdt::layout::compute_result_layout.
+            let ok_align = ok_ty.align();
+            let error_align = std::mem::align_of::<usize>().max(std::mem::align_of::<*const rtdt::TyDesc>()) as u32;
+            let max_payload_align = ok_align.max(error_align);
+            let payload_offset = rtdt::layout::align_up(1, max_payload_align);
+
             // For now, we only handle Ok case.
             // Error type cloning would need the error tydesc.
             if res_in.tag == rtdt::ResultTag::Ok {
-                let ok_align = ok_ty.align();
-                let payload_offset = rtdt::layout::align_up(1, ok_align);
-
                 let payload_in = unsafe { value_in.add(payload_offset as usize) };
                 let payload_out = unsafe { value_out.add(payload_offset as usize) };
 
@@ -334,7 +338,6 @@ unsafe fn clone_impl(
             // For Err, we need to know the Error layout.
             // For now, just copy the error bytes.
             let err_size = std::mem::size_of::<rtdt::Error>() as u32;
-            let payload_offset = rtdt::layout::align_up(1, 8);
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     value_in.add(payload_offset as usize),
