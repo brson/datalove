@@ -1,0 +1,8 @@
+fun test(): @?u32
+  let x: @u32 = @10
+  let y: @u32 = x + @5
+  let z: @?u32 = y
+  ret z
+end fun
+
+let output = test()

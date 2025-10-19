@@ -1,0 +1,7 @@
+fun test(): @!string
+  let x: @string = @"world"
+  let y: @!string = x
+  ret y
+end fun
+
+let output = test()

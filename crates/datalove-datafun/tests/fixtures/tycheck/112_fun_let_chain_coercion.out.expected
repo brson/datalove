@@ -1,0 +1,33 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test_option",
+      "params": [
+        {
+          "name": "val",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "?u32"
+    },
+    {
+      "kind": "function",
+      "name": "test_result",
+      "params": [
+        {
+          "name": "val",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "!u32"
+    },
+    {
+      "kind": "function",
+      "name": "test_chain",
+      "params": [],
+      "return_type": "?u32"
+    }
+  ]
+}
