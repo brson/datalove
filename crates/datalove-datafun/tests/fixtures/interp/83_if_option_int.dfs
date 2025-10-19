@@ -1,0 +1,10 @@
+// Test Option destructuring with Int (bigint) payload - Some variant.
+fun test(a: @?int): @int
+    if a |value|
+        ret value
+    else
+        ret @0
+    end if
+end fun
+
+let output = test(@999999999999999999999)

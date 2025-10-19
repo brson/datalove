@@ -1,0 +1,10 @@
+// Test Option destructuring with Option<Result<u32>> payload - Some(Ok(42)).
+fun test(a: @?!u32): @!u32
+    if a |value|
+        ret value
+    else
+        ret @error
+    end if
+end fun
+
+let output = test(@42)

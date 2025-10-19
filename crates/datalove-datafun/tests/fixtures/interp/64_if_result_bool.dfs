@@ -1,0 +1,10 @@
+// Test Result destructuring with bool payload - Ok variant.
+fun test(a: @!bool): @bool
+    if a |value|
+        ret value
+    else |error|
+        ret @false
+    end if
+end fun
+
+let output = test(@true)

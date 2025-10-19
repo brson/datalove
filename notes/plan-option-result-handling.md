@@ -145,12 +145,19 @@ end if
   - `49_result_missing_else.dfs` ✓ PASSING - Error case: Result without else clause
   - `50_result_missing_error_binding.dfs` ✓ PASSING - Error case: Result without error binding
 - Interpreter tests (in `fixtures/interp/`):
-  - `57_if_option_some.dfs` ✓ PASSING - Option destructuring with Some, extracts value 42
+  - `57_if_option_some.dfs` ✓ PASSING - Option destructuring with Some, extracts value 42 (u32)
   - `58_if_option_none.dfs` ✓ PASSING - Option destructuring with None, executes else branch (999)
-  - `59_if_result_ok.dfs` ✓ PASSING - Result destructuring with Ok variant
+  - `59_if_result_ok.dfs` ✓ PASSING - Result destructuring with Ok variant (u32)
   - `60_if_result_err.dfs` ✓ PASSING - Result destructuring with Err variant, executes else branch (888)
   - `61_if_option_string.dfs` ✓ PASSING - Option destructuring with String payload (heap-allocated)
   - `62_if_result_string.dfs` ✓ PASSING - Result destructuring with String payload (heap-allocated)
+  - `63_if_option_bool.dfs` ✓ PASSING - Option destructuring with bool payload
+  - `64_if_result_bool.dfs` ✓ PASSING - Result destructuring with bool payload
+  - `83_if_option_int.dfs` ✓ PASSING - Option destructuring with Int (bigint) payload
+  - `84_if_result_int.dfs` ✓ PASSING - Result destructuring with Int (bigint) payload
+  - `89_if_option_option.dfs` ✓ PASSING - Option<Option<u32>> destructuring
+  - `90_if_result_result.dfs` ✓ PASSING - Result<Result<u32>> destructuring
+  - `91_if_option_result.dfs` ✓ PASSING - Option<Result<u32>> destructuring
 
 **Implementation Notes**
 - Option destructuring: else clause and error binding are optional
@@ -158,10 +165,12 @@ end if
 - Bindings add variables to type context during type checking
 - Variables are removed from context after body is checked
 - Runtime execution: Bindings are added to interpreter variable scope, executed, then removed and freed
-- All 61 interpreter tests passing (including 4 original if-destructuring tests + 2 heap-allocated payload tests)
-- **FIXED (2025-10-18)**: Payload extraction now supports ALL types including heap-allocated types (String, Int, Tuple, Struct, Enum, List, Map, Set, Option, Result)
+- All 68 interpreter tests passing (including 13 if-destructuring tests for Option/Result)
+- **FIXED (2025-10-18)**: Payload extraction now supports ALL types including heap-allocated types (String, Int, Option, Result)
   - Implementation uses `rt::clone::clone_value()` to deep clone heap-allocated payloads
-  - Added tests: `61_if_option_string.dfs` ✓ PASSING, `62_if_result_string.dfs` ✓ PASSING
+  - Inline primitive types supported: bool, u32, f32
+  - Heap types supported: Int (bigint), String, Option, Result
+  - Types not yet supported in datafun functions: u8, i8, u16, i16, i32, u64, i64, f64, Tuple, Struct, Enum, List, Map, Set
 
 ---
 
