@@ -204,40 +204,270 @@ impl<'db> InterpContext<'db> {
 
             Statement::If(stmt) => {
                 let condition = stmt.condition(self.db);
+                let then_binding = stmt.then_binding(self.db);
+                let else_binding = stmt.else_binding(self.db);
                 let then_body = stmt.then_body(self.db);
                 let else_body = stmt.else_body(self.db);
 
-                // Evaluate condition.
-                let condition_value = crate::eval_datafun::eval_expr(self, condition)?;
+                // Check if we're doing Option/Result destructuring or boolean condition.
+                if then_binding.is_some() || else_binding.is_some() {
+                    // Option/Result destructuring path.
+                    self.exec_if_destructuring(
+                        condition,
+                        then_binding,
+                        else_binding,
+                        then_body,
+                        else_body.as_ref(),
+                    )
+                } else {
+                    // Boolean condition path.
+                    // Evaluate condition.
+                    let condition_value = crate::eval_datafun::eval_expr(self, condition)?;
 
-                // Condition must be a bool.
-                let condition_bool = match condition_value {
-                    Value::Bool(b) => b,
-                    _ => {
-                        return Err(InterpError::TypeError(
-                            "condition must be bool".to_string()
-                        ));
-                    }
-                };
+                    // Condition must be a bool.
+                    let condition_bool = match condition_value {
+                        Value::Bool(b) => b,
+                        _ => {
+                            return Err(InterpError::TypeError(
+                                "condition must be bool".to_string()
+                            ));
+                        }
+                    };
 
-                // Execute appropriate branch.
-                if condition_bool {
-                    for stmt in then_body {
-                        self.exec_stmt(stmt)?;
+                    // Execute appropriate branch.
+                    if condition_bool {
+                        for stmt in then_body {
+                            self.exec_stmt(stmt)?;
+                        }
+                    } else if let Some(else_stmts) = else_body {
+                        for stmt in else_stmts {
+                            self.exec_stmt(stmt)?;
+                        }
                     }
-                } else if let Some(else_stmts) = else_body {
-                    for stmt in else_stmts {
-                        self.exec_stmt(stmt)?;
-                    }
+
+                    Ok(())
                 }
-
-                Ok(())
             }
 
             Statement::ParseError(err) => {
                 let message = err.message(self.db);
                 Err(InterpError::RuntimeError(
                     format!("Parse error: {}", message.as_str(self.db)),
+                ))
+            }
+        }
+    }
+
+    /// Execute an if statement with Option/Result destructuring.
+    fn exec_if_destructuring(
+        &mut self,
+        condition: ExprFun<'db>,
+        then_binding: Option<InternedText<'db>>,
+        else_binding: Option<InternedText<'db>>,
+        then_body: &[Statement<'db>],
+        else_body: Option<&Vec<Statement<'db>>>,
+    ) -> Result<(), InterpError> {
+        use rtdt::OptionTag;
+        use rtdt::ResultTag;
+
+        // Evaluate the condition to get the Option/Result value.
+        let condition_value = crate::eval_datafun::eval_expr(self, condition)?;
+
+        // Get the type descriptor from the value itself.
+        let condition_tydesc = condition_value.tydesc();
+        if condition_tydesc.is_null() {
+            return Err(InterpError::TypeError(
+                format!("Cannot determine type of condition value: {:?}", condition_value)
+            ));
+        }
+
+        // Check if it's Option or Result.
+        let type_tag = unsafe { (*condition_tydesc).type_tag };
+
+        match type_tag {
+            rtdt::TyTag::Option => {
+                // Extract the tag from the Option value.
+                let option_ptr = match condition_value {
+                    Value::Option { ptr, .. } => ptr,
+                    _ => {
+                        return Err(InterpError::TypeError(
+                            "Expected Option value for if-destructuring".to_string()
+                        ));
+                    }
+                };
+
+                let tag = unsafe { *(option_ptr as *const u8) as u8 };
+                let option_tag = if tag == OptionTag::Some as u8 {
+                    OptionTag::Some
+                } else {
+                    OptionTag::None
+                };
+
+                match option_tag {
+                    OptionTag::Some => {
+                        // Extract payload and execute then branch.
+                        let layout = unsafe { rtdt::layout::compute_option_layout(condition_tydesc) };
+                        let payload_ptr = unsafe { option_ptr.add(layout.payload_offset as usize) };
+
+                        // Get the inner type descriptor.
+                        let inner_tydesc = unsafe { (*condition_tydesc).type_info.option.inner_tydesc };
+
+                        // Create a Value for the payload.
+                        let payload_value = Self::value_from_ptr(payload_ptr, inner_tydesc)?;
+
+                        // Bind the payload if there's a then_binding.
+                        if let Some(binding_name) = then_binding {
+                            self.variables.insert(binding_name, payload_value);
+                        }
+
+                        // Execute then branch.
+                        for stmt in then_body {
+                            self.exec_stmt(stmt)?;
+                        }
+
+                        // Remove the binding.
+                        if let Some(binding_name) = then_binding {
+                            if let Some(mut old_value) = self.variables.remove(&binding_name) {
+                                unsafe { old_value.free(&mut self.rt); }
+                            }
+                        }
+                    }
+                    OptionTag::None => {
+                        // Execute else branch if it exists.
+                        if let Some(else_stmts) = else_body {
+                            for stmt in else_stmts {
+                                self.exec_stmt(stmt)?;
+                            }
+                        }
+                    }
+                }
+
+                Ok(())
+            }
+
+            rtdt::TyTag::Result => {
+                // Extract the tag from the Result value.
+                let result_ptr = match condition_value {
+                    Value::Result { ptr, .. } => ptr,
+                    _ => {
+                        return Err(InterpError::TypeError(
+                            "Expected Result value for if-destructuring".to_string()
+                        ));
+                    }
+                };
+
+                let tag = unsafe { *(result_ptr as *const u8) as u8 };
+                let result_tag = if tag == ResultTag::Ok as u8 {
+                    ResultTag::Ok
+                } else {
+                    ResultTag::Err
+                };
+
+                match result_tag {
+                    ResultTag::Ok => {
+                        // Extract Ok payload and execute then branch.
+                        let layout = unsafe { rtdt::layout::compute_result_layout(condition_tydesc) };
+                        let payload_ptr = unsafe { result_ptr.add(layout.payload_offset as usize) };
+
+                        // Get the Ok type descriptor.
+                        let ok_tydesc = unsafe { (*condition_tydesc).type_info.result.ok_tydesc };
+
+                        // Create a Value for the payload.
+                        let payload_value = Self::value_from_ptr(payload_ptr, ok_tydesc)?;
+
+                        // Bind the payload if there's a then_binding.
+                        if let Some(binding_name) = then_binding {
+                            self.variables.insert(binding_name, payload_value);
+                        }
+
+                        // Execute then branch.
+                        for stmt in then_body {
+                            self.exec_stmt(stmt)?;
+                        }
+
+                        // Remove the binding.
+                        if let Some(binding_name) = then_binding {
+                            if let Some(mut old_value) = self.variables.remove(&binding_name) {
+                                unsafe { old_value.free(&mut self.rt); }
+                            }
+                        }
+                    }
+                    ResultTag::Err => {
+                        // Extract Err payload and execute else branch.
+                        if let Some(else_stmts) = else_body {
+                            let layout = unsafe { rtdt::layout::compute_result_layout(condition_tydesc) };
+                            let payload_ptr = unsafe { result_ptr.add(layout.payload_offset as usize) };
+
+                            // The error payload is of type Error (same layout as Data).
+                            // Error contains tydesc + value pointer.
+                            let error_ptr = payload_ptr as *const rtdt::Error;
+                            let error_tydesc = unsafe { (*error_ptr).tydesc() };
+                            let error_value_ptr = unsafe { (*error_ptr).value_ptr() };
+
+                            // Create a Value for the error.
+                            let error_value = Self::value_from_ptr(error_value_ptr, error_tydesc)?;
+
+                            // Bind the error if there's an else_binding.
+                            if let Some(binding_name) = else_binding {
+                                self.variables.insert(binding_name, error_value);
+                            }
+
+                            // Execute else branch.
+                            for stmt in else_stmts {
+                                self.exec_stmt(stmt)?;
+                            }
+
+                            // Remove the binding.
+                            if let Some(binding_name) = else_binding {
+                                if let Some(mut old_value) = self.variables.remove(&binding_name) {
+                                    unsafe { old_value.free(&mut self.rt); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Ok(())
+            }
+
+            _ => {
+                Err(InterpError::TypeError(
+                    format!("If-destructuring requires Option or Result type, got {:?}", type_tag)
+                ))
+            }
+        }
+    }
+
+    /// Create a Value from a pointer and type descriptor.
+    ///
+    /// This clones the value at the given pointer into a new allocation.
+    fn value_from_ptr(ptr: *const u8, tydesc: *const rtdt::TyDesc) -> Result<Value, InterpError> {
+        if tydesc.is_null() {
+            return Err(InterpError::TypeError(
+                "Cannot create value from null type descriptor".to_string()
+            ));
+        }
+
+        let type_tag = unsafe { (*tydesc).type_tag };
+
+        match type_tag {
+            rtdt::TyTag::Bool => {
+                let value = unsafe { *(ptr as *const bool) };
+                Ok(Value::Bool(value))
+            }
+            rtdt::TyTag::U32 => {
+                let value = unsafe { *(ptr as *const u32) };
+                Ok(Value::U32(value))
+            }
+            rtdt::TyTag::F32 => {
+                let value = unsafe { *(ptr as *const f32) };
+                Ok(Value::F32(value))
+            }
+            _ => {
+                // For heap-allocated types, we need to clone.
+                // For now, return NotImplemented for complex types.
+                Err(InterpError::NotImplemented(
+                    format!("Cloning {:?} values in if-destructuring not yet implemented", type_tag)
                 ))
             }
         }

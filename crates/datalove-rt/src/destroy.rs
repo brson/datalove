@@ -180,8 +180,18 @@ pub unsafe fn any_destroy_local(
                         any_destroy_local(rt, payload_ptr, ok_ty.as_ptr())
                     }
                     rtdt::ResultTag::Err => {
-                        // Error type is not parameterized - need to figure out how to destroy it.
-                        todo!("Error destructor")
+                        // Destroy the Error payload.
+                        // Create a temporary Error tydesc.
+                        // fixme this is pretty sketchy!
+                        let error_tydesc = rtdt::TyDesc {
+                            type_tag: rtdt::TyTag::Error,
+                            size: std::mem::size_of::<rtdt::Error>() as u32,
+                            align: std::mem::align_of::<rtdt::Error>() as u32,
+                            type_info: rtdt::TyInfo {
+                                nothing: rtdt::TyInfoNothing,
+                            },
+                        };
+                        any_destroy_local(rt, payload_ptr, &error_tydesc as *const rtdt::TyDesc)
                     }
                 }
             }

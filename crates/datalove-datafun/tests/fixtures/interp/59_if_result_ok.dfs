@@ -1,0 +1,10 @@
+// Test Result destructuring with Ok variant.
+fun test(a: @!u32): @u32
+    if a |value|
+        ret value
+    else |error|
+        ret @999
+    end if
+end fun
+
+let output = test(@100)

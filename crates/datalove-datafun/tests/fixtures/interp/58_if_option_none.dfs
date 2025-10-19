@@ -1,0 +1,10 @@
+// Test Option destructuring with None variant.
+fun test(a: @?u32): @u32
+    if a |value|
+        ret value
+    else
+        ret @999
+    end if
+end fun
+
+let output = test(@none)

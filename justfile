@@ -27,9 +27,7 @@ test-sanitizers-all:
 # AddressSanitizer - detects memory errors (use-after-free, buffer overflows, etc).
 # Works on: stable, Linux/macOS/Windows
 test-san-address *ARGS='':
-    env RUSTFLAGS="-Z sanitizer=address" \
-        RUSTDOCFLAGS="-Z sanitizer=address" \
-        cargo +nightly test --all --target x86_64-unknown-linux-gnu {{ARGS}}
+    env ASAN_SYMBOLIZER_PATH="$(which llvm-symbolizer-18)" ASAN_OPTIONS="symbolize=1" RUSTFLAGS="-Z sanitizer=address" cargo +nightly test --target x86_64-unknown-linux-gnu --all {{ARGS}}
 
 # LeakSanitizer - detects memory leaks.
 # Works on: stable, Linux/macOS

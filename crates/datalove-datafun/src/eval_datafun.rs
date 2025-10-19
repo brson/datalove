@@ -498,10 +498,18 @@ fn eval_function_call<'db>(
     let params = func.params(ctx.db);
     let body = func.body(ctx.db);
 
-    // Evaluate arguments.
+    // Evaluate arguments with expected parameter types.
     let mut arg_values = Vec::new();
-    for arg in args {
-        let value = eval_expr(ctx, *arg)?;
+    for (i, arg) in args.iter().enumerate() {
+        // Get the expected type from the parameter if available.
+        let expected_type = if i < params.len() {
+            let type_hint = params[i].type_hint(ctx.db);
+            crate::eval_datalit::convert_type_hint_tracked(ctx.db, type_hint)
+        } else {
+            None
+        };
+
+        let value = eval_expr_with_expected(ctx, *arg, expected_type)?;
         arg_values.push(value);
     }
 

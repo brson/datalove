@@ -4,10 +4,10 @@ This plan implements all features described in the README section "Option and re
 
 ## Progress Summary
 
-**Overall Status**: 1.5 of 4 phases complete (37.5%)
+**Overall Status**: 2 of 4 phases complete (50%)
 
 - ✅ **Phase 1: Automatic Coercion** - COMPLETE
-- ⚠️ **Phase 2: If-Destructuring** - PARTIALLY COMPLETE (type checking done, interpreter not done)
+- ✅ **Phase 2: If-Destructuring** - COMPLETE
 - ⚠️ **Phase 3: Postfix ? and ! Operators** - NOT STARTED
 - ⚠️ **Phase 4: Unary Operators with Suffixes** - NOT STARTED
 
@@ -79,7 +79,7 @@ Note: Binary operators with suffixes (`+%`, `+|`, `+?`, `+!`) are already implem
 
 ---
 
-### Phase 2: If-Destructuring ⚠️ PARTIALLY COMPLETE
+### Phase 2: If-Destructuring ✅ COMPLETE
 
 **Goal**: Support `if expr |binding| ... else ... end if` syntax
 
@@ -123,38 +123,41 @@ end if
 - **Validation**: Result destructuring requires error-binding else branch (lines 551-554)
 - Added `TypeError::ResultRequiresErrorBinding` variant (line 45)
 
-**Interpreter/Runtime Changes** ❌ NOT IMPLEMENTED
-- Location: `crates/datalove-datafun/src/interp.rs` lines 205-235
-- Current behavior: `Statement::If` handler only evaluates condition as boolean, completely ignores bindings
-- **Missing functionality**:
-  1. Check if `then_binding` or `else_binding` exist on the `StmtIf`
-  2. When bindings present, condition must be Option or Result (not bool)
-  3. For Option: Read tag from Option value (rtdt::OptionTag), extract payload if Some, bind to then_binding
-  4. For Result: Read tag from Result value (rtdt::ResultTag), extract payload (value or error), bind to appropriate variable
-  5. Execute branch with binding added to variable scope
-  6. Remove binding from scope after branch execution
-- **Consequences**: Type check tests pass but interpreter tests cannot execute if-destructuring code
+**Interpreter/Runtime Changes** ✓ IMPLEMENTED
+- Location: `crates/datalove-datafun/src/interp.rs` lines 205-250 (Statement::If handler), 261-475 (exec_if_destructuring method)
+- Implementation:
+  1. `Statement::If` handler checks for bindings and routes to `exec_if_destructuring` if present
+  2. `exec_if_destructuring` evaluates condition and gets tydesc from value
+  3. For Option: Reads OptionTag, extracts payload at layout-computed offset, binds to then_binding
+  4. For Result: Reads ResultTag, extracts Ok/Err payload, binds to appropriate variable
+  5. Executes branch with binding in variable scope
+  6. Removes binding from scope and frees value after branch execution
+- **Additional change**: `eval_function_call` in `eval_datafun.rs` now passes expected parameter types to enable automatic Option/Result wrapping of arguments (lines 501-516)
 
 **Test Helpers Updated** ✓ IMPLEMENTED
 - `tycheck_tests.rs` lines 112-114: JSON serialization for new error
 - `tycheck_world_tests.rs` lines 54-56: JSON serialization for new error
 
-**Tests Created** ⚠️ PARTIALLY PASSING
+**Tests Created** ✓ ALL PASSING
 - Type check tests (in `fixtures/tycheck/`):
   - `47_if_option_destructuring.dfs` ✓ PASSING - Option destructuring test
   - `48_if_result_destructuring.dfs` ✓ PASSING - Result destructuring with error binding
   - `49_result_missing_else.dfs` ✓ PASSING - Error case: Result without else clause
   - `50_result_missing_error_binding.dfs` ✓ PASSING - Error case: Result without error binding
 - Interpreter tests (in `fixtures/interp/`):
-  - ❌ NOT CREATED - Cannot test runtime execution until interpreter support is implemented
+  - `57_if_option_some.dfs` ✓ PASSING - Option destructuring with Some, extracts value 42
+  - `58_if_option_none.dfs` ✓ PASSING - Option destructuring with None, executes else branch (999)
+  - `59_if_result_ok.dfs` ✓ PASSING - Result destructuring with Ok variant
+  - `60_if_result_err.dfs` ✓ PASSING - Result destructuring with Err variant, executes else branch (888)
 
 **Implementation Notes**
 - Option destructuring: else clause and error binding are optional
 - Result destructuring: else clause with error binding is **required**
-- Bindings add variables to type context during body checking
+- Bindings add variables to type context during type checking
 - Variables are removed from context after body is checked
-- **Runtime execution blocked**: Parser and type checker are ready, but interpreter cannot execute if-destructuring until `Statement::If` handler is updated
-- All type check tests passing, but no interpreter tests exist yet
+- Runtime execution: Bindings are added to interpreter variable scope, executed, then removed and freed
+- All 59 interpreter tests passing (including 4 new if-destructuring tests)
+- **Limitation**: Payload extraction only supports primitive types (bool, u32, f32); heap-allocated payloads require cloning infrastructure (to be added later)
 
 ---
 

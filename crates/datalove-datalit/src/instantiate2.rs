@@ -2031,10 +2031,13 @@ mod tests {
         let db = Database::default();
         let typechecked = compile(&db, ": @!@u32 / @42")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
-        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
-        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::rt_local::RtLocal) };
+        let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Result);
@@ -2053,10 +2056,13 @@ mod tests {
         let db = Database::default();
         let typechecked = compile(&db, ": @!@u32 / @error @\"oops\"")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
-        let rt_handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
-        let rt_ref = unsafe { &mut *(rt_handle as *mut datalove_rt::rt_local::RtLocal) };
+        let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
-        let inst = instantiate_value(&db, rt_ref, &mut tydesc_table, typechecked)?;
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
 
         unsafe {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Result);
