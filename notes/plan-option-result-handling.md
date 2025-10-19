@@ -4,11 +4,11 @@ This plan implements all features described in the README section "Option and re
 
 ## Progress Summary
 
-**Overall Status**: 3 of 4 phases complete (75%)
+**Overall Status**: 2 of 4 phases complete (50%), 1 phase partially complete
 
 - [x] **Phase 1: Automatic Coercion** - COMPLETE
 - [x] **Phase 2: If-Destructuring** - COMPLETE
-- [x] **Phase 3: Postfix ? and ! Operators** - COMPLETE
+- [ ] **Phase 3: Postfix ? and ! Operators** - PARTIALLY COMPLETE (type checking only, runtime blocked by coercion limitation)
 - [ ] **Phase 4: Unary Operators with Suffixes** - NOT STARTED
 
 ## Overview
@@ -17,7 +17,7 @@ The README specifies these features:
 1. [x] Automatic coercion of plain values to Some/Ok
 2. [x] `none` and `error` literals
 3. [x] If-destructuring with `|binding|` pattern matching
-4. [x] Postfix `?` and `!` operators for early return
+4. [ ] Postfix `?` and `!` operators for early return (type checking only, runtime incomplete)
 5. [ ] Math operators with suffixes for fixed ints (`+%`, `+|`, `+?`, `+!`, and unary `-`)
 
 Note: Binary operators with suffixes (`+%`, `+|`, `+?`, `+!`) are already implemented for fixed ints. Only unary operators need implementation.
@@ -192,7 +192,7 @@ end if
 
 ---
 
-### Phase 3: Postfix ? and ! Operators [x] COMPLETE
+### Phase 3: Postfix ? and ! Operators ⚠️ PARTIALLY COMPLETE
 
 **Goal**: Early return operators for propagating None/Error
 
@@ -247,20 +247,40 @@ end
 - Location: `crates/datalove-datafun/src/ast_serde.rs`
 - Added `TryOption` and `TryResult` variants to serializable AST
 
-**Tests Created** [x] ALL PASSING (56 tycheck tests total)
-- Type check tests (in `fixtures/tycheck/`):
+**Tests Created**
+- **Type check tests** (in `fixtures/tycheck/`) - [x] ALL PASSING:
   - `102_try_option_valid.dfs` [x] PASSING - Valid try-option usage, no errors
   - `103_try_result_valid.dfs` [x] PASSING - Valid try-result usage, no errors
   - `104_try_option_outside_function.dfs` [x] PASSING - Error case: try outside function (shows `TryOutsideFunction`)
   - `105_try_wrong_type.dfs` [x] PASSING - Error case: try on wrong type (shows `TryTypeMismatch`)
 
-**Implementation Notes**
-- Postfix operators have highest precedence, parsed before binary operators
-- Early return mechanism uses `InterpError` variants as control flow
-- Type validation ensures operators only used in function context with matching return types
-- Payload extraction follows existing if-destructuring pattern with layout computation
-- The tests demonstrate the operators work correctly by showing the unwrapped values type-check properly
-- Current limitation: Coercion only works for Datalit expressions, not Name expressions, so tests return literals rather than variables
+- **Interpreter tests** (in `fixtures/interp/`) - [ ] NONE EXIST:
+  - No runtime tests exist due to coercion limitation (see below)
+  - 15 test files were created (102-116) but all fail type-check or runtime
+  - Tests cannot be completed until Name expression coercion is fixed
+
+**Implementation Status**
+- [x] **Type checking**: Fully implemented and working
+- [x] **Interpreter runtime**: Core implementation exists in `eval_datafun.rs`
+- [ ] **End-to-end usage**: Blocked by coercion limitation
+
+**Critical Limitation - Prevents Phase Completion**
+- **Problem**: Coercion only works for Datalit expressions, not Name expressions
+- **Impact**: The unwrapped result of `val?` or `val!` is a Name expression (variable reference)
+- **Consequence**: Cannot use unwrapped values in contexts requiring automatic coercion
+- **Example**: `let unwrapped = val?; ret unwrapped + 1` fails because `unwrapped` cannot be coerced
+- **Workaround**: Type check tests return literals (`ret 42`) instead of using unwrapped variables
+- **Status**: This limitation prevents writing realistic runtime tests that match README examples
+
+**Remaining Work for Phase 3**
+1. Fix Name expression coercion in type checker
+2. Create comprehensive interpreter tests covering:
+   - Basic unwrapping (? and ! on Some/Ok values)
+   - Early return behavior (? and ! on None/Err values)
+   - Chained operators
+   - Different payload types (string, list, nested)
+   - Mixed ? and ! in same function
+3. Verify all README examples work end-to-end
 
 **Note**: Binary operators with suffixes already exist (lines 138-172 in datafun/ast.rs):
 - `AddOptional`, `SubOptional`, `MulOptional`, `DivOptional` (for `+?`, `-?`, etc.)
