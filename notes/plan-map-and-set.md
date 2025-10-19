@@ -124,41 +124,83 @@ Added extern "C" wrappers for all set operations:
 - dtlv_rti_btreeset_clear_local [x]
 - dtlv_rti_btreeset_clone_from_slice_local [x]
 
-### Phase 3: Runtime Test Suite - BTreeSet Unit Tests
+### Phase 3: Runtime Test Suite - BTreeSet Unit Tests - [~] IN PROGRESS
 
-**Create crates/datalove-rt-tests/tests/btreeset_tests.rs** (~40 tests):
+**Created crates/datalove-rt-tests/tests/btreeset_tests.rs** with 20 tests (target: ~50 tests):
 
-Basic operations:
-- test_create_empty_set
-- test_destroy_empty_set
-- test_insert_single_element
-- test_insert_multiple_elements
-- test_insert_duplicate (should not increase size)
-- test_insert_ordering (elements stored in order)
-- test_remove_existing
-- test_remove_nonexistent
-- test_contains_existing
-- test_contains_nonexistent
-- test_clear_empty
-- test_clear_nonempty
+**Completed Tests (20/50):**
 
-Edge cases:
-- test_insert_with_split (force B-tree node splits)
-- test_remove_with_rebalance (force node borrowing/merging)
-- test_insert_reverse_order
-- test_large_set (stress test with many elements)
+Basic operations (12 tests): [x]
+- test_btreeset_create_empty [x]
+- test_btreeset_destroy_empty [x]
+- test_btreeset_insert_single [x]
+- test_btreeset_insert_multiple [x]
+- test_btreeset_insert_duplicate [x]
+- test_btreeset_contains_existing [x]
+- test_btreeset_contains_nonexistent [x]
+- test_btreeset_remove_existing [x]
+- test_btreeset_remove_nonexistent [x]
+- test_btreeset_clear_empty [x]
+- test_btreeset_clear_nonempty [x]
+- test_btreeset_clone_from_slice_single [x]
 
-Data types:
-- test_set_u32
-- test_set_string
-- test_set_tuples
-- test_set_nested_types
+1000-element stress tests (8 tests): [x]
+- test_btreeset_insert_1000_elements [x]
+- test_btreeset_insert_1000_reverse [x]
+- test_btreeset_insert_1000_random [x]
+- test_btreeset_contains_1000_elements [x]
+- test_btreeset_remove_1000_elements [x]
+- test_btreeset_clone_from_slice_1000 [x]
+- test_btreeset_insert_remove_cycles_1000 [x]
+- test_btreeset_clear_1000_elements [x]
 
-Clone operations:
+**Critical Bugs Fixed:**
+1. **B-tree split logic** (set.rs:703-800) - Fixed split_internal_node to properly extract separator key and distribute pending insertions [x]
+2. **Memory leak in remove** (set.rs:1128) - Changed from free_node to destroy_tree_recursive when set becomes empty [x]
+
+**Memory Safety Checkpoint:** [x] PASSED - All 20 tests pass with address sanitizer, no leaks
+
+**Remaining Tests (30/50):**
+
+B-tree structure tests (8 tests): [ ]
+- test_btreeset_node_capacity
+- test_btreeset_multi_level_splits
+- test_btreeset_deep_tree_inserts
+- test_btreeset_verify_ordering_after_splits
+- test_btreeset_root_splits
+- test_btreeset_leaf_splits
+- test_btreeset_internal_splits
+- test_btreeset_mixed_operations_structure
+
+String element tests (10 tests): [ ]
+- test_btreeset_insert_single_string
+- test_btreeset_insert_multiple_strings
+- test_btreeset_contains_string
+- test_btreeset_remove_string
+- test_btreeset_clear_strings
+- test_btreeset_insert_1000_strings
+- test_btreeset_string_ordering
+- test_btreeset_empty_strings
+- test_btreeset_unicode_strings
+- test_btreeset_long_strings
+
+Clone from slice tests (5 more tests): [ ]
 - test_clone_from_slice_empty
-- test_clone_from_slice_single
 - test_clone_from_slice_multiple
 - test_clone_from_slice_with_duplicates
+- test_clone_from_slice_strings
+- test_clone_from_slice_large
+
+Error handling tests (6 tests): [ ]
+- test_btreeset_null_pointer_checks
+- test_btreeset_insert_null_element
+- test_btreeset_remove_null_element
+- test_btreeset_contains_null_element
+- test_btreeset_destroy_null_checks
+- test_btreeset_clear_null_checks
+
+Tuple/nested type tests (1 test): [ ]
+- test_btreeset_tuples
 
 ### Phase 4: Runtime Test Suite - BTreeSet Property Tests
 
@@ -266,7 +308,7 @@ Verify existing tests:
 
 Runtime tests:
 - [x] rt-tests btreemap_tests (43 tests - COMPLETE)
-- [ ] rt-tests btreeset_tests (NEEDS CREATION)
+- [~] rt-tests btreeset_tests (20/50 tests - IN PROGRESS, all pass with ASAN)
 - [x] rt-tests btreemap_proptests (18 tests - COMPLETE)
 - [ ] rt-tests btreeset_proptests (NEEDS CREATION)
 - [x] rt-tests clone_tests (5 map + 5 set tests - HAS COVERAGE)
