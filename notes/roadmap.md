@@ -36,6 +36,7 @@
 
 ## near future
 
+- datafun ast roundtrip
 - type declarations
 - name resolution for named types
 - generics
