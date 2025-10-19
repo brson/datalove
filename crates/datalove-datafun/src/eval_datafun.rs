@@ -233,12 +233,6 @@ fn eval_binop<'db>(ctx: &mut InterpContext<'db>, binop: ExprBinOp<'db>) -> Inter
         MulOptional => eval_mul_optional(ctx, lhs_value, rhs_value),
         DivOptional => eval_div_optional(ctx, lhs_value, rhs_value),
 
-        // Saturating arithmetic.
-        AddSaturating => eval_add_saturating(ctx, lhs_value, rhs_value),
-        SubSaturating => eval_sub_saturating(ctx, lhs_value, rhs_value),
-        MulSaturating => eval_mul_saturating(ctx, lhs_value, rhs_value),
-        DivSaturating => eval_div_saturating(ctx, lhs_value, rhs_value),
-
         // Comparison operators.
         Lt => eval_lt(ctx, lhs_value, rhs_value),
         Gt => eval_gt(ctx, lhs_value, rhs_value),
@@ -363,52 +357,6 @@ fn eval_mul_optional(_ctx: &mut InterpContext<'_>, _lhs: Value, _rhs: Value) -> 
 /// Evaluate optional division.
 fn eval_div_optional(_ctx: &mut InterpContext<'_>, _lhs: Value, _rhs: Value) -> InterpResult {
     Err(InterpError::NotImplemented("optional division".to_string()))
-}
-
-/// Evaluate saturating addition.
-fn eval_add_saturating(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
-    match (lhs, rhs) {
-        (Value::U32(a), Value::U32(b)) => Ok(Value::from_u32(a.saturating_add(b))),
-        _ => Err(InterpError::TypeError(
-            "Unsupported types for saturating addition".to_string(),
-        )),
-    }
-}
-
-/// Evaluate saturating subtraction.
-fn eval_sub_saturating(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
-    match (lhs, rhs) {
-        (Value::U32(a), Value::U32(b)) => Ok(Value::from_u32(a.saturating_sub(b))),
-        _ => Err(InterpError::TypeError(
-            "Unsupported types for saturating subtraction".to_string(),
-        )),
-    }
-}
-
-/// Evaluate saturating multiplication.
-fn eval_mul_saturating(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
-    match (lhs, rhs) {
-        (Value::U32(a), Value::U32(b)) => Ok(Value::from_u32(a.saturating_mul(b))),
-        _ => Err(InterpError::TypeError(
-            "Unsupported types for saturating multiplication".to_string(),
-        )),
-    }
-}
-
-/// Evaluate saturating division.
-fn eval_div_saturating(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
-    match (lhs, rhs) {
-        (Value::U32(a), Value::U32(b)) => {
-            if b == 0 {
-                Err(InterpError::DivisionByZero)
-            } else {
-                Ok(Value::from_u32(a / b))
-            }
-        }
-        _ => Err(InterpError::TypeError(
-            "Unsupported types for saturating division".to_string(),
-        )),
-    }
 }
 
 /// Evaluate less than.

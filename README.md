@@ -314,8 +314,8 @@ let a = 1 /! 1
 let a = -!a // yup
 ```
 
-`-?` and `-|` unary ops are not defined for unsigned ints -
-they have a sensible semantic but are pure footgun.
+`-?` unary op is not defined for unsigned ints -
+it has a sensible semantic but is a pure footgun.
 
 If we decide to let funs panic we'll also add panicking variations.
 
@@ -396,7 +396,7 @@ Allowed and optional in all sequence forms of course.
 
 - Rust. general syntax, general mechanical sympathy concerns,
   data structure definitions, float total_cmp.
-- Zig. `?` / `!`, `+|`, aspects of anonymous structs
+- Zig. `?` / `!`, aspects of anonymous structs
 - JSON5. baseline markup language requirements
 - Python. negative inspiration - awkward dicts,
   heavyweight class abstractions

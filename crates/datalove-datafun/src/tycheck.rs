@@ -741,8 +741,7 @@ fn synthesize_binop<'db>(
     use BinOp::*;
     let result_ty = match op {
         // Basic arithmetic: same type.
-        Add | Sub | Mul | Div |
-        AddSaturating | SubSaturating | MulSaturating | DivSaturating => {
+        Add | Sub | Mul | Div => {
             lhs_ty
         }
 

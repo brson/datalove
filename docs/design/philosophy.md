@@ -81,7 +81,7 @@ The language is built around REPL interaction:
 ## Influences
 
 - **Rust**: General syntax, mechanical sympathy, data structures, `total_cmp`
-- **Zig**: `?`/`!` operators, `+|` overflow handling, anonymous structs
+- **Zig**: `?`/`!` operators, anonymous structs
 - **JSON5**: Baseline markup language requirements
 - **Python**: Negative inspiration (heavyweight abstractions)
 - **Polars/Pandas**: Table operations

@@ -714,14 +714,12 @@ impl<'db> Parser<'db> {
             // Addition and subtraction (all variants)
             ast::BinOp::Add | ast::BinOp::Sub |
             ast::BinOp::AddChecked | ast::BinOp::SubChecked |
-            ast::BinOp::AddOptional | ast::BinOp::SubOptional |
-            ast::BinOp::AddSaturating | ast::BinOp::SubSaturating => 2,
+            ast::BinOp::AddOptional | ast::BinOp::SubOptional => 2,
 
             // Multiplication and division (highest precedence)
             ast::BinOp::Mul | ast::BinOp::Div |
             ast::BinOp::MulChecked | ast::BinOp::DivChecked |
-            ast::BinOp::MulOptional | ast::BinOp::DivOptional |
-            ast::BinOp::MulSaturating | ast::BinOp::DivSaturating => 3,
+            ast::BinOp::MulOptional | ast::BinOp::DivOptional => 3,
         }
     }
 
@@ -743,11 +741,6 @@ impl<'db> Parser<'db> {
                     TokenKind::Sigil(Sigil::MinusQuestion) => Some(ast::BinOp::SubOptional),
                     TokenKind::Sigil(Sigil::StarQuestion) => Some(ast::BinOp::MulOptional),
                     TokenKind::Sigil(Sigil::SlashQuestion) => Some(ast::BinOp::DivOptional),
-
-                    TokenKind::Sigil(Sigil::PlusBar) => Some(ast::BinOp::AddSaturating),
-                    TokenKind::Sigil(Sigil::MinusBar) => Some(ast::BinOp::SubSaturating),
-                    TokenKind::Sigil(Sigil::StarBar) => Some(ast::BinOp::MulSaturating),
-                    TokenKind::Sigil(Sigil::SlashBar) => Some(ast::BinOp::DivSaturating),
 
                     TokenKind::Sigil(Sigil::EqualsEquals) => Some(ast::BinOp::Eq),
                     TokenKind::Sigil(Sigil::ExclamationEquals) => Some(ast::BinOp::Ne),
@@ -913,10 +906,6 @@ impl<'db> Parser<'db> {
                             TokenKind::Sigil(Sigil::MinusQuestion) |
                             TokenKind::Sigil(Sigil::StarQuestion) |
                             TokenKind::Sigil(Sigil::SlashQuestion) |
-                            TokenKind::Sigil(Sigil::PlusBar) |
-                            TokenKind::Sigil(Sigil::MinusBar) |
-                            TokenKind::Sigil(Sigil::StarBar) |
-                            TokenKind::Sigil(Sigil::SlashBar) |
                             TokenKind::Sigil(Sigil::EqualsEquals) |
                             TokenKind::Sigil(Sigil::ExclamationEquals) |
                             TokenKind::Sigil(Sigil::DotLess) |
@@ -1287,26 +1276,6 @@ mod tests {
                 match stmt.value(db).expr(db) {
                     ast::ExprFunKind::BinOp(binop) => {
                         assert_eq!(binop.op(db), ast::BinOp::AddOptional);
-                    }
-                    _ => panic!("expected binop expression"),
-                }
-            }
-            _ => panic!("expected let statement"),
-        }
-    }
-
-    #[test]
-    fn test_parse_expr_binop_saturating() {
-        let ref db = crate::Database::default();
-        let source = Source::new(db, S("let x = a +| b"));
-        let script = parse(db, source);
-        let statements = script.statements(db);
-        assert_eq!(statements.len(), 1);
-        match &statements[0] {
-            ast::Statement::Let(stmt) => {
-                match stmt.value(db).expr(db) {
-                    ast::ExprFunKind::BinOp(binop) => {
-                        assert_eq!(binop.op(db), ast::BinOp::AddSaturating);
                     }
                     _ => panic!("expected binop expression"),
                 }

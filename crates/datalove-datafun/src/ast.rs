@@ -161,12 +161,6 @@ pub enum BinOp {
     MulOptional,  // *?
     DivOptional,  // /?
 
-    // Saturating arithmetic (| suffix)
-    AddSaturating,  // +|
-    SubSaturating,  // -|
-    MulSaturating,  // *|
-    DivSaturating,  // /|
-
     // Comparison operators
     Lt,  // .<
     Gt,  // .>

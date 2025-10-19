@@ -281,20 +281,18 @@ end
    - Mixed ? and ! in same function
 3. Verify all README examples work end-to-end
 
-**Note**: Binary operators with suffixes already exist (lines 138-172 in datafun/ast.rs):
-- `AddOptional`, `SubOptional`, `MulOptional`, `DivOptional` (for `+?`, `-?`, etc.)
-- `AddResult`, `SubResult`, `MulResult`, `DivResult` (for `+!`, `-!`, etc.)
+**Note**: Binary operators with suffixes already exist:
+- `AddChecked`, `SubChecked`, `MulChecked`, `DivChecked` (for `+!`, `-!`, `*!`, `/!`)
+- `AddOptional`, `SubOptional`, `MulOptional`, `DivOptional` (for `+?`, `-?`, `*?`, `/?`)
 
 ---
 
 ### Phase 4: Unary Operators with Suffixes [ ] NOT IMPLEMENTED
 
-**Goal**: Unary negation with wrapping, saturating, optional, and result variants
+**Goal**: Unary negation with optional and result variants
 
 **README Examples**:
 ```datalove
-let a = -%a   // wrapping negation
-let a = -|a   // saturating negation
 let a = -?a   // optional negation (early return on overflow)
 let a = -!a   // result negation (early return on overflow)
 ```
@@ -306,17 +304,15 @@ let a = -!a   // result negation (early return on overflow)
 - [ ] Add `UnaryOp` enum to `datafun/ast.rs`:
   ```rust
   pub enum UnaryOp {
-      NegWrapping,    // -%
-      NegSaturating,  // -|
       NegOptional,    // -?
       NegResult,      // -!
   }
   ```
 - [ ] Add `Unary { op: UnaryOp, operand: ExprFun }` to `ExprFun` enum
-- [ ] Update parser to recognize `-` followed by `%`, `|`, `?`, `!`
+- [ ] Update parser to recognize `-` followed by `?`, `!`
 - [ ] Update type checker to validate operand types (fixed ints only, not bigint/float)
 - [ ] Update interpreter/runtime to implement operations
-- [ ] Add tests for all four variants
+- [ ] Add tests for both variants
 
 ---
 
