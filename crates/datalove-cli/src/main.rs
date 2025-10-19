@@ -38,6 +38,8 @@ enum Command {
     Repl(ReplCommand),
     /// Documentation tools.
     Docs(docs::DocsCommand),
+    /// Execute a datafun script.
+    Script(ScriptCommand),
 }
 
 #[derive(clap::Args)]
@@ -79,6 +81,15 @@ struct ReplCommand {
     script: Option<PathBuf>,
 }
 
+#[derive(clap::Args)]
+struct ScriptCommand {
+    /// Path to the script file (.dfs) to execute.
+    file_path: PathBuf,
+    /// Run without loading the sys library.
+    #[arg(long)]
+    no_sys: bool,
+}
+
 impl Cli {
     fn run(&self) -> AnyResult<()> {
         match &self.cmd {
@@ -88,6 +99,7 @@ impl Cli {
             Command::LitOp(cmd) => cmd.run(&self.args),
             Command::Repl(cmd) => cmd.run(&self.args),
             Command::Docs(cmd) => cmd.run(),
+            Command::Script(cmd) => cmd.run(&self.args),
         }
     }
 }
@@ -280,5 +292,169 @@ impl ReplCommand {
         } else {
             datalove_repl_term::run()
         }
+    }
+}
+
+impl ScriptCommand {
+    fn run(&self, _args: &Args) -> AnyResult<()> {
+        if self.no_sys {
+            self.run_without_sys()
+        } else {
+            self.run_with_sys()
+        }
+    }
+
+    fn run_without_sys(&self) -> AnyResult<()> {
+        use datalove_datafun as datafun;
+        use bct::input::Source;
+
+        let db = datafun::Database::default();
+
+        // Read the script file.
+        let source_text = rmx::std::fs::read_to_string(&self.file_path)?;
+        let source = Source::new(&db, source_text.S());
+
+        // Parse the script.
+        let script = datafun::parser::parse(&db, source);
+
+        // Type check the script.
+        let tycheck_result = datafun::tycheck::type_check(&db, script);
+        if !tycheck_result.errors(&db).is_empty() {
+            bail!("Type check errors: {} error(s)", tycheck_result.errors(&db).len());
+        }
+
+        // Build type table.
+        let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = match datafun::type_table::TypeTable::build(&db, script, tycheck_result, &mut tydesc_table) {
+            Ok(table) => table,
+            Err(e) => bail!("Failed to build type table: {}", e),
+        };
+
+        // Create interpreter context.
+        let mut ctx = datafun::interp::InterpContext::new(&db, type_table);
+
+        // Execute the script.
+        if let Err(e) = ctx.execute(script) {
+            bail!("Execution error: {:?}", e);
+        }
+
+        // Pretty-print the 'output' variable.
+        let output_name = bct::text::InternedText::new(&db, S("output"));
+        let result = match ctx.pretty_print_variable(output_name) {
+            Ok(res) => res,
+            Err(e) => bail!("Failed to pretty-print output: {:?}", e),
+        };
+
+        println!("{}", result);
+
+        Ok(())
+    }
+
+    fn run_with_sys(&self) -> AnyResult<()> {
+        use datalove_datafun as datafun;
+        use bct::input::Source;
+
+        let db = datafun::Database::default();
+
+        // Read the script file.
+        let script_text = rmx::std::fs::read_to_string(&self.file_path)?;
+        let source = Source::new(&db, script_text.S());
+
+        // Parse the script.
+        let script = datafun::parser::parse(&db, source);
+
+        // Load package world from sys/ directory.
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_path = rmx::std::path::PathBuf::from(manifest_dir);
+        let parent = match manifest_path.parent() {
+            Some(p) => p,
+            None => bail!("Failed to get parent directory"),
+        };
+        let grandparent = match parent.parent() {
+            Some(p) => p,
+            None => bail!("Failed to get grandparent directory"),
+        };
+        let sys_dir = grandparent.join("sys");
+
+        let config = datafun::package_load::PackageWorldConfig {
+            dir_pkglib_system: sys_dir,
+            dir_pkglib_local: None,
+        };
+
+        let package_world_raw = rmx::futures::executor::block_on(
+            datafun::package_load::load_world(config)
+        )?;
+
+        let package_world = datafun::package::import_from_loader(&db, package_world_raw);
+
+        // Load and resolve script with package world.
+        let script_world = datafun::script_world::load_script_with_package_world(&db, script, package_world);
+
+        // Check if resolution succeeded.
+        let resolution = script_world.resolution(&db);
+        if let Err(e) = resolution.result(&db) {
+            bail!("Package resolution failed: {:?}", e);
+        }
+
+        // Get typecheck result.
+        let typecheck_result = match script_world.typecheck_result(&db) {
+            Some(res) => res,
+            None => bail!("Package world typecheck failed"),
+        };
+
+        // Check for package world typecheck errors.
+        let module_errors = typecheck_result.module_errors(&db);
+        if !module_errors.is_empty() {
+            let error_count: usize = module_errors.values().map(|v| v.len()).sum();
+            bail!("Package world has {} typecheck error(s)", error_count);
+        }
+
+        // Typecheck the script with package world context.
+        let script_typecheck = datafun::tycheck::type_check_with_package_world(
+            &db,
+            script,
+            package_world,
+            *typecheck_result,
+        );
+
+        // Check for script typecheck errors.
+        if !script_typecheck.errors(&db).is_empty() {
+            let errors: Vec<_> = script_typecheck.errors(&db).iter()
+                .map(|e| format!("{:?}", e.error(&db)))
+                .collect();
+            bail!("Script has {} typecheck error(s):\n{}", errors.len(), errors.join("\n"));
+        }
+
+        // Build type table for the script.
+        let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(&db);
+        let type_table = match datafun::type_table::TypeTable::build(&db, script, script_typecheck, &mut tydesc_table) {
+            Ok(table) => table,
+            Err(e) => bail!("Failed to build type table: {}", e),
+        };
+
+        // Create interpreter context with package world support.
+        let mut ctx = datafun::interp::InterpContext::with_package_world(
+            &db,
+            type_table,
+            &script,
+            package_world,
+            &typecheck_result,
+        );
+
+        // Execute the script.
+        if let Err(e) = ctx.execute(script) {
+            bail!("Execution error: {:?}", e);
+        }
+
+        // Pretty-print the 'output' variable.
+        let output_name = bct::text::InternedText::new(&db, S("output"));
+        let result = match ctx.pretty_print_variable(output_name) {
+            Ok(res) => res,
+            Err(e) => bail!("Failed to pretty-print output: {:?}", e),
+        };
+
+        println!("{}", result);
+
+        Ok(())
     }
 }

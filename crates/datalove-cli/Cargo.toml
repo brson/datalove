@@ -10,6 +10,7 @@ rmx.workspace = true
 bct.workspace = true
 datalove.path = "../datalove"
 datalove-datalit.path = "../datalove-datalit"
+datalove-datafun.path = "../datalove-datafun"
 datalove-rt.path = "../datalove-rt"
 datalove-repl.path = "../datalove-repl"
 datalove-repl-term.path = "../datalove-repl-term"

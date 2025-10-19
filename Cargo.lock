@@ -1395,6 +1395,7 @@ dependencies = [
  "bct",
  "comrak",
  "datalove",
+ "datalove-datafun",
  "datalove-datalit",
  "datalove-repl",
  "datalove-repl-term",
