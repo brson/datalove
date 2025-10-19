@@ -1,0 +1,7 @@
+fun returns_option(val: @u32): @?u32
+  ret val
+end fun
+
+fun returns_result(val: @u32): @!u32
+  ret val
+end fun

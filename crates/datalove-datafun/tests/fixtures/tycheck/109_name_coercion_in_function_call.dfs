@@ -1,0 +1,11 @@
+fun takes_option(val: @?u32): @u32
+  ret @42
+end fun
+
+fun takes_result(val: @!u32): @u32
+  ret @42
+end fun
+
+let x: @u32 = @10
+let a = takes_option(x)
+let b = takes_result(x)

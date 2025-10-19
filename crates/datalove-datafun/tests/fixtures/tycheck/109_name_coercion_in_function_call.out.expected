@@ -1,0 +1,42 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "takes_option",
+      "params": [
+        {
+          "name": "val",
+          "type": "?u32"
+        }
+      ],
+      "return_type": "@u32"
+    },
+    {
+      "kind": "function",
+      "name": "takes_result",
+      "params": [
+        {
+          "name": "val",
+          "type": "!u32"
+        }
+      ],
+      "return_type": "@u32"
+    },
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "u32"
+    }
+  ]
+}

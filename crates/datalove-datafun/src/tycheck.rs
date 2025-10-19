@@ -991,17 +991,39 @@ fn check_expr<'db>(
             }
         }
 
-        // For non-datalit expressions, use synthesis + comparison.
+        // For non-datalit expressions, use synthesis + comparison with coercion support.
         _ => {
             let synthesized = synthesize_expr(ctx, expr)?;
+
+            // Check for exact type match first.
             if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
-                Ok(())
-            } else {
-                Err(TypeError::TypeMismatch {
-                    expected: type_to_string(db, expected.ty(db)),
-                    actual: type_to_string(db, synthesized.ty(db)),
-                })
+                return Ok(());
             }
+
+            // If exact match fails, check for automatic coercion to Option/Result.
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
+                    // Allow coercion from T to Option<T>.
+                    let inner_ty = opt.inner_type(db);
+                    if types_equivalent(db, synthesized.ty(db), &Type::Datalit(inner_ty.ty(db).clone())) {
+                        return Ok(());
+                    }
+                }
+                Type::Datalit(datalit::tycheck::Type::Result(res)) => {
+                    // Allow coercion from T to Result<T>.
+                    let inner_ty = res.inner_type(db);
+                    if types_equivalent(db, synthesized.ty(db), &Type::Datalit(inner_ty.ty(db).clone())) {
+                        return Ok(());
+                    }
+                }
+                _ => {}
+            }
+
+            // No match or coercion possible.
+            Err(TypeError::TypeMismatch {
+                expected: type_to_string(db, expected.ty(db)),
+                actual: type_to_string(db, synthesized.ty(db)),
+            })
         }
     }
 }
