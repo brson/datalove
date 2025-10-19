@@ -432,6 +432,9 @@ mod tests {
             assert_eq!(tuple.field1.size, 0);
             assert_eq!(tuple.field1.capacity, 0);
 
+            // Reconstruct and drop the fields Vec to avoid leaking.
+            drop(Vec::from_raw_parts(fields_ptr as *mut rtdt::TyInfoTupleField, 2, 2));
+
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
         }
