@@ -703,8 +703,8 @@ unsafe fn insert_into_internal(
 unsafe fn split_internal_node(
     rt: &mut RtLocal,
     node: *mut SetNode,
-    separator_key: &[u8],
-    right_child: *mut SetNode,
+    pending_key: &[u8],
+    pending_child: *mut SetNode,
     element_tydesc: *const TyDesc,
 ) -> SplitInfo {
     unsafe {
@@ -726,37 +726,73 @@ unsafe fn split_internal_node(
         let new_children_ptr = internal_child_ptrs_ptr(new_internal, element_tydesc);
         let element_size = (*element_tydesc).size as usize;
 
-        // Move upper half to new node.
-        let move_count = capacity as usize - split_point;
-        std::ptr::copy_nonoverlapping(
+        // Clone the middle key as the separator to push up.
+        let mut separator_key_buf = vec![0u8; element_size];
+        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let status = crate::clone::clone_value(
+            rt_handle,
             keys_ptr.add(split_point * element_size),
-            new_keys_ptr,
-            move_count * element_size,
+            element_tydesc,
+            separator_key_buf.as_mut_ptr(),
         );
+        if status != RtStatus::Ok {
+            return SplitInfo {
+                separator_key_buf: Vec::new(),
+                new_node: std::ptr::null_mut(),
+                insert_result: LeafInsertResult::NeedsSplit,
+            };
+        }
+
+        // Destroy the separator key in the old node since we've cloned it out.
+        let _ = crate::destroy::any_destroy_local(
+            rt_handle,
+            keys_ptr.add(split_point * element_size),
+            element_tydesc,
+        );
+
+        // Move keys after split_point (excluding the separator) to new node.
+        let keys_to_move = capacity as usize - split_point - 1;
+        if keys_to_move > 0 {
+            std::ptr::copy_nonoverlapping(
+                keys_ptr.add((split_point + 1) * element_size),
+                new_keys_ptr,
+                keys_to_move * element_size,
+            );
+        }
+
+        // Move child pointers (split_point+1 onwards) to new node.
+        let children_to_move = capacity as usize - split_point;
         std::ptr::copy_nonoverlapping(
-            children_ptr.add(split_point),
+            children_ptr.add(split_point + 1),
             new_children_ptr,
-            move_count + 1,
+            children_to_move,
         );
 
         write_node_len(node, split_point as u32);
-        write_node_len(new_internal, move_count as u32);
+        write_node_len(new_internal, keys_to_move as u32);
 
-        // Clone the separator key.
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
-        let mut new_separator_buf = vec![0u8; element_size];
-        let _ = crate::clone::clone_value(
-            rt_handle,
-            new_keys_ptr,
+        // Now insert the pending key/child into the appropriate node.
+        let cmp_result = crate::cmp::cmp_total(
+            pending_key.as_ptr(),
             element_tydesc,
-            new_separator_buf.as_mut_ptr(),
+            separator_key_buf.as_ptr(),
+            element_tydesc,
         );
 
-        // Insert the pending separator into the appropriate node.
-        let _ = insert_into_internal(rt, node, separator_key, right_child, element_tydesc);
+        let insert_result = match cmp_result {
+            crate::RtOrdering::Less => {
+                insert_into_internal(rt, node, pending_key, pending_child, element_tydesc)
+            }
+            _ => {
+                insert_into_internal(rt, new_internal, pending_key, pending_child, element_tydesc)
+            }
+        };
+
+        // After split, there should be room - if not, something is very wrong.
+        assert!(insert_result.is_ok(), "Split didn't make room for insertion");
 
         SplitInfo {
-            separator_key_buf: new_separator_buf,
+            separator_key_buf,
             new_node: new_internal,
             insert_result: LeafInsertResult::Inserted,
         }
@@ -1089,7 +1125,7 @@ pub unsafe fn btreeset_remove_impl(
 
                     // Handle empty root case.
                     if (*set_ptr).len == 0 {
-                        free_node(rt, root, set_element_tydesc);
+                        destroy_tree_recursive(rt, root, set_element_tydesc);
                         (*set_ptr).root = std::ptr::null();
                     }
 
