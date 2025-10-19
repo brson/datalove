@@ -711,6 +711,9 @@ fn eval_function_call<'db>(
         }
     }
 
+    // Restore the previous return type.
+    ctx.expected_return_type = old_return_type;
+
     // Restore shadowed variables.
     // First, free the parameter values.
     for (param_name, _) in &shadowed_vars {
