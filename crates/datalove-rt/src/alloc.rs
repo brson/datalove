@@ -288,8 +288,8 @@ mod unix_impl {
         }
 
         pub unsafe fn shutdown(mut self) {
-            // Check for leaks before cleanup.
-            if !self.active_allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
+            // Capture leak information before cleanup.
+            let leak_report = if !self.active_allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
                 let leaked_count = self.active_allocations.len();
                 let leaked_bytes: usize = self.active_allocations
                     .values()
@@ -318,19 +318,12 @@ mod unix_impl {
                     details.push_str(&format!("\n  ... and {} more", self.active_allocations.len() - 10));
                 }
 
-                let full_report = format!("{}{}\n", report, details);
+                Some(format!("{}{}\n", report, details))
+            } else {
+                None
+            };
 
-                match self.leak_check_mode {
-                    LeakCheckMode::Warn => {
-                        eprintln!("{}", full_report);
-                    }
-                    LeakCheckMode::Panic => {
-                        panic!("{}", full_report);
-                    }
-                    LeakCheckMode::Ignore => {}
-                }
-            }
-
+            // Clean up resources first.
             unsafe {
                 for page in self.small_pages.drain(..) {
                     let result = libc::munmap(page.ptr as *mut libc::c_void, page.size);
@@ -344,6 +337,19 @@ mod unix_impl {
                     if result != 0 {
                         eprintln!("Warning: munmap failed during shutdown");
                     }
+                }
+            }
+
+            // Report leaks after cleanup.
+            if let Some(full_report) = leak_report {
+                match self.leak_check_mode {
+                    LeakCheckMode::Warn => {
+                        eprintln!("{}", full_report);
+                    }
+                    LeakCheckMode::Panic => {
+                        panic!("{}", full_report);
+                    }
+                    LeakCheckMode::Ignore => {}
                 }
             }
         }
@@ -445,8 +451,8 @@ mod wasm_impl {
         }
 
         pub unsafe fn shutdown(mut self) {
-            // Check for leaks before cleanup.
-            if !self.allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
+            // Capture leak information before cleanup.
+            let leak_report = if !self.allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
                 let leaked_count = self.allocations.len();
                 let leaked_bytes: usize = self.allocations
                     .iter()
@@ -474,8 +480,20 @@ mod wasm_impl {
                     details.push_str(&format!("\n  ... and {} more", self.allocations.len() - 10));
                 }
 
-                let full_report = format!("{}{}\n", report, details);
+                Some(format!("{}{}\n", report, details))
+            } else {
+                None
+            };
 
+            // Clean up resources first.
+            for alloc in self.allocations.drain(..) {
+                unsafe {
+                    dealloc(alloc.ptr, alloc.layout);
+                }
+            }
+
+            // Report leaks after cleanup.
+            if let Some(full_report) = leak_report {
                 match self.leak_check_mode {
                     LeakCheckMode::Warn => {
                         eprintln!("{}", full_report);
@@ -484,13 +502,6 @@ mod wasm_impl {
                         panic!("{}", full_report);
                     }
                     LeakCheckMode::Ignore => {}
-                }
-            }
-
-            // Clean up any remaining allocations.
-            for alloc in self.allocations.drain(..) {
-                unsafe {
-                    dealloc(alloc.ptr, alloc.layout);
                 }
             }
         }
