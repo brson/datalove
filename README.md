@@ -289,42 +289,33 @@ end
 
 ### Math ops and error handling
 
-Bigint (`int`) and floats support bare math ops,
+Floats support bare math ops,
 `+ - * /` and unary `-`.
+
+Bigints (int) support all but div,
+`| - *` and unary `-`.
+For div, because of div0 we must use a checked variant.
 
 Fixed ints do not, not even unary `-`.
 
-They support zig-like `+%` (wrapping) and `+|` saturating ops:
-
-```
-let a = 1 +% 1
-let a = 1 -% 1
-let a = 1 *% 1
-let a = 1 /% 1
-let a = -%a      // yup
-
-let a = 1 +| 1
-let a = 1 -| 1
-let a = 1 *| 1
-let a = 1 /| 1
-let a = -|a      // yup
-```
-
-And early-return varieties:
+They support early-return varieties:
 
 ```
 let a = 1 +? 1
 let a = 1 -? 1
 let a = 1 *? 1
 let a = 1 /? 1
-let a = -?a
+let a = -?a // yup
 
 let a = 1 +! 1
 let a = 1 -! 1
 let a = 1 *! 1
 let a = 1 /! 1
-let a = -!a
+let a = -!a // yup
 ```
+
+`-?` and `-|` unary ops are not defined for unsigned ints -
+they have a sensible semantic but are pure footgun.
 
 If we decide to let funs panic we'll also add panicking variations.
 

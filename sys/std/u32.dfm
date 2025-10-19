@@ -16,7 +16,7 @@ fun count_ones(self: u32): u32
 end fun
 
 fun count_zeros(self: u32): u32
-  ret bits() -| count_ones(self)
+  ret sub_saturating(bits(), count_ones(self))
 end fun
 
 fun leading_zeros(self: u32): u32
@@ -186,3 +186,22 @@ fun rotate_right(self: u32, n: u32): u32
   ret 0
 end fun
 
+fun bitnot(self: u32): u32
+  // todo
+  ret 0
+end fun
+
+fun bitand(self: u32, n: u32): u32
+  // todo
+  ret 0
+end fun
+
+fun bitor(self: u32, n: u32): u32
+  // todo
+  ret 0
+end fun
+
+fun bitxor(self: u32, n: u32): u32
+  // todo
+  ret 0
+end fun
