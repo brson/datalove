@@ -13,6 +13,10 @@
 - ux
 - web
 
+## cli
+
+- script runner
+
 ## modules and standard library
 
 - core modules
