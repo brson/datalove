@@ -1,0 +1,12 @@
+require module sys/std/option
+
+import option.unwrap_or
+
+let some_val: @?u32 = @100
+let none_val: @?u32 = @none
+let default_val: @u32 = @999
+
+let test1 = unwrap_or(some_val, default_val)
+let test2 = unwrap_or(none_val, default_val)
+
+let output = (test1, test2)

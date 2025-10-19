@@ -168,6 +168,13 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
                 }
                 // TODO: Store the result type of the function call.
             }
+            ExprFunKind::Tuple(tuple) => {
+                // Visit all element expressions.
+                for elem in tuple.elements(self.db) {
+                    self.visit_datafun_expr(*elem)?;
+                }
+                // TODO: Store the result type of the tuple.
+            }
             ExprFunKind::TryOption(try_op) => {
                 self.visit_datafun_expr(try_op.operand(self.db))?;
                 // TODO: Store the result type of the try operator.

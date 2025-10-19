@@ -41,21 +41,35 @@ mod tests {
         let package_world_raw = block_on(crate::package_load::load_world(config)).X();
         let package_world = crate::package::import_from_loader(db, package_world_raw);
 
-        // Verify sys library loaded
+        // Verify sys library loaded.
         assert!(!package_world.pkglib_system(db).is_empty());
 
-        // Try to resolve imports
+        // Resolve imports.
         let resolution = resolve_package_world_with_imports(db, package_world);
         let result = resolution.result(db);
 
-        // Should succeed if sys modules can be loaded
-        match result {
-            Ok(_) => {
-                // Success!
-            }
+        // Resolution should succeed.
+        let graph = match result {
+            Ok(graph) => graph,
             Err(e) => {
                 panic!("Resolution failed: {:?}", e);
             }
+        };
+
+        // Typecheck the package world.
+        let typecheck_result = crate::tycheck::typecheck_package_world(db, graph);
+
+        // Check for typecheck errors.
+        let module_errors = typecheck_result.module_errors(db);
+        if !module_errors.is_empty() {
+            eprintln!("\nTypecheck errors found in sys/ modules:");
+            for (module, errors) in module_errors {
+                eprintln!("\nModule: {}", module.name(db));
+                for error in errors {
+                    eprintln!("  - {:?}", error);
+                }
+            }
+            panic!("Package world has typecheck errors");
         }
     }
 

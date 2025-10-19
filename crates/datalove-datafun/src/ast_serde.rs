@@ -108,6 +108,7 @@ pub enum ExprFunKind {
     Name { name: String },
     BinOp(ExprBinOp),
     FunctionCall(ExprFunctionCall),
+    Tuple(ExprTuple),
     TryOption(ExprTryOption),
     TryResult(ExprTryResult),
     ParseError(ExprFunParseError),
@@ -124,6 +125,11 @@ pub struct ExprBinOp {
 pub struct ExprFunctionCall {
     pub name: String,
     pub args: Vec<ExprFun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprTuple {
+    pub elements: Vec<ExprFun>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -305,6 +311,7 @@ impl ExprFunKind {
             },
             crate::ast::ExprFunKind::BinOp(b) => ExprFunKind::BinOp(ExprBinOp::from_ast(db, b)),
             crate::ast::ExprFunKind::FunctionCall(f) => ExprFunKind::FunctionCall(ExprFunctionCall::from_ast(db, f)),
+            crate::ast::ExprFunKind::Tuple(t) => ExprFunKind::Tuple(ExprTuple::from_ast(db, t)),
             crate::ast::ExprFunKind::TryOption(t) => ExprFunKind::TryOption(ExprTryOption::from_ast(db, t)),
             crate::ast::ExprFunKind::TryResult(t) => ExprFunKind::TryResult(ExprTryResult::from_ast(db, t)),
             crate::ast::ExprFunKind::ParseError(e) => ExprFunKind::ParseError(ExprFunParseError::from_ast(db, e)),
@@ -327,6 +334,14 @@ impl ExprFunctionCall {
         ExprFunctionCall {
             name: ast.name(db).as_str(db).to_string(),
             args: ast.args(db).iter().map(|a| ExprFun::from_ast(db, *a)).collect(),
+        }
+    }
+}
+
+impl ExprTuple {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTuple<'db>) -> Self {
+        ExprTuple {
+            elements: ast.elements(db).iter().map(|e| ExprFun::from_ast(db, *e)).collect(),
         }
     }
 }

@@ -119,6 +119,8 @@ pub enum ExprFunKind<'db> {
     BinOp(ExprBinOp<'db>),
     // Function call
     FunctionCall(ExprFunctionCall<'db>),
+    // Datafun tuple (elements are datafun expressions)
+    Tuple(ExprTuple<'db>),
     // Try operators (postfix ? and !)
     TryOption(ExprTryOption<'db>),
     TryResult(ExprTryResult<'db>),
@@ -138,6 +140,12 @@ pub struct ExprFunctionCall<'db> {
     pub name: InternedText<'db>,
     #[returns(ref)]
     pub args: Vec<ExprFun<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprTuple<'db> {
+    #[returns(ref)]
+    pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]

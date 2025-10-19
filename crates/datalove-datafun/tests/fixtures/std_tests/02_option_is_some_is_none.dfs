@@ -1,0 +1,9 @@
+require module sys/std/option
+
+import option.is_some
+import option.is_none
+
+let some_val: @?u32 = @42
+let none_val: @?u32 = @none
+
+let output = (is_some(some_val), is_some(none_val), is_none(some_val), is_none(none_val))

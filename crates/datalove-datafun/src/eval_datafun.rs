@@ -27,6 +27,8 @@ pub fn eval_expr_with_expected<'db>(
 
         ExprFunKind::FunctionCall(call) => eval_function_call(ctx, call),
 
+        ExprFunKind::Tuple(tuple) => eval_tuple(ctx, tuple),
+
         ExprFunKind::TryOption(try_op) => eval_try_option(ctx, try_op),
 
         ExprFunKind::TryResult(try_op) => eval_try_result(ctx, try_op),
@@ -733,6 +735,20 @@ fn eval_function_call<'db>(
     ctx.call_depth -= 1;
 
     result
+}
+
+/// Evaluate a tuple expression.
+///
+/// TODO: This is a simplified implementation that needs proper type tracking.
+fn eval_tuple<'db>(
+    ctx: &mut InterpContext<'db>,
+    tuple: crate::ast::ExprTuple<'db>,
+) -> InterpResult {
+    // For now, return an error indicating tuples are not yet fully supported.
+    // The typechecker allows them, but runtime evaluation needs more work.
+    Err(InterpError::RuntimeError(
+        "Datafun tuple evaluation not yet fully implemented".to_string()
+    ))
 }
 
 #[cfg(test)]

@@ -1,0 +1,25 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "f32"
+    },
+    {
+      "kind": "variable",
+      "name": "c",
+      "type": "bool"
+    },
+    {
+      "kind": "variable",
+      "name": "output",
+      "type": "(@u32, @f32, @bool)"
+    }
+  ]
+}

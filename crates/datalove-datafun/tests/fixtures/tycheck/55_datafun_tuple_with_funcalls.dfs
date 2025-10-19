@@ -1,0 +1,7 @@
+fun add(a: @u32, b: @u32): @u32
+  let result = a + b
+end fun
+
+let x = @10
+let y = @20
+let output = (add(x, y), add(y, x))

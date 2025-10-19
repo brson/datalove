@@ -32,6 +32,12 @@ fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_jso
                 "type": ty
             })
         }
+        TypeError::InvalidTupleElement { ty } => {
+            json!({
+                "kind": "InvalidTupleElement",
+                "type": ty
+            })
+        }
         TypeError::ArityMismatch { expected, actual } => {
             json!({
                 "kind": "ArityMismatch",

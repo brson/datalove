@@ -1,0 +1,16 @@
+require module sys/std/option
+
+import option.or_option
+import option.unwrap_or_zero
+
+let some_a: @?u32 = @10
+let some_b: @?u32 = @20
+let none_val: @?u32 = @none
+
+// Test all combinations and unwrap for comparison.
+let output = (
+  unwrap_or_zero(or_option(some_a, some_b)),
+  unwrap_or_zero(or_option(some_a, none_val)),
+  unwrap_or_zero(or_option(none_val, some_b)),
+  unwrap_or_zero(or_option(none_val, none_val))
+)

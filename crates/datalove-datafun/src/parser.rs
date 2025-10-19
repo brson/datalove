@@ -847,9 +847,14 @@ impl<'db> Parser<'db> {
                     }
                 }
             }
-            Some(TreeToken::Branch(..)) => {
-                // Branches like (), {}, [] are datalit expressions.
-                self.parse_datalit_expr(tokens)
+            Some(TreeToken::Branch(sigil, _)) => {
+                // Check if it's a tuple (ParenOpen) - parse as datafun tuple.
+                // Other branches like {}, [] are datalit expressions.
+                if matches!(sigil, Sigil::ParenOpen) {
+                    self.parse_datafun_tuple(tokens)
+                } else {
+                    self.parse_datalit_expr(tokens)
+                }
             }
             None => {
                 let message = InternedText::new(self.db, "expected expression".S());
@@ -933,6 +938,70 @@ impl<'db> Parser<'db> {
         ast::ExprFun::new(
             self.db,
             ast::ExprFunKind::Datalit(datalit_expr)
+        )
+    }
+
+    // Parse a datafun tuple: (expr1, expr2, ...).
+    fn parse_datafun_tuple(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> ast::ExprFun<'db> {
+        // Consume the ParenOpen branch and get its contents.
+        let iter = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
+            _ => {
+                let message = InternedText::new(self.db, "expected tuple".S());
+                return ast::ExprFun::new(
+                    self.db,
+                    ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, message))
+                );
+            }
+        };
+
+        // Collect all tokens and filter out spaces.
+        let all_tokens: Vec<TreeToken<'db>> = iter.filter_map(|t| t.without_space(self.db)).collect();
+        if all_tokens.is_empty() {
+            // Empty tuple.
+            return ast::ExprFun::new(
+                self.db,
+                ast::ExprFunKind::Tuple(ast::ExprTuple::new(self.db, vec![]))
+            );
+        }
+
+        // Split tokens by comma to get individual element token groups.
+        let mut element_token_groups: Vec<Vec<TreeToken<'db>>> = vec![];
+        let mut current_group: Vec<TreeToken<'db>> = vec![];
+
+        for token in all_tokens {
+            match token {
+                TreeToken::Token(t) if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) => {
+                    if !current_group.is_empty() {
+                        element_token_groups.push(current_group);
+                        current_group = vec![];
+                    }
+                }
+                _ => {
+                    current_group.push(token);
+                }
+            }
+        }
+
+        // Don't forget the last group.
+        if !current_group.is_empty() {
+            element_token_groups.push(current_group);
+        }
+
+        // Parse each element group.
+        let mut elements = vec![];
+        for group in element_token_groups {
+            let mut group_iter = group.into_iter().peekable();
+            let element = self.parse_expr_full(&mut group_iter);
+            elements.push(element);
+        }
+
+        ast::ExprFun::new(
+            self.db,
+            ast::ExprFunKind::Tuple(ast::ExprTuple::new(self.db, elements))
         )
     }
 

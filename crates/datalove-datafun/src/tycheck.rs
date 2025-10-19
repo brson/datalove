@@ -39,6 +39,7 @@ pub enum TypeError {
     UnresolvedName(String),
     CannotSynthesize,
     InvalidOperandType { op: String, ty: String },
+    InvalidTupleElement { ty: String },
     ArityMismatch { expected: usize, actual: usize },
     NotAFunction(String),
     DatalitError(String),
@@ -690,6 +691,44 @@ fn synthesize_expr<'db>(
 
         ExprFunKind::FunctionCall(call) => {
             synthesize_function_call(ctx, call)
+        }
+
+        ExprFunKind::Tuple(tuple) => {
+            // Synthesize type for each element.
+            let elements = tuple.elements(db);
+            let mut datalit_element_types = Vec::new();
+
+            for elem in elements {
+                let elem_ty = synthesize_expr(ctx, *elem)?;
+
+                // Extract datalit TypeAndHeap from datafun TypeAndHeap.
+                // Tuple elements must be datalit types.
+                match elem_ty.ty(db) {
+                    Type::Datalit(datalit_ty) => {
+                        let datalit_elem_ty = datalit::tycheck::TypeAndHeap::new(
+                            db,
+                            elem_ty.heap(db),
+                            datalit_ty.clone(),
+                        );
+                        datalit_element_types.push(datalit_elem_ty);
+                    }
+                    _ => {
+                        return Err(TypeError::InvalidTupleElement {
+                            ty: type_to_string(db, elem_ty.ty(db)),
+                        });
+                    }
+                }
+            }
+
+            // Create datalit tuple type.
+            let datalit_tuple_ty = datalit::tycheck::Type::AnonTuple(
+                datalit::tycheck::TypeAnonTuple::new(db, datalit_element_types)
+            );
+
+            // Wrap in datafun type.
+            // Use Heap::Omitted since tuple heap is determined by element heaps.
+            let ty = Type::Datalit(datalit_tuple_ty);
+            Ok(TypeAndHeap::new(db, datalit::ast::Heap::Omitted, ty))
         }
 
         ExprFunKind::TryOption(try_op) => {

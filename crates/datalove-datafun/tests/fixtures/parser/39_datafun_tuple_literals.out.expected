@@ -1,0 +1,48 @@
+{
+  "statements": [
+    {
+      "kind": "Let",
+      "name": "output",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "Tuple",
+          "elements": [
+            {
+              "expr": {
+                "kind": "Datalit",
+                "value": {
+                  "type_hint": null,
+                  "expr": {
+                    "heap": "Local",
+                    "expr": {
+                      "Int": {
+                        "value": "42"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "expr": {
+                "kind": "Datalit",
+                "value": {
+                  "type_hint": null,
+                  "expr": {
+                    "heap": "Local",
+                    "expr": {
+                      "Int": {
+                        "value": "99"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
