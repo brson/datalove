@@ -1,0 +1,10 @@
+// Test Result destructuring with u8 payload - Ok variant.
+fun test(a: @!u8): @u8
+    if a |value|
+        ret value
+    else |error|
+        ret @0
+    end if
+end fun
+
+let output = test(@128)

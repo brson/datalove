@@ -160,6 +160,17 @@ end if
   - `89_if_option_option.dfs` ✓ PASSING - Option<Option<u32>> destructuring
   - `90_if_result_result.dfs` ✓ PASSING - Result<Result<u32>> destructuring
   - `91_if_option_result.dfs` ✓ PASSING - Option<Result<u32>> destructuring
+  - **ADDED (2025-10-19)**: Scalar type tests:
+    - `92_if_option_f32.dfs` ✓ PASSING - Option<f32> destructuring with Some(3.14)
+    - `93_if_result_f32.dfs` ✓ PASSING - Result<f32> destructuring with Ok(2.71)
+    - `94_if_option_u8.dfs` ✓ PASSING - Option<u8> destructuring with Some(255)
+    - `95_if_result_u8.dfs` ✓ PASSING - Result<u8> destructuring with Ok(128)
+    - `96_if_option_i8.dfs` ✓ PASSING - Option<i8> destructuring with Some(-42)
+    - `97_if_result_i8.dfs` ✓ PASSING - Result<i8> destructuring with Ok(-100)
+    - `98_if_option_u16.dfs` ✓ PASSING - Option<u16> destructuring with Some(65535)
+    - `99_if_result_u16.dfs` ✓ PASSING - Result<u16> destructuring with Ok(32768)
+    - `100_if_option_i16.dfs` ✓ PASSING - Option<i16> destructuring with Some(-12345)
+    - `101_if_result_i16.dfs` ✓ PASSING - Result<i16> destructuring with Ok(-30000)
 
 **Implementation Notes**
 - Option destructuring: else clause and error binding are optional
@@ -167,13 +178,17 @@ end if
 - Bindings add variables to type context during type checking
 - Variables are removed from context after body is checked
 - Runtime execution: Bindings are added to interpreter variable scope, executed, then removed and freed
-- All 70 interpreter tests passing (including 15 if-destructuring tests for Option/Result)
+- All 80 interpreter tests passing (including 25 if-destructuring tests for Option/Result)
 - **FIXED (2025-10-18)**: Payload extraction now supports ALL types including heap-allocated types (String, Int, List, Option, Result)
   - Implementation uses `rt::clone::clone_value()` to deep clone heap-allocated payloads
   - Inline primitive types supported: bool, u32, f32
   - Heap types supported: Int (bigint), String, List, Option, Result
   - **FIXED (2025-10-18)**: List types now supported in datafun function signatures
-  - Types not yet supported in datafun functions: u8, i8, u16, i16, i32, u64, i64, f64, Tuple, Struct, Enum, Map, Set
+- **FIXED (2025-10-19)**: All scalar types now supported in if-destructuring
+  - Added support in `interp.rs:457-501` (`value_from_ptr` function)
+  - All scalar types convert to Value::U32 or Value::F32 as appropriate
+  - Supported scalar types: u8, i8, u16, i16, i32, u32, u64, i64, f32, f64
+  - Types not yet tested in if-destructuring: i32, u64, i64, f64, Tuple, Struct, Enum, Map, Set
 
 ---
 

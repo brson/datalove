@@ -1,0 +1,10 @@
+// Test Option destructuring with u16 payload - Some variant.
+fun test(a: @?u16): @u16
+    if a |value|
+        ret value
+    else
+        ret @0
+    end if
+end fun
+
+let output = test(@65535)

@@ -1,0 +1,10 @@
+// Test Option destructuring with f32 payload - Some variant.
+fun test(a: @?f32): @f32
+    if a |value|
+        ret value
+    else
+        ret @0.0
+    end if
+end fun
+
+let output = test(@3.14)

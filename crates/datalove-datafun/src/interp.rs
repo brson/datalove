@@ -459,13 +459,45 @@ impl<'db> InterpContext<'db> {
                 let value = unsafe { *(ptr as *const bool) };
                 Ok(Value::Bool(value))
             }
+            rtdt::TyTag::U8 => {
+                let value = unsafe { *(ptr as *const u8) };
+                Ok(Value::U32(value as u32))
+            }
+            rtdt::TyTag::I8 => {
+                let value = unsafe { *(ptr as *const i8) };
+                Ok(Value::U32((value as i32) as u32))
+            }
+            rtdt::TyTag::U16 => {
+                let value = unsafe { *(ptr as *const u16) };
+                Ok(Value::U32(value as u32))
+            }
+            rtdt::TyTag::I16 => {
+                let value = unsafe { *(ptr as *const i16) };
+                Ok(Value::U32((value as i32) as u32))
+            }
             rtdt::TyTag::U32 => {
                 let value = unsafe { *(ptr as *const u32) };
                 Ok(Value::U32(value))
             }
+            rtdt::TyTag::I32 => {
+                let value = unsafe { *(ptr as *const i32) };
+                Ok(Value::U32(value as u32))
+            }
+            rtdt::TyTag::U64 => {
+                let value = unsafe { *(ptr as *const u64) };
+                Ok(Value::U32(value as u32))
+            }
+            rtdt::TyTag::I64 => {
+                let value = unsafe { *(ptr as *const i64) };
+                Ok(Value::U32(value as u32))
+            }
             rtdt::TyTag::F32 => {
                 let value = unsafe { *(ptr as *const f32) };
                 Ok(Value::F32(value))
+            }
+            rtdt::TyTag::F64 => {
+                let value = unsafe { *(ptr as *const f64) };
+                Ok(Value::F32(value as f32))
             }
             rtdt::TyTag::Int => {
                 let mut new_value = unsafe { Value::alloc_int(rt, tydesc) };
