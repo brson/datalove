@@ -49,7 +49,14 @@ unsafe fn pretty_value(
     unsafe {
         match tydesc.as_ref().type_tag {
             rtdt::TyTag::Bool => pretty_bool(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::U8 => pretty_u8(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::I8 => pretty_i8(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::U16 => pretty_u16(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::I16 => pretty_i16(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::U32 => pretty_u32(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::I32 => pretty_i32(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::U64 => pretty_u64(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::I64 => pretty_i64(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::F32 => pretty_f32(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::Int => pretty_int(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::String => pretty_string(rt, value_ref, string_mut, string_tydesc),
@@ -92,6 +99,62 @@ unsafe fn pretty_bool(
     }
 }
 
+unsafe fn pretty_u8(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let n = &*(value_ref as *const rtdt::U8);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
+        let s = n.0.to_string();
+        push_str(rt, string_mut, string_tydesc, s.as_bytes())
+    }
+}
+
+unsafe fn pretty_i8(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let n = &*(value_ref as *const rtdt::I8);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
+        let s = n.0.to_string();
+        push_str(rt, string_mut, string_tydesc, s.as_bytes())
+    }
+}
+
+unsafe fn pretty_u16(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let n = &*(value_ref as *const rtdt::U16);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
+        let s = n.0.to_string();
+        push_str(rt, string_mut, string_tydesc, s.as_bytes())
+    }
+}
+
+unsafe fn pretty_i16(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let n = &*(value_ref as *const rtdt::I16);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
+        let s = n.0.to_string();
+        push_str(rt, string_mut, string_tydesc, s.as_bytes())
+    }
+}
+
 unsafe fn pretty_u32(
     rt: LocalRtHandle,
     value_ref: *const u8,
@@ -100,6 +163,48 @@ unsafe fn pretty_u32(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U32);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
+        let s = n.0.to_string();
+        push_str(rt, string_mut, string_tydesc, s.as_bytes())
+    }
+}
+
+unsafe fn pretty_i32(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let n = &*(value_ref as *const rtdt::I32);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
+        let s = n.0.to_string();
+        push_str(rt, string_mut, string_tydesc, s.as_bytes())
+    }
+}
+
+unsafe fn pretty_u64(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let n = &*(value_ref as *const rtdt::U64);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
+        let s = n.0.to_string();
+        push_str(rt, string_mut, string_tydesc, s.as_bytes())
+    }
+}
+
+unsafe fn pretty_i64(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let n = &*(value_ref as *const rtdt::I64);
         push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
@@ -366,7 +471,7 @@ unsafe fn pretty_data(
 ) -> Result<(), ()> {
     unsafe {
         let data = &*(value_ref as *const rtdt::Data);
-        push_str(rt, string_mut, string_tydesc, b"data ")?;
+        push_str(rt, string_mut, string_tydesc, b"@data ")?;
 
         let tydesc_ptr = data.tydesc();
         if tydesc_ptr.is_null() {
@@ -388,7 +493,7 @@ unsafe fn pretty_error(
 ) -> Result<(), ()> {
     unsafe {
         let error = &*(value_ref as *const rtdt::Error);
-        push_str(rt, string_mut, string_tydesc, b"error ")?;
+        push_str(rt, string_mut, string_tydesc, b"@error ")?;
 
         let tydesc_ptr = error.tydesc();
         if tydesc_ptr.is_null() {
