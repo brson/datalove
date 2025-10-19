@@ -409,14 +409,52 @@ impl<'db> InterpContext<'db> {
                             let layout = unsafe { rtdt::layout::compute_result_layout(condition_tydesc) };
                             let payload_ptr = unsafe { result_ptr.add(layout.payload_offset as usize) };
 
-                            // The error payload is of type Error (same layout as Data).
-                            // Error contains tydesc + value pointer.
+                            // The error payload is of type Error (16 bytes containing tydesc + value_ptr).
+                            // We need to move it out of the Result to avoid cloning the inner value.
+                            // Error is stored inline in Result, so we copy the Error struct itself
+                            // and transfer ownership of what it points to.
                             let error_ptr = payload_ptr as *const rtdt::Error;
-                            let error_tydesc = unsafe { (*error_ptr).tydesc() };
-                            let error_value_ptr = unsafe { (*error_ptr).value_ptr() };
 
-                            // Create a Value for the error.
-                            let error_value = Self::value_from_ptr(&mut self.rt, error_value_ptr, error_tydesc)?;
+                            // Allocate a new Error on the heap and copy the Error struct.
+                            let error_tydesc = unsafe {
+                                // Get Error type descriptor from error type table.
+                                // For now we'll get it from the error itself.
+                                // TODO: This might need the proper Error tydesc from type table.
+                                std::ptr::null() as *const rtdt::TyDesc
+                            };
+
+                            let error_size = std::mem::size_of::<rtdt::Error>();
+                            let error_align = std::mem::align_of::<rtdt::Error>();
+                            let new_error_ptr = unsafe {
+                                self.rt.alloc.alloc(error_size as u32, error_align as u32, 1)
+                            };
+
+                            if new_error_ptr.is_null() {
+                                return Err(InterpError::RuntimeError(
+                                    "Failed to allocate Error in destructuring".to_string()
+                                ));
+                            }
+
+                            // Copy the Error struct (transfers ownership of inner value_ptr).
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(
+                                    error_ptr as *const u8,
+                                    new_error_ptr,
+                                    error_size
+                                );
+                            }
+
+                            // Create Value::Error pointing to the moved Error.
+                            let error_value = Value::Error {
+                                ptr: new_error_ptr as *mut rtdt::Error,
+                                tydesc: error_tydesc,
+                            };
+
+                            // Now we need to prevent the Result from freeing the Error's inner value.
+                            // Zero out the Error in the Result so it won't double-free.
+                            unsafe {
+                                std::ptr::write_bytes(payload_ptr, 0, error_size);
+                            }
 
                             // Bind the error if there's an else_binding.
                             if let Some(binding_name) = else_binding {

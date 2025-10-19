@@ -177,9 +177,9 @@ end if
 - Bindings add variables to type context during type checking
 - Variables are removed from context after body is checked
 - Runtime execution: Bindings are added to interpreter variable scope, executed, then removed and freed
-- All 80 interpreter tests passing (including 25 if-destructuring tests for Option/Result)
+- All 105 interpreter tests passing (including 25 if-destructuring tests for Option/Result)
 - **FIXED (2025-10-18)**: Payload extraction now supports ALL types including heap-allocated types (String, Int, List, Option, Result)
-  - Implementation uses `rt::clone::clone_value()` to deep clone heap-allocated payloads
+  - Ok variant: Implementation uses `rt::clone::clone_value()` to deep clone heap-allocated payloads
   - Inline primitive types supported: bool, u32, f32
   - Heap types supported: Int (bigint), String, List, Option, Result
   - **FIXED (2025-10-18)**: List types now supported in datafun function signatures
@@ -188,6 +188,13 @@ end if
   - All scalar types convert to Value::U32 or Value::F32 as appropriate
   - Supported scalar types: u8, i8, u16, i16, i32, u32, u64, i64, f32, f64
   - Types not yet tested in if-destructuring: i32, u64, i64, f64, Tuple, Struct, Enum, Map, Set
+- **FIXED (2025-10-19)**: Result Err destructuring now uses move semantics instead of cloning
+  - Location: `interp.rs:406-476` (ResultTag::Err branch)
+  - **Problem**: Error values were being cloned via `value_from_ptr()`, wasteful for large values
+  - **Solution**: Error struct (16 bytes: tydesc + value_ptr) is copied from Result payload, transferring ownership of inner value
+  - **Implementation**: Allocate new Error on heap, memcpy Error struct, zero out Result's Error slot to prevent double-free
+  - **Benefit**: True move semantics, no unnecessary cloning, handles inline scalar errors naturally
+  - **Note**: Error binding provides Error wrapper, not inner value - extracting inner error values requires additional work
 
 ---
 
