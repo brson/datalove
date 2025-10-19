@@ -338,43 +338,44 @@ impl Value {
 
             let mut output_string = output_string.assume_init();
 
+            // Create type descriptors for inline values outside the match to ensure they live long enough.
+            let bool_tydesc = rtdt::TyDesc {
+                type_tag: rtdt::TyTag::Bool,
+                size: 1,
+                align: 1,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            };
+
+            let u32_tydesc = rtdt::TyDesc {
+                type_tag: rtdt::TyTag::U32,
+                size: 4,
+                align: 4,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            };
+
+            let f32_tydesc = rtdt::TyDesc {
+                type_tag: rtdt::TyTag::F32,
+                size: 4,
+                align: 4,
+                type_info: rtdt::TyInfo {
+                    nothing: rtdt::TyInfoNothing,
+                },
+            };
+
             // Get value pointer and type descriptor.
             let (value_ptr, tydesc_ptr) = match self {
                 Value::Bool(b) => {
-                    // Create inline bool tydesc.
-                    let tydesc = rtdt::TyDesc {
-                        type_tag: rtdt::TyTag::Bool,
-                        size: 1,
-                        align: 1,
-                        type_info: rtdt::TyInfo {
-                            nothing: rtdt::TyInfoNothing,
-                        },
-                    };
-                    (b as *const bool as *const u8, &tydesc as *const rtdt::TyDesc)
+                    (b as *const bool as *const u8, &bool_tydesc as *const rtdt::TyDesc)
                 }
                 Value::U32(n) => {
-                    // Create inline u32 tydesc.
-                    let tydesc = rtdt::TyDesc {
-                        type_tag: rtdt::TyTag::U32,
-                        size: 4,
-                        align: 4,
-                        type_info: rtdt::TyInfo {
-                            nothing: rtdt::TyInfoNothing,
-                        },
-                    };
-                    (n as *const u32 as *const u8, &tydesc as *const rtdt::TyDesc)
+                    (n as *const u32 as *const u8, &u32_tydesc as *const rtdt::TyDesc)
                 }
                 Value::F32(f) => {
-                    // Create inline f32 tydesc.
-                    let tydesc = rtdt::TyDesc {
-                        type_tag: rtdt::TyTag::F32,
-                        size: 4,
-                        align: 4,
-                        type_info: rtdt::TyInfo {
-                            nothing: rtdt::TyInfoNothing,
-                        },
-                    };
-                    (f as *const f32 as *const u8, &tydesc as *const rtdt::TyDesc)
+                    (f as *const f32 as *const u8, &f32_tydesc as *const rtdt::TyDesc)
                 }
                 Value::Int { ptr, tydesc } => (*ptr as *const u8, *tydesc),
                 Value::String { ptr, tydesc } => (*ptr as *const u8, *tydesc),
