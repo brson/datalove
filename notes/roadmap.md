@@ -6,6 +6,7 @@
 ## language
 
 - maps and sets
+- interp tests for math ops
 
 ## repl
 
