@@ -1,0 +1,11 @@
+// Test try-option operator (?) on function call expression.
+fun get_option(): ?u32
+  ret 42
+end fun
+
+fun unwrap_option(): ?u32
+  let x: u32 = get_option()?
+  ret x
+end fun
+
+let output = unwrap_option()

@@ -1,0 +1,10 @@
+// Test try-option on function call expression (parser support check).
+fun get_option(): ?u32
+  ret 42
+end fun
+
+fun test(): ?u32
+  ret get_option()?
+end fun
+
+let output = test()

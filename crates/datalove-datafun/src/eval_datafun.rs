@@ -593,11 +593,15 @@ fn eval_function_call<'db>(
         "Function did not return a value".to_string(),
     ));
 
-    // Get the function's return type for handling early returns.
+    // Get the function's return type for handling early returns and automatic coercion.
     let return_type_hint = func.return_type(ctx.db);
     let return_type = return_type_hint.and_then(|type_hint| {
         crate::eval_datalit::convert_type_hint_tracked(ctx.db, type_hint)
     });
+
+    // Set expected return type for automatic coercion in return statements.
+    let old_return_type = ctx.expected_return_type;
+    ctx.expected_return_type = return_type;
 
     for stmt in body {
         match ctx.exec_stmt(stmt) {
@@ -721,6 +725,9 @@ fn eval_function_call<'db>(
             ctx.variables.insert(param_name, old_val);
         }
     }
+
+    // Restore expected return type.
+    ctx.expected_return_type = old_return_type;
 
     // Decrement call depth before returning.
     ctx.call_depth -= 1;

@@ -78,6 +78,9 @@ pub struct InterpContext<'db> {
 
     /// Current call stack depth (for recursion protection).
     pub call_depth: usize,
+
+    /// Expected return type for the current function (for automatic coercion).
+    pub expected_return_type: Option<crate::datalit::tycheck::TypeAndHeap<'db>>,
 }
 
 impl<'db> InterpContext<'db> {
@@ -92,6 +95,7 @@ impl<'db> InterpContext<'db> {
             functions: HashMap::new(),
             module_functions: HashMap::new(),
             call_depth: 0,
+            expected_return_type: None,
         }
     }
 
@@ -174,8 +178,9 @@ impl<'db> InterpContext<'db> {
             }
 
             Statement::Ret(stmt) => {
-                // Evaluate the return value and throw it as a Return "error" for control flow.
-                let value = crate::eval_datafun::eval_expr(self, stmt.value(self.db))?;
+                // Evaluate the return value with expected type for automatic coercion.
+                let expected = self.expected_return_type;
+                let value = crate::eval_datafun::eval_expr_with_expected(self, stmt.value(self.db), expected)?;
                 Err(InterpError::Return(value))
             }
 

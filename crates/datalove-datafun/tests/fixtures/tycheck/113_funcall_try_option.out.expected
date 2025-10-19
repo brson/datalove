@@ -1,0 +1,22 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get_option",
+      "params": [],
+      "return_type": "?u32"
+    },
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [],
+      "return_type": "?u32"
+    },
+    {
+      "kind": "variable",
+      "name": "output",
+      "type": "@?u32"
+    }
+  ]
+}
