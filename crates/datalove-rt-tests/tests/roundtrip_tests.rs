@@ -28,13 +28,81 @@ fn find_test_fixtures() -> Vec<PathBuf> {
     fixtures
 }
 
+/// Compare two types for structural equality, recursively comparing nested types.
+fn types_equal<'db>(
+    db: &'db datalit::Database,
+    type1: &datalit::tycheck::Type<'db>,
+    type2: &datalit::tycheck::Type<'db>,
+) -> bool {
+    use datalit::tycheck::Type;
+
+    match (type1, type2) {
+        (Type::Bool, Type::Bool) => true,
+        (Type::U8, Type::U8) => true,
+        (Type::I8, Type::I8) => true,
+        (Type::U16, Type::U16) => true,
+        (Type::I16, Type::I16) => true,
+        (Type::U32, Type::U32) => true,
+        (Type::I32, Type::I32) => true,
+        (Type::U64, Type::U64) => true,
+        (Type::I64, Type::I64) => true,
+        (Type::F32, Type::F32) => true,
+        (Type::Int, Type::Int) => true,
+        (Type::String, Type::String) => true,
+        (Type::Data, Type::Data) => true,
+        (Type::Error, Type::Error) => true,
+
+        (Type::AnonTuple(t1), Type::AnonTuple(t2)) => {
+            let fields1 = t1.fields(db);
+            let fields2 = t2.fields(db);
+            if fields1.len() != fields2.len() {
+                return false;
+            }
+            fields1.iter().zip(fields2.iter()).all(|(f1, f2)| {
+                let heap1 = std::mem::discriminant(&f1.heap(db));
+                let heap2 = std::mem::discriminant(&f2.heap(db));
+                heap1 == heap2 && types_equal(db, f1.ty(db), f2.ty(db))
+            })
+        }
+
+        (Type::List(t1), Type::List(t2)) => {
+            let elem1 = t1.element_type(db);
+            let elem2 = t2.element_type(db);
+            let heap1 = std::mem::discriminant(&elem1.heap(db));
+            let heap2 = std::mem::discriminant(&elem2.heap(db));
+            heap1 == heap2 && types_equal(db, elem1.ty(db), elem2.ty(db))
+        }
+
+        (Type::Option(t1), Type::Option(t2)) => {
+            let inner1 = t1.inner_type(db);
+            let inner2 = t2.inner_type(db);
+            let heap1 = std::mem::discriminant(&inner1.heap(db));
+            let heap2 = std::mem::discriminant(&inner2.heap(db));
+            heap1 == heap2 && types_equal(db, inner1.ty(db), inner2.ty(db))
+        }
+
+        (Type::Result(t1), Type::Result(t2)) => {
+            let inner1 = t1.inner_type(db);
+            let inner2 = t2.inner_type(db);
+            let heap1 = std::mem::discriminant(&inner1.heap(db));
+            let heap2 = std::mem::discriminant(&inner2.heap(db));
+            heap1 == heap2 && types_equal(db, inner1.ty(db), inner2.ty(db))
+        }
+
+        _ => {
+            // For other types or mismatched variants, use standard equality.
+            type1 == type2
+        }
+    }
+}
+
 /// Compile and instantiate a datalit value.
 fn compile_and_instantiate<'db>(
     db: &'db datalit::Database,
     rt: &mut rt::rt_local::RtLocal,
     tydesc_table: &mut datalit::tydesc_table::TyDescTable<'db>,
     source_text: &str,
-) -> Result<datalit::instantiate2::InstantiatedValue, String> {
+) -> Result<(datalit::instantiate2::InstantiatedValue, datalit::tycheck::TypecheckResult<'db>), String> {
     let source = bct::input::Source::new(db, source_text.S());
     let parsed = datalit::parser::parse(db, source);
     let resolved = datalit::resolve::resolve_names(db, parsed);
@@ -51,8 +119,10 @@ fn compile_and_instantiate<'db>(
         return Err(format!("Type check errors: {} error(s)", errors.len()));
     }
 
-    datalit::instantiate2::instantiate_value(db, rt, tydesc_table, typechecked)
-        .map_err(|e| format!("Instantiation error: {}", e))
+    let inst_value = datalit::instantiate2::instantiate_value(db, rt, tydesc_table, typechecked)
+        .map_err(|e| format!("Instantiation error: {}", e))?;
+
+    Ok((inst_value, typechecked))
 }
 
 /// Pretty-print a runtime value to a string.
@@ -133,7 +203,7 @@ fn rt_pretty_print(
 
 /// Round-trip test: parse -> instantiate -> rt pretty-print -> parse -> instantiate -> rt pretty-print.
 ///
-/// Both pretty-prints should be identical.
+/// Both pretty-prints should be identical, and all three sources should typecheck identically.
 fn analyze_file(path: &Path) -> Result<String, String> {
     let source_text = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
@@ -142,18 +212,67 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let db = datalit::Database::default();
     let mut rt_inst = rt::rt_local::RtLocal::new();
     let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(&db);
-    let inst1 = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &source_text)?;
+    let (inst1, tycheck1) = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &source_text)?;
+
+    // Extract the root type from the first typecheck.
+    let type1 = tycheck1.root_type(&db).X();
 
     // Step 2: Pretty-print using runtime pretty printer.
     let pretty1 = rt_pretty_print(inst1.ptr, inst1.tydesc)?;
 
     // Step 3: Parse, type check, and instantiate the pretty-printed output.
-    let inst2 = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &pretty1)?;
+    let (inst2, tycheck2) = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &pretty1)?;
+
+    // Extract the root type from the second typecheck.
+    let type2 = tycheck2.root_type(&db).X();
 
     // Step 4: Pretty-print again.
     let pretty2 = rt_pretty_print(inst2.ptr, inst2.tydesc)?;
 
-    // Step 5: Check that both pretty-prints are identical.
+    // Step 5: Parse and typecheck the second pretty-print to get the third type.
+    let source3 = bct::input::Source::new(&db, pretty2.S());
+    let parsed3 = datalit::parser::parse(&db, source3);
+    let resolved3 = datalit::resolve::resolve_names(&db, parsed3);
+    let tycheck3 = datalit::tycheck::type_check(&db, parsed3, resolved3);
+    let type3 = tycheck3.root_type(&db).X();
+
+    // Step 6: Check that all three types and heaps are identical.
+    // We compare the actual type and heap content, not salsa identity.
+    let heap1 = std::mem::discriminant(&type1.heap(&db));
+    let heap2 = std::mem::discriminant(&type2.heap(&db));
+    let heap3 = std::mem::discriminant(&type3.heap(&db));
+
+    if heap1 != heap2 || !types_equal(&db, type1.ty(&db), type2.ty(&db)) {
+        unsafe {
+            let rt_handle = &mut *rt_inst as *mut rt::rt_local::RtLocal as *mut u8;
+            rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+            rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+            rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+            rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+            rt_inst.shutdown();
+        }
+        return Err(format!(
+            "Types differ between original and first pretty-print:\nOriginal: {}\nFirst:    {}",
+            source_text, pretty1
+        ));
+    }
+
+    if heap2 != heap3 || !types_equal(&db, type2.ty(&db), type3.ty(&db)) {
+        unsafe {
+            let rt_handle = &mut *rt_inst as *mut rt::rt_local::RtLocal as *mut u8;
+            rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+            rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+            rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+            rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+            rt_inst.shutdown();
+        }
+        return Err(format!(
+            "Types differ between first and second pretty-print:\nFirst:  {}\nSecond: {}",
+            pretty1, pretty2
+        ));
+    }
+
+    // Step 7: Check that both pretty-prints are identical.
     if pretty1 != pretty2 {
         unsafe {
             let rt_handle = &mut *rt_inst as *mut rt::rt_local::RtLocal as *mut u8;
