@@ -9,6 +9,25 @@ pub fn align_up(value: u32, align: u32) -> u32 {
     (value + align - 1) & !(align - 1)
 }
 
+/// Compute the payload offset for an Option<T> type.
+///
+/// The payload starts after the tag (u8), aligned to the inner type's alignment.
+#[inline]
+pub fn option_payload_offset(inner_align: u32) -> u32 {
+    align_up(1, inner_align)
+}
+
+/// Compute the payload offset for a Result<T> type.
+///
+/// The payload starts after the tag (u8), aligned to the maximum of
+/// the ok type's alignment and the error alignment.
+#[inline]
+pub fn result_payload_offset(ok_align: u32) -> u32 {
+    let error_align = std::mem::align_of::<usize>().max(std::mem::align_of::<*const TyDesc>()) as u32;
+    let max_payload_align = ok_align.max(error_align);
+    align_up(1, max_payload_align)
+}
+
 /// Compute the memory layout for a tuple type.
 ///
 /// This function implements the standard struct layout algorithm:

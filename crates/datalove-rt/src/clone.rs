@@ -291,10 +291,7 @@ unsafe fn clone_impl(
 
             if opt_in.tag == rtdt::OptionTag::Some {
                 let inner_ty = ty.option_inner_ty();
-                let inner_align = inner_ty.align();
-
-                // Compute payload offset.
-                let payload_offset = rtdt::layout::align_up(1, inner_align);
+                let payload_offset = rtdt::layout::option_payload_offset(inner_ty.align());
 
                 let payload_in = unsafe { value_in.add(payload_offset as usize) };
                 let payload_out = unsafe { value_out.add(payload_offset as usize) };
@@ -316,13 +313,7 @@ unsafe fn clone_impl(
             res_out.tag = res_in.tag;
 
             let ok_ty = ty.result_ok_ty();
-
-            // Compute correct payload offset using max of ok_align and error_align.
-            // This must match the layout computation in rtdt::layout::compute_result_layout.
-            let ok_align = ok_ty.align();
-            let error_align = std::mem::align_of::<usize>().max(std::mem::align_of::<*const rtdt::TyDesc>()) as u32;
-            let max_payload_align = ok_align.max(error_align);
-            let payload_offset = rtdt::layout::align_up(1, max_payload_align);
+            let payload_offset = rtdt::layout::result_payload_offset(ok_ty.align());
 
             // For now, we only handle Ok case.
             // Error type cloning would need the error tydesc.

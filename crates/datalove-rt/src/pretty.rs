@@ -425,10 +425,8 @@ unsafe fn pretty_option(
             }
             rtdt::OptionTag::Some => {
                 let inner_ty = tydesc.option_inner_ty();
-
-                // Calculate payload offset.
-                let payload_offset = align_up(1, inner_ty.align() as usize);
-                let payload_value = value_ref.add(payload_offset);
+                let payload_offset = rtdt::layout::option_payload_offset(inner_ty.align());
+                let payload_value = value_ref.add(payload_offset as usize);
 
                 pretty_value(rt, payload_value, inner_ty, string_mut, string_tydesc)
             }
