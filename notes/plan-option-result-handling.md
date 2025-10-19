@@ -292,14 +292,32 @@ end
     - Function let binding coercion: 123-128
 
 **Remaining Work**
-1. **Function call support** - Try operators on function call expressions
-   - Example: `let x = get_option()?` where `get_option()` returns `?u32`
-   - Current workaround: Use let binding first: `let opt = get_option(); let x = opt?`
-   - This is needed for practical ergonomic code
+1. **Function call support** - Automatic coercion of function return values (IN PROGRESS 2025-10-19)
+   - **Parser/Type Checker**: Already support `get_option()?` syntax - COMPLETE
+     - Test: `113_funcall_try_option.dfs` type checks successfully
+     - The `?` operator can be applied to function call expressions
+   - **Runtime Issue**: Function returns don't automatically coerce to Option/Result
+     - Example: `fun f(): ?u32 { ret 42 }` - the `42` should auto-wrap to `Some(42)`
+     - Currently the return value is not wrapped, causing type errors in try operators
+   - **Root Cause**: Return statement evaluation (`interp.rs:176-179`) doesn't pass expected type
+     - `eval_expr` is called without expected type context
+     - Automatic coercion only happens in let statements and other contexts with expected types
+   - **Attempted Fix #1** (2025-10-19): Manual coercion in function call handler
+     - Implemented `coerce_value_to_expected()` in `eval_datafun.rs`
+     - Manually builds Option/Result values by cloning payloads
+     - **Result**: Memory corruption bug - segfaults during cleanup
+     - **Issue**: Manual construction of Option/Result with `clone_value` is error-prone
+     - **Status**: Abandoned due to complexity and ownership issues
+   - **Recommended Fix**: Refactor return statement to pass expected type through evaluation
+     - Modify `Statement::Ret` handler to get function's return type
+     - Pass return type as expected type to `eval_expr_with_expected`
+     - Let existing datalit coercion machinery handle wrapping
+     - Similar to how let statements work (see `interp.rs:159-165`)
 2. **Inline error types** - Error values with inline types (bool, u32, f32) for early return
    - Currently only heap-allocated error values (String, List, etc.) work
    - Need to allocate inline values on heap or handle them specially in Error structure
    - Important for complete Result<T> support
+   - Location of NotImplemented: `eval_datafun.rs:651-663`
 
 **Known Limitations (not blocking completion)**
 3. Optional/Result arithmetic operators (`+?`, `+!`, etc.) are not implemented in interpreter
@@ -309,6 +327,60 @@ end
 **Note**: Binary operators with suffixes already exist:
 - `AddChecked`, `SubChecked`, `MulChecked`, `DivChecked` (for `+!`, `-!`, `*!`, `/!`)
 - `AddOptional`, `SubOptional`, `MulOptional`, `DivOptional` (for `+?`, `-?`, `*?`, `/?`)
+
+**Refactoring Plan for Function Return Coercion** (2025-10-19)
+
+The recommended approach to fix function return coercion:
+
+1. **Add expected type to InterpContext during function execution**
+   - Location: `eval_datafun.rs` in `eval_function_call()`
+   - Store the function's return type in the context before executing the body
+   - Similar to how `expected_return_type` is used in type checking
+
+2. **Modify Statement::Ret handler to use expected type**
+   - Location: `interp.rs:176-179`
+   - Currently: `let value = crate::eval_datafun::eval_expr(self, stmt.value(self.db))?;`
+   - Change to: Get expected type from context, call `eval_expr_with_expected`
+   - Pass the function's return type as the expected type
+
+3. **Handle expected type in exec_stmt**
+   - The `exec_stmt` method needs access to the expected return type
+   - Option A: Add field to `InterpContext` (e.g., `current_return_type: Option<TypeAndHeap>`)
+   - Option B: Pass expected type as parameter to `exec_stmt` (more invasive)
+   - Recommendation: Use Option A for minimal changes
+
+4. **Implementation steps**:
+   ```rust
+   // In InterpContext:
+   pub struct InterpContext<'db> {
+       // ... existing fields ...
+       pub expected_return_type: Option<datalit::tycheck::TypeAndHeap<'db>>,
+   }
+
+   // In eval_function_call (before executing body):
+   let old_return_type = ctx.expected_return_type;
+   ctx.expected_return_type = return_type;
+
+   // Execute function body...
+
+   // After function completes:
+   ctx.expected_return_type = old_return_type;
+
+   // In Statement::Ret handler:
+   let expected = self.expected_return_type;
+   let value = crate::eval_datafun::eval_expr_with_expected(self, stmt.value(self.db), expected)?;
+   ```
+
+5. **Expected benefits**:
+   - Leverages existing automatic coercion in `eval_datalit`
+   - No manual Option/Result construction
+   - No ownership/memory management issues
+   - Consistent with how let statements handle coercion
+
+6. **Testing plan**:
+   - Test 139_try_function_call_option.dfs should pass
+   - All existing tests should continue passing
+   - Function returns with automatic coercion should work for all types
 
 ---
 
