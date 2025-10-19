@@ -7,6 +7,7 @@
 
 - maps and sets
 - interp tests for math ops
+- error diagnostics
 
 ## testing
 
