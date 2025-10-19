@@ -136,10 +136,6 @@ let i: @u32 = (1 +! 2) -! 3 *! 4 /! 5
 var i = 0
 set i += 1;
 
-// overflow ops - worth having?
-let i = 1 +% 1 // wrapping (from zig)
-let i = 1 +| 1 // saturating (from zig)
-
 // numeric types expand when using overflowing math
 let a /* : @u16 */ = 1 + 2
 let b /* : @u32 */ = a + a;
