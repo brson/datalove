@@ -313,7 +313,7 @@ impl<'db> InterpContext<'db> {
                         let inner_tydesc = unsafe { (*condition_tydesc).type_info.option.inner_tydesc };
 
                         // Create a Value for the payload.
-                        let payload_value = Self::value_from_ptr(payload_ptr, inner_tydesc)?;
+                        let payload_value = Self::value_from_ptr(&mut self.rt, payload_ptr, inner_tydesc)?;
 
                         // Bind the payload if there's a then_binding.
                         if let Some(binding_name) = then_binding {
@@ -373,7 +373,7 @@ impl<'db> InterpContext<'db> {
                         let ok_tydesc = unsafe { (*condition_tydesc).type_info.result.ok_tydesc };
 
                         // Create a Value for the payload.
-                        let payload_value = Self::value_from_ptr(payload_ptr, ok_tydesc)?;
+                        let payload_value = Self::value_from_ptr(&mut self.rt, payload_ptr, ok_tydesc)?;
 
                         // Bind the payload if there's a then_binding.
                         if let Some(binding_name) = then_binding {
@@ -405,7 +405,7 @@ impl<'db> InterpContext<'db> {
                             let error_value_ptr = unsafe { (*error_ptr).value_ptr() };
 
                             // Create a Value for the error.
-                            let error_value = Self::value_from_ptr(error_value_ptr, error_tydesc)?;
+                            let error_value = Self::value_from_ptr(&mut self.rt, error_value_ptr, error_tydesc)?;
 
                             // Bind the error if there's an else_binding.
                             if let Some(binding_name) = else_binding {
@@ -441,7 +441,11 @@ impl<'db> InterpContext<'db> {
     /// Create a Value from a pointer and type descriptor.
     ///
     /// This clones the value at the given pointer into a new allocation.
-    fn value_from_ptr(ptr: *const u8, tydesc: *const rtdt::TyDesc) -> Result<Value, InterpError> {
+    fn value_from_ptr(
+        rt: &mut rt::rt_local::RtLocal,
+        ptr: *const u8,
+        tydesc: *const rtdt::TyDesc
+    ) -> Result<Value, InterpError> {
         if tydesc.is_null() {
             return Err(InterpError::TypeError(
                 "Cannot create value from null type descriptor".to_string()
@@ -463,9 +467,177 @@ impl<'db> InterpContext<'db> {
                 let value = unsafe { *(ptr as *const f32) };
                 Ok(Value::F32(value))
             }
+            rtdt::TyTag::Int => {
+                let mut new_value = unsafe { Value::alloc_int(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone Int value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
+            rtdt::TyTag::String => {
+                let mut new_value = unsafe { Value::alloc_string(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone String value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
+            rtdt::TyTag::Tuple => {
+                let mut new_value = unsafe { Value::alloc_tuple(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone Tuple value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
+            rtdt::TyTag::Struct => {
+                let mut new_value = unsafe { Value::alloc_struct(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone Struct value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
+            rtdt::TyTag::Enum => {
+                let mut new_value = unsafe { Value::alloc_enum(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone Enum value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
+            rtdt::TyTag::List => {
+                let mut new_value = unsafe { Value::alloc_list(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone List value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
+            rtdt::TyTag::Map => {
+                let mut new_value = unsafe { Value::alloc_map(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone Map value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
+            rtdt::TyTag::Set => {
+                let mut new_value = unsafe { Value::alloc_set(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone Set value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
+            rtdt::TyTag::Option => {
+                let mut new_value = unsafe { Value::alloc_option(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone Option value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
+            rtdt::TyTag::Result => {
+                let mut new_value = unsafe { Value::alloc_result(rt, tydesc) };
+                let status = unsafe {
+                    rt::clone::clone_value(
+                        rt as *mut _ as rt::LocalRtHandle,
+                        ptr,
+                        tydesc,
+                        new_value.as_mut_ptr(),
+                    )
+                };
+                if status != rt::RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone Result value".to_string()
+                    ));
+                }
+                Ok(new_value)
+            }
             _ => {
-                // For heap-allocated types, we need to clone.
-                // For now, return NotImplemented for complex types.
                 Err(InterpError::NotImplemented(
                     format!("Cloning {:?} values in if-destructuring not yet implemented", type_tag)
                 ))

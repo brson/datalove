@@ -149,6 +149,8 @@ end if
   - `58_if_option_none.dfs` ✓ PASSING - Option destructuring with None, executes else branch (999)
   - `59_if_result_ok.dfs` ✓ PASSING - Result destructuring with Ok variant
   - `60_if_result_err.dfs` ✓ PASSING - Result destructuring with Err variant, executes else branch (888)
+  - `61_if_option_string.dfs` ✓ PASSING - Option destructuring with String payload (heap-allocated)
+  - `62_if_result_string.dfs` ✓ PASSING - Result destructuring with String payload (heap-allocated)
 
 **Implementation Notes**
 - Option destructuring: else clause and error binding are optional
@@ -156,8 +158,10 @@ end if
 - Bindings add variables to type context during type checking
 - Variables are removed from context after body is checked
 - Runtime execution: Bindings are added to interpreter variable scope, executed, then removed and freed
-- All 59 interpreter tests passing (including 4 new if-destructuring tests)
-- **Limitation**: Payload extraction only supports primitive types (bool, u32, f32); heap-allocated payloads require cloning infrastructure (to be added later)
+- All 61 interpreter tests passing (including 4 original if-destructuring tests + 2 heap-allocated payload tests)
+- **FIXED (2025-10-18)**: Payload extraction now supports ALL types including heap-allocated types (String, Int, Tuple, Struct, Enum, List, Map, Set, Option, Result)
+  - Implementation uses `rt::clone::clone_value()` to deep clone heap-allocated payloads
+  - Added tests: `61_if_option_string.dfs` ✓ PASSING, `62_if_result_string.dfs` ✓ PASSING
 
 ---
 
