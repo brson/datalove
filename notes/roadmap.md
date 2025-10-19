@@ -20,7 +20,6 @@
 ## cleanup
 
 - runtime safety
-- remove rt dep from datalit?
 
 ## documentation
 
