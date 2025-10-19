@@ -9,6 +9,9 @@
 
 ## repl
 
+- ux
+- web
+
 ## modules and standard library
 
 - core modules
@@ -17,7 +20,7 @@
 
 - runtime safety
 
-## pitch documentation
+## documentation
 
 - improve readme
 
@@ -32,9 +35,11 @@
 
 ## near future
 
+- generics
 - argument modes
 - move semantics
 - heap genericity and clone method
+- aot
 
 ## far future
 
