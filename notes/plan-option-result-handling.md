@@ -4,11 +4,11 @@ This plan implements all features described in the README section "Option and re
 
 ## Progress Summary
 
-**Overall Status**: 3 of 4 phases complete (75%)
+**Overall Status**: 2 of 4 phases complete (50%), 1 phase in progress (75% complete)
 
 - [x] **Phase 1: Automatic Coercion** - COMPLETE
 - [x] **Phase 2: If-Destructuring** - COMPLETE
-- [x] **Phase 3: Postfix ? and ! Operators** - COMPLETE (2025-10-19)
+- [ ] **Phase 3: Postfix ? and ! Operators** - IN PROGRESS (core implementation done, needs function call support and inline error types)
 - [ ] **Phase 4: Unary Operators with Suffixes** - NOT STARTED
 
 ## Overview
@@ -17,7 +17,7 @@ The README specifies these features:
 1. [x] Automatic coercion of plain values to Some/Ok
 2. [x] `none` and `error` literals
 3. [x] If-destructuring with `|binding|` pattern matching
-4. [x] Postfix `?` and `!` operators for early return (fully implemented, 2025-10-19)
+4. [ ] Postfix `?` and `!` operators for early return (in progress - core done, needs function call support and inline error types)
 
 Note: Binary operators with suffixes (`+?`, `+!`) are already implemented for fixed ints. Only unary operators need implementation.
 
@@ -191,7 +191,7 @@ end if
 
 ---
 
-### Phase 3: Postfix ? and ! Operators [x] COMPLETE
+### Phase 3: Postfix ? and ! Operators ⚠️ IN PROGRESS
 
 **Goal**: Early return operators for propagating None/Error
 
@@ -271,10 +271,12 @@ end
 
 **Implementation Status**
 - [x] **Type checking**: Fully implemented and working
-- [x] **Interpreter runtime**: Fully implemented and working
-- [x] **Early return handling**: Fully implemented (2025-10-19)
+- [x] **Interpreter runtime**: Core implementation complete (2025-10-19)
+- [x] **Early return handling**: Implemented for heap-allocated error types (2025-10-19)
 - [x] **Name expression coercion**: Fully implemented (2025-10-19)
-- [x] **All tests passing**: 14 tests total (4 tycheck, 10 interp), 102 interpreter tests total
+- [ ] **Function call support**: Not yet implemented - try operators don't work on function call expressions
+- [ ] **Inline error types**: Not yet implemented - early return only works with heap-allocated errors
+- [x] **Basic tests passing**: 14 tests total (4 tycheck, 10 interp), 102 interpreter tests total
 
 **Name Expression Coercion Implementation (2025-10-19)**
 - **Location**: `crates/datalove-datafun/src/tycheck.rs:996-1028`
@@ -289,15 +291,20 @@ end
     - Script-level coercion: 117-122
     - Function let binding coercion: 123-128
 
-**Known Limitations**
-1. Try operators on function call expressions are not yet supported
+**Remaining Work**
+1. **Function call support** - Try operators on function call expressions
    - Example: `let x = get_option()?` where `get_option()` returns `?u32`
-   - Workaround: Use a let binding first: `let opt = get_option(); let x = opt?`
-2. Error values with inline types (bool, u32, f32) are not yet supported for early return
-   - Early return only works with heap-allocated error values (String, List, etc.)
-   - This is a minor limitation as errors are typically strings
+   - Current workaround: Use let binding first: `let opt = get_option(); let x = opt?`
+   - This is needed for practical ergonomic code
+2. **Inline error types** - Error values with inline types (bool, u32, f32) for early return
+   - Currently only heap-allocated error values (String, List, etc.) work
+   - Need to allocate inline values on heap or handle them specially in Error structure
+   - Important for complete Result<T> support
+
+**Known Limitations (not blocking completion)**
 3. Optional/Result arithmetic operators (`+?`, `+!`, etc.) are not implemented in interpreter
    - These operators exist in the type system but runtime evaluation is not complete
+   - Can be addressed separately from Phase 3
 
 **Note**: Binary operators with suffixes already exist:
 - `AddChecked`, `SubChecked`, `MulChecked`, `DivChecked` (for `+!`, `-!`, `*!`, `/!`)
