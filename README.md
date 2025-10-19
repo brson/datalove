@@ -292,20 +292,20 @@ end
 Floats support bare math ops,
 `+ - * /` and unary `-`.
 
-Bigints (int) support all but div,
+Bigints (int) support all but div:
 `| - *` and unary `-`.
 For div, because of div0 we must use a checked variant.
 
-Fixed ints do not, not even unary `-`.
+Fixed ints do not support any bare bath ops, not even unary `-`.
 
-They support early-return varieties:
+Fixed ints support early-return varieties:
 
 ```
 let a = 1 +? 1
 let a = 1 -? 1
 let a = 1 *? 1
 let a = 1 /? 1
-let a = -?a // yup
+let a = -?a // yup, early-return negation
 
 let a = 1 +! 1
 let a = 1 -! 1
@@ -316,6 +316,9 @@ let a = -!a // yup
 
 `-?` unary op is not defined for unsigned ints -
 it has a sensible semantic but is a pure footgun.
+
+Bigints support the early-return division but not the others.
+Floats don't support early-return math.
 
 If we decide to let funs panic we'll also add panicking variations.
 
