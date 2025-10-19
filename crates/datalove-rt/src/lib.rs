@@ -538,6 +538,166 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
     }
 }
 
+// BTreeSet operations.
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreeset_create_local(
+    rt: LocalRtHandle,
+    // Destination will be overwritten.
+    value_out: *mut u8,
+    // BTreeSet type.
+    tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        set::btreeset_create_impl(rt_ref, value_out, tydesc)
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreeset_destroy_local(
+    rt: LocalRtHandle,
+    btreeset_value_in: *mut u8,
+    btreeset_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || btreeset_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        set::set_destroy_impl(rt_ref, btreeset_value_in, btreeset_tydesc)
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreeset_insert_local(
+    rt: LocalRtHandle,
+    btreeset_value_mut: *mut u8,
+    btreeset_tydesc: *const rtdt::TyDesc,
+    // Element is moved.
+    element_in: *mut u8,
+    element_tydesc: *const rtdt::TyDesc,
+    // Output: 1 if newly inserted, 0 if already existed.
+    bool_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || btreeset_tydesc.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        set::btreeset_insert_impl(
+            rt_ref,
+            btreeset_value_mut,
+            btreeset_tydesc,
+            element_in,
+            element_tydesc,
+            bool_out,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreeset_remove_local(
+    rt: LocalRtHandle,
+    btreeset_value_mut: *mut u8,
+    btreeset_tydesc: *const rtdt::TyDesc,
+    element_ref: *const u8,
+    element_tydesc: *const rtdt::TyDesc,
+    // Output: 1 if removed, 0 if not found.
+    bool_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || btreeset_tydesc.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        set::btreeset_remove_impl(
+            rt_ref,
+            btreeset_value_mut,
+            btreeset_tydesc,
+            element_ref,
+            element_tydesc,
+            bool_out,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreeset_contains_local(
+    rt: LocalRtHandle,
+    btreeset_value_ref: *const u8,
+    btreeset_tydesc: *const rtdt::TyDesc,
+    element_ref: *const u8,
+    element_tydesc: *const rtdt::TyDesc,
+    // Output: 1 if contains, 0 if not.
+    bool_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || btreeset_tydesc.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        set::btreeset_contains_impl(
+            rt_ref,
+            btreeset_value_ref,
+            btreeset_tydesc,
+            element_ref,
+            element_tydesc,
+            bool_out,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreeset_clear_local(
+    rt: LocalRtHandle,
+    btreeset_value_mut: *mut u8,
+    btreeset_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || btreeset_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        set::btreeset_clear_impl(rt_ref, btreeset_value_mut, btreeset_tydesc)
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_btreeset_clone_from_slice_local(
+    rt: LocalRtHandle,
+    btreeset_value_out: *mut u8,
+    btreeset_tydesc: *const rtdt::TyDesc,
+    slice_ptr_ref: *const u8,
+    slice_ptr_len: u32,
+    slice_element_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || btreeset_tydesc.is_null() || slice_element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        set::btreeset_clone_from_slice_impl(
+            rt_ref,
+            btreeset_value_out,
+            btreeset_tydesc,
+            slice_ptr_ref,
+            slice_ptr_len,
+            slice_element_tydesc,
+        )
+    }
+}
+
 
 
 
