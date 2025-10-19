@@ -30,13 +30,11 @@ fun trailing_zeros(self: u32): u32
 end fun
 
 fun leading_ones(self: u32): u32
-  // todo
-  ret 0
+  ret leading_zeros(bitnot(self))
 end fun
 
 fun trailing_ones(self: u32): u32
-  // todo
-  ret 0
+  ret trailing_zeros(bitnot(self))
 end fun
 
 fun cast_signed(self: u32): i32
@@ -161,29 +159,61 @@ fun shift_right(self: u32, other: u32): ?u32
 end fun
 
 fun shift_left_saturating(self: u32, other: u32): u32
-  ret 0
+  if other >= 32
+    ret max_value()
+  else
+    if shift_left(self, other) |value|
+      ret value
+    else
+      ret max_value()
+    end if
+  end if
 end fun
 
 fun shift_right_saturating(self: u32, other: u32): u32
-  ret 0
+  if other >= 32
+    ret 0
+  else
+    if shift_right(self, other) |value|
+      ret value
+    else
+      ret 0
+    end if
+  end if
 end fun
 
 fun shift_left_wrapping(self: u32, other: u32): u32
-  ret 0
+  let n_mod = bitand(other, 31)
+  if shift_left(self, n_mod) |value|
+    ret value
+  else
+    ret 0
+  end if
 end fun
 
 fun shift_right_wrapping(self: u32, other: u32): u32
-  ret 0
+  let n_mod = bitand(other, 31)
+  if shift_right(self, n_mod) |value|
+    ret value
+  else
+    ret 0
+  end if
 end fun
 
 fun rotate_left(self: u32, n: u32): u32
-  // todo
-  ret 0
+  let n_mod = bitand(n, 31)
+  let left_part = shift_left_wrapping(self, n_mod)
+  let right_amount = sub_wrapping(32, n_mod)
+  let right_part = shift_right_wrapping(self, right_amount)
+  ret bitor(left_part, right_part)
 end fun
 
 fun rotate_right(self: u32, n: u32): u32
-  // todo
-  ret 0
+  let n_mod = bitand(n, 31)
+  let right_part = shift_right_wrapping(self, n_mod)
+  let left_amount = sub_wrapping(32, n_mod)
+  let left_part = shift_left_wrapping(self, left_amount)
+  ret bitor(left_part, right_part)
 end fun
 
 fun bitnot(self: u32): u32
