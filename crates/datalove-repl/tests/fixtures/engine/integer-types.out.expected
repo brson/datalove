@@ -105,9 +105,18 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "SuccessLet": {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
+      }
     },
     "environment": [
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
+      },
       {
         "name": "u8_max",
         "ty": "u8",
@@ -128,9 +137,18 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"i8_min\")"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "i8",
+        "value": "@4294967168"
+      }
     },
     "environment": [
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
+      },
       {
         "name": "u8_max",
         "ty": "u8",
@@ -162,6 +180,11 @@
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u8_max",
@@ -196,6 +219,11 @@
         "value": "@127"
       },
       {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
+      },
+      {
         "name": "u8_max",
         "ty": "u8",
         "value": "@255"
@@ -226,6 +254,11 @@
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_min",
@@ -265,6 +298,11 @@
         "value": "@127"
       },
       {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
+      },
+      {
         "name": "u16_min",
         "ty": "u16",
         "value": "@0"
@@ -300,6 +338,11 @@
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -344,6 +387,11 @@
         "value": "@127"
       },
       {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
+      },
+      {
         "name": "u16_max",
         "ty": "u16",
         "value": "@65535"
@@ -373,13 +421,27 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "SuccessLet": {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      }
     },
     "environment": [
+      {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
       {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -411,13 +473,27 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"i16_min\")"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "i16",
+        "value": "@4294934528"
+      }
     },
     "environment": [
+      {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
       {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -462,9 +538,19 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -509,9 +595,19 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -556,9 +652,19 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -608,9 +714,19 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -660,9 +776,19 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -717,9 +843,19 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -761,7 +897,11 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "SuccessLet": {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      }
     },
     "environment": [
       {
@@ -770,9 +910,24 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -814,7 +969,11 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"i32_min\")"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "i32",
+        "value": "@2147483648"
+      }
     },
     "environment": [
       {
@@ -823,9 +982,24 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -880,14 +1054,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -942,14 +1131,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -991,11 +1195,7 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      }
+      "Error": "execution error: RuntimeError(\"Unsupported type tag: U64\")"
     },
     "environment": [
       {
@@ -1004,14 +1204,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1031,11 +1246,6 @@
       {
         "name": "u32_min",
         "ty": "u32",
-        "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1058,11 +1268,7 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u64",
-        "value": "@0"
-      }
+      "Error": "type error(s): UnresolvedName(\"u64_min\")"
     },
     "environment": [
       {
@@ -1071,14 +1277,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1098,11 +1319,6 @@
       {
         "name": "u32_min",
         "ty": "u32",
-        "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1125,7 +1341,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "Error": "execution error: RuntimeError(\"Unsupported type tag: U64\")"
     },
     "environment": [
       {
@@ -1134,14 +1350,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1161,11 +1392,6 @@
       {
         "name": "u32_min",
         "ty": "u32",
-        "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1197,14 +1423,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1224,11 +1465,6 @@
       {
         "name": "u32_min",
         "ty": "u32",
-        "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1251,7 +1487,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "Error": "execution error: RuntimeError(\"Unsupported type tag: I64\")"
     },
     "environment": [
       {
@@ -1260,14 +1496,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1287,11 +1538,6 @@
       {
         "name": "u32_min",
         "ty": "u32",
-        "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1323,14 +1569,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1350,11 +1611,6 @@
       {
         "name": "u32_min",
         "ty": "u32",
-        "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1377,7 +1633,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "Error": "execution error: RuntimeError(\"Unsupported type tag: I64\")"
     },
     "environment": [
       {
@@ -1386,14 +1642,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1413,11 +1684,6 @@
       {
         "name": "u32_min",
         "ty": "u32",
-        "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1449,14 +1715,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1476,11 +1757,6 @@
       {
         "name": "u32_min",
         "ty": "u32",
-        "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1503,11 +1779,7 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
-      }
+      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -1516,14 +1788,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1544,16 +1831,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -1575,11 +1852,7 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u8",
-        "value": "@100"
-      }
+      "Error": "type error(s): UnresolvedName(\"u8_add\")"
     },
     "environment": [
       {
@@ -1588,14 +1861,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1616,16 +1904,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -1647,7 +1925,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -1656,14 +1934,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1684,16 +1977,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -1724,14 +2007,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1752,16 +2050,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -1783,11 +2071,7 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      }
+      "Error": "type error(s): TypeMismatch { expected: \"u16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -1796,14 +2080,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1816,11 +2115,6 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
@@ -1829,16 +2123,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -1860,11 +2144,7 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u16",
-        "value": "@100"
-      }
+      "Error": "type error(s): UnresolvedName(\"u16_mul\")"
     },
     "environment": [
       {
@@ -1873,14 +2153,29 @@
         "value": "@32767"
       },
       {
+        "name": "i16_min",
+        "ty": "i16",
+        "value": "@4294934528"
+      },
+      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1893,11 +2188,6 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
@@ -1906,16 +2196,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -1937,11 +2217,7 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "i16_sub",
-        "ty": "i16",
-        "value": "@1000"
-      }
+      "Error": "type error(s): TypeMismatch { expected: \"i16\", actual: \"u32\" }"
     },
     "environment": [
       {
@@ -1950,9 +2226,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -1960,9 +2236,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1975,11 +2261,6 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
@@ -1988,16 +2269,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -2019,11 +2290,7 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "i16",
-        "value": "@1000"
-      }
+      "Error": "type error(s): UnresolvedName(\"i16_sub\")"
     },
     "environment": [
       {
@@ -2032,9 +2299,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -2042,9 +2309,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2057,11 +2334,6 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
@@ -2070,16 +2342,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -2104,7 +2366,7 @@
       "SuccessLet": {
         "name": "u32_div",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       }
     },
     "environment": [
@@ -2114,9 +2376,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -2124,9 +2386,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2139,14 +2411,9 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_div",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2157,16 +2424,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -2191,7 +2448,7 @@
       "SuccessExpr": {
         "expr_kind": "expression",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       }
     },
     "environment": [
@@ -2201,9 +2458,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -2211,9 +2468,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2226,14 +2493,9 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_div",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2244,16 +2506,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -2275,7 +2527,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -2284,9 +2536,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -2294,9 +2546,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2309,14 +2571,9 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_div",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2327,16 +2584,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -2367,9 +2614,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -2377,9 +2624,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2392,14 +2649,9 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_div",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2410,16 +2662,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -2441,7 +2683,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -2450,9 +2692,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -2460,9 +2702,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2475,14 +2727,9 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_div",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2493,16 +2740,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -2533,9 +2770,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -2543,9 +2780,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2558,14 +2805,9 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_div",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2576,16 +2818,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -2607,7 +2839,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: TypeError(\"Typecheck errors in datalit expression: 1 errors\")"
+      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
     },
     "environment": [
       {
@@ -2616,9 +2848,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -2626,9 +2858,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2641,14 +2883,9 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_div",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2659,16 +2896,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",
@@ -2699,9 +2926,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_sub",
+        "name": "i16_min",
         "ty": "i16",
-        "value": "@1000"
+        "value": "@4294934528"
       },
       {
         "name": "i32_max",
@@ -2709,9 +2936,19 @@
         "value": "@2147483647"
       },
       {
+        "name": "i32_min",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
+      },
+      {
+        "name": "i8_min",
+        "ty": "i8",
+        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2724,14 +2961,9 @@
         "value": "@0"
       },
       {
-        "name": "u16_mul",
-        "ty": "u16",
-        "value": "@100"
-      },
-      {
         "name": "u32_div",
         "ty": "u32",
-        "value": "@1000"
+        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2742,16 +2974,6 @@
         "name": "u32_min",
         "ty": "u32",
         "value": "@0"
-      },
-      {
-        "name": "u64_min",
-        "ty": "u64",
-        "value": "@0"
-      },
-      {
-        "name": "u8_add",
-        "ty": "u8",
-        "value": "@100"
       },
       {
         "name": "u8_max",

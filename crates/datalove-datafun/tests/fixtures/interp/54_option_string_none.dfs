@@ -1,3 +1,2 @@
-// Test Option type with string payload - another Some variant
-// Note: Testing None variant with @none is not supported due to evaluation limitations.
-let output: ?string = "another test string"
+// Test Option type with string payload and none coercion.
+let output: @?@string = @none

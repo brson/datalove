@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"i32\", actual: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u32\", actual: \"i32\" }"
     },
     "environment": []
   },

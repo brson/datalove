@@ -150,7 +150,13 @@ impl<'db> InterpContext<'db> {
                 let name = stmt.name(self.db);
                 let value_expr = stmt.value(self.db);
 
-                let value = crate::eval_datafun::eval_expr(self, value_expr)?;
+                // If type hint is provided, convert it and pass to evaluator.
+                let expected_type = stmt.type_hint(self.db)
+                    .and_then(|type_hint| {
+                        crate::eval_datalit::convert_type_hint_tracked(self.db, type_hint)
+                    });
+
+                let value = crate::eval_datafun::eval_expr_with_expected(self, value_expr, expected_type)?;
                 self.variables.insert(name, value);
 
                 Ok(())

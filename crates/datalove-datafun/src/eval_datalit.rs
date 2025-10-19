@@ -7,6 +7,31 @@ use crate::datalit;
 use crate::interp::{InterpContext, InterpResult, InterpError};
 use crate::value::Value;
 
+/// Tracked wrapper for converting a type hint to a type.
+///
+/// This allows calling convert_type_hint from non-tracked contexts.
+#[salsa::tracked]
+pub fn convert_type_hint_tracked<'db>(
+    db: &'db dyn crate::Db,
+    type_hint: datalit::ast::TypeHintAndHeap<'db>,
+) -> Option<datalit::tycheck::TypeAndHeap<'db>> {
+    datalit::tycheck::convert_type_hint(db, type_hint).ok()
+}
+
+/// Tracked wrapper for datalit type checking with expected type.
+///
+/// This allows calling type_check_with_expected from non-tracked contexts
+/// while maintaining Salsa memoization.
+#[salsa::tracked]
+fn typecheck_datalit<'db>(
+    db: &'db dyn crate::Db,
+    expr: datalit::ast::ExprFull<'db>,
+    expected: Option<datalit::tycheck::TypeAndHeap<'db>>,
+) -> datalit::tycheck::TypecheckResult<'db> {
+    let resolved = datalit::resolve::resolve_names(db, expr);
+    datalit::tycheck::type_check_with_expected(db, expr, resolved, expected)
+}
+
 /// Convert an InstantiatedValue from instantiate2 to the interpreter's Value enum.
 fn instantiated_to_value(inst: datalit::instantiate2::InstantiatedValue) -> InterpResult {
     use rtdt::TyTag;
@@ -18,9 +43,29 @@ fn instantiated_to_value(inst: datalit::instantiate2::InstantiatedValue) -> Inte
             let value = unsafe { *(inst.ptr as *const bool) };
             Ok(Value::Bool(value))
         }
+        TyTag::U8 => {
+            let value = unsafe { *(inst.ptr as *const u8) };
+            Ok(Value::U32(value as u32))
+        }
+        TyTag::I8 => {
+            let value = unsafe { *(inst.ptr as *const i8) };
+            Ok(Value::U32((value as i32) as u32))
+        }
+        TyTag::U16 => {
+            let value = unsafe { *(inst.ptr as *const u16) };
+            Ok(Value::U32(value as u32))
+        }
+        TyTag::I16 => {
+            let value = unsafe { *(inst.ptr as *const i16) };
+            Ok(Value::U32((value as i32) as u32))
+        }
         TyTag::U32 => {
             let value = unsafe { *(inst.ptr as *const u32) };
             Ok(Value::U32(value))
+        }
+        TyTag::I32 => {
+            let value = unsafe { *(inst.ptr as *const i32) };
+            Ok(Value::U32(value as u32))
         }
         TyTag::F32 => {
             let value = unsafe { *(inst.ptr as *const f32) };
@@ -110,10 +155,11 @@ fn instantiated_to_value(inst: datalit::instantiate2::InstantiatedValue) -> Inte
 pub fn eval_datalit<'db>(
     ctx: &mut InterpContext<'db>,
     expr: datalit::ast::ExprFull<'db>,
+    expected: Option<datalit::tycheck::TypeAndHeap<'db>>,
 ) -> InterpResult {
     // Run typechecker to get TypecheckResult needed by instantiate2.
-    let resolved = datalit::resolve::resolve_names(ctx.db, expr);
-    let typechecked = datalit::tycheck::type_check(ctx.db, expr, resolved);
+    // Use tracked wrapper to allow calling from non-tracked context.
+    let typechecked = typecheck_datalit(ctx.db, expr, expected);
 
     // Check for type errors.
     if !typechecked.errors(ctx.db).is_empty() {

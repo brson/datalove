@@ -7,9 +7,18 @@ use crate::value::Value;
 
 /// Evaluate a datafun expression.
 pub fn eval_expr<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>) -> InterpResult {
+    eval_expr_with_expected(ctx, expr, None)
+}
+
+/// Evaluate a datafun expression with an optional expected type.
+pub fn eval_expr_with_expected<'db>(
+    ctx: &mut InterpContext<'db>,
+    expr: ExprFun<'db>,
+    expected: Option<crate::datalit::tycheck::TypeAndHeap<'db>>,
+) -> InterpResult {
     match expr.expr(ctx.db) {
         ExprFunKind::Datalit(datalit_expr) => {
-            crate::eval_datalit::eval_datalit(ctx, datalit_expr)
+            crate::eval_datalit::eval_datalit(ctx, datalit_expr, expected)
         }
 
         ExprFunKind::Name(name) => eval_name(ctx, name),

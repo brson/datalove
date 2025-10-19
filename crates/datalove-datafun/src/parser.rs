@@ -809,11 +809,73 @@ impl<'db> Parser<'db> {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> ast::ExprFun<'db> {
-        // Collect remaining tokens.
-        let remaining_tokens: Vec<TreeToken<'db>> = tokens.collect();
+        // Collect tokens until we hit a datafun operator or end of tokens.
+        // Datalit expressions don't contain binary operators, so we stop at +, -, *, /, etc.
+        // Exception: - can appear as part of a negative literal right after @ or # sigil.
+        let mut datalit_tokens = Vec::new();
+        let mut just_saw_heap_sigil = false;
 
-        // Parse directly from tokens using the datalit parser.
-        let datalit_expr = datalit::parser::parse_from_tokens(self.db, remaining_tokens);
+        // Collect tokens for the datalit expression, stopping at datafun operators.
+        while let Some(token) = tokens.peek() {
+            // Track if we just consumed a heap sigil.
+            let is_heap_sigil = matches!(
+                token,
+                TreeToken::Token(t) if matches!(
+                    t.kind(self.db),
+                    TokenKind::Sigil(Sigil::At) | TokenKind::Sigil(Sigil::Hash)
+                )
+            );
+
+            // Check if this is a datafun binary operator.
+            // Special case: - right after @ or # is part of a negative literal, not a binop.
+            let is_binop = match token {
+                TreeToken::Token(t) => {
+                    let sigil = t.kind(self.db);
+                    // Minus after heap sigil is part of negative literal.
+                    if just_saw_heap_sigil && matches!(sigil, TokenKind::Sigil(Sigil::Minus)) {
+                        false
+                    } else {
+                        matches!(
+                            sigil,
+                            TokenKind::Sigil(Sigil::Plus) |
+                            TokenKind::Sigil(Sigil::Minus) |
+                            TokenKind::Sigil(Sigil::Star) |
+                            TokenKind::Sigil(Sigil::SlashForward) |
+                            TokenKind::Sigil(Sigil::PlusExclamation) |
+                            TokenKind::Sigil(Sigil::MinusExclamation) |
+                            TokenKind::Sigil(Sigil::StarExclamation) |
+                            TokenKind::Sigil(Sigil::SlashExclamation) |
+                            TokenKind::Sigil(Sigil::PlusQuestion) |
+                            TokenKind::Sigil(Sigil::MinusQuestion) |
+                            TokenKind::Sigil(Sigil::StarQuestion) |
+                            TokenKind::Sigil(Sigil::SlashQuestion) |
+                            TokenKind::Sigil(Sigil::PlusBar) |
+                            TokenKind::Sigil(Sigil::MinusBar) |
+                            TokenKind::Sigil(Sigil::StarBar) |
+                            TokenKind::Sigil(Sigil::SlashBar) |
+                            TokenKind::Sigil(Sigil::EqualsEquals) |
+                            TokenKind::Sigil(Sigil::ExclamationEquals) |
+                            TokenKind::Sigil(Sigil::DotLess) |
+                            TokenKind::Sigil(Sigil::DotGreater) |
+                            TokenKind::Sigil(Sigil::LessEquals) |
+                            TokenKind::Sigil(Sigil::GreaterEquals)
+                        )
+                    }
+                }
+                _ => false,
+            };
+
+            if is_binop {
+                break;
+            }
+
+            // Not a binop, so consume this token for the datalit expression.
+            datalit_tokens.push(tokens.next().unwrap());
+            just_saw_heap_sigil = is_heap_sigil;
+        }
+
+        // Parse the collected tokens as a datalit expression.
+        let datalit_expr = datalit::parser::parse_from_tokens(self.db, datalit_tokens);
 
         ast::ExprFun::new(
             self.db,
