@@ -1375,3 +1375,2080 @@ fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
 
     Ok(())
 }
+
+// ==================== Clone From Slice Tests ====================
+
+/// Test clone from empty slice.
+#[test]
+fn test_btreeset_clone_from_slice_empty() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let slice: Vec<u32> = vec![];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_clone_from_slice_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            slice.as_ptr() as *const u8,
+            slice.len() as u32,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(set.len, 0);
+    assert!(set.root.is_null());
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test clone from slice with multiple elements.
+#[test]
+fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let slice: Vec<u32> = vec![10, 20, 30, 40, 50];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_clone_from_slice_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            slice.as_ptr() as *const u8,
+            slice.len() as u32,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(set.len, 5);
+
+    for &val in &slice {
+        let search_element = val;
+        let mut contains = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_contains_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &search_element as *const u32 as *const u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut contains,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(contains, 1, "Element {} should be in set", val);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test clone from slice with duplicates.
+#[test]
+fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let slice: Vec<u32> = vec![10, 20, 10, 30, 20, 10];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_clone_from_slice_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            slice.as_ptr() as *const u8,
+            slice.len() as u32,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(set.len, 3, "Set should have 3 unique elements");
+
+    let expected = vec![10u32, 20, 30];
+    for &val in &expected {
+        let search_element = val;
+        let mut contains = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_contains_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &search_element as *const u32 as *const u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut contains,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(contains, 1, "Element {} should be in set", val);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test clone from slice with strings.
+#[test]
+fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let strings = vec!["apple", "banana", "cherry"];
+    let mut runtime_strings: Vec<rtdt::String> = strings
+        .iter()
+        .map(|s| unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) })
+        .collect();
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_clone_from_slice_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            runtime_strings.as_ptr() as *const u8,
+            runtime_strings.len() as u32,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(set.len, 3);
+
+    for runtime_str in &mut runtime_strings {
+        let status = unsafe {
+            datalove_rt::dtlv_rti_string_destroy_local(
+                rt,
+                runtime_str as *mut rtdt::String as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test clone from slice in reverse order.
+#[test]
+fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let slice: Vec<u32> = (0u32..100).rev().collect();
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_clone_from_slice_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            slice.as_ptr() as *const u8,
+            slice.len() as u32,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(set.len, 100);
+
+    for i in 0u32..100 {
+        let search_element = i;
+        let mut contains = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_contains_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &search_element as *const u32 as *const u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut contains,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(contains, 1, "Element {} should be in set", i);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+// ==================== String Element Tests ====================
+
+/// Test inserting a single string element.
+#[test]
+fn test_btreeset_string_insert_single() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let mut element = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut was_inserted = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_insert_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &mut element as *mut rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_inserted,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(was_inserted, 1);
+    assert_eq!(set.len, 1);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting multiple string elements.
+#[test]
+fn test_btreeset_string_insert_multiple() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let strings = vec!["apple", "banana", "cherry", "date", "elderberry"];
+
+    for s in &strings {
+        let mut element = unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut rtdt::String as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(was_inserted, 1);
+    }
+
+    assert_eq!(set.len, 5);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test checking contains for string elements.
+#[test]
+fn test_btreeset_string_contains() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let mut element = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut was_inserted = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_insert_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &mut element as *mut rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_inserted,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let search = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut contains = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_contains_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &search as *const rtdt::String as *const u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut contains,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(contains, 1);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_string_destroy_local(
+            rt,
+            &search as *const rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test removing string elements.
+#[test]
+fn test_btreeset_string_remove() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let mut element = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut was_inserted = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_insert_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &mut element as *mut rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_inserted,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(set.len, 1);
+
+    let search = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut was_removed = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_remove_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &search as *const rtdt::String as *const u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_removed,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(was_removed, 1);
+    assert_eq!(set.len, 0);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_string_destroy_local(
+            rt,
+            &search as *const rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test clearing set with strings.
+#[test]
+fn test_btreeset_string_clear() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let strings = vec!["apple", "banana", "cherry"];
+
+    for s in &strings {
+        let mut element = unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut rtdt::String as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    assert_eq!(set.len, 3);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_clear_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    assert!(set.root.is_null());
+    assert_eq!(set.len, 0);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test inserting 100 string elements.
+#[test]
+fn test_btreeset_string_insert_100() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in 0..100 {
+        let key = format!("key_{:03}", i);
+        let mut element = unsafe { create_runtime_string(rt, &key, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut rtdt::String as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok, "Failed to insert key {}", key);
+        assert_eq!(was_inserted, 1);
+    }
+
+    assert_eq!(set.len, 100);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test string ordering.
+#[test]
+fn test_btreeset_string_ordering() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let strings = vec!["zebra", "apple", "mango", "banana"];
+
+    for s in &strings {
+        let mut element = unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut rtdt::String as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    assert_eq!(set.len, 4);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test empty string.
+#[test]
+fn test_btreeset_string_empty() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let mut element = unsafe { create_runtime_string(rt, "", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut was_inserted = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_insert_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &mut element as *mut rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_inserted,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(was_inserted, 1);
+    assert_eq!(set.len, 1);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test unicode strings.
+#[test]
+fn test_btreeset_string_unicode() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let strings = vec!["hello", "world", "rust"];
+
+    for s in &strings {
+        let mut element = unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut rtdt::String as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(was_inserted, 1);
+    }
+
+    assert_eq!(set.len, 3);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test duplicate string insertions.
+#[test]
+fn test_btreeset_string_duplicates() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let mut element1 = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut was_inserted1 = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_insert_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &mut element1 as *mut rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_inserted1,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(was_inserted1, 1);
+    assert_eq!(set.len, 1);
+
+    let mut element2 = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut was_inserted2 = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_insert_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &mut element2 as *mut rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_inserted2,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(was_inserted2, 0);
+    assert_eq!(set.len, 1);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_string_destroy_local(
+            rt,
+            &element2 as *const rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+// ==================== B-tree Structure Tests ====================
+
+/// Test sequential insertions (small).
+#[test]
+fn test_btreeset_small_inserts_sequential() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in 0u32..20 {
+        let mut element = i;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(was_inserted, 1);
+    }
+
+    assert_eq!(set.len, 20);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test reverse insertions (small).
+#[test]
+fn test_btreeset_small_inserts_reverse() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in (0u32..20).rev() {
+        let mut element = i;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(was_inserted, 1);
+    }
+
+    assert_eq!(set.len, 20);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test repeated clear and refill.
+#[test]
+fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for _cycle in 0..3 {
+        for i in 0u32..20 {
+            let mut element = i;
+            let mut was_inserted = 0u8;
+
+            let status = unsafe {
+                datalove_rt::dtlv_rti_btreeset_insert_local(
+                    rt,
+                    set_ptr,
+                    &*set_tydesc as *const rtdt::TyDesc,
+                    &mut element as *mut u32 as *mut u8,
+                    &*element_tydesc as *const rtdt::TyDesc,
+                    &mut was_inserted,
+                )
+            };
+            assert_eq!(status, datalove_rt::RtStatus::Ok);
+        }
+
+        assert_eq!(set.len, 20);
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_clear_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(set.len, 0);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test interleaved operations.
+#[test]
+fn test_btreeset_interleaved_ops() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in 0u32..50 {
+        let mut element = i;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+        if i % 3 == 0 {
+            let search_element = i / 2;
+            let mut contains = 0u8;
+
+            let status = unsafe {
+                datalove_rt::dtlv_rti_btreeset_contains_local(
+                    rt,
+                    set_ptr,
+                    &*set_tydesc as *const rtdt::TyDesc,
+                    &search_element as *const u32 as *const u8,
+                    &*element_tydesc as *const rtdt::TyDesc,
+                    &mut contains,
+                )
+            };
+            assert_eq!(status, datalove_rt::RtStatus::Ok);
+        }
+    }
+
+    assert_eq!(set.len, 50);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test remove every other element.
+#[test]
+fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in 0u32..100 {
+        let mut element = i;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    assert_eq!(set.len, 100);
+
+    for i in (0u32..100).step_by(2) {
+        let remove_element = i;
+        let mut was_removed = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_remove_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &remove_element as *const u32 as *const u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_removed,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(was_removed, 1);
+    }
+
+    assert_eq!(set.len, 50);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test remove every third element.
+#[test]
+fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in 0u32..100 {
+        let mut element = i;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    assert_eq!(set.len, 100);
+
+    let mut removed_count = 0;
+    for i in (0u32..100).step_by(3) {
+        let remove_element = i;
+        let mut was_removed = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_remove_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &remove_element as *const u32 as *const u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_removed,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        if was_removed == 1 {
+            removed_count += 1;
+        }
+    }
+
+    assert_eq!(set.len, 100 - removed_count);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test boundary values.
+#[test]
+fn test_btreeset_boundary_values() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let boundary_values = vec![0u32, 1, u32::MAX - 1, u32::MAX];
+
+    for &val in &boundary_values {
+        let mut element = val;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(was_inserted, 1);
+    }
+
+    assert_eq!(set.len, 4);
+
+    for &val in &boundary_values {
+        let search_element = val;
+        let mut contains = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_contains_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &search_element as *const u32 as *const u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut contains,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(contains, 1, "Boundary value {} should be in set", val);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test ascending insert, descending remove.
+#[test]
+fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in 0u32..50 {
+        let mut element = i;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    assert_eq!(set.len, 50);
+
+    for i in (0u32..50).rev() {
+        let remove_element = i;
+        let mut was_removed = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_remove_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &remove_element as *const u32 as *const u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_removed,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(was_removed, 1);
+    }
+
+    assert_eq!(set.len, 0);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+// ==================== Error Handling Tests ====================
+
+/// Test contains on empty set.
+#[test]
+fn test_btreeset_contains_empty_set() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let search_element = 42u32;
+    let mut contains = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_contains_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &search_element as *const u32 as *const u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut contains,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(contains, 0);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test remove from empty set.
+#[test]
+fn test_btreeset_remove_from_empty() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let remove_element = 42u32;
+    let mut was_removed = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_remove_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &remove_element as *const u32 as *const u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_removed,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(was_removed, 0);
+    assert_eq!(set.len, 0);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test multiple clears.
+#[test]
+fn test_btreeset_multiple_clears() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in 0u32..10 {
+        let mut element = i;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    for _i in 0..3 {
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_clear_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(set.len, 0);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test insert after clear.
+#[test]
+fn test_btreeset_insert_after_clear() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in 0u32..10 {
+        let mut element = i;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_clear_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for i in 20u32..30 {
+        let mut element = i;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(was_inserted, 1);
+    }
+
+    assert_eq!(set.len, 10);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test duplicate inserts many times.
+#[test]
+fn test_btreeset_duplicate_inserts_many() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for _i in 0..100 {
+        let mut element = 42u32;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+    }
+
+    assert_eq!(set.len, 1);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test alternating insert/remove of same element.
+#[test]
+fn test_btreeset_alternating_insert_remove_same() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    for _i in 0..10 {
+        let mut element = 42u32;
+        let mut was_inserted = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_insert_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &mut element as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+        let remove_element = 42u32;
+        let mut was_removed = 0u8;
+
+        let status = unsafe {
+            datalove_rt::dtlv_rti_btreeset_remove_local(
+                rt,
+                set_ptr,
+                &*set_tydesc as *const rtdt::TyDesc,
+                &remove_element as *const u32 as *const u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut was_removed,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(set.len, 0);
+    }
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+// ==================== Tuple Element Tests ====================
+
+/// Create a (u32, u32) tuple type descriptor.
+fn create_tuple_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<[rtdt::TyInfoTupleField; 2]>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
+    let field0_tydesc = create_u32_tydesc();
+    let field1_tydesc = create_u32_tydesc();
+
+    let fields = Box::new([
+        rtdt::TyInfoTupleField {
+            offset: 0,
+            tydesc: &*field0_tydesc as *const rtdt::TyDesc,
+        },
+        rtdt::TyInfoTupleField {
+            offset: 4,
+            tydesc: &*field1_tydesc as *const rtdt::TyDesc,
+        },
+    ]);
+
+    let tuple_tydesc = Box::new(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::Tuple,
+        size: 8,
+        align: 4,
+        type_info: rtdt::TyInfo {
+            tuple: rtdt::TyInfoTuple {
+                num_fields: 2,
+                fields: fields.as_ptr(),
+            },
+        },
+    });
+
+    (tuple_tydesc, fields, field0_tydesc, field1_tydesc)
+}
+
+/// Create a Set<(u32, u32)> type descriptor.
+fn create_set_tuple_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<[rtdt::TyInfoTupleField; 2]>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
+    let (tuple_tydesc, fields, field0_tydesc, field1_tydesc) = create_tuple_u32_u32_tydesc();
+
+    let set_tydesc = Box::new(rtdt::TyDesc {
+        type_tag: rtdt::TyTag::Set,
+        size: std::mem::size_of::<rtdt::Set>() as u32,
+        align: std::mem::align_of::<rtdt::Set>() as u32,
+        type_info: rtdt::TyInfo {
+            set: rtdt::TyInfoSet {
+                element_tydesc: &*tuple_tydesc as *const rtdt::TyDesc,
+            },
+        },
+    });
+
+    (set_tydesc, tuple_tydesc, fields, field0_tydesc, field1_tydesc)
+}
+
+/// Test set with tuple elements.
+#[test]
+fn test_btreeset_tuples() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (set_tydesc, element_tydesc, _fields, _field0_tydesc, _field1_tydesc) = create_set_tuple_u32_u32_tydesc();
+
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: 0,
+    };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_create_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    #[repr(C)]
+    struct Tuple2U32 {
+        field0: u32,
+        field1: u32,
+    }
+
+    let mut tuple1 = Tuple2U32 { field0: 10, field1: 100 };
+    let mut was_inserted1 = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_insert_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &mut tuple1 as *mut Tuple2U32 as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_inserted1,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(was_inserted1, 1);
+    assert_eq!(set.len, 1);
+
+    let mut tuple2 = Tuple2U32 { field0: 20, field1: 200 };
+    let mut was_inserted2 = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_insert_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &mut tuple2 as *mut Tuple2U32 as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_inserted2,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(was_inserted2, 1);
+    assert_eq!(set.len, 2);
+
+    let search_tuple = Tuple2U32 { field0: 10, field1: 100 };
+    let mut contains = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_contains_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &search_tuple as *const Tuple2U32 as *const u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut contains,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(contains, 1);
+
+    let remove_tuple = Tuple2U32 { field0: 10, field1: 100 };
+    let mut was_removed = 0u8;
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_remove_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+            &remove_tuple as *const Tuple2U32 as *const u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut was_removed,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(was_removed, 1);
+    assert_eq!(set.len, 1);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_btreeset_destroy_local(
+            rt,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
