@@ -6,19 +6,19 @@ This plan implements all features described in the README section "Option and re
 
 **Overall Status**: 3 of 4 phases complete (75%)
 
-- ✅ **Phase 1: Automatic Coercion** - COMPLETE
-- ✅ **Phase 2: If-Destructuring** - COMPLETE
-- ✅ **Phase 3: Postfix ? and ! Operators** - COMPLETE
-- ⚠️ **Phase 4: Unary Operators with Suffixes** - NOT STARTED
+- [x] **Phase 1: Automatic Coercion** - COMPLETE
+- [x] **Phase 2: If-Destructuring** - COMPLETE
+- [x] **Phase 3: Postfix ? and ! Operators** - COMPLETE
+- [ ] **Phase 4: Unary Operators with Suffixes** - NOT STARTED
 
 ## Overview
 
 The README specifies these features:
-1. ✅ Automatic coercion of plain values to Some/Ok
-2. ✅ `none` and `error` literals
-3. ✅ If-destructuring with `|binding|` pattern matching
-4. ✅ Postfix `?` and `!` operators for early return
-5. ⚠️ Math operators with suffixes for fixed ints (`+%`, `+|`, `+?`, `+!`, and unary `-`)
+1. [x] Automatic coercion of plain values to Some/Ok
+2. [x] `none` and `error` literals
+3. [x] If-destructuring with `|binding|` pattern matching
+4. [x] Postfix `?` and `!` operators for early return
+5. [ ] Math operators with suffixes for fixed ints (`+%`, `+|`, `+?`, `+!`, and unary `-`)
 
 Note: Binary operators with suffixes (`+%`, `+|`, `+?`, `+!`) are already implemented for fixed ints. Only unary operators need implementation.
 
@@ -26,9 +26,9 @@ Note: Binary operators with suffixes (`+%`, `+|`, `+?`, `+!`) are already implem
 
 ## Implementation Status
 
-### Phase 1: Automatic Coercion ✅ COMPLETE
+### Phase 1: Automatic Coercion [x] COMPLETE
 
-**Type Checking** ✓ FULLY IMPLEMENTED
+**Type Checking** [x] FULLY IMPLEMENTED
 - Location: `crates/datalove-datalit/src/tycheck.rs`
 - Option coercion: Lines 502-507 (Check-Option rule)
 - Result coercion: Lines 515-520 (Check-Result rule)
@@ -36,9 +36,9 @@ Note: Binary operators with suffixes (`+%`, `+|`, `+?`, `+!`) are already implem
 - Error literal: Lines 509-513
 - **CRITICAL FIX (2025-10-18)**: Moved Check-Option/Check-Result rules BEFORE Check-Subsume (lines 499-520) to enable string literal coercion
 
-**Runtime Support** ✓ FULLY IMPLEMENTED
-- Options ✓ IMPLEMENTED: `instantiate2.rs` lines 167-175
-- Results ✓ IMPLEMENTED: `instantiate2.rs` lines 177-185, 588-636
+**Runtime Support** [x] FULLY IMPLEMENTED
+- Options [x] IMPLEMENTED: `instantiate2.rs` lines 167-175
+- Results [x] IMPLEMENTED: `instantiate2.rs` lines 177-185, 588-636
 
 **Implementation Details**
 - Added `instantiate_result()` function at lines 588-636
@@ -50,19 +50,19 @@ Note: Binary operators with suffixes (`+%`, `+|`, `+?`, `+!`) are already implem
 **Tests Created**
 
 *Primitive payloads (u32):*
-- `instantiate2.rs::test_instantiate_result_ok_u32()` ✓ PASSING
-- `instantiate2.rs::test_instantiate_result_err()` ✓ PASSING
-- `crates/datalove-datafun/tests/fixtures/interp/51_result_ok.dfs` ✓ PASSING (Result<u32> with Ok)
-- `crates/datalove-datafun/tests/fixtures/interp/52_result_err.dfs` ✓ PASSING (Result<u32> with Err)
+- `instantiate2.rs::test_instantiate_result_ok_u32()` [x] PASSING
+- `instantiate2.rs::test_instantiate_result_err()` [x] PASSING
+- `crates/datalove-datafun/tests/fixtures/interp/51_result_ok.dfs` [x] PASSING (Result<u32> with Ok)
+- `crates/datalove-datafun/tests/fixtures/interp/52_result_err.dfs` [x] PASSING (Result<u32> with Err)
 
 *String payloads:*
-- `crates/datalove-datafun/tests/fixtures/tycheck/51_option_string_coercion.dfs` ✓ PASSING
-- `crates/datalove-datafun/tests/fixtures/tycheck/52_result_string_ok_coercion.dfs` ✓ PASSING
-- `crates/datalove-datafun/tests/fixtures/tycheck/53_result_string_err.dfs` ✓ PASSING
-- `crates/datalove-datafun/tests/fixtures/interp/53_option_string_some.dfs` ✓ PASSING (tests `?string` with "hello world")
-- `crates/datalove-datafun/tests/fixtures/interp/54_option_string_none.dfs` ✓ PASSING (tests `?string` with "another test string", see note below)
-- `crates/datalove-datafun/tests/fixtures/interp/55_result_string_ok.dfs` ✓ PASSING (tests `!string` with "success message")
-- `crates/datalove-datafun/tests/fixtures/interp/56_result_string_err.dfs` ✓ PASSING
+- `crates/datalove-datafun/tests/fixtures/tycheck/51_option_string_coercion.dfs` [x] PASSING
+- `crates/datalove-datafun/tests/fixtures/tycheck/52_result_string_ok_coercion.dfs` [x] PASSING
+- `crates/datalove-datafun/tests/fixtures/tycheck/53_result_string_err.dfs` [x] PASSING
+- `crates/datalove-datafun/tests/fixtures/interp/53_option_string_some.dfs` [x] PASSING (tests `?string` with "hello world")
+- `crates/datalove-datafun/tests/fixtures/interp/54_option_string_none.dfs` [x] PASSING (tests `?string` with "another test string", see note below)
+- `crates/datalove-datafun/tests/fixtures/interp/55_result_string_ok.dfs` [x] PASSING (tests `!string` with "success message")
+- `crates/datalove-datafun/tests/fixtures/interp/56_result_string_err.dfs` [x] PASSING
 
 **Known Limitations**
 - **FIXED (2025-10-18)**: ~~Automatic coercion for allocated types (strings) in Option/Result doesn't work~~
@@ -79,7 +79,7 @@ Note: Binary operators with suffixes (`+%`, `+|`, `+?`, `+!`) are already implem
 
 ---
 
-### Phase 2: If-Destructuring ✅ COMPLETE
+### Phase 2: If-Destructuring [x] COMPLETE
 
 **Goal**: Support `if expr |binding| ... else ... end if` syntax
 
@@ -104,18 +104,18 @@ else |error|
 end if
 ```
 
-**AST Changes** ✓ IMPLEMENTED
+**AST Changes** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/ast.rs` lines 89-98
 - Added `then_binding: Option<InternedText<'db>>` to `StmtIf`
 - Added `else_binding: Option<InternedText<'db>>` to `StmtIf`
 
-**Parser Changes** ✓ IMPLEMENTED
+**Parser Changes** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/parser.rs` lines 442-540
 - Recognizes `|identifier|` syntax after if condition
 - Recognizes `|identifier|` syntax after else keyword
 - Parses bindings as optional `InternedText`
 
-**Type Checker Changes** ✓ IMPLEMENTED
+**Type Checker Changes** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/tycheck.rs` lines 525-629
 - Validates condition is Option or Result type when binding present
 - Extracts inner type from Option/Result and binds to then_binding
@@ -123,7 +123,7 @@ end if
 - **Validation**: Result destructuring requires error-binding else branch (lines 551-554)
 - Added `TypeError::ResultRequiresErrorBinding` variant (line 45)
 
-**Interpreter/Runtime Changes** ✓ IMPLEMENTED
+**Interpreter/Runtime Changes** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/interp.rs` lines 205-250 (Statement::If handler), 261-475 (exec_if_destructuring method)
 - Implementation:
   1. `Statement::If` handler checks for bindings and routes to `exec_if_destructuring` if present
@@ -134,43 +134,43 @@ end if
   6. Removes binding from scope and frees value after branch execution
 - **Additional change**: `eval_function_call` in `eval_datafun.rs` now passes expected parameter types to enable automatic Option/Result wrapping of arguments (lines 501-516)
 
-**Test Helpers Updated** ✓ IMPLEMENTED
+**Test Helpers Updated** [x] IMPLEMENTED
 - `tycheck_tests.rs` lines 112-114: JSON serialization for new error
 - `tycheck_world_tests.rs` lines 54-56: JSON serialization for new error
 
-**Tests Created** ✓ ALL PASSING
+**Tests Created** [x] ALL PASSING
 - Type check tests (in `fixtures/tycheck/`):
-  - `47_if_option_destructuring.dfs` ✓ PASSING - Option destructuring test
-  - `48_if_result_destructuring.dfs` ✓ PASSING - Result destructuring with error binding
-  - `49_result_missing_else.dfs` ✓ PASSING - Error case: Result without else clause
-  - `50_result_missing_error_binding.dfs` ✓ PASSING - Error case: Result without error binding
+  - `47_if_option_destructuring.dfs` [x] PASSING - Option destructuring test
+  - `48_if_result_destructuring.dfs` [x] PASSING - Result destructuring with error binding
+  - `49_result_missing_else.dfs` [x] PASSING - Error case: Result without else clause
+  - `50_result_missing_error_binding.dfs` [x] PASSING - Error case: Result without error binding
 - Interpreter tests (in `fixtures/interp/`):
-  - `57_if_option_some.dfs` ✓ PASSING - Option destructuring with Some, extracts value 42 (u32)
-  - `58_if_option_none.dfs` ✓ PASSING - Option destructuring with None, executes else branch (999)
-  - `59_if_result_ok.dfs` ✓ PASSING - Result destructuring with Ok variant (u32)
-  - `60_if_result_err.dfs` ✓ PASSING - Result destructuring with Err variant, executes else branch (888)
-  - `61_if_option_string.dfs` ✓ PASSING - Option destructuring with String payload (heap-allocated)
-  - `62_if_result_string.dfs` ✓ PASSING - Result destructuring with String payload (heap-allocated)
-  - `63_if_option_bool.dfs` ✓ PASSING - Option destructuring with bool payload
-  - `64_if_result_bool.dfs` ✓ PASSING - Result destructuring with bool payload
-  - `83_if_option_int.dfs` ✓ PASSING - Option destructuring with Int (bigint) payload
-  - `84_if_result_int.dfs` ✓ PASSING - Result destructuring with Int (bigint) payload
-  - `87_if_option_list.dfs` ✓ PASSING - Option destructuring with List payload (heap-allocated)
-  - `88_if_result_list.dfs` ✓ PASSING - Result destructuring with List payload (heap-allocated)
-  - `89_if_option_option.dfs` ✓ PASSING - Option<Option<u32>> destructuring
-  - `90_if_result_result.dfs` ✓ PASSING - Result<Result<u32>> destructuring
-  - `91_if_option_result.dfs` ✓ PASSING - Option<Result<u32>> destructuring
+  - `57_if_option_some.dfs` [x] PASSING - Option destructuring with Some, extracts value 42 (u32)
+  - `58_if_option_none.dfs` [x] PASSING - Option destructuring with None, executes else branch (999)
+  - `59_if_result_ok.dfs` [x] PASSING - Result destructuring with Ok variant (u32)
+  - `60_if_result_err.dfs` [x] PASSING - Result destructuring with Err variant, executes else branch (888)
+  - `61_if_option_string.dfs` [x] PASSING - Option destructuring with String payload (heap-allocated)
+  - `62_if_result_string.dfs` [x] PASSING - Result destructuring with String payload (heap-allocated)
+  - `63_if_option_bool.dfs` [x] PASSING - Option destructuring with bool payload
+  - `64_if_result_bool.dfs` [x] PASSING - Result destructuring with bool payload
+  - `83_if_option_int.dfs` [x] PASSING - Option destructuring with Int (bigint) payload
+  - `84_if_result_int.dfs` [x] PASSING - Result destructuring with Int (bigint) payload
+  - `87_if_option_list.dfs` [x] PASSING - Option destructuring with List payload (heap-allocated)
+  - `88_if_result_list.dfs` [x] PASSING - Result destructuring with List payload (heap-allocated)
+  - `89_if_option_option.dfs` [x] PASSING - Option<Option<u32>> destructuring
+  - `90_if_result_result.dfs` [x] PASSING - Result<Result<u32>> destructuring
+  - `91_if_option_result.dfs` [x] PASSING - Option<Result<u32>> destructuring
   - **ADDED (2025-10-19)**: Scalar type tests:
-    - `92_if_option_f32.dfs` ✓ PASSING - Option<f32> destructuring with Some(3.14)
-    - `93_if_result_f32.dfs` ✓ PASSING - Result<f32> destructuring with Ok(2.71)
-    - `94_if_option_u8.dfs` ✓ PASSING - Option<u8> destructuring with Some(255)
-    - `95_if_result_u8.dfs` ✓ PASSING - Result<u8> destructuring with Ok(128)
-    - `96_if_option_i8.dfs` ✓ PASSING - Option<i8> destructuring with Some(-42)
-    - `97_if_result_i8.dfs` ✓ PASSING - Result<i8> destructuring with Ok(-100)
-    - `98_if_option_u16.dfs` ✓ PASSING - Option<u16> destructuring with Some(65535)
-    - `99_if_result_u16.dfs` ✓ PASSING - Result<u16> destructuring with Ok(32768)
-    - `100_if_option_i16.dfs` ✓ PASSING - Option<i16> destructuring with Some(-12345)
-    - `101_if_result_i16.dfs` ✓ PASSING - Result<i16> destructuring with Ok(-30000)
+    - `92_if_option_f32.dfs` [x] PASSING - Option<f32> destructuring with Some(3.14)
+    - `93_if_result_f32.dfs` [x] PASSING - Result<f32> destructuring with Ok(2.71)
+    - `94_if_option_u8.dfs` [x] PASSING - Option<u8> destructuring with Some(255)
+    - `95_if_result_u8.dfs` [x] PASSING - Result<u8> destructuring with Ok(128)
+    - `96_if_option_i8.dfs` [x] PASSING - Option<i8> destructuring with Some(-42)
+    - `97_if_result_i8.dfs` [x] PASSING - Result<i8> destructuring with Ok(-100)
+    - `98_if_option_u16.dfs` [x] PASSING - Option<u16> destructuring with Some(65535)
+    - `99_if_result_u16.dfs` [x] PASSING - Result<u16> destructuring with Ok(32768)
+    - `100_if_option_i16.dfs` [x] PASSING - Option<i16> destructuring with Some(-12345)
+    - `101_if_result_i16.dfs` [x] PASSING - Result<i16> destructuring with Ok(-30000)
 
 **Implementation Notes**
 - Option destructuring: else clause and error binding are optional
@@ -192,7 +192,7 @@ end if
 
 ---
 
-### Phase 3: Postfix ? and ! Operators ✅ COMPLETE
+### Phase 3: Postfix ? and ! Operators [x] COMPLETE
 
 **Goal**: Early return operators for propagating None/Error
 
@@ -209,18 +209,18 @@ fun transform_result(val: !u32): !u32
 end
 ```
 
-**AST Changes** ✓ IMPLEMENTED
+**AST Changes** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/ast.rs` lines 138-172
 - Added `TryOption(ExprTryOption<'db>)` to `ExprFunKind` enum
 - Added `TryResult(ExprTryResult<'db>)` to `ExprFunKind` enum
 - Created two new tracked structs with `operand: ExprFun<'db>` field
 
-**Parser Changes** ✓ IMPLEMENTED
+**Parser Changes** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/parser.rs`
 - Added `parse_postfix_try_operators()` method that checks for `Sigil::Question` and `Sigil::Exclamation` after primary expressions
 - Called in `parse_expr_binop()` after parsing primary but before binary operators (highest precedence)
 
-**Type Checker Changes** ✓ IMPLEMENTED
+**Type Checker Changes** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/tycheck.rs`
 - Added three new error types: `TryOutsideFunction`, `TryTypeMismatch`, `TryReturnTypeMismatch`
 - Added `synthesize_try_option()` and `synthesize_try_result()` functions
@@ -229,7 +229,7 @@ end
 - Both return unwrapped inner type T
 - Used `opt.inner_type(db)` and `res.inner_type(db)` to get inner types
 
-**Interpreter/Runtime Changes** ✓ IMPLEMENTED
+**Interpreter/Runtime Changes** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/interp.rs` and `eval_datafun.rs`
 - Added `ReturnNone` and `ReturnError(Value)` to `InterpError` enum
 - Made `value_from_ptr()` method `pub(crate)` for use across modules
@@ -243,16 +243,16 @@ end
   - On Ok: extracts payload and clones it
 - Both use same pattern as if-destructuring: `rtdt::layout::compute_option_layout()`, etc.
 
-**AST Serialization** ✓ IMPLEMENTED
+**AST Serialization** [x] IMPLEMENTED
 - Location: `crates/datalove-datafun/src/ast_serde.rs`
 - Added `TryOption` and `TryResult` variants to serializable AST
 
-**Tests Created** ✓ ALL PASSING (56 tycheck tests total)
+**Tests Created** [x] ALL PASSING (56 tycheck tests total)
 - Type check tests (in `fixtures/tycheck/`):
-  - `102_try_option_valid.dfs` ✓ PASSING - Valid try-option usage, no errors
-  - `103_try_result_valid.dfs` ✓ PASSING - Valid try-result usage, no errors
-  - `104_try_option_outside_function.dfs` ✓ PASSING - Error case: try outside function (shows `TryOutsideFunction`)
-  - `105_try_wrong_type.dfs` ✓ PASSING - Error case: try on wrong type (shows `TryTypeMismatch`)
+  - `102_try_option_valid.dfs` [x] PASSING - Valid try-option usage, no errors
+  - `103_try_result_valid.dfs` [x] PASSING - Valid try-result usage, no errors
+  - `104_try_option_outside_function.dfs` [x] PASSING - Error case: try outside function (shows `TryOutsideFunction`)
+  - `105_try_wrong_type.dfs` [x] PASSING - Error case: try on wrong type (shows `TryTypeMismatch`)
 
 **Implementation Notes**
 - Postfix operators have highest precedence, parsed before binary operators
@@ -268,7 +268,7 @@ end
 
 ---
 
-### Phase 4: Unary Operators with Suffixes ⚠️ NOT IMPLEMENTED
+### Phase 4: Unary Operators with Suffixes [ ] NOT IMPLEMENTED
 
 **Goal**: Unary negation with wrapping, saturating, optional, and result variants
 
