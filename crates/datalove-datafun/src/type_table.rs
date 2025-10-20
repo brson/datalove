@@ -112,6 +112,23 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
         }
     }
 
+    /// Convert a datafun TypeAndHeap to a runtime TyDesc pointer.
+    ///
+    /// Returns null for non-datalit types (Function, Void).
+    fn type_and_heap_to_tydesc(&mut self, type_and_heap: crate::tycheck::TypeAndHeap<'db>) -> *const rtdt::TyDesc {
+        use crate::tycheck::Type;
+
+        match type_and_heap.ty(self.db) {
+            Type::Datalit(datalit_ty) => {
+                self.tydesc_table.get_or_create(datalit_ty)
+            }
+            Type::Function(_) | Type::Void => {
+                // Function and Void types don't have runtime type descriptors.
+                std::ptr::null()
+            }
+        }
+    }
+
     /// Visit a statement.
     fn visit_statement(&mut self, statement: &Statement<'db>) -> Result<(), String> {
         match statement {
@@ -167,19 +184,114 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
                 }
             }
             ExprFunKind::Name(_) => {
-                // Names don't have their own type stored yet.
-                // TODO: Implement type lookup for variables.
+                // Look up type from typechecker results.
+                use salsa::plumbing::AsId;
+                let name_id = expr.as_id();
+                let name_index = name_id.index() as usize;
+                let expr_types = self.tycheck_result.expr_types(self.db);
+
+                if name_index < expr_types.len() {
+                    if let Some(var_type) = expr_types[name_index] {
+                        // Convert datafun type to runtime type descriptor.
+                        let tydesc = self.type_and_heap_to_tydesc(var_type);
+
+                        // Store the type for this Name expression.
+                        if !tydesc.is_null() {
+                            if name_index >= self.datafun_expr_types.len() {
+                                self.datafun_expr_types.resize(name_index + 1, std::ptr::null());
+                            }
+
+                            self.datafun_expr_types[name_index] = tydesc;
+                        }
+                    }
+                }
+                // If variable type not found or has no runtime type, leave as null.
             }
             ExprFunKind::BinOp(binop) => {
-                self.visit_datafun_expr(binop.lhs(self.db))?;
-                self.visit_datafun_expr(binop.rhs(self.db))?;
-                // NOTE: Type descriptors for BinOp are computed on-demand during evaluation
-                // rather than stored in the type table, to avoid salsa context issues.
+                let lhs = binop.lhs(self.db);
+                let rhs = binop.rhs(self.db);
+
+                // Visit operands first.
+                self.visit_datafun_expr(lhs)?;
+                self.visit_datafun_expr(rhs)?;
+
+                // Try to get type descriptors for both operands.
+                let lhs_tydesc = self.get_datafun_expr_type(lhs);
+                let rhs_tydesc = self.get_datafun_expr_type(rhs);
+
+                // Only compute result type if both operand types are available.
+                if !lhs_tydesc.is_null() && !rhs_tydesc.is_null() {
+                    let op = binop.op(self.db);
+
+                    // Compute result type based on operator.
+                    let result_tydesc = match op {
+                        // Basic arithmetic: same type as operands.
+                        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => lhs_tydesc,
+
+                        // Checked arithmetic: Result<T>.
+                        BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked => {
+                            self.tydesc_table.create_result_from_inner_tydesc(lhs_tydesc)
+                        }
+
+                        // Optional arithmetic: Option<T>.
+                        BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional => {
+                            self.tydesc_table.create_option_from_inner_tydesc(lhs_tydesc)
+                        }
+
+                        // Comparison operations: bool.
+                        BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
+                            let bool_ty = datalit::tycheck::Type::Bool;
+                            self.tydesc_table.get_or_create(&bool_ty)
+                        }
+                    };
+
+                    // Store the result type for this BinOp expression.
+                    let binop_id = expr.as_id();
+                    let binop_index = binop_id.index() as usize;
+
+                    if binop_index >= self.datafun_expr_types.len() {
+                        self.datafun_expr_types.resize(binop_index + 1, std::ptr::null());
+                    }
+
+                    self.datafun_expr_types[binop_index] = result_tydesc;
+                }
             }
             ExprFunKind::UnaryOp(unaryop) => {
-                self.visit_datafun_expr(unaryop.operand(self.db))?;
-                // NOTE: Type descriptors for UnaryOp are computed on-demand during evaluation
-                // rather than stored in the type table, to avoid salsa context issues.
+                let operand = unaryop.operand(self.db);
+
+                // Visit operand first.
+                self.visit_datafun_expr(operand)?;
+
+                // Try to get type descriptor for the operand.
+                let operand_tydesc = self.get_datafun_expr_type(operand);
+
+                // Only compute result type if operand type is available.
+                if !operand_tydesc.is_null() {
+                    let op = unaryop.op(self.db);
+
+                    // Compute result type based on operator.
+                    let result_tydesc = match op {
+                        // Optional negation: Option<T>.
+                        UnaryOp::NegOptional => {
+                            self.tydesc_table.create_option_from_inner_tydesc(operand_tydesc)
+                        }
+
+                        // Result negation: Result<T>.
+                        UnaryOp::NegResult => {
+                            self.tydesc_table.create_result_from_inner_tydesc(operand_tydesc)
+                        }
+                    };
+
+                    // Store the result type for this UnaryOp expression.
+                    let unaryop_id = expr.as_id();
+                    let unaryop_index = unaryop_id.index() as usize;
+
+                    if unaryop_index >= self.datafun_expr_types.len() {
+                        self.datafun_expr_types.resize(unaryop_index + 1, std::ptr::null());
+                    }
+
+                    self.datafun_expr_types[unaryop_index] = result_tydesc;
+                }
             }
             ExprFunKind::FunctionCall(call) => {
                 // Visit all argument expressions.

@@ -428,7 +428,9 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
 
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            // Default to U32 if type descriptor is null (for backward compatibility).
+            // Type descriptor may be null in rare cases (e.g., function return values,
+            // imported functions, or expressions not typechecked successfully).
+            // Default to U32 as a safe fallback.
             let tytag = if inner_tydesc.is_null() {
                 rtdt::TyTag::U32
             } else {
@@ -505,7 +507,9 @@ fn eval_sub_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
 
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            // Default to U32 if type descriptor is null (for backward compatibility).
+            // Type descriptor may be null in rare cases (e.g., function return values,
+            // imported functions, or expressions not typechecked successfully).
+            // Default to U32 as a safe fallback.
             let tytag = if inner_tydesc.is_null() {
                 rtdt::TyTag::U32
             } else {
@@ -582,7 +586,9 @@ fn eval_mul_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
 
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            // Default to U32 if type descriptor is null (for backward compatibility).
+            // Type descriptor may be null in rare cases (e.g., function return values,
+            // imported functions, or expressions not typechecked successfully).
+            // Default to U32 as a safe fallback.
             let tytag = if inner_tydesc.is_null() {
                 rtdt::TyTag::U32
             } else {
@@ -644,7 +650,9 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
 
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            // Default to U32 if type descriptor is null (for backward compatibility).
+            // Type descriptor may be null in rare cases (e.g., function return values,
+            // imported functions, or expressions not typechecked successfully).
+            // Default to U32 as a safe fallback.
             let tytag = if inner_tydesc.is_null() {
                 rtdt::TyTag::U32
             } else {

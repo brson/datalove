@@ -461,6 +461,71 @@ The system needs the operand's type to construct `Result<T>` or `Option<T>` type
 
 **Summary**: This null-defaulting pattern is a workaround for incomplete type tracking in the interpreter, allowing it to continue working even when full type information isn't available. The U32 default is arbitrary but safe for the current test suite.
 
+**Update (2025-10-20)**: Fixed Partial - Type Table Now Builds BinOp/UnaryOp Types
+
+We've expanded the TypeTableBuilder to compute and store type descriptors for BinOp and UnaryOp expressions (type_table.rs:173-258):
+
+**What Was Fixed:**
+- BinOp expressions now have their result types computed based on the operator:
+  - Regular arithmetic (Add/Sub/Mul/Div): uses operand type
+  - Checked arithmetic (AddChecked/etc): wraps in Result<T> using `create_result_from_inner_tydesc()`
+  - Optional arithmetic (AddOptional/etc): wraps in Option<T> using `create_option_from_inner_tydesc()`
+  - Comparisons: creates Bool type
+- UnaryOp expressions similarly compute their result types
+- Uses existing TyDescTable methods that don't require salsa context
+- Resolves null pointers for literal-based BinOp/UnaryOp expressions
+
+**What Still Causes Null Pointers:**
+The defensive null check still remains because Name (variable reference) expressions don't have their types stored in the type table (type_table.rs:169-172). When BinOp/UnaryOp operands are variables, we can't determine the result type at table build time, so it remains null.
+
+Updated comment in eval_datafun.rs now correctly explains:
+```rust
+// Type descriptor may be null when operands are variable references,
+// as Name expressions don't have their types stored in the type table yet.
+// Default to U32 as a safe fallback.
+```
+
+**Future Work:**
+To completely eliminate null pointers, we would need to:
+1. Implement type storage for Name expressions by querying the typechecker's variable context
+2. This requires passing the typechecker context through the type table builder
+3. Alternative: accept that runtime type lookups are needed for variables
+
+**Update (2025-10-20 - Later)**: Name Expressions Now Store Types
+
+We've implemented type storage for Name (variable reference) expressions by storing all expression types during typechecking:
+
+**What Was Fixed:**
+- Modified TypecheckResult to include expr_types field (tycheck.rs:67-69)
+- TypeContext now stores expression types as they're synthesized (tycheck.rs:109-110, 145-164)
+- TypeTableBuilder retrieves Name expression types from TypecheckResult (type_table.rs:186-209)
+- Added type_and_heap_to_tydesc helper to convert datafun types to runtime TyDescs (type_table.rs:125-140)
+- All 125 interpreter tests pass, including checked arithmetic with variable operands
+
+**Current State of Null Checks:**
+Despite fixing Name expression types, the defensive null checks still remain in eval_datafun.rs at lines 431-433, 510-512, 589-591, 653-655. The comment now reads:
+```rust
+// Type descriptor may be null in rare cases (e.g., function return values,
+// imported functions, or expressions not typechecked successfully).
+// Default to U32 as a safe fallback.
+```
+
+**Why Null Checks Still Exist:**
+1. **Function call return values**: FunctionCall expressions don't store their return types in the type table (type_table.rs:259-266)
+2. **Imported functions**: Functions from other modules may not have complete type information
+3. **TryOption/TryResult operators**: These expressions don't store result types (type_table.rs:301-308)
+4. **Tuple expressions**: Only stored if all element types are available (type_table.rs:284-299)
+
+**TODO - Eliminate All Null Checks:**
+To completely remove the defensive null checks:
+1. Store FunctionCall result types by looking up function signatures in TypeContext
+2. Store TryOption/TryResult result types based on operand types
+3. Handle imported functions properly during type table building
+4. Once all expression types are guaranteed to be stored, remove the null checks entirely
+5. Convert the code to use `unsafe { (*inner_tydesc).type_tag }` directly without null checks
+
+The null checks are currently a safety net for incomplete type coverage. We need to achieve 100% type coverage before removing them.
+
 ---
 
 **Refactoring Plan for Function Return Coercion** (2025-10-19)

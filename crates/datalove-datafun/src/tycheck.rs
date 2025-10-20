@@ -63,6 +63,10 @@ pub struct TypecheckResult<'db> {
 
     /// Type errors encountered.
     pub errors: Vec<TypeErrorEntry<'db>>,
+
+    /// Expression types, indexed by ExprFun ID.
+    #[returns(ref)]
+    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
 }
 
 /// Exported function signatures from a module.
@@ -102,6 +106,8 @@ pub struct TypeContext<'db> {
     /// Expected return type for current function (if inside a function).
     expected_return_type: Option<TypeAndHeap<'db>>,
     errors: Vec<TypeError>,
+    /// Expression types, indexed by ExprFun ID.
+    expr_types: Vec<Option<TypeAndHeap<'db>>>,
 }
 
 impl<'db> TypeContext<'db> {
@@ -112,6 +118,7 @@ impl<'db> TypeContext<'db> {
             functions: HashMap::new(),
             expected_return_type: None,
             errors: Vec::new(),
+            expr_types: Vec::new(),
         }
     }
 
@@ -119,7 +126,7 @@ impl<'db> TypeContext<'db> {
         self.errors.push(error);
     }
 
-    fn add_variable(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
+    pub fn add_variable(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
         self.variables.insert(name, ty);
     }
 
@@ -127,7 +134,7 @@ impl<'db> TypeContext<'db> {
         self.functions.insert(name, func_type);
     }
 
-    fn lookup_variable(&self, name: InternedText<'db>) -> Option<TypeAndHeap<'db>> {
+    pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<TypeAndHeap<'db>> {
         self.variables.get(&name).copied()
     }
 
@@ -135,9 +142,25 @@ impl<'db> TypeContext<'db> {
         self.functions.get(&name).copied()
     }
 
+    /// Store the type for an expression.
+    fn store_expr_type(&mut self, expr: ExprFun<'db>, ty: TypeAndHeap<'db>) {
+        use salsa::plumbing::AsId;
+        let id = expr.as_id();
+        let index = id.index() as usize;
+
+        // Ensure the vector is large enough.
+        if index >= self.expr_types.len() {
+            self.expr_types.resize(index + 1, None);
+        }
+
+        self.expr_types[index] = Some(ty);
+    }
+
     /// Synthesize the type of an expression.
     pub fn synthesize_expr(&mut self, expr: ExprFun<'db>) -> Result<TypeAndHeap<'db>, TypeError> {
-        synthesize_expr(self, expr)
+        let ty = synthesize_expr(self, expr)?;
+        self.store_expr_type(expr, ty);
+        Ok(ty)
     }
 }
 
@@ -167,7 +190,7 @@ pub fn type_check<'db>(
         .map(|e| TypeErrorEntry::new(db, e))
         .collect();
 
-    TypecheckResult::new(db, script, errors)
+    TypecheckResult::new(db, script, errors, ctx.expr_types)
 }
 
 /// Typecheck a script with package world support.
@@ -242,7 +265,7 @@ pub fn type_check_with_package_world<'db>(
         .map(|e| TypeErrorEntry::new(db, e))
         .collect();
 
-    TypecheckResult::new(db, script, errors)
+    TypecheckResult::new(db, script, errors, ctx.expr_types)
 }
 
 /// Look up the type of a variable after typechecking.
@@ -372,7 +395,7 @@ pub fn typecheck_package_world<'db>(
 }
 
 /// Collect function signature without checking body (first pass).
-fn collect_function_signature<'db>(
+pub fn collect_function_signature<'db>(
     ctx: &mut TypeContext<'db>,
     stmt: &StmtFun<'db>,
 ) {
