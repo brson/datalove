@@ -428,14 +428,8 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
 
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            // Type descriptor may be null in rare cases (e.g., function return values,
-            // imported functions, or expressions not typechecked successfully).
-            // Default to U32 as a safe fallback.
-            let tytag = if inner_tydesc.is_null() {
-                rtdt::TyTag::U32
-            } else {
-                unsafe { (*inner_tydesc).type_tag }
-            };
+            // All expression types should be populated in the type table.
+            let tytag = unsafe { (*inner_tydesc).type_tag };
 
             match tytag {
                 rtdt::TyTag::U8 => {
@@ -507,14 +501,8 @@ fn eval_sub_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
 
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            // Type descriptor may be null in rare cases (e.g., function return values,
-            // imported functions, or expressions not typechecked successfully).
-            // Default to U32 as a safe fallback.
-            let tytag = if inner_tydesc.is_null() {
-                rtdt::TyTag::U32
-            } else {
-                unsafe { (*inner_tydesc).type_tag }
-            };
+            // All expression types should be populated in the type table.
+            let tytag = unsafe { (*inner_tydesc).type_tag };
 
             match tytag {
                 rtdt::TyTag::U8 => {
@@ -586,14 +574,8 @@ fn eval_mul_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
 
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            // Type descriptor may be null in rare cases (e.g., function return values,
-            // imported functions, or expressions not typechecked successfully).
-            // Default to U32 as a safe fallback.
-            let tytag = if inner_tydesc.is_null() {
-                rtdt::TyTag::U32
-            } else {
-                unsafe { (*inner_tydesc).type_tag }
-            };
+            // All expression types should be populated in the type table.
+            let tytag = unsafe { (*inner_tydesc).type_tag };
             match tytag {
                 rtdt::TyTag::U8 => {
                     let result_tydesc = make_result_tydesc_u8(ctx);
@@ -650,14 +632,8 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
 
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            // Type descriptor may be null in rare cases (e.g., function return values,
-            // imported functions, or expressions not typechecked successfully).
-            // Default to U32 as a safe fallback.
-            let tytag = if inner_tydesc.is_null() {
-                rtdt::TyTag::U32
-            } else {
-                unsafe { (*inner_tydesc).type_tag }
-            };
+            // All expression types should be populated in the type table.
+            let tytag = unsafe { (*inner_tydesc).type_tag };
             match tytag {
                 rtdt::TyTag::U8 => {
                     let result_tydesc = make_result_tydesc_u8(ctx);

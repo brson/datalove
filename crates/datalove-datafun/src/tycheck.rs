@@ -473,7 +473,7 @@ fn check_statement<'db>(
                 }
                 None => {
                     // Synthesize type from value.
-                    match synthesize_expr(ctx, value) {
+                    match ctx.synthesize_expr(value) {
                         Ok(ty) => Some(ty),
                         Err(e) => {
                             ctx.add_error(e);
@@ -565,7 +565,7 @@ fn check_statement<'db>(
             // If there's a binding, this is destructuring syntax.
             if let Some(binding_name) = then_binding {
                 // Synthesize the condition type.
-                let condition_ty = match synthesize_expr(ctx, condition) {
+                let condition_ty = match ctx.synthesize_expr(condition) {
                     Ok(ty) => ty,
                     Err(e) => {
                         ctx.add_error(e);
@@ -731,7 +731,7 @@ fn synthesize_expr<'db>(
             let mut datalit_element_types = Vec::new();
 
             for elem in elements {
-                let elem_ty = synthesize_expr(ctx, *elem)?;
+                let elem_ty = ctx.synthesize_expr(*elem)?;
 
                 // Extract datalit TypeAndHeap from datafun TypeAndHeap.
                 // Tuple elements must be datalit types.
@@ -788,8 +788,8 @@ fn synthesize_binop<'db>(
     let rhs = binop.rhs(db);
 
     // Synthesize types for operands.
-    let lhs_ty = synthesize_expr(ctx, lhs)?;
-    let rhs_ty = synthesize_expr(ctx, rhs)?;
+    let lhs_ty = ctx.synthesize_expr(lhs)?;
+    let rhs_ty = ctx.synthesize_expr(rhs)?;
 
     // Check that operands have the same type.
     if !types_equivalent(db, lhs_ty.ty(db), rhs_ty.ty(db)) {
@@ -870,7 +870,7 @@ fn synthesize_unaryop<'db>(
     let operand = unaryop.operand(db);
 
     // Synthesize type for operand.
-    let operand_ty = synthesize_expr(ctx, operand)?;
+    let operand_ty = ctx.synthesize_expr(operand)?;
 
     // Check that operand is a numeric type.
     let operand_type = operand_ty.ty(db);
@@ -967,7 +967,7 @@ fn synthesize_try_option<'db>(
         .ok_or_else(|| TypeError::TryOutsideFunction { operator: "?".to_string() })?;
 
     // Synthesize operand type.
-    let operand_ty = synthesize_expr(ctx, operand)?;
+    let operand_ty = ctx.synthesize_expr(operand)?;
 
     // Operand must be Option<T>.
     let inner_ty = match operand_ty.ty(db) {
@@ -1014,7 +1014,7 @@ fn synthesize_try_result<'db>(
         .ok_or_else(|| TypeError::TryOutsideFunction { operator: "!".to_string() })?;
 
     // Synthesize operand type.
-    let operand_ty = synthesize_expr(ctx, operand)?;
+    let operand_ty = ctx.synthesize_expr(operand)?;
 
     // Operand must be Result<T>.
     let inner_ty = match operand_ty.ty(db) {
@@ -1111,7 +1111,7 @@ fn check_expr<'db>(
             } else {
                 // Expected type is not a datalit type (e.g., function type).
                 // Fall back to synthesis + comparison.
-                let synthesized = synthesize_expr(ctx, expr)?;
+                let synthesized = ctx.synthesize_expr(expr)?;
                 if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
                     Ok(())
                 } else {
@@ -1125,7 +1125,7 @@ fn check_expr<'db>(
 
         // For non-datalit expressions, use synthesis + comparison with coercion support.
         _ => {
-            let synthesized = synthesize_expr(ctx, expr)?;
+            let synthesized = ctx.synthesize_expr(expr)?;
 
             // Check for exact type match first.
             if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {

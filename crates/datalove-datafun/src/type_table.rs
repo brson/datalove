@@ -298,8 +298,27 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
                 for arg in call.args(self.db) {
                     self.visit_datafun_expr(*arg)?;
                 }
-                // We don't try to store the return type of function calls here.
-                // The type will be determined at runtime when the function is actually called.
+
+                // Look up return type from typechecker results.
+                let call_id = expr.as_id();
+                let call_index = call_id.index() as usize;
+                let expr_types = self.tycheck_result.expr_types(self.db);
+
+                if call_index < expr_types.len() {
+                    if let Some(call_type) = expr_types[call_index] {
+                        // Convert datafun type to runtime type descriptor.
+                        let tydesc = self.type_and_heap_to_tydesc(call_type);
+
+                        // Store the type for this FunctionCall expression.
+                        if !tydesc.is_null() {
+                            if call_index >= self.datafun_expr_types.len() {
+                                self.datafun_expr_types.resize(call_index + 1, std::ptr::null());
+                            }
+
+                            self.datafun_expr_types[call_index] = tydesc;
+                        }
+                    }
+                }
             }
             ExprFunKind::Tuple(tuple) => {
                 // Visit all element expressions.
@@ -336,12 +355,56 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
                 // The evaluator will need to handle this case.
             }
             ExprFunKind::TryOption(try_op) => {
-                self.visit_datafun_expr(try_op.operand(self.db))?;
-                // TODO: Store the result type of the try operator.
+                let operand = try_op.operand(self.db);
+                self.visit_datafun_expr(operand)?;
+
+                // Look up the type of the try expression from typechecker results.
+                // The typechecker computes the inner type T from Option<T>.
+                let try_id = expr.as_id();
+                let try_index = try_id.index() as usize;
+                let expr_types = self.tycheck_result.expr_types(self.db);
+
+                if try_index < expr_types.len() {
+                    if let Some(try_type) = expr_types[try_index] {
+                        // Convert datafun type to runtime type descriptor.
+                        let tydesc = self.type_and_heap_to_tydesc(try_type);
+
+                        // Store the type for this TryOption expression.
+                        if !tydesc.is_null() {
+                            if try_index >= self.datafun_expr_types.len() {
+                                self.datafun_expr_types.resize(try_index + 1, std::ptr::null());
+                            }
+
+                            self.datafun_expr_types[try_index] = tydesc;
+                        }
+                    }
+                }
             }
             ExprFunKind::TryResult(try_op) => {
-                self.visit_datafun_expr(try_op.operand(self.db))?;
-                // TODO: Store the result type of the try operator.
+                let operand = try_op.operand(self.db);
+                self.visit_datafun_expr(operand)?;
+
+                // Look up the type of the try expression from typechecker results.
+                // The typechecker computes the inner type T from Result<T>.
+                let try_id = expr.as_id();
+                let try_index = try_id.index() as usize;
+                let expr_types = self.tycheck_result.expr_types(self.db);
+
+                if try_index < expr_types.len() {
+                    if let Some(try_type) = expr_types[try_index] {
+                        // Convert datafun type to runtime type descriptor.
+                        let tydesc = self.type_and_heap_to_tydesc(try_type);
+
+                        // Store the type for this TryResult expression.
+                        if !tydesc.is_null() {
+                            if try_index >= self.datafun_expr_types.len() {
+                                self.datafun_expr_types.resize(try_index + 1, std::ptr::null());
+                            }
+
+                            self.datafun_expr_types[try_index] = tydesc;
+                        }
+                    }
+                }
             }
             ExprFunKind::ParseError(_) => {}
         }
