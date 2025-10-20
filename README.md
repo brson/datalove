@@ -401,6 +401,7 @@ Allowed and optional in all sequence forms of course.
   data structure definitions, float total_cmp.
 - Zig. `?` / `!`, aspects of anonymous structs
 - JSON5. baseline markup language requirements
+- Julia. Multidimensional arrays.
 - Python. negative inspiration - awkward dicts,
   heavyweight class abstractions
 - Polars / Pandas. tables

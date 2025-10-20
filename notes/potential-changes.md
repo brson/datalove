@@ -1,4 +1,7 @@
-## Line-comments to `//`
+## map -> dict?
+
+just to free up the word map
+
 
 ## Type hints
 
