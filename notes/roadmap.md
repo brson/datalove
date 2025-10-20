@@ -58,6 +58,7 @@
 
 ## far future
 
+- datafun packages as wasm components
 - ergonomic bitops and bitfields
 - `datalove lit-tycheck` - run the type checker and report
 - `datalove lit-pretty` - pritty printer
