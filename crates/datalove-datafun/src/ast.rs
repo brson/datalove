@@ -121,6 +121,8 @@ pub enum ExprFunKind<'db> {
     FunctionCall(ExprFunctionCall<'db>),
     // Datafun tuple (elements are datafun expressions)
     Tuple(ExprTuple<'db>),
+    // Unary operators
+    UnaryOp(ExprUnaryOp<'db>),
     // Try operators (postfix ? and !)
     TryOption(ExprTryOption<'db>),
     TryResult(ExprTryResult<'db>),
@@ -176,6 +178,19 @@ pub enum BinOp {
     Ge,  // >=
     Eq,  // ==
     Ne,  // !=
+}
+
+#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum UnaryOp {
+    NegOptional,  // -?
+    NegResult,    // -!
+}
+
+#[salsa::tracked]
+pub struct ExprUnaryOp<'db> {
+    pub op: UnaryOp,
+    pub operand: ExprFun<'db>,
 }
 
 #[salsa::tracked]

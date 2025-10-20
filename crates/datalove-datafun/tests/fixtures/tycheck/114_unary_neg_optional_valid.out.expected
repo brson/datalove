@@ -1,0 +1,16 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "negate_optional",
+      "params": [
+        {
+          "name": "x",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "?u32"
+    }
+  ]
+}

@@ -694,6 +694,10 @@ fn synthesize_expr<'db>(
             synthesize_binop(ctx, binop)
         }
 
+        ExprFunKind::UnaryOp(unaryop) => {
+            synthesize_unaryop(ctx, unaryop)
+        }
+
         ExprFunKind::FunctionCall(call) => {
             synthesize_function_call(ctx, call)
         }
@@ -827,6 +831,67 @@ fn synthesize_binop<'db>(
         Lt | Gt | Le | Ge | Eq | Ne => {
             let bool_ty = Type::Datalit(datalit::tycheck::Type::Bool);
             TypeAndHeap::new(db, datalit::ast::Heap::Omitted, bool_ty)
+        }
+    };
+
+    Ok(result_ty)
+}
+
+/// Synthesize type for unary operation.
+fn synthesize_unaryop<'db>(
+    ctx: &mut TypeContext<'db>,
+    unaryop: ExprUnaryOp<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let op = unaryop.op(db);
+    let operand = unaryop.operand(db);
+
+    // Synthesize type for operand.
+    let operand_ty = synthesize_expr(ctx, operand)?;
+
+    // Check that operand is a numeric type.
+    let operand_type = operand_ty.ty(db);
+    if !is_numeric_type(operand_type) {
+        return Err(TypeError::InvalidOperandType {
+            op: format!("{:?}", op),
+            ty: type_to_string(db, operand_type),
+        });
+    }
+
+    // Determine result type based on operator.
+    let result_ty = match op {
+        // Optional negation: Option<T>.
+        UnaryOp::NegOptional => {
+            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
+            let operand_datalit_ty = match operand_ty.ty(db) {
+                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, operand_ty.heap(db), dt.clone()),
+                _ => {
+                    return Err(TypeError::InvalidOperandType {
+                        op: format!("{:?}", op),
+                        ty: type_to_string(db, operand_ty.ty(db)),
+                    });
+                }
+            };
+            let option_inner = datalit::tycheck::TypeOption::new(db, operand_datalit_ty);
+            let option_ty = Type::Datalit(datalit::tycheck::Type::Option(option_inner));
+            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, option_ty)
+        }
+
+        // Result negation: Result<T>.
+        UnaryOp::NegResult => {
+            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
+            let operand_datalit_ty = match operand_ty.ty(db) {
+                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, operand_ty.heap(db), dt.clone()),
+                _ => {
+                    return Err(TypeError::InvalidOperandType {
+                        op: format!("{:?}", op),
+                        ty: type_to_string(db, operand_ty.ty(db)),
+                    });
+                }
+            };
+            let result_inner = datalit::tycheck::TypeResult::new(db, operand_datalit_ty);
+            let result_ty = Type::Datalit(datalit::tycheck::Type::Result(result_inner));
+            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, result_ty)
         }
     };
 
@@ -1348,6 +1413,26 @@ fn collect_module_exports<'db>(
     }
 
     functions
+}
+
+/// Public wrapper to synthesize type for a binary operation.
+/// This is used by the type table builder.
+pub fn synthesize_binop_type<'db>(
+    db: &'db dyn crate::Db,
+    binop: ExprBinOp<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let mut ctx = TypeContext::new(db);
+    synthesize_binop(&mut ctx, binop)
+}
+
+/// Public wrapper to synthesize type for a unary operation.
+/// This is used by the type table builder.
+pub fn synthesize_unaryop_type<'db>(
+    db: &'db dyn crate::Db,
+    unaryop: ExprUnaryOp<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let mut ctx = TypeContext::new(db);
+    synthesize_unaryop(&mut ctx, unaryop)
 }
 
 #[cfg(test)]

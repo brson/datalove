@@ -42,6 +42,7 @@ impl TypeTable {
 
         let mut builder = TypeTableBuilder {
             db,
+            tycheck_result,
             tydesc_table,
             expr_types: Vec::new(),
             datafun_expr_types: Vec::new(),
@@ -84,6 +85,7 @@ impl TypeTable {
 /// Builder for type table.
 struct TypeTableBuilder<'a, 'db> {
     db: &'db dyn crate::Db,
+    tycheck_result: TypecheckResult<'db>,
     tydesc_table: &'a mut datalit::tydesc_table::TyDescTable<'db>,
     expr_types: Vec<*const rtdt::TyDesc>,
     datafun_expr_types: Vec<*const rtdt::TyDesc>,
@@ -171,7 +173,13 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
             ExprFunKind::BinOp(binop) => {
                 self.visit_datafun_expr(binop.lhs(self.db))?;
                 self.visit_datafun_expr(binop.rhs(self.db))?;
-                // TODO: Store the result type of the binop.
+                // NOTE: Type descriptors for BinOp are computed on-demand during evaluation
+                // rather than stored in the type table, to avoid salsa context issues.
+            }
+            ExprFunKind::UnaryOp(unaryop) => {
+                self.visit_datafun_expr(unaryop.operand(self.db))?;
+                // NOTE: Type descriptors for UnaryOp are computed on-demand during evaluation
+                // rather than stored in the type table, to avoid salsa context issues.
             }
             ExprFunKind::FunctionCall(call) => {
                 // Visit all argument expressions.

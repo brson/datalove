@@ -1,0 +1,22 @@
+{
+  "errors": [
+    {
+      "kind": "InvalidOperandType",
+      "op": "NegOptional",
+      "type": "string"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "negate_invalid",
+      "params": [
+        {
+          "name": "x",
+          "type": "string"
+        }
+      ],
+      "return_type": "?u32"
+    }
+  ]
+}

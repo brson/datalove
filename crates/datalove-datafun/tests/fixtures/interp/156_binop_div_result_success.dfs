@@ -1,0 +1,6 @@
+// Test result division (/!) with successful result.
+fun test_div_result(a: @u32, b: @u32): !u32
+  ret a /! b
+end fun
+
+let output = test_div_result(@15, @3)

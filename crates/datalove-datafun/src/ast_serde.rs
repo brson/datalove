@@ -109,6 +109,7 @@ pub enum ExprFunKind {
     BinOp(ExprBinOp),
     FunctionCall(ExprFunctionCall),
     Tuple(ExprTuple),
+    UnaryOp(ExprUnaryOp),
     TryOption(ExprTryOption),
     TryResult(ExprTryResult),
     ParseError(ExprFunParseError),
@@ -152,6 +153,18 @@ pub enum BinOp {
     Ge,
     Eq,
     Ne,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum UnaryOp {
+    NegOptional,
+    NegResult,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprUnaryOp {
+    pub op: UnaryOp,
+    pub operand: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -312,6 +325,7 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::BinOp(b) => ExprFunKind::BinOp(ExprBinOp::from_ast(db, b)),
             crate::ast::ExprFunKind::FunctionCall(f) => ExprFunKind::FunctionCall(ExprFunctionCall::from_ast(db, f)),
             crate::ast::ExprFunKind::Tuple(t) => ExprFunKind::Tuple(ExprTuple::from_ast(db, t)),
+            crate::ast::ExprFunKind::UnaryOp(u) => ExprFunKind::UnaryOp(ExprUnaryOp::from_ast(db, u)),
             crate::ast::ExprFunKind::TryOption(t) => ExprFunKind::TryOption(ExprTryOption::from_ast(db, t)),
             crate::ast::ExprFunKind::TryResult(t) => ExprFunKind::TryResult(ExprTryResult::from_ast(db, t)),
             crate::ast::ExprFunKind::ParseError(e) => ExprFunKind::ParseError(ExprFunParseError::from_ast(db, e)),
@@ -367,6 +381,24 @@ impl BinOp {
             crate::ast::BinOp::Ge => BinOp::Ge,
             crate::ast::BinOp::Eq => BinOp::Eq,
             crate::ast::BinOp::Ne => BinOp::Ne,
+        }
+    }
+}
+
+impl UnaryOp {
+    pub fn from_ast(ast: crate::ast::UnaryOp) -> Self {
+        match ast {
+            crate::ast::UnaryOp::NegOptional => UnaryOp::NegOptional,
+            crate::ast::UnaryOp::NegResult => UnaryOp::NegResult,
+        }
+    }
+}
+
+impl ExprUnaryOp {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprUnaryOp<'db>) -> Self {
+        ExprUnaryOp {
+            op: UnaryOp::from_ast(ast.op(db)),
+            operand: Box::new(ExprFun::from_ast(db, ast.operand(db))),
         }
     }
 }

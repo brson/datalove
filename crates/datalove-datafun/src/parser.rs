@@ -783,6 +783,24 @@ impl<'db> Parser<'db> {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> ast::ExprFun<'db> {
+        // Check for unary operators (-? or -!).
+        if let Some(TreeToken::Token(token)) = tokens.peek() {
+            let unary_op = match token.kind(self.db) {
+                TokenKind::Sigil(Sigil::MinusQuestion) => Some(ast::UnaryOp::NegOptional),
+                TokenKind::Sigil(Sigil::MinusExclamation) => Some(ast::UnaryOp::NegResult),
+                _ => None,
+            };
+
+            if let Some(op) = unary_op {
+                tokens.next(); // Consume the operator.
+                let operand = self.parse_expr_primary(tokens);
+                return ast::ExprFun::new(
+                    self.db,
+                    ast::ExprFunKind::UnaryOp(ast::ExprUnaryOp::new(self.db, op, operand))
+                );
+            }
+        }
+
         // Check if it starts with a heap sigil (@ or #) - if so, it's definitely a datalit expression.
         if self.peek_sigil(tokens, Sigil::At) || self.peek_sigil(tokens, Sigil::Hash) {
             return self.parse_datalit_expr(tokens);

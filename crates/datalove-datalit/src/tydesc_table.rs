@@ -17,6 +17,10 @@ pub struct TyDescTable<'db> {
     db: &'db dyn crate::Db,
     /// Deduplication map: Type → TyDesc pointer.
     cache: HashMap<Type<'db>, *const rtdt::TyDesc>,
+    /// Runtime-constructed Option cache: inner_tydesc → Option<T> tydesc.
+    runtime_option_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
+    /// Runtime-constructed Result cache: inner_tydesc → Result<T> tydesc.
+    runtime_result_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Storage for TyDesc allocations.
     tydescs: Vec<Box<rtdt::TyDesc>>,
     /// Storage for flexible array members.
@@ -30,6 +34,8 @@ impl<'db> TyDescTable<'db> {
         Self {
             db,
             cache: HashMap::new(),
+            runtime_option_cache: HashMap::new(),
+            runtime_result_cache: HashMap::new(),
             tydescs: Vec::new(),
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
@@ -470,6 +476,44 @@ impl<'db> TyDescTable<'db> {
         })
     }
 
+    /// Create TyDesc for Option<T> from an existing inner tydesc pointer.
+    ///
+    /// This is useful for runtime construction of Option types without going through salsa.
+    pub fn create_option_from_inner_tydesc(&mut self, inner_tydesc: *const rtdt::TyDesc) -> *const rtdt::TyDesc {
+        // Check cache first.
+        if let Some(&cached) = self.runtime_option_cache.get(&inner_tydesc) {
+            return cached;
+        }
+
+        // Create temporary TyDesc to compute layout.
+        let temp_tydesc = rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Option,
+            size: 0,
+            align: 1,
+            type_info: rtdt::TyInfo {
+                option: rtdt::TyInfoOption { inner_tydesc },
+            },
+        };
+
+        // Compute layout.
+        let layout = unsafe { rtdt::layout::compute_option_layout(&temp_tydesc) };
+
+        // Create final TyDesc with computed layout.
+        let tydesc = Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Option,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo {
+                option: rtdt::TyInfoOption { inner_tydesc },
+            },
+        });
+
+        let ptr = &*tydesc as *const rtdt::TyDesc;
+        self.tydescs.push(tydesc);
+        self.runtime_option_cache.insert(inner_tydesc, ptr);
+        ptr
+    }
+
     /// Create TyDesc for option.
     fn create_option_tydesc(&mut self, inner_type: TypeAndHeap<'db>) -> Box<rtdt::TyDesc> {
         // Recursively create TyDesc for inner type.
@@ -537,6 +581,48 @@ impl<'db> TyDescTable<'db> {
                 },
             },
         })
+    }
+
+    /// Create TyDesc for Result<T> from an existing inner tydesc pointer.
+    ///
+    /// This is useful for runtime construction of Result types without going through salsa.
+    pub fn create_result_from_inner_tydesc(&mut self, inner_tydesc: *const rtdt::TyDesc) -> *const rtdt::TyDesc {
+        // Check cache first.
+        if let Some(&cached) = self.runtime_result_cache.get(&inner_tydesc) {
+            return cached;
+        }
+
+        // Create temporary TyDesc to compute layout.
+        let temp_tydesc = rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Result,
+            size: 0,
+            align: 1,
+            type_info: rtdt::TyInfo {
+                result: rtdt::TyInfoResult {
+                    ok_tydesc: inner_tydesc,
+                },
+            },
+        };
+
+        // Compute layout.
+        let layout = unsafe { rtdt::layout::compute_result_layout(&temp_tydesc) };
+
+        // Create final TyDesc with computed layout.
+        let tydesc = Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Result,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo {
+                result: rtdt::TyInfoResult {
+                    ok_tydesc: inner_tydesc,
+                },
+            },
+        });
+
+        let ptr = &*tydesc as *const rtdt::TyDesc;
+        self.tydescs.push(tydesc);
+        self.runtime_result_cache.insert(inner_tydesc, ptr);
+        ptr
     }
 
     /// Create TyDesc for result.

@@ -23,7 +23,9 @@ pub fn eval_expr_with_expected<'db>(
 
         ExprFunKind::Name(name) => eval_name(ctx, name),
 
-        ExprFunKind::BinOp(binop) => eval_binop(ctx, binop),
+        ExprFunKind::BinOp(binop) => eval_binop(ctx, expr, binop),
+
+        ExprFunKind::UnaryOp(unaryop) => eval_unaryop(ctx, expr, unaryop),
 
         ExprFunKind::FunctionCall(call) => eval_function_call(ctx, call),
 
@@ -205,7 +207,7 @@ fn eval_name<'db>(
 }
 
 /// Evaluate a binary operation.
-fn eval_binop<'db>(ctx: &mut InterpContext<'db>, binop: ExprBinOp<'db>) -> InterpResult {
+fn eval_binop<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>, binop: ExprBinOp<'db>) -> InterpResult {
     let op = binop.op(ctx.db);
     let lhs = binop.lhs(ctx.db);
     let rhs = binop.rhs(ctx.db);
@@ -213,6 +215,12 @@ fn eval_binop<'db>(ctx: &mut InterpContext<'db>, binop: ExprBinOp<'db>) -> Inter
     // Evaluate operands.
     let lhs_value = eval_expr(ctx, lhs)?;
     let rhs_value = eval_expr(ctx, rhs)?;
+
+    // For checked/optional operators, get the operand type descriptor and construct
+    // the Result<T>/Option<T> type descriptor from it.
+    // NOTE: We can't get this from the type table because BinOp types aren't stored there
+    // (to avoid salsa context issues). Instead, we construct it on-demand from the operand type.
+    let lhs_tydesc = get_expr_tydesc(ctx, lhs);
 
     use BinOp::*;
 
@@ -224,16 +232,16 @@ fn eval_binop<'db>(ctx: &mut InterpContext<'db>, binop: ExprBinOp<'db>) -> Inter
         Div => eval_div(ctx, lhs_value, rhs_value),
 
         // Checked arithmetic.
-        AddChecked => eval_add_checked(ctx, lhs_value, rhs_value),
-        SubChecked => eval_sub_checked(ctx, lhs_value, rhs_value),
-        MulChecked => eval_mul_checked(ctx, lhs_value, rhs_value),
-        DivChecked => eval_div_checked(ctx, lhs_value, rhs_value),
+        AddChecked => eval_add_checked(ctx, lhs_value, rhs_value, lhs_tydesc),
+        SubChecked => eval_sub_checked(ctx, lhs_value, rhs_value, lhs_tydesc),
+        MulChecked => eval_mul_checked(ctx, lhs_value, rhs_value, lhs_tydesc),
+        DivChecked => eval_div_checked(ctx, lhs_value, rhs_value, lhs_tydesc),
 
         // Optional arithmetic.
-        AddOptional => eval_add_optional(ctx, lhs_value, rhs_value),
-        SubOptional => eval_sub_optional(ctx, lhs_value, rhs_value),
-        MulOptional => eval_mul_optional(ctx, lhs_value, rhs_value),
-        DivOptional => eval_div_optional(ctx, lhs_value, rhs_value),
+        AddOptional => eval_add_optional(ctx, lhs_value, rhs_value, lhs_tydesc),
+        SubOptional => eval_sub_optional(ctx, lhs_value, rhs_value, lhs_tydesc),
+        MulOptional => eval_mul_optional(ctx, lhs_value, rhs_value, lhs_tydesc),
+        DivOptional => eval_div_optional(ctx, lhs_value, rhs_value, lhs_tydesc),
 
         // Comparison operators.
         Lt => eval_lt(ctx, lhs_value, rhs_value),
@@ -242,6 +250,74 @@ fn eval_binop<'db>(ctx: &mut InterpContext<'db>, binop: ExprBinOp<'db>) -> Inter
         Ge => eval_ge(ctx, lhs_value, rhs_value),
         Eq => eval_eq(ctx, lhs_value, rhs_value),
         Ne => eval_ne(ctx, lhs_value, rhs_value),
+    }
+}
+
+/// Evaluate unary operation.
+fn eval_unaryop<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>, unaryop: ExprUnaryOp<'db>) -> InterpResult {
+    let op = unaryop.op(ctx.db);
+    let operand = unaryop.operand(ctx.db);
+
+    // Evaluate operand.
+    let operand_value = eval_expr(ctx, operand)?;
+
+    // Get the type descriptor for the unary operation expression.
+    let result_tydesc = ctx.type_table.get_datafun_expr_type(expr);
+
+    use UnaryOp::*;
+
+    match op {
+        // Optional negation.
+        NegOptional => eval_neg_optional(ctx, operand_value, result_tydesc),
+
+        // Result negation.
+        NegResult => eval_neg_result(ctx, operand_value, result_tydesc),
+    }
+}
+
+/// Evaluate optional negation.
+fn eval_neg_optional(ctx: &mut InterpContext<'_>, operand: Value, _operand_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    match operand {
+        // Signed integers support checked negation.
+        Value::U32(u) => {
+            let option_tydesc = make_option_tydesc_u32(ctx);
+            // Reinterpret as i32 for signed negation.
+            let val = u as i32;
+            match val.checked_neg() {
+                Some(result) => {
+                    create_option_some(ctx, Value::U32(result as u32), option_tydesc)
+                }
+                None => {
+                    create_option_none(ctx, option_tydesc)
+                }
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported type for optional negation".to_string(),
+        )),
+    }
+}
+
+/// Evaluate result negation.
+fn eval_neg_result(ctx: &mut InterpContext<'_>, operand: Value, _operand_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    match operand {
+        // Signed integers support checked negation.
+        Value::U32(u) => {
+            let result_tydesc = make_result_tydesc_u32(ctx);
+            // Reinterpret as i32 for signed negation.
+            let val = u as i32;
+            match val.checked_neg() {
+                Some(result) => {
+                    create_result_ok(ctx, Value::U32(result as u32), result_tydesc)
+                }
+                None => {
+                    create_result_overflow_err(ctx, result_tydesc)
+                }
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported type for result negation".to_string(),
+        )),
     }
 }
 
@@ -305,18 +381,18 @@ fn eval_div(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResul
 }
 
 /// Evaluate checked addition.
-fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            // Return Result<u32>.
+            let result_tydesc = make_result_tydesc_u32(ctx);
             match a.checked_add(b) {
                 Some(result) => {
-                    // TODO: Create Result::Ok value.
-                    Err(InterpError::NotImplemented("Result type".to_string()))
+                    create_result_ok(ctx, Value::U32(result), result_tydesc)
                 }
                 None => {
-                    // TODO: Create Result::Err value.
-                    Err(InterpError::NotImplemented("Result type".to_string()))
+                    create_result_overflow_err(ctx, result_tydesc)
                 }
             }
         }
@@ -327,38 +403,144 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> Inte
 }
 
 /// Evaluate checked subtraction.
-fn eval_sub_checked(_ctx: &mut InterpContext<'_>, _lhs: Value, _rhs: Value) -> InterpResult {
-    Err(InterpError::NotImplemented("checked subtraction".to_string()))
+fn eval_sub_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    match (lhs, rhs) {
+        (Value::U32(a), Value::U32(b)) => {
+            let result_tydesc = make_result_tydesc_u32(ctx);
+            match a.checked_sub(b) {
+                Some(result) => {
+                    create_result_ok(ctx, Value::U32(result), result_tydesc)
+                }
+                None => {
+                    create_result_overflow_err(ctx, result_tydesc)
+                }
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported types for checked subtraction".to_string(),
+        )),
+    }
 }
 
 /// Evaluate checked multiplication.
-fn eval_mul_checked(_ctx: &mut InterpContext<'_>, _lhs: Value, _rhs: Value) -> InterpResult {
-    Err(InterpError::NotImplemented("checked multiplication".to_string()))
+fn eval_mul_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    match (lhs, rhs) {
+        (Value::U32(a), Value::U32(b)) => {
+            let result_tydesc = make_result_tydesc_u32(ctx);
+            match a.checked_mul(b) {
+                Some(result) => {
+                    create_result_ok(ctx, Value::U32(result), result_tydesc)
+                }
+                None => {
+                    create_result_overflow_err(ctx, result_tydesc)
+                }
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported types for checked multiplication".to_string(),
+        )),
+    }
 }
 
 /// Evaluate checked division.
-fn eval_div_checked(_ctx: &mut InterpContext<'_>, _lhs: Value, _rhs: Value) -> InterpResult {
-    Err(InterpError::NotImplemented("checked division".to_string()))
+fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    match (lhs, rhs) {
+        (Value::U32(a), Value::U32(b)) => {
+            let result_tydesc = make_result_tydesc_u32(ctx);
+            match a.checked_div(b) {
+                Some(result) => {
+                    create_result_ok(ctx, Value::U32(result), result_tydesc)
+                }
+                None => {
+                    // Division by zero.
+                    create_result_divzero_err(ctx, result_tydesc)
+                }
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported types for checked division".to_string(),
+        )),
+    }
 }
 
 /// Evaluate optional addition.
-fn eval_add_optional(_ctx: &mut InterpContext<'_>, _lhs: Value, _rhs: Value) -> InterpResult {
-    Err(InterpError::NotImplemented("optional addition".to_string()))
+fn eval_add_optional(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    match (lhs, rhs) {
+        (Value::U32(a), Value::U32(b)) => {
+            let option_tydesc = make_option_tydesc_u32(ctx);
+            match a.checked_add(b) {
+                Some(result) => {
+                    create_option_some(ctx, Value::U32(result), option_tydesc)
+                }
+                None => {
+                    create_option_none(ctx, option_tydesc)
+                }
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported types for optional addition".to_string(),
+        )),
+    }
 }
 
 /// Evaluate optional subtraction.
-fn eval_sub_optional(_ctx: &mut InterpContext<'_>, _lhs: Value, _rhs: Value) -> InterpResult {
-    Err(InterpError::NotImplemented("optional subtraction".to_string()))
+fn eval_sub_optional(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    match (lhs, rhs) {
+        (Value::U32(a), Value::U32(b)) => {
+            let option_tydesc = make_option_tydesc_u32(ctx);
+            match a.checked_sub(b) {
+                Some(result) => {
+                    create_option_some(ctx, Value::U32(result), option_tydesc)
+                }
+                None => {
+                    create_option_none(ctx, option_tydesc)
+                }
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported types for optional subtraction".to_string(),
+        )),
+    }
 }
 
 /// Evaluate optional multiplication.
-fn eval_mul_optional(_ctx: &mut InterpContext<'_>, _lhs: Value, _rhs: Value) -> InterpResult {
-    Err(InterpError::NotImplemented("optional multiplication".to_string()))
+fn eval_mul_optional(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    match (lhs, rhs) {
+        (Value::U32(a), Value::U32(b)) => {
+            let option_tydesc = make_option_tydesc_u32(ctx);
+            match a.checked_mul(b) {
+                Some(result) => {
+                    create_option_some(ctx, Value::U32(result), option_tydesc)
+                }
+                None => {
+                    create_option_none(ctx, option_tydesc)
+                }
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported types for optional multiplication".to_string(),
+        )),
+    }
 }
 
 /// Evaluate optional division.
-fn eval_div_optional(_ctx: &mut InterpContext<'_>, _lhs: Value, _rhs: Value) -> InterpResult {
-    Err(InterpError::NotImplemented("optional division".to_string()))
+fn eval_div_optional(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    match (lhs, rhs) {
+        (Value::U32(a), Value::U32(b)) => {
+            let option_tydesc = make_option_tydesc_u32(ctx);
+            match a.checked_div(b) {
+                Some(result) => {
+                    create_option_some(ctx, Value::U32(result), option_tydesc)
+                }
+                None => {
+                    create_option_none(ctx, option_tydesc)
+                }
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported types for optional division".to_string(),
+        )),
+    }
 }
 
 /// Evaluate less than.
@@ -949,6 +1131,236 @@ fn eval_tuple<'db>(
     Ok(tuple_value)
 }
 
+/// Helper function to create an Option::Some value.
+fn create_option_some(
+    ctx: &mut InterpContext<'_>,
+    payload: Value,
+    option_tydesc: *const datalove_rtdt::TyDesc,
+) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
+    if option_tydesc.is_null() {
+        return Err(InterpError::RuntimeError(
+            "Cannot create Option value: missing type descriptor".to_string(),
+        ));
+    }
+
+    let mut option_value = unsafe { Value::alloc_option(&mut ctx.rt, option_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc) };
+
+    // Write Some tag.
+    unsafe {
+        *(option_value.as_mut_ptr()) = rtdt::OptionTag::Some as u8;
+    }
+
+    // Write payload at the correct offset.
+    let payload_ptr = unsafe { option_value.as_mut_ptr().add(layout.payload_offset as usize) };
+
+    // Write the payload value.
+    unsafe {
+        write_value_to_ptr(&mut ctx.rt, payload, payload_ptr)?;
+    }
+
+    Ok(option_value)
+}
+
+/// Helper function to create an Option::None value.
+fn create_option_none(
+    ctx: &mut InterpContext<'_>,
+    option_tydesc: *const datalove_rtdt::TyDesc,
+) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
+    if option_tydesc.is_null() {
+        return Err(InterpError::RuntimeError(
+            "Cannot create Option value: missing type descriptor".to_string(),
+        ));
+    }
+
+    let mut option_value = unsafe { Value::alloc_option(&mut ctx.rt, option_tydesc) };
+
+    // Write None tag.
+    unsafe {
+        *(option_value.as_mut_ptr()) = rtdt::OptionTag::None as u8;
+    }
+
+    Ok(option_value)
+}
+
+/// Helper function to create a Result::Ok value.
+fn create_result_ok(
+    ctx: &mut InterpContext<'_>,
+    payload: Value,
+    result_tydesc: *const datalove_rtdt::TyDesc,
+) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
+    if result_tydesc.is_null() {
+        return Err(InterpError::RuntimeError(
+            "Cannot create Result value: missing type descriptor".to_string(),
+        ));
+    }
+
+    let mut result_value = unsafe { Value::alloc_result(&mut ctx.rt, result_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc) };
+
+    // Write Ok tag.
+    unsafe {
+        *(result_value.as_mut_ptr()) = rtdt::ResultTag::Ok as u8;
+    }
+
+    // Write payload at the correct offset.
+    let payload_ptr = unsafe { result_value.as_mut_ptr().add(layout.payload_offset as usize) };
+
+    // Write the payload value.
+    unsafe {
+        write_value_to_ptr(&mut ctx.rt, payload, payload_ptr)?;
+    }
+
+    Ok(result_value)
+}
+
+/// Helper function to create a Result::Err value with an overflow error message.
+fn create_result_overflow_err(
+    ctx: &mut InterpContext<'_>,
+    result_tydesc: *const datalove_rtdt::TyDesc,
+) -> InterpResult {
+    create_result_err_with_string(ctx, result_tydesc, "overflow")
+}
+
+/// Helper function to create a Result::Err value with a division by zero error message.
+fn create_result_divzero_err(
+    ctx: &mut InterpContext<'_>,
+    result_tydesc: *const datalove_rtdt::TyDesc,
+) -> InterpResult {
+    create_result_err_with_string(ctx, result_tydesc, "division by zero")
+}
+
+/// Helper function to create a Result::Err value with a string error message.
+fn create_result_err_with_string(
+    ctx: &mut InterpContext<'_>,
+    result_tydesc: *const datalove_rtdt::TyDesc,
+    error_msg: &str,
+) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
+    if result_tydesc.is_null() {
+        return Err(InterpError::RuntimeError(
+            "Cannot create Result value: missing type descriptor".to_string(),
+        ));
+    }
+
+    let mut result_value = unsafe { Value::alloc_result(&mut ctx.rt, result_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc) };
+
+    // Write Err tag.
+    unsafe {
+        *(result_value.as_mut_ptr()) = rtdt::ResultTag::Err as u8;
+    }
+
+    // Create a String value for the error message.
+    let string_tydesc = ctx.tydesc_table.get_or_create(
+        &crate::datalit::tycheck::Type::String
+    );
+
+    let error_string = unsafe {
+        // alloc_string already initializes the String struct properly.
+        let mut string_value = Value::alloc_string(&mut ctx.rt, string_tydesc);
+
+        let rt_handle = ctx.rt.as_mut() as *mut _ as datalove_rt::LocalRtHandle;
+
+        // Push the error message bytes into the string.
+        let status = datalove_rt::dtlv_rti_string_push_bytes_local(
+            rt_handle,
+            string_value.as_mut_ptr(),
+            string_tydesc,
+            error_msg.as_ptr(),
+            error_msg.len() as u32,
+        );
+        if status != datalove_rt::RtStatus::Ok {
+            return Err(InterpError::RuntimeError(
+                "Failed to push error message to string".to_string(),
+            ));
+        }
+        string_value
+    };
+
+    // Write Error payload (which is a Data structure with tydesc + value_ptr).
+    let payload_ptr = unsafe { result_value.as_mut_ptr().add(layout.payload_offset as usize) };
+    let error_ptr = payload_ptr as *mut rtdt::Error;
+
+    let (inner_tydesc, inner_ptr) = match error_string {
+        Value::String { ptr, tydesc } => (tydesc, ptr as *const u8),
+        _ => unreachable!(),
+    };
+
+    unsafe {
+        std::ptr::write(
+            error_ptr as *mut rtdt::Data,
+            rtdt::Data::from_pointers(inner_tydesc, inner_ptr)
+        );
+    }
+
+    // Transfer ownership - the error_string is now owned by the Result.
+    std::mem::forget(error_string);
+
+    Ok(result_value)
+}
+
+/// Helper function to write a Value to a memory location.
+unsafe fn write_value_to_ptr(
+    rt: &mut datalove_rt::rt_local::RtLocal,
+    value: Value,
+    dest_ptr: *mut u8,
+) -> Result<(), InterpError> {
+    match value {
+        Value::Bool(b) => {
+            unsafe { *(dest_ptr as *mut bool) = b; }
+        }
+        Value::U32(u) => {
+            unsafe { *(dest_ptr as *mut u32) = u; }
+        }
+        Value::F32(f) => {
+            unsafe { *(dest_ptr as *mut f32) = f; }
+        }
+        Value::Int { ptr, tydesc } => {
+            // Clone the Int value to the destination.
+            let rt_handle = rt as *mut _ as datalove_rt::LocalRtHandle;
+            let status = unsafe { datalove_rt::clone::clone_value(
+                rt_handle,
+                ptr as *const u8,
+                tydesc,
+                dest_ptr,
+            ) };
+            if status != datalove_rt::RtStatus::Ok {
+                return Err(InterpError::RuntimeError(
+                    "Failed to clone Int value".to_string(),
+                ));
+            }
+        }
+        Value::String { ptr, tydesc } => {
+            let rt_handle = rt as *mut _ as datalove_rt::LocalRtHandle;
+            let status = unsafe { datalove_rt::clone::clone_value(
+                rt_handle,
+                ptr as *const u8,
+                tydesc,
+                dest_ptr,
+            ) };
+            if status != datalove_rt::RtStatus::Ok {
+                return Err(InterpError::RuntimeError(
+                    "Failed to clone String value".to_string(),
+                ));
+            }
+        }
+        _ => {
+            return Err(InterpError::NotImplemented(
+                format!("Writing {:?} to pointer not yet implemented", value),
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1298,4 +1710,55 @@ mod tests {
             _ => panic!("Expected Tuple values for x and y"),
         }
     }
+}
+
+/// Get the type descriptor for a datafun expression.
+///
+/// This looks up the type in the type table first, and if not found,
+/// tries to synthesize it for literals.
+fn get_expr_tydesc<'db>(ctx: &InterpContext<'db>, expr: ExprFun<'db>) -> *const datalove_rtdt::TyDesc {
+    use datalove_rtdt as rtdt;
+
+    // First try the type table.
+    let tydesc = ctx.type_table.get_datafun_expr_type(expr);
+    if !tydesc.is_null() {
+        return tydesc;
+    }
+
+    // For literals, we can infer the type from the expression kind.
+    match expr.expr(ctx.db) {
+        ExprFunKind::Datalit(datalit_expr) => {
+            // datalit_expr is ExprFull from the datalit AST.
+            ctx.type_table.get_expr_type(datalit_expr)
+        }
+        _ => std::ptr::null(),
+    }
+}
+
+/// Construct an Option<T> type descriptor from an inner type.
+///
+/// Currently hardcoded for u32. Extend as needed for other types.
+fn make_option_tydesc_u32<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    // Get the tydesc for u32.
+    let u32_ty = crate::datalit::tycheck::Type::U32;
+    let u32_tydesc = ctx.tydesc_table.get_or_create(&u32_ty);
+
+    // Construct Option<u32> from it.
+    ctx.tydesc_table.create_option_from_inner_tydesc(u32_tydesc)
+}
+
+/// Construct a Result<T> type descriptor from an inner type.
+///
+/// Currently hardcoded for u32. Extend as needed for other types.
+fn make_result_tydesc_u32<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    // Get the tydesc for u32.
+    let u32_ty = crate::datalit::tycheck::Type::U32;
+    let u32_tydesc = ctx.tydesc_table.get_or_create(&u32_ty);
+
+    // Construct Result<u32> from it.
+    ctx.tydesc_table.create_result_from_inner_tydesc(u32_tydesc)
 }

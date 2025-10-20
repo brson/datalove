@@ -1,0 +1,6 @@
+// Test result negation (-!) with overflow (i32::MIN).
+fun test_neg_result_overflow(a: @i32): !i32
+  ret -!a
+end fun
+
+let output = test_neg_result_overflow(@-2147483648)

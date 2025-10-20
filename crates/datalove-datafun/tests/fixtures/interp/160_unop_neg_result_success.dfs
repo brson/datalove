@@ -1,0 +1,6 @@
+// Test result negation (-!) with successful result.
+fun test_neg_result(a: @i32): !i32
+  ret -!a
+end fun
+
+let output = test_neg_result(@42)

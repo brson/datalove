@@ -46,6 +46,7 @@
 
 ## near future
 
+- don't ever construct tydescs with a tydesc table
 - datafun ast roundtrip
 - type declarations
 - name resolution for named types

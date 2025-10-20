@@ -1,0 +1,6 @@
+// Test result subtraction (-!) with underflow.
+fun test_sub_result_underflow(a: @u32, b: @u32): !u32
+  ret a -! b
+end fun
+
+let output = test_sub_result_underflow(@0, @1)

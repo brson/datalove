@@ -1,0 +1,6 @@
+// Test result addition (+!) with overflow.
+fun test_add_result_overflow(a: @u32, b: @u32): !u32
+  ret a +! b
+end fun
+
+let output = test_add_result_overflow(@4294967295, @1)
