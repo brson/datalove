@@ -198,20 +198,3 @@
 : @error / @error "oops"
 // with type hint
 : @error / @error : int / 1
-
-
-
-
-
-// ## TODO
-
-// subranged ints
-// datetimes
-// bitset
-// table (polars, arrow)
-// graph
-// array
-// multi-dimensional array
-// range (python)?
-// complex?
-// real?

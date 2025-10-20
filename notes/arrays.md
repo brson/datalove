@@ -12,36 +12,372 @@ but shape, layout, and stride are dynamic.
 - stride - rows/columns to skip in a particular view
 
 ```
-: tensor<u32, 2> / tensor [
-  1 2 3,
-  4 5 6
-]
-```
-
-```
 : [|u32, 2|] / [|
   1 2 3,
   4 5 6
 |]
 ```
 
+I think outer hash may be best but currently used for heap sigil.
+Hash suggests matrixes. Could _also_ save this far actual matrix type.
+
 ```
-|[ ]|
+: #[u32, 2]# / #[
+  1 2 3,
+  4 5 6
+]#
+```
 
-|( )|
+Outer percent also good:
 
-|{ }|
+```
+: %[u32, 2]% / %[
+  1 2 3,
+  4 5 6
+]%
+```
 
-|< >|
 
-[| |]
+## Bracket-modifier combination examples
 
-(| |)
+### `|[ ]|` (pipe prefix)
 
-{| |}
+```
+: |[u32, 2]| / |[
+  1 2 3,
+  4 5 6
+]|
 
-<| |>
+fun foo(a: !u32): !u32
+  if a |val: |[u32, 2]|| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
 
+### `[| |]` (pipe postfix)
+
+```
+: [|u32, 2|] / [|
+  1 2 3,
+  4 5 6
+|]
+
+fun foo(a: !u32): !u32
+  if a |val: [|u32, 2|]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `#[ ]#` (hash prefix)
+
+```
+: #[u32, 2]# / #[
+  1 2 3,
+  4 5 6
+]#
+
+fun foo(a: !u32): !u32
+  if a |val: #[u32, 2]#| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `[# #]` (hash postfix)
+
+```
+: [#u32, 2#] / [#
+  1 2 3,
+  4 5 6
+#]
+
+fun foo(a: !u32): !u32
+  if a |val: [#u32, 2#]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `:[ ]:` (colon prefix)
+
+```
+: :[u32, 2]: / :[
+  1 2 3,
+  4 5 6
+]:
+
+fun foo(a: !u32): !u32
+  if a |val: :[u32, 2]:| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `[: :]` (colon postfix)
+
+```
+: [:u32, 2:] / [:
+  1 2 3,
+  4 5 6
+:]
+
+fun foo(a: !u32): !u32
+  if a |val: [:u32, 2:]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `~[ ]~` (tilde prefix)
+
+```
+: ~[u32, 2]~ / ~[
+  1 2 3,
+  4 5 6
+]~
+
+fun foo(a: !u32): !u32
+  if a |val: ~[u32, 2]~| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `[~ ~]` (tilde postfix)
+
+```
+: [~u32, 2~] / [~
+  1 2 3,
+  4 5 6
+~]
+
+fun foo(a: !u32): !u32
+  if a |val: [~u32, 2~]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `@[ ]@` (at prefix)
+
+```
+: @[u32, 2]@ / @[
+  1 2 3,
+  4 5 6
+]@
+
+fun foo(a: !u32): !u32
+  if a |val: @[u32, 2]@| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `[@ @]` (at postfix)
+
+```
+: [@u32, 2@] / [@
+  1 2 3,
+  4 5 6
+@]
+
+fun foo(a: !u32): !u32
+  if a |val: [@u32, 2@]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `*[ ]*` (star prefix)
+
+```
+: *[u32, 2]* / *[
+  1 2 3,
+  4 5 6
+]*
+
+fun foo(a: !u32): !u32
+  if a |val: *[u32, 2]*| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `[* *]` (star postfix)
+
+```
+: [*u32, 2*] / [*
+  1 2 3,
+  4 5 6
+*]
+
+fun foo(a: !u32): !u32
+  if a |val: [*u32, 2*]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `%[ ]%` (percent prefix)
+
+```
+: %[u32, 2]% / %[
+  1 2 3,
+  4 5 6
+]%
+
+fun foo(a: !u32): !u32
+  if a |val: %[u32, 2]%| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `[% %]` (percent postfix)
+
+```
+: [%u32, 2%] / [%
+  1 2 3,
+  4 5 6
+%]
+
+fun foo(a: !u32): !u32
+  if a |val: [%u32, 2%]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `=[ ]=` (equals prefix)
+
+```
+: =[u32, 2]= / =[
+  1 2 3,
+  4 5 6
+]=
+
+fun foo(a: !u32): !u32
+  if a |val: =[u32, 2]=| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `[= =]` (equals postfix)
+
+```
+: [=u32, 2=] / [=
+  1 2 3,
+  4 5 6
+=]
+
+fun foo(a: !u32): !u32
+  if a |val: [=u32, 2=]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `.[ ].` (dot prefix)
+
+```
+: .[u32, 2]. / .[
+  1 2 3,
+  4 5 6
+].
+
+fun foo(a: !u32): !u32
+  if a |val: .[u32, 2].| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `[. .]` (dot postfix)
+
+```
+: [.u32, 2.] / [.
+  1 2 3,
+  4 5 6
+.]
+
+fun foo(a: !u32): !u32
+  if a |val: [.u32, 2.]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `^[ ]^` (caret prefix)
+
+```
+: ^[u32, 2]^ / ^[
+  1 2 3,
+  4 5 6
+]^
+
+fun foo(a: !u32): !u32
+  if a |val: ^[u32, 2]^| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
+```
+
+### `[^ ^]` (caret postfix)
+
+```
+: [^u32, 2^] / [^
+  1 2 3,
+  4 5 6
+^]
+
+fun foo(a: !u32): !u32
+  if a |val: [^u32, 2^]| {
+    ret val
+  } else |err| {
+    ret err
+  }
+end fun
 ```
 
 
