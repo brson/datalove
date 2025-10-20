@@ -841,3 +841,272 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
 
     Ok(())
 }
+
+// Map destroy tests
+
+#[test]
+fn test_destroy_map_empty() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked = compile(&db, ": @map<@u32, @u32> / @map{}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_clone_local(
+            rt,
+            inst.ptr,
+            inst.tydesc,
+            cloned_buffer.as_mut_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
+    assert!(map_val.root.is_null());
+    assert_eq!(map_val.len, 0);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+#[test]
+fn test_destroy_map_primitives() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked = compile(&db, "@map{@10 = @100, @20 = @200, @30 = @300}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_clone_local(
+            rt,
+            inst.ptr,
+            inst.tydesc,
+            cloned_buffer.as_mut_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
+    assert!(map_val.root.is_null());
+    assert_eq!(map_val.len, 0);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+#[test]
+fn test_destroy_map_strings() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked = compile(&db, r#"@map{@"key1" = @"val1", @"key2" = @"val2"}"#)?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_clone_local(
+            rt,
+            inst.ptr,
+            inst.tydesc,
+            cloned_buffer.as_mut_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
+    assert!(map_val.root.is_null());
+    assert_eq!(map_val.len, 0);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+#[test]
+fn test_destroy_map_tuples() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked = compile(&db, "@map{@(@1, @2) = @(@3, @4), @(@5, @6) = @(@7, @8)}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_clone_local(
+            rt,
+            inst.ptr,
+            inst.tydesc,
+            cloned_buffer.as_mut_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
+    assert!(map_val.root.is_null());
+    assert_eq!(map_val.len, 0);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+#[test]
+fn test_destroy_map_nested() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked = compile(&db, r#"@map{@"outer" = @[@"inner1", @"inner2"]}"#)?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_clone_local(
+            rt,
+            inst.ptr,
+            inst.tydesc,
+            cloned_buffer.as_mut_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
+    assert!(map_val.root.is_null());
+    assert_eq!(map_val.len, 0);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+#[test]
+fn test_destroy_map_large() -> AnyResult<()> {
+    let db = Database::default();
+    let mut map_literal = String::from("@map{");
+    for i in 0..10 {
+        if i > 0 {
+            map_literal.push_str(", ");
+        }
+        map_literal.push_str(&format!("@{} = @{}", i, i * 10));
+    }
+    map_literal.push('}');
+
+    let typechecked = compile(&db, &map_literal)?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_clone_local(
+            rt,
+            inst.ptr,
+            inst.tydesc,
+            cloned_buffer.as_mut_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
+    assert!(map_val.root.is_null());
+    assert_eq!(map_val.len, 0);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}

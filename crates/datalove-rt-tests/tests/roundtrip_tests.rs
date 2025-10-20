@@ -89,6 +89,28 @@ fn types_equal<'db>(
             heap1 == heap2 && types_equal(db, inner1.ty(db), inner2.ty(db))
         }
 
+        (Type::Map(m1), Type::Map(m2)) => {
+            let key1 = m1.key_type(db);
+            let key2 = m2.key_type(db);
+            let value1 = m1.value_type(db);
+            let value2 = m2.value_type(db);
+            let key_heap1 = std::mem::discriminant(&key1.heap(db));
+            let key_heap2 = std::mem::discriminant(&key2.heap(db));
+            let value_heap1 = std::mem::discriminant(&value1.heap(db));
+            let value_heap2 = std::mem::discriminant(&value2.heap(db));
+            key_heap1 == key_heap2 && value_heap1 == value_heap2
+                && types_equal(db, key1.ty(db), key2.ty(db))
+                && types_equal(db, value1.ty(db), value2.ty(db))
+        }
+
+        (Type::Set(s1), Type::Set(s2)) => {
+            let elem1 = s1.element_type(db);
+            let elem2 = s2.element_type(db);
+            let heap1 = std::mem::discriminant(&elem1.heap(db));
+            let heap2 = std::mem::discriminant(&elem2.heap(db));
+            heap1 == heap2 && types_equal(db, elem1.ty(db), elem2.ty(db))
+        }
+
         _ => {
             // For other types or mismatched variants, use standard equality.
             type1 == type2

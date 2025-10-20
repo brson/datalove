@@ -386,27 +386,100 @@ unsafe fn pretty_list(
 
 unsafe fn pretty_map(
     rt: LocalRtHandle,
-    _value_ref: *const u8,
-    _tydesc: rtdt::TyDescRef,
+    value_ref: *const u8,
+    tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
-    // TODO: Implement map pretty printing.
     unsafe {
-        push_str(rt, string_mut, string_tydesc, b"@map {}")
+        let map = &*(value_ref as *const rtdt::Map);
+        let key_ty = tydesc.map_key_ty();
+        let value_ty = tydesc.map_value_ty();
+
+        push_str(rt, string_mut, string_tydesc, b"@map {")?;
+
+        if !map.root.is_null() && map.len > 0 {
+            let key_size = key_ty.size() as usize;
+            let value_size = value_ty.size() as usize;
+
+            let mut current_leaf = map.root as *mut rtdt::MapNode;
+            let mut entry_count = 0u32;
+
+            while !current_leaf.is_null() {
+                let node_len = (*current_leaf).len;
+
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_ty.as_ptr(), value_ty.as_ptr());
+                let keys_array = (current_leaf as *const u8).add(layout.keys_offset as usize);
+                let values_array = (current_leaf as *const u8).add(layout.values_offset as usize);
+
+                for i in 0..node_len {
+                    if entry_count > 0 {
+                        push_str(rt, string_mut, string_tydesc, b", ")?;
+                    }
+
+                    let key_ptr = keys_array.add(i as usize * key_size);
+                    let value_ptr = values_array.add(i as usize * value_size);
+
+                    pretty_value(rt, key_ptr, key_ty, string_mut, string_tydesc)?;
+                    push_str(rt, string_mut, string_tydesc, b" = ")?;
+                    pretty_value(rt, value_ptr, value_ty, string_mut, string_tydesc)?;
+
+                    entry_count += 1;
+                }
+
+                // Move to next leaf.
+                let next_leaf_ptr = (current_leaf as *const u8).add(layout.next_leaf_offset as usize) as *const *mut rtdt::MapNode;
+                current_leaf = *next_leaf_ptr;
+            }
+        }
+
+        push_str(rt, string_mut, string_tydesc, b"}")
     }
 }
 
 unsafe fn pretty_set(
     rt: LocalRtHandle,
-    _value_ref: *const u8,
-    _tydesc: rtdt::TyDescRef,
+    value_ref: *const u8,
+    tydesc: rtdt::TyDescRef,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
-    // TODO: Implement set pretty printing.
     unsafe {
-        push_str(rt, string_mut, string_tydesc, b"@set {}")
+        let set = &*(value_ref as *const rtdt::Set);
+        let elem_ty = tydesc.set_element_ty();
+
+        push_str(rt, string_mut, string_tydesc, b"@set {")?;
+
+        if !set.root.is_null() && set.len > 0 {
+            let elem_size = elem_ty.size() as usize;
+
+            let mut current_leaf = set.root as *mut rtdt::SetNode;
+            let mut elem_count = 0u32;
+
+            while !current_leaf.is_null() {
+                let node_len = (*current_leaf).len;
+
+                let layout = rtdt::layout::compute_set_leaf_node_layout(elem_ty.as_ptr());
+                let keys_array = (current_leaf as *const u8).add(layout.keys_offset as usize);
+
+                for i in 0..node_len {
+                    if elem_count > 0 {
+                        push_str(rt, string_mut, string_tydesc, b", ")?;
+                    }
+
+                    let elem_ptr = keys_array.add(i as usize * elem_size);
+                    pretty_value(rt, elem_ptr, elem_ty, string_mut, string_tydesc)?;
+
+                    elem_count += 1;
+                }
+
+                // Move to next leaf.
+                let next_leaf_ptr = (current_leaf as *const u8).add(layout.next_leaf_offset as usize) as *const *mut rtdt::SetNode;
+                current_leaf = *next_leaf_ptr;
+            }
+        }
+
+        push_str(rt, string_mut, string_tydesc, b"}")
     }
 }
 

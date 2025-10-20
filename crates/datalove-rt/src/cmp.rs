@@ -461,11 +461,17 @@ unsafe fn eq_value(
                     }
                     rtdt::ResultTag::Err => {
                         // Compare Error values.
-                        // Error is a dynamic type with primary and secondary fields.
-                        // For now, use bitwise comparison of Error struct.
-                        let err_a = std::ptr::read(payload_a as *const (u64, u64));
-                        let err_b = std::ptr::read(payload_b as *const (u64, u64));
-                        err_a == err_b
+                        // Error has same structure as Data: (tydesc, value_ptr).
+                        let err_a = &*(payload_a as *const rtdt::Error);
+                        let err_b = &*(payload_b as *const rtdt::Error);
+                        let tydesc_a = err_a.tydesc();
+                        let tydesc_b = err_b.tydesc();
+                        if tydesc_a != tydesc_b {
+                            return false;
+                        }
+                        let value_a = err_a.value_ptr();
+                        let value_b = err_b.value_ptr();
+                        eq_value(value_a, value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
                     }
                 }
             }
@@ -912,14 +918,22 @@ unsafe fn cmp_value(
                             }
                             rtdt::ResultTag::Err => {
                                 // Compare Error values.
-                                // For now, use bitwise comparison.
-                                let err_a = std::ptr::read(payload_a as *const (u64, u64));
-                                let err_b = std::ptr::read(payload_b as *const (u64, u64));
-                                match err_a.cmp(&err_b) {
-                                    std::cmp::Ordering::Less => crate::RtOrdering::Less,
-                                    std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
-                                    std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
+                                // Error has same structure as Data: (tydesc, value_ptr).
+                                let err_a = &*(payload_a as *const rtdt::Error);
+                                let err_b = &*(payload_b as *const rtdt::Error);
+                                let tydesc_a = err_a.tydesc();
+                                let tydesc_b = err_b.tydesc();
+                                if tydesc_a != tydesc_b {
+                                    // Different error types - compare tydesc pointers.
+                                    return match (tydesc_a as usize).cmp(&(tydesc_b as usize)) {
+                                        std::cmp::Ordering::Less => crate::RtOrdering::Less,
+                                        std::cmp::Ordering::Greater => crate::RtOrdering::Greater,
+                                        std::cmp::Ordering::Equal => crate::RtOrdering::Equal,
+                                    };
                                 }
+                                let value_a = err_a.value_ptr();
+                                let value_b = err_b.value_ptr();
+                                cmp_value(value_a, value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
                             }
                         }
                     }
@@ -1059,14 +1073,31 @@ unsafe fn eq_map_trees(
         let mut len_b = read_map_node_len(leaf_b);
 
         loop {
-            // If both exhausted their current leaves, move to next.
+            // Check if we've exhausted leaves.
+            let exhausted_a = idx_a >= len_a && {
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+                (*next_ptr).is_null()
+            };
+
+            let exhausted_b = idx_b >= len_b && {
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+                (*next_ptr).is_null()
+            };
+
+            if exhausted_a && exhausted_b {
+                return true;
+            }
+            if exhausted_a || exhausted_b {
+                return false;
+            }
+
+            // Move to next leaf if needed.
             if idx_a >= len_a {
                 let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_a = *next_ptr;
-                if leaf_a.is_null() {
-                    break;
-                }
                 idx_a = 0;
                 len_a = read_map_node_len(leaf_a);
             }
@@ -1075,9 +1106,6 @@ unsafe fn eq_map_trees(
                 let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_b = *next_ptr;
-                if leaf_b.is_null() {
-                    break;
-                }
                 idx_b = 0;
                 len_b = read_map_node_len(leaf_b);
             }
@@ -1108,9 +1136,6 @@ unsafe fn eq_map_trees(
             idx_a += 1;
             idx_b += 1;
         }
-
-        // Both should be exhausted at the same time.
-        leaf_a.is_null() && leaf_b.is_null()
     }
 }
 
@@ -1134,14 +1159,31 @@ unsafe fn eq_set_trees(
         let mut len_b = read_set_node_len(leaf_b);
 
         loop {
-            // If both exhausted their current leaves, move to next.
+            // Check if we've exhausted leaves.
+            let exhausted_a = idx_a >= len_a && {
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+                (*next_ptr).is_null()
+            };
+
+            let exhausted_b = idx_b >= len_b && {
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+                (*next_ptr).is_null()
+            };
+
+            if exhausted_a && exhausted_b {
+                return true;
+            }
+            if exhausted_a || exhausted_b {
+                return false;
+            }
+
+            // Move to next leaf if needed.
             if idx_a >= len_a {
                 let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_a = *next_ptr;
-                if leaf_a.is_null() {
-                    break;
-                }
                 idx_a = 0;
                 len_a = read_set_node_len(leaf_a);
             }
@@ -1150,9 +1192,6 @@ unsafe fn eq_set_trees(
                 let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_b = *next_ptr;
-                if leaf_b.is_null() {
-                    break;
-                }
                 idx_b = 0;
                 len_b = read_set_node_len(leaf_b);
             }
@@ -1174,9 +1213,6 @@ unsafe fn eq_set_trees(
             idx_a += 1;
             idx_b += 1;
         }
-
-        // Both should be exhausted at the same time.
-        leaf_a.is_null() && leaf_b.is_null()
     }
 }
 
