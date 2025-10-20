@@ -1057,19 +1057,21 @@ fn eval_function_call<'db>(
                     // Extract the inner value's tydesc and ptr.
                     // We need to write a Data/Error structure containing (tydesc, value_ptr).
                     let (inner_tydesc, inner_ptr): (*const datalove_rtdt::TyDesc, *const u8) = match &error_value {
-                        Value::Bool(b) => {
-                            // For inline values, we need to allocate them on the heap first.
-                            // This is complex, so for now we'll leave it unimplemented.
-                            result = Err(InterpError::NotImplemented(
-                                "Error value handling for inline types not yet implemented".to_string()
-                            ));
-                            break;
+                        Value::Bool(_) => {
+                            // For inline values, allocate on heap to get a pointer.
+                            let tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::Bool);
+                            let ptr = unsafe { alloc_scalar_value(&mut ctx.rt, &error_value, tydesc) };
+                            (tydesc, ptr)
                         }
-                        Value::U32(_) | Value::F32(_) => {
-                            result = Err(InterpError::NotImplemented(
-                                "Error value handling for inline types not yet implemented".to_string()
-                            ));
-                            break;
+                        Value::U32(_) => {
+                            let tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32);
+                            let ptr = unsafe { alloc_scalar_value(&mut ctx.rt, &error_value, tydesc) };
+                            (tydesc, ptr)
+                        }
+                        Value::F32(_) => {
+                            let tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::F32);
+                            let ptr = unsafe { alloc_scalar_value(&mut ctx.rt, &error_value, tydesc) };
+                            (tydesc, ptr)
                         }
                         Value::Int { ptr, tydesc } => (*tydesc, *ptr as *const u8),
                         Value::String { ptr, tydesc } => (*tydesc, *ptr as *const u8),
@@ -1526,6 +1528,41 @@ fn create_result_err_with_string(
     std::mem::forget(error_string);
 
     Ok(result_value)
+}
+
+/// Allocate a scalar value on the heap and return its pointer.
+///
+/// This is used for inline types (Bool, U32, F32, etc.) that need to be
+/// stored in Error structures which expect heap pointers.
+unsafe fn alloc_scalar_value(
+    rt: &mut datalove_rt::rt_local::RtLocal,
+    value: &Value,
+    tydesc: *const datalove_rtdt::TyDesc,
+) -> *const u8 {
+    use datalove_rtdt as rtdt;
+
+    let size = unsafe { (*tydesc).size };
+    let align = unsafe { (*tydesc).align };
+    let ptr = unsafe { rt.alloc.alloc(size, align, 1) };
+
+    // Write the scalar value to the allocated memory.
+    match value {
+        Value::Bool(b) => {
+            unsafe { *(ptr as *mut bool) = *b; }
+        }
+        Value::U32(u) => {
+            unsafe { *(ptr as *mut u32) = *u; }
+        }
+        Value::F32(f) => {
+            unsafe { *(ptr as *mut f32) = *f; }
+        }
+        _ => {
+            // This should never happen - only called for inline types.
+            panic!("alloc_scalar_value called with non-scalar value");
+        }
+    }
+
+    ptr as *const u8
 }
 
 /// Helper function to write a Value to a memory location.
