@@ -417,6 +417,52 @@ All early-return arithmetic operators have been fully implemented with comprehen
 
 **Status**: Implementation complete but needs refinement for tydesc deduplication
 
+---
+
+### Null Type Descriptor Pattern in Checked Operations
+
+**Context**: The checked arithmetic operations (`eval_add_checked`, `eval_sub_checked`, `eval_mul_checked`, `eval_div_checked`) all receive an `inner_tydesc` parameter representing the type of the operands. This parameter can be null in certain cases.
+
+**Why Can `inner_tydesc` Be Null?**
+
+The `inner_tydesc` comes from `get_expr_tydesc()` (eval_datafun.rs:1956-1973), which:
+1. First tries to look up the type in the type table via `ctx.type_table.get_datafun_expr_type(expr)`
+2. If that returns null, tries to infer the type from literals
+3. If neither works, returns `std::ptr::null()`
+
+The type table can return null when:
+- The expression index is out of bounds in the `datafun_expr_types` vector
+- The expression isn't a datalit literal
+- The expression involves imported functions or other constructs that weren't visited during type table construction
+
+**The Backwards Compatibility Fallback**
+
+Pattern seen in eval_datafun.rs:432, 509, 586, 648:
+```rust
+// Default to U32 if type descriptor is null (for backward compatibility).
+let tytag = if inner_tydesc.is_null() {
+    rtdt::TyTag::U32
+} else {
+    unsafe { (*inner_tydesc).type_tag }
+};
+```
+
+This defensive programming pattern:
+- Prevents crashes when type information is incomplete
+- Assumes U32 as a safe default type when the actual type is unknown
+- Maintains backwards compatibility with code/tests that may not have properly populated the type table
+
+**The Deeper Issue**
+
+From comment in `eval_binop` (eval_datafun.rs:219-222):
+> NOTE: We can't get this from the type table because BinOp types aren't stored there (to avoid salsa context issues). Instead, we construct it on-demand from the operand type.
+
+The system needs the operand's type to construct `Result<T>` or `Option<T>` types on-demand, but the type table doesn't always have this information (particularly for complex expressions or imported functions).
+
+**Summary**: This null-defaulting pattern is a workaround for incomplete type tracking in the interpreter, allowing it to continue working even when full type information isn't available. The U32 default is arbitrary but safe for the current test suite.
+
+---
+
 **Refactoring Plan for Function Return Coercion** (2025-10-19)
 
 The recommended approach to fix function return coercion:
