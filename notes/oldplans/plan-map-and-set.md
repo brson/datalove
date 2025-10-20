@@ -316,31 +316,43 @@ Sets:
 
 **Memory Safety Checkpoint:** Run `just test-san-address -p datalove-rt-tests` after completing Phase 5 tests. [ ]
 
-### Phase 6: Datalit Test Coverage
+### Phase 6: Datalit Test Coverage - [x] COMPLETED (Already Done)
 
-**tycheck_tests** - Add fixtures to crates/datalove-datalit/tests/fixtures/tycheck/:
-- XX_map_valid.dlt
-- XX_map_nested.dlt
-- XX_map_invalid_key_type.dlt (error case)
-- XX_set_valid.dlt
-- XX_set_nested.dlt
+**tycheck_tests** - Fixtures already exist: [x] COMPLETED
 
-Verify existing tests still pass:
-- parser_tests (already has 6 map/set fixtures)
-- pretty_tests (already has 7 map/set fixtures)
-- roundtrip_tests (already has 6 map/set fixtures)
+Found 22 existing map/set test fixtures:
+- Maps: 44-47_map_*.dlt, bare_map.dlt, no_sigil_map.dlt, global_no_sigil_map.dlt, no_sigil_nested_map_list.dlt
+- Sets: 48-52_set_*.dlt, bare_set.dlt, no_sigil_set.dlt
+- Error cases: err_map_01-03, err_set_01-02 (3 map + 2 set error tests)
 
-### Phase 7: Datafun Test Coverage
+Result: All 125 tycheck tests pass
 
-**interp_tests** - Add fixtures to crates/datalove-datafun/tests/fixtures/interp/:
-- XX_map_insert_get.dfs (if map operations are exposed)
-- XX_map_operations.dfs
-- XX_set_insert_contains.dfs (if set operations are exposed)
-- XX_set_operations.dfs
+Verified existing tests still pass:
+- parser_tests (already has 6 map/set fixtures) [x]
+- pretty_tests (already has 7 map/set fixtures) [x]
+- roundtrip_tests (already has 6 map/set fixtures) [x]
 
-Verify existing tests:
-- parser_tests (already has 3 fixtures)
-- tycheck_tests (already has 2 fixtures)
+### Phase 7: Datafun Test Coverage - [x] COMPLETED
+
+**interp_tests** - Add fixtures to crates/datalove-datafun/tests/fixtures/interp/: [x] COMPLETED
+
+Added 8 new test fixtures:
+- 162_variable_ref_map.dfs - Map in variable reference [x]
+- 163_variable_ref_set.dfs - Set in variable reference [x]
+- 166_map_string_keys.dfs - Map with string keys [x]
+- 167_set_strings.dfs - Set with string elements [x]
+- 168_nested_map_in_tuple.dfs - Map nested in tuple [x]
+- 169_nested_set_in_tuple.dfs - Set nested in tuple [x]
+- 170_nested_map_in_list.dfs - Map nested in list [x]
+- 171_nested_set_in_list.dfs - Set nested in list [x]
+
+Note: Empty map/set tests (164, 165) were skipped due to type annotation syntax issues in the datafun parser.
+
+Result: All 133 interp tests pass (125 original + 8 new)
+
+Verified existing tests:
+- parser_tests (already has 3 fixtures) [x]
+- tycheck_tests (already has 2 fixtures) [x]
 
 ### Phase 8: Repl Test Coverage
 
@@ -374,13 +386,13 @@ Runtime tests:
 Datalit tests:
 - [x] datalit parser_tests (6 fixtures - HAS COVERAGE)
 - [x] datalit pretty_tests (7 fixtures - HAS COVERAGE)
-- [ ] datalit tycheck_tests (NEEDS dedicated fixtures)
+- [x] datalit tycheck_tests (22 map/set fixtures - HAS COVERAGE, 125 tests pass)
 - [x] datalit roundtrip_tests (6 fixtures - HAS COVERAGE)
 
 Datafun tests:
 - [x] datafun parser_tests (3 fixtures - HAS COVERAGE)
 - [x] datafun tycheck_tests (2 fixtures - HAS COVERAGE)
-- [ ] datafun interp_tests (2 fixtures - NEEDS MORE)
+- [x] datafun interp_tests (10 fixtures total - HAS COVERAGE: 2 original + 8 new, 133 tests pass)
 
 Repl tests:
 - [ ] repl engine_tests (NEEDS fixtures)
