@@ -1438,26 +1438,6 @@ fn collect_module_exports<'db>(
     functions
 }
 
-/// Public wrapper to synthesize type for a binary operation.
-/// This is used by the type table builder.
-pub fn synthesize_binop_type<'db>(
-    db: &'db dyn crate::Db,
-    binop: ExprBinOp<'db>,
-) -> Result<TypeAndHeap<'db>, TypeError> {
-    let mut ctx = TypeContext::new(db);
-    synthesize_binop(&mut ctx, binop)
-}
-
-/// Public wrapper to synthesize type for a unary operation.
-/// This is used by the type table builder.
-pub fn synthesize_unaryop_type<'db>(
-    db: &'db dyn crate::Db,
-    unaryop: ExprUnaryOp<'db>,
-) -> Result<TypeAndHeap<'db>, TypeError> {
-    let mut ctx = TypeContext::new(db);
-    synthesize_unaryop(&mut ctx, unaryop)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
