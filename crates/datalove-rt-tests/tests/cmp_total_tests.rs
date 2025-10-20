@@ -139,3 +139,332 @@ fn test_cmp_total_tuple_equal() -> AnyResult<()> {
     assert!(matches!(result, datalove_rt::RtOrdering::Equal));
     Ok(())
 }
+
+// Map comparison tests
+
+#[test]
+fn test_cmp_total_map_empty_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @map<@u32, @u32> / @map{}")?;
+    let typechecked_b = compile(&db, ": @map<@u32, @u32> / @map{}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_map_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@map{@10 = @100, @20 = @200}")?;
+    let typechecked_b = compile(&db, "@map{@10 = @100, @20 = @200}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_map_empty_vs_nonempty() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @map<@u32, @u32> / @map{}")?;
+    let typechecked_b = compile(&db, "@map{@10 = @100}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_map_less_by_key() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@map{@10 = @100, @20 = @200}")?;
+    let typechecked_b = compile(&db, "@map{@10 = @100, @30 = @300}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_map_less_by_value() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@map{@10 = @100, @20 = @200}")?;
+    let typechecked_b = compile(&db, "@map{@10 = @100, @20 = @999}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_map_less_by_length() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@map{@10 = @100}")?;
+    let typechecked_b = compile(&db, "@map{@10 = @100, @20 = @200}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_map_greater_by_key() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@map{@10 = @100, @30 = @300}")?;
+    let typechecked_b = compile(&db, "@map{@10 = @100, @20 = @200}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Greater));
+    Ok(())
+}
+
+// Set comparison tests
+
+#[test]
+fn test_cmp_total_set_empty_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @set<@u32> / @set{}")?;
+    let typechecked_b = compile(&db, ": @set<@u32> / @set{}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_set_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@set{@10, @20, @30}")?;
+    let typechecked_b = compile(&db, "@set{@10, @20, @30}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_set_empty_vs_nonempty() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, ": @set<@u32> / @set{}")?;
+    let typechecked_b = compile(&db, "@set{@10}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_set_less_by_element() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@set{@10, @20, @30}")?;
+    let typechecked_b = compile(&db, "@set{@10, @20, @40}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_set_less_by_length() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@set{@10}")?;
+    let typechecked_b = compile(&db, "@set{@10, @20}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    Ok(())
+}
+
+#[test]
+fn test_cmp_total_set_greater_by_element() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile(&db, "@set{@10, @20, @40}")?;
+    let typechecked_b = compile(&db, "@set{@10, @20, @30}")?;
+
+    let mut rt = RtLocal::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+
+    let result = unsafe {
+        datalove_rt::dtlv_rti_cmp_total(
+            std::ptr::null_mut(),
+            inst_a.ptr,
+            inst_a.tydesc,
+            inst_b.ptr,
+            inst_b.tydesc,
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::RtOrdering::Greater));
+    Ok(())
+}

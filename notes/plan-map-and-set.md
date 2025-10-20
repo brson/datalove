@@ -246,9 +246,43 @@ Sets:
    - Fix: Extract tydesc and value_ptr from Error structs and use eq_value/cmp_value recursively
    - Result: All 5 Result equality tests now pass (test_eq_result_err_equals, etc.)
 
-**eq_unique_tests.rs** - Add unique equality tests for maps and sets [ ]
+**eq_unique_tests.rs** - Add unique equality tests for maps and sets [x] COMPLETED
 
-**cmp_total_tests.rs** - Add total ordering tests for maps and sets [ ]
+Maps:
+- test_eq_unique_map_empty_equals [x]
+- test_eq_unique_map_equals_same_contents [x]
+- test_eq_unique_map_not_equals_different_keys [x]
+- test_eq_unique_map_not_equals_different_values [x]
+- test_eq_unique_map_not_equals_different_sizes [x]
+
+Sets:
+- test_eq_unique_set_empty_equals [x]
+- test_eq_unique_set_equals_same_contents [x]
+- test_eq_unique_set_not_equals_different_elements [x]
+- test_eq_unique_set_not_equals_different_sizes [x]
+
+Result: All 13 tests pass (4 original + 5 map + 4 set)
+
+**cmp_total_tests.rs** - Add total ordering tests for maps and sets [x] COMPLETED
+
+Maps:
+- test_cmp_total_map_empty_equal [x]
+- test_cmp_total_map_equal [x]
+- test_cmp_total_map_empty_vs_nonempty [x]
+- test_cmp_total_map_less_by_key [x]
+- test_cmp_total_map_less_by_value [x]
+- test_cmp_total_map_less_by_length [x]
+- test_cmp_total_map_greater_by_key [x]
+
+Sets:
+- test_cmp_total_set_empty_equal [x]
+- test_cmp_total_set_equal [x]
+- test_cmp_total_set_empty_vs_nonempty [x]
+- test_cmp_total_set_less_by_element [x]
+- test_cmp_total_set_less_by_length [x]
+- test_cmp_total_set_greater_by_element [x]
+
+Result: All 18 tests pass (5 original + 7 map + 6 set)
 
 **destroy_tests.rs** - Add map destroy tests: [x] COMPLETED
 - test_destroy_map_empty [x]
@@ -330,10 +364,10 @@ Runtime tests:
 - [x] rt-tests btreemap_proptests (18 tests - COMPLETE)
 - [ ] rt-tests btreeset_proptests (NEEDS CREATION)
 - [x] rt-tests clone_tests (5 map + 5 set tests - HAS COVERAGE)
-- [ ] rt-tests eq_unique_tests (NEEDS map/set tests)
+- [x] rt-tests eq_unique_tests (13 tests - HAS COVERAGE, 5 map + 4 set tests)
 - [x] rt-tests eq_tests (9 map/set tests pass, 2 #[ignore] - HAS COVERAGE)
 - [x] rt-tests cmp_tests (HAS map/set coverage)
-- [ ] rt-tests cmp_total_tests (NEEDS map/set tests)
+- [x] rt-tests cmp_total_tests (18 tests - HAS COVERAGE, 7 map + 6 set tests)
 - [x] rt-tests destroy_tests (6 map + 5 set tests - HAS COVERAGE)
 - [x] rt-tests roundtrip_tests (8 map/set fixtures - HAS COVERAGE, all 40 tests pass)
 
