@@ -276,48 +276,90 @@ fn eval_unaryop<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>, unaryop: 
 }
 
 /// Evaluate optional negation.
-fn eval_neg_optional(ctx: &mut InterpContext<'_>, operand: Value, _operand_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+fn eval_neg_optional(ctx: &mut InterpContext<'_>, operand: Value, operand_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
     match operand {
-        // Signed integers support checked negation.
         Value::U32(u) => {
-            let option_tydesc = make_option_tydesc_u32(ctx);
-            // Reinterpret as i32 for signed negation.
-            let val = u as i32;
-            match val.checked_neg() {
-                Some(result) => {
-                    create_option_some(ctx, Value::U32(result as u32), option_tydesc)
+            // Default to I32 if type descriptor is null (for backward compatibility).
+            let (tytag, option_tydesc) = if operand_tydesc.is_null() {
+                (rtdt::TyTag::I32, make_option_tydesc_i32(ctx))
+            } else {
+                // operand_tydesc is Option<T>, extract T
+                let inner_tydesc = unsafe { (*operand_tydesc).type_info.option.inner_tydesc };
+                (unsafe { (*inner_tydesc).type_tag }, operand_tydesc)
+            };
+
+            match tytag {
+                rtdt::TyTag::I8 => {
+                    let a = (u as i32) as i8;
+                    match a.checked_neg() {
+                        Some(result) => create_option_some(ctx, Value::U32((result as i32) as u32), option_tydesc),
+                        None => create_option_none(ctx, option_tydesc),
+                    }
                 }
-                None => {
-                    create_option_none(ctx, option_tydesc)
+                rtdt::TyTag::I16 => {
+                    let a = (u as i32) as i16;
+                    match a.checked_neg() {
+                        Some(result) => create_option_some(ctx, Value::U32((result as i32) as u32), option_tydesc),
+                        None => create_option_none(ctx, option_tydesc),
+                    }
                 }
+                rtdt::TyTag::I32 => {
+                    let a = u as i32;
+                    match a.checked_neg() {
+                        Some(result) => create_option_some(ctx, Value::U32(result as u32), option_tydesc),
+                        None => create_option_none(ctx, option_tydesc),
+                    }
+                }
+                _ => Err(InterpError::TypeError(format!("Unsupported type {:?} for optional negation (only signed integers supported)", tytag))),
             }
         }
-        _ => Err(InterpError::TypeError(
-            "Unsupported type for optional negation".to_string(),
-        )),
+        _ => Err(InterpError::TypeError("Unsupported type for optional negation".to_string())),
     }
 }
 
 /// Evaluate result negation.
-fn eval_neg_result(ctx: &mut InterpContext<'_>, operand: Value, _operand_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+fn eval_neg_result(ctx: &mut InterpContext<'_>, operand: Value, operand_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
     match operand {
-        // Signed integers support checked negation.
         Value::U32(u) => {
-            let result_tydesc = make_result_tydesc_u32(ctx);
-            // Reinterpret as i32 for signed negation.
-            let val = u as i32;
-            match val.checked_neg() {
-                Some(result) => {
-                    create_result_ok(ctx, Value::U32(result as u32), result_tydesc)
+            // Default to I32 if type descriptor is null (for backward compatibility).
+            let (tytag, result_tydesc) = if operand_tydesc.is_null() {
+                (rtdt::TyTag::I32, make_result_tydesc_i32(ctx))
+            } else {
+                // operand_tydesc is Result<T>, extract T
+                let inner_tydesc = unsafe { (*operand_tydesc).type_info.result.ok_tydesc };
+                (unsafe { (*inner_tydesc).type_tag }, operand_tydesc)
+            };
+
+            match tytag {
+                rtdt::TyTag::I8 => {
+                    let a = (u as i32) as i8;
+                    match a.checked_neg() {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
                 }
-                None => {
-                    create_result_overflow_err(ctx, result_tydesc)
+                rtdt::TyTag::I16 => {
+                    let a = (u as i32) as i16;
+                    match a.checked_neg() {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
                 }
+                rtdt::TyTag::I32 => {
+                    let a = u as i32;
+                    match a.checked_neg() {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                _ => Err(InterpError::TypeError(format!("Unsupported type {:?} for result negation (only signed integers supported)", tytag))),
             }
         }
-        _ => Err(InterpError::TypeError(
-            "Unsupported type for result negation".to_string(),
-        )),
+        _ => Err(InterpError::TypeError("Unsupported type for result negation".to_string())),
     }
 }
 
@@ -381,19 +423,74 @@ fn eval_div(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResul
 }
 
 /// Evaluate checked addition.
-fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
     use datalove_rtdt as rtdt;
 
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            let result_tydesc = make_result_tydesc_u32(ctx);
-            match a.checked_add(b) {
-                Some(result) => {
-                    create_result_ok(ctx, Value::U32(result), result_tydesc)
+            // Default to U32 if type descriptor is null (for backward compatibility).
+            let tytag = if inner_tydesc.is_null() {
+                rtdt::TyTag::U32
+            } else {
+                unsafe { (*inner_tydesc).type_tag }
+            };
+
+            match tytag {
+                rtdt::TyTag::U8 => {
+                    let result_tydesc = make_result_tydesc_u8(ctx);
+                    let a = a as u8;
+                    let b = b as u8;
+                    match a.checked_add(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
                 }
-                None => {
-                    create_result_overflow_err(ctx, result_tydesc)
+                rtdt::TyTag::I8 => {
+                    let result_tydesc = make_result_tydesc_i8(ctx);
+                    let a = (a as i32) as i8;
+                    let b = (b as i32) as i8;
+                    match a.checked_add(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
                 }
+                rtdt::TyTag::U16 => {
+                    let result_tydesc = make_result_tydesc_u16(ctx);
+                    let a = a as u16;
+                    let b = b as u16;
+                    match a.checked_add(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::I16 => {
+                    let result_tydesc = make_result_tydesc_i16(ctx);
+                    let a = (a as i32) as i16;
+                    let b = (b as i32) as i16;
+                    match a.checked_add(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::I32 => {
+                    let result_tydesc = make_result_tydesc_i32(ctx);
+                    let a = a as i32;
+                    let b = b as i32;
+                    match a.checked_add(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::U32 => {
+                    let result_tydesc = make_result_tydesc_u32(ctx);
+                    match a.checked_add(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                _ => Err(InterpError::TypeError(
+                    format!("Unsupported type {:?} for checked addition", tytag),
+                )),
             }
         }
         _ => Err(InterpError::TypeError(
@@ -403,17 +500,74 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_
 }
 
 /// Evaluate checked subtraction.
-fn eval_sub_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+fn eval_sub_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            let result_tydesc = make_result_tydesc_u32(ctx);
-            match a.checked_sub(b) {
-                Some(result) => {
-                    create_result_ok(ctx, Value::U32(result), result_tydesc)
+            // Default to U32 if type descriptor is null (for backward compatibility).
+            let tytag = if inner_tydesc.is_null() {
+                rtdt::TyTag::U32
+            } else {
+                unsafe { (*inner_tydesc).type_tag }
+            };
+
+            match tytag {
+                rtdt::TyTag::U8 => {
+                    let result_tydesc = make_result_tydesc_u8(ctx);
+                    let a = a as u8;
+                    let b = b as u8;
+                    match a.checked_sub(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
                 }
-                None => {
-                    create_result_overflow_err(ctx, result_tydesc)
+                rtdt::TyTag::I8 => {
+                    let result_tydesc = make_result_tydesc_i8(ctx);
+                    let a = (a as i32) as i8;
+                    let b = (b as i32) as i8;
+                    match a.checked_sub(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
                 }
+                rtdt::TyTag::U16 => {
+                    let result_tydesc = make_result_tydesc_u16(ctx);
+                    let a = a as u16;
+                    let b = b as u16;
+                    match a.checked_sub(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::I16 => {
+                    let result_tydesc = make_result_tydesc_i16(ctx);
+                    let a = (a as i32) as i16;
+                    let b = (b as i32) as i16;
+                    match a.checked_sub(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::I32 => {
+                    let result_tydesc = make_result_tydesc_i32(ctx);
+                    let a = a as i32;
+                    let b = b as i32;
+                    match a.checked_sub(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::U32 => {
+                    let result_tydesc = make_result_tydesc_u32(ctx);
+                    match a.checked_sub(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                _ => Err(InterpError::TypeError(
+                    format!("Unsupported type {:?} for checked subtraction", tytag),
+                )),
             }
         }
         _ => Err(InterpError::TypeError(
@@ -423,43 +577,126 @@ fn eval_sub_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_
 }
 
 /// Evaluate checked multiplication.
-fn eval_mul_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+fn eval_mul_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            let result_tydesc = make_result_tydesc_u32(ctx);
-            match a.checked_mul(b) {
-                Some(result) => {
-                    create_result_ok(ctx, Value::U32(result), result_tydesc)
+            // Default to U32 if type descriptor is null (for backward compatibility).
+            let tytag = if inner_tydesc.is_null() {
+                rtdt::TyTag::U32
+            } else {
+                unsafe { (*inner_tydesc).type_tag }
+            };
+            match tytag {
+                rtdt::TyTag::U8 => {
+                    let result_tydesc = make_result_tydesc_u8(ctx);
+                    match (a as u8).checked_mul(b as u8) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
                 }
-                None => {
-                    create_result_overflow_err(ctx, result_tydesc)
+                rtdt::TyTag::I8 => {
+                    let result_tydesc = make_result_tydesc_i8(ctx);
+                    match ((a as i32) as i8).checked_mul((b as i32) as i8) {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
                 }
+                rtdt::TyTag::U16 => {
+                    let result_tydesc = make_result_tydesc_u16(ctx);
+                    match (a as u16).checked_mul(b as u16) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::I16 => {
+                    let result_tydesc = make_result_tydesc_i16(ctx);
+                    match ((a as i32) as i16).checked_mul((b as i32) as i16) {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::I32 => {
+                    let result_tydesc = make_result_tydesc_i32(ctx);
+                    match (a as i32).checked_mul(b as i32) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::U32 => {
+                    let result_tydesc = make_result_tydesc_u32(ctx);
+                    match a.checked_mul(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result), result_tydesc),
+                        None => create_result_overflow_err(ctx, result_tydesc),
+                    }
+                }
+                _ => Err(InterpError::TypeError(format!("Unsupported type {:?} for checked multiplication", tytag))),
             }
         }
-        _ => Err(InterpError::TypeError(
-            "Unsupported types for checked multiplication".to_string(),
-        )),
+        _ => Err(InterpError::TypeError("Unsupported types for checked multiplication".to_string())),
     }
 }
 
 /// Evaluate checked division.
-fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+    use datalove_rtdt as rtdt;
+
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            let result_tydesc = make_result_tydesc_u32(ctx);
-            match a.checked_div(b) {
-                Some(result) => {
-                    create_result_ok(ctx, Value::U32(result), result_tydesc)
+            // Default to U32 if type descriptor is null (for backward compatibility).
+            let tytag = if inner_tydesc.is_null() {
+                rtdt::TyTag::U32
+            } else {
+                unsafe { (*inner_tydesc).type_tag }
+            };
+            match tytag {
+                rtdt::TyTag::U8 => {
+                    let result_tydesc = make_result_tydesc_u8(ctx);
+                    match (a as u8).checked_div(b as u8) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_divzero_err(ctx, result_tydesc),
+                    }
                 }
-                None => {
-                    // Division by zero.
-                    create_result_divzero_err(ctx, result_tydesc)
+                rtdt::TyTag::I8 => {
+                    let result_tydesc = make_result_tydesc_i8(ctx);
+                    match ((a as i32) as i8).checked_div((b as i32) as i8) {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_divzero_err(ctx, result_tydesc),
+                    }
                 }
+                rtdt::TyTag::U16 => {
+                    let result_tydesc = make_result_tydesc_u16(ctx);
+                    match (a as u16).checked_div(b as u16) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_divzero_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::I16 => {
+                    let result_tydesc = make_result_tydesc_i16(ctx);
+                    match ((a as i32) as i16).checked_div((b as i32) as i16) {
+                        Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
+                        None => create_result_divzero_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::I32 => {
+                    let result_tydesc = make_result_tydesc_i32(ctx);
+                    match (a as i32).checked_div(b as i32) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
+                        None => create_result_divzero_err(ctx, result_tydesc),
+                    }
+                }
+                rtdt::TyTag::U32 => {
+                    let result_tydesc = make_result_tydesc_u32(ctx);
+                    match a.checked_div(b) {
+                        Some(result) => create_result_ok(ctx, Value::U32(result), result_tydesc),
+                        None => create_result_divzero_err(ctx, result_tydesc),
+                    }
+                }
+                _ => Err(InterpError::TypeError(format!("Unsupported type {:?} for checked division", tytag))),
             }
         }
-        _ => Err(InterpError::TypeError(
-            "Unsupported types for checked division".to_string(),
-        )),
+        _ => Err(InterpError::TypeError("Unsupported types for checked division".to_string())),
     }
 }
 
@@ -1761,4 +1998,94 @@ fn make_result_tydesc_u32<'db>(
 
     // Construct Result<u32> from it.
     ctx.tydesc_table.create_result_from_inner_tydesc(u32_tydesc)
+}
+
+/// Helper to create Option<u8> tydesc.
+fn make_option_tydesc_u8<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let u8_ty = crate::datalit::tycheck::Type::U8;
+    let u8_tydesc = ctx.tydesc_table.get_or_create(&u8_ty);
+    ctx.tydesc_table.create_option_from_inner_tydesc(u8_tydesc)
+}
+
+/// Helper to create Result<u8> tydesc.
+fn make_result_tydesc_u8<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let u8_ty = crate::datalit::tycheck::Type::U8;
+    let u8_tydesc = ctx.tydesc_table.get_or_create(&u8_ty);
+    ctx.tydesc_table.create_result_from_inner_tydesc(u8_tydesc)
+}
+
+/// Helper to create Option<i8> tydesc.
+fn make_option_tydesc_i8<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let i8_ty = crate::datalit::tycheck::Type::I8;
+    let i8_tydesc = ctx.tydesc_table.get_or_create(&i8_ty);
+    ctx.tydesc_table.create_option_from_inner_tydesc(i8_tydesc)
+}
+
+/// Helper to create Result<i8> tydesc.
+fn make_result_tydesc_i8<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let i8_ty = crate::datalit::tycheck::Type::I8;
+    let i8_tydesc = ctx.tydesc_table.get_or_create(&i8_ty);
+    ctx.tydesc_table.create_result_from_inner_tydesc(i8_tydesc)
+}
+
+/// Helper to create Option<u16> tydesc.
+fn make_option_tydesc_u16<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let u16_ty = crate::datalit::tycheck::Type::U16;
+    let u16_tydesc = ctx.tydesc_table.get_or_create(&u16_ty);
+    ctx.tydesc_table.create_option_from_inner_tydesc(u16_tydesc)
+}
+
+/// Helper to create Result<u16> tydesc.
+fn make_result_tydesc_u16<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let u16_ty = crate::datalit::tycheck::Type::U16;
+    let u16_tydesc = ctx.tydesc_table.get_or_create(&u16_ty);
+    ctx.tydesc_table.create_result_from_inner_tydesc(u16_tydesc)
+}
+
+/// Helper to create Option<i16> tydesc.
+fn make_option_tydesc_i16<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let i16_ty = crate::datalit::tycheck::Type::I16;
+    let i16_tydesc = ctx.tydesc_table.get_or_create(&i16_ty);
+    ctx.tydesc_table.create_option_from_inner_tydesc(i16_tydesc)
+}
+
+/// Helper to create Result<i16> tydesc.
+fn make_result_tydesc_i16<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let i16_ty = crate::datalit::tycheck::Type::I16;
+    let i16_tydesc = ctx.tydesc_table.get_or_create(&i16_ty);
+    ctx.tydesc_table.create_result_from_inner_tydesc(i16_tydesc)
+}
+
+/// Helper to create Option<i32> tydesc.
+fn make_option_tydesc_i32<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let i32_ty = crate::datalit::tycheck::Type::I32;
+    let i32_tydesc = ctx.tydesc_table.get_or_create(&i32_ty);
+    ctx.tydesc_table.create_option_from_inner_tydesc(i32_tydesc)
+}
+
+/// Helper to create Result<i32> tydesc.
+fn make_result_tydesc_i32<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let i32_ty = crate::datalit::tycheck::Type::I32;
+    let i32_tydesc = ctx.tydesc_table.get_or_create(&i32_ty);
+    ctx.tydesc_table.create_result_from_inner_tydesc(i32_tydesc)
 }
