@@ -2,6 +2,8 @@
 
 Heap allocated strided multidimensional arrays are called tensors.
 
+Major influence is Julia.
+
 Their rank (dimension) is static,
 but shape, layout, and stride are dynamic.
 
