@@ -1091,3 +1091,29 @@ pub unsafe extern "C" fn dtlv_rti_tensor_destroy_local(
         tensor::tensor_destroy_impl(rt_ref, tensor_value_in, tensor_tydesc_ref)
     }
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_tensor_get_local(
+    rt: LocalRtHandle,
+    tensor_value_ref: *const u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+    indices_ptr: *const u32,
+    element_ptr_out: *mut *const u8,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || tensor_value_ref.is_null() || tensor_tydesc.is_null()
+            || indices_ptr.is_null() || element_ptr_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        tensor::tensor_get_impl(
+            rt_ref,
+            tensor_value_ref,
+            tensor_tydesc_ref,
+            indices_ptr,
+            element_ptr_out,
+        )
+    }
+}

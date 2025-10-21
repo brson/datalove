@@ -202,6 +202,61 @@ pub unsafe fn tensor_create_from_slice_impl(
     }
 }
 
+/// Gets a pointer to an element at the specified indices.
+///
+/// Validates indices against shape and computes linear offset.
+pub unsafe fn tensor_get_impl(
+    _rt_ref: &mut RtLocal,
+    tensor_value_ref: *const u8,
+    tensor_tydesc_ref: TyDescRef,
+    indices_ptr: *const u32,
+    element_ptr_out: *mut *const u8,
+) -> RtStatus {
+    unsafe {
+        if tensor_value_ref.is_null() || indices_ptr.is_null() || element_ptr_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        let element_ty = tensor_tydesc_ref.tensor_element_ty();
+        let rank = tensor_tydesc_ref.tensor_rank();
+
+        let tensor_ptr = tensor_value_ref as *const crate::rtdt::Tensor;
+        let ptr_base = (*tensor_ptr).ptr_base;
+        let offset_elems = (*tensor_ptr).offset_elems;
+        let shape_ptr = (*tensor_ptr).shape as *const u32;
+        let strides_ptr = (*tensor_ptr).strides as *const u32;
+
+        if ptr_base.is_null() || shape_ptr.is_null() || strides_ptr.is_null() || rank == 0 {
+            return RtStatus::Error;
+        }
+
+        // Validate indices and compute linear offset.
+        let indices_slice = std::slice::from_raw_parts(indices_ptr, rank as usize);
+        let shape_slice = std::slice::from_raw_parts(shape_ptr, rank as usize);
+        let strides_slice = std::slice::from_raw_parts(strides_ptr, rank as usize);
+
+        let mut linear_offset = offset_elems;
+        for i in 0..rank as usize {
+            let index = indices_slice[i];
+            let dim = shape_slice[i];
+
+            if index >= dim {
+                return RtStatus::Error;
+            }
+
+            linear_offset = linear_offset.saturating_add(index.saturating_mul(strides_slice[i]));
+        }
+
+        // Compute element pointer.
+        let element_size = element_ty.size() as usize;
+        let element_ptr = ptr_base.add(linear_offset as usize * element_size);
+
+        *element_ptr_out = element_ptr;
+
+        RtStatus::Ok
+    }
+}
+
 /// Destroys a tensor, freeing all three allocations.
 ///
 /// Frees the shape array, strides array, and data buffer.
