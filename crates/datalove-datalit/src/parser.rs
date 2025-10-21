@@ -56,6 +56,23 @@ pub fn parse_from_tokens<'db>(
     dyn_parser.parse_expr_full()
 }
 
+/// Parse a type hint and heap from a vector of tokens.
+///
+/// Returns the parsed type hint and the number of tokens consumed.
+pub fn parse_type_hint_and_heap_from_tokens<'db>(
+    db: &'db dyn crate::Db,
+    tokens: Vec<TreeToken<'db>>,
+) -> (ast::TypeHintAndHeap<'db>, usize) {
+    let mut dyn_parser = DynParser {
+        db,
+        tokens,
+        pos: 0,
+    };
+    let type_hint = dyn_parser.parse_type_hint_and_heap();
+    let consumed = dyn_parser.pos;
+    (type_hint, consumed)
+}
+
 struct DynParser<'db> {
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,

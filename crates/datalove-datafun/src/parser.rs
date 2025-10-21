@@ -540,87 +540,44 @@ impl<'db> Parser<'db> {
         ))
     }
 
-    // Delegate to datalit parser for type hints and expressions
+    // Delegate to datalit parser for type hints.
     fn parse_type_hint_and_heap(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> datalit::ast::TypeHintAndHeap<'db> {
-        // For now, do simple type parsing inline without delegating
-        // This avoids the issue of the datalit parser consuming too many tokens
+        // Collect tokens for the type hint, stopping at delimiters that mark the end of a type.
+        // We stop at `=` (assignment) or `,` (parameter separator) at depth 0.
+        // These delimiters are NOT consumed, so they remain in the iterator.
+        let mut collected = Vec::new();
 
-        // Heap sigils: @ for local, # for global.
-        // If omitted, defaults to Heap::Omitted (inferred).
-        let heap = if self.peek_sigil(tokens, Sigil::At) {
-            self.eat_sigil(tokens, Sigil::At);
-            datalit::ast::Heap::Local
-        } else if self.peek_sigil(tokens, Sigil::Hash) {
-            self.eat_sigil(tokens, Sigil::Hash);
-            datalit::ast::Heap::Global
-        } else {
-            // No heap sigil - default to Omitted (inferred).
-            datalit::ast::Heap::Omitted
-        };
+        while let Some(token) = tokens.peek() {
+            let should_stop = match token {
+                TreeToken::Token(t) => {
+                    matches!(
+                        t.kind(self.db),
+                        TokenKind::Sigil(Sigil::Equals) | TokenKind::Sigil(Sigil::Comma)
+                    )
+                }
+                _ => false,
+            };
 
-        // Check for ? or ! prefix for Option/Result types.
-        let type_hint = if self.peek_sigil(tokens, Sigil::Question) {
-            self.eat_sigil(tokens, Sigil::Question);
-            let inner_type = self.parse_type_hint_and_heap(tokens);
-            datalit::ast::TypeHint::Option(datalit::ast::TypeHintOption::new(self.db, inner_type))
-        } else if self.peek_sigil(tokens, Sigil::Exclamation) {
-            self.eat_sigil(tokens, Sigil::Exclamation);
-            let inner_type = self.parse_type_hint_and_heap(tokens);
-            datalit::ast::TypeHint::Result(datalit::ast::TypeHintResult::new(self.db, inner_type))
-        } else if matches!(tokens.peek(), Some(TreeToken::Branch(Sigil::BracketOpen, _))) {
-            // List type: [element_type]
-            // Delegate to a helper function to avoid monomorphization issues.
-            match tokens.next() {
-                Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
-                    self.parse_list_type_hint(iter)
-                }
-                _ => {
-                    let message = InternedText::new(self.db, "expected list type".S());
-                    datalit::ast::TypeHint::ParseError(datalit::ast::TypeHintParseError::new(self.db, message))
-                }
+            if should_stop {
+                break;
             }
-        } else {
-            // Parse base type keyword
-            match self.peek_word(tokens) {
-                Some("bool") => { self.eat_word(tokens, "bool"); datalit::ast::TypeHint::Bool }
-                Some("u8") => { self.eat_word(tokens, "u8"); datalit::ast::TypeHint::U8 }
-                Some("i8") => { self.eat_word(tokens, "i8"); datalit::ast::TypeHint::I8 }
-                Some("u16") => { self.eat_word(tokens, "u16"); datalit::ast::TypeHint::U16 }
-                Some("i16") => { self.eat_word(tokens, "i16"); datalit::ast::TypeHint::I16 }
-                Some("u32") => { self.eat_word(tokens, "u32"); datalit::ast::TypeHint::U32 }
-                Some("i32") => { self.eat_word(tokens, "i32"); datalit::ast::TypeHint::I32 }
-                Some("u64") => { self.eat_word(tokens, "u64"); datalit::ast::TypeHint::U64 }
-                Some("i64") => { self.eat_word(tokens, "i64"); datalit::ast::TypeHint::I64 }
-                Some("f32") => { self.eat_word(tokens, "f32"); datalit::ast::TypeHint::F32 }
-                Some("int") => { self.eat_word(tokens, "int"); datalit::ast::TypeHint::Int }
-                Some("string") => { self.eat_word(tokens, "string"); datalit::ast::TypeHint::String }
-                Some("data") => { self.eat_word(tokens, "data"); datalit::ast::TypeHint::Data }
-                Some("error") => { self.eat_word(tokens, "error"); datalit::ast::TypeHint::Error }
-                _ => {
-                    let message = InternedText::new(self.db, "unknown type hint".S());
-                    datalit::ast::TypeHint::ParseError(datalit::ast::TypeHintParseError::new(self.db, message))
-                }
-            }
-        };
 
-        datalit::ast::TypeHintAndHeap::new(self.db, heap, type_hint)
-    }
-
-    fn parse_list_type_hint(
-        &mut self,
-        iter: BracerIter<'db>,
-    ) -> datalit::ast::TypeHint<'db> {
-        let tokens: Vec<TreeToken<'db>> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        if tokens.is_empty() {
-            let message = InternedText::new(self.db, "list type must have element type".S());
-            return datalit::ast::TypeHint::ParseError(datalit::ast::TypeHintParseError::new(self.db, message));
+            // Consume and collect the token.
+            collected.push(token.clone());
+            tokens.next();
         }
-        let mut tokens = tokens.into_iter().peekable();
-        let element_type = self.parse_type_hint_and_heap(&mut tokens);
-        datalit::ast::TypeHint::List(datalit::ast::TypeHintList::new(self.db, element_type))
+
+        // Delegate to datalit parser.
+        // The parser should consume exactly the tokens we collected.
+        let (type_hint, _consumed) = datalit::parser::parse_type_hint_and_heap_from_tokens(
+            self.db,
+            collected,
+        );
+
+        type_hint
     }
 
     fn parse_expr_full(
