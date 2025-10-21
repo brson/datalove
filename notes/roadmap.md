@@ -5,8 +5,7 @@
 
 ## language
 
-- maps and sets
-- interp tests for math ops
+- move/clone semantics
 - error diagnostics
 
 ## testing
@@ -20,8 +19,6 @@
 - web
 
 ## cli
-
-- script runner
 
 ## modules and standard library
 
@@ -46,7 +43,7 @@
 
 ## near future
 
-- don't ever construct tydescs with a tydesc table
+- don't ever construct tydescs without a tydesc table
 - datafun ast roundtrip
 - type declarations
 - name resolution for named types
