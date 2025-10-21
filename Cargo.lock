@@ -1412,6 +1412,7 @@ version = "0.1.0"
 dependencies = [
  "bct",
  "datalove-datalit",
+ "datalove-diagnostic",
  "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
@@ -1425,6 +1426,7 @@ name = "datalove-datalit"
 version = "0.1.0"
 dependencies = [
  "bct",
+ "datalove-diagnostic",
  "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",

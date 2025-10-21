@@ -1,5 +1,23 @@
 # Datalove Diagnostic System Design
 
+## Current Status
+
+**Latest Update:** 2025-10-21
+
+- ✅ Phase 1 Complete: Diagnostic crate created and compiles
+- ✅ Phase 2 Complete: AST error nodes updated
+  - datafun parser: 9/9 error sites updated ✅
+  - datalit parser: 21/21 error sites updated ✅
+  - ast_serde: Deferred (recommendation: keep serde simple, only serialize message field)
+  - All tests passing ✅
+- 🔲 Phases 3-7: Not yet started
+
+**Next Steps:**
+1. Phase 3: Update datafun parser to emit ParseDiagnostic accumulators
+2. Phase 3: Update datalit parser to emit ParseDiagnostic accumulators
+3. Phase 4: Type checker diagnostics
+4. Phase 5: Resolution diagnostics
+
 ## Overview
 
 Design a comprehensive diagnostic system inspired by Rust's compiler, using Salsa accumulators for automatic error collection while maintaining error recovery throughout the compilation pipeline.
@@ -362,13 +380,31 @@ match expr.kind {
 - This keeps the public API clean while working within Salsa's constraints
 - The crate compiles successfully with only expected dead_code warnings
 
-### Phase 2: Update AST error nodes
-- [ ] Add `text: Text<'db>` and `span: ByteSpan` to datafun::StmtParseError
-- [ ] Add `text: Text<'db>` and `span: ByteSpan` to datafun::ExprFunParseError
-- [ ] Update datafun parser to populate these fields
-- [ ] Add similar fields to datalit::TypeHintParseError
-- [ ] Add similar fields to datalit::ExprParseError
-- [ ] Update datalit parser to populate these fields
+### Phase 2: Update AST error nodes ✅ COMPLETE
+- [x] Add `text: Text<'db>` and `span: ByteSpan` to datafun::StmtParseError
+- [x] Add `text: Text<'db>` and `span: ByteSpan` to datafun::ExprFunParseError
+- [x] Update datafun parser to populate these fields (9 error sites updated)
+- [x] Add similar fields to datalit::TypeHintParseError
+- [x] Add similar fields to datalit::ExprParseError
+- [x] Update datalit parser to populate these fields (21 error sites completed)
+  - 9 TypeHintParseError sites updated
+  - 12 ExprParseError sites updated
+  - All sub_parser initializations updated to pass source_text
+  - Fixed parse_bracer to extract text from tokens instead of private chunk field
+- [x] All tests passing
+
+**Implementation Notes:**
+- Added `ByteSpan` type alias import to both AST files
+- datafun parser: Added `bracer` field to Parser struct and helper methods:
+  - `source_text()` - gets Text from bracer
+  - `extract_text_span()` - extracts from TreeToken
+  - `peek_text_span()` - peeks at next token
+- datalit parser: Added `source_text` field to DynParser and helper methods:
+  - `get_error_text()` - gets Text for errors
+  - `current_text_span()` - extracts from current position
+- All error nodes now have the signature: `::new(db, text, span, message)`
+- ast_serde: Keeping serde versions simple with just `message` field (text/span are for diagnostic emission, not serialization)
+- Source text extraction: Uses first token's SubText to get parent Text (ChunkLex.chunk is private)
 
 ### Phase 3: Parser diagnostics
 - [ ] Update datafun parser to emit ParseDiagnostic accumulators

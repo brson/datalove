@@ -1,5 +1,6 @@
 use rmx::prelude::*;
-use bct::text::InternedText;
+use bct::text::{InternedText, Text};
+use datalove_diagnostic::ByteSpan;
 
 #[salsa::tracked]
 pub struct ExprFull<'db> {
@@ -244,10 +245,14 @@ pub struct ExprErr<'db> {
 
 #[salsa::tracked]
 pub struct TypeHintParseError<'db> {
+    pub text: Text<'db>,
+    pub span: ByteSpan,
     pub message: InternedText<'db>,
 }
 
 #[salsa::tracked]
 pub struct ExprParseError<'db> {
+    pub text: Text<'db>,
+    pub span: ByteSpan,
     pub message: InternedText<'db>,
 }

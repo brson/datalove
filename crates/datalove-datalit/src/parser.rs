@@ -37,8 +37,14 @@ fn parse_bracer<'db>(
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
 ) -> ast::ExprFull<'db> {
+    let chunk_lex = bracer.chunk(db);
+    // Get source text from the first token.
+    let source_text = chunk_lex.tokens(db).first().map(|token| {
+        let subtext = token.text(db);
+        subtext.text(db)
+    });
     let tokens = bracer.iter(db).filter_map(|t| t.without_space(db)).collect::<Vec<_>>();
-    parse_from_tokens(db, tokens)
+    parse_from_tokens_with_source(db, tokens, source_text)
 }
 
 /// Parse a datalit expression directly from a vector of tokens.
@@ -48,10 +54,20 @@ pub fn parse_from_tokens<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
 ) -> ast::ExprFull<'db> {
+    parse_from_tokens_with_source(db, tokens, None)
+}
+
+/// Parse a datalit expression from tokens with an optional source Text for error reporting.
+fn parse_from_tokens_with_source<'db>(
+    db: &'db dyn crate::Db,
+    tokens: Vec<TreeToken<'db>>,
+    source_text: Option<bct::text::Text<'db>>,
+) -> ast::ExprFull<'db> {
     let mut dyn_parser = DynParser {
         db,
         tokens,
         pos: 0,
+        source_text,
     };
     dyn_parser.parse_expr_full()
 }
@@ -67,6 +83,7 @@ pub fn parse_type_hint_and_heap_from_tokens<'db>(
         db,
         tokens,
         pos: 0,
+        source_text: None,
     };
     let type_hint = dyn_parser.parse_type_hint_and_heap();
     let consumed = dyn_parser.pos;
@@ -77,6 +94,7 @@ struct DynParser<'db> {
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
     pos: usize,
+    source_text: Option<bct::text::Text<'db>>,
 }
 
 impl<'db> DynParser<'db> {
@@ -136,6 +154,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                         ast::TypeHint::NamedTuple(ast::TypeHintNamedTuple::new(
@@ -145,8 +164,9 @@ impl<'db> DynParser<'db> {
                         ))
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected () after tuple keyword".S());
-                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
             }
@@ -161,6 +181,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                         ast::TypeHint::NamedStruct(ast::TypeHintNamedStruct::new(
@@ -170,8 +191,9 @@ impl<'db> DynParser<'db> {
                         ))
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected {} after struct keyword".S());
-                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
             }
@@ -188,6 +210,7 @@ impl<'db> DynParser<'db> {
                                 db: self.db,
                                 tokens,
                                 pos: 0,
+                                source_text: self.source_text,
                             };
                             let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
                             ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum::new(
@@ -196,8 +219,9 @@ impl<'db> DynParser<'db> {
                             ))
                         }
                         _ => {
+                            let (text, span) = self.current_text_span();
                             let message = InternedText::new(self.db, "expected {} after enum keyword".S());
-                            ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                            ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                         }
                     }
                 } else {
@@ -211,6 +235,7 @@ impl<'db> DynParser<'db> {
                                 db: self.db,
                                 tokens,
                                 pos: 0,
+                                source_text: self.source_text,
                             };
                             let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
                             ast::TypeHint::NamedEnum(ast::TypeHintNamedEnum::new(
@@ -220,8 +245,9 @@ impl<'db> DynParser<'db> {
                             ))
                         }
                         _ => {
+                            let (text, span) = self.current_text_span();
                             let message = InternedText::new(self.db, "expected {} after enum name".S());
-                            ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                            ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                         }
                     }
                 }
@@ -237,6 +263,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let key_type = sub_parser.parse_type_hint_and_heap();
                         sub_parser.need_sigil(Sigil::Comma);
@@ -244,8 +271,9 @@ impl<'db> DynParser<'db> {
                         ast::TypeHint::Map(ast::TypeHintMap::new(self.db, key_type, value_type))
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected <> after map keyword".S());
-                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
             }
@@ -260,13 +288,15 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
                         ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected <> after set keyword".S());
-                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
             }
@@ -281,13 +311,15 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
                         ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected <> after list keyword".S());
-                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
             }
@@ -302,6 +334,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                         ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
@@ -314,6 +347,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
                         ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
@@ -326,13 +360,15 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                         ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "unknown type hint in DynParser".S());
-                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message))
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
             }
@@ -356,17 +392,19 @@ impl<'db> DynParser<'db> {
                 db: self.db,
                 tokens: tokens.clone(),
                 pos: 0,
+                source_text: self.source_text,
             };
             let payload_type = sub_parser.parse_type_hint_and_heap();
 
             // Check for unparsed tokens - this indicates a syntax error.
             if sub_parser.pos < tokens.len() {
                 // There are extra tokens after the payload type.
+                let (text, span) = sub_parser.current_text_span();
                 let message = InternedText::new(
                     self.db,
                     "enum variant payload must be a single type (use a tuple for multiple values)".S()
                 );
-                let error_type = ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, message));
+                let error_type = ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message));
                 return ast::TypeHintEnumVariant::new(
                     self.db,
                     name,
@@ -420,21 +458,24 @@ impl<'db> DynParser<'db> {
                                     ast::Heap::Omitted
                                 } else {
                                     // Not a number - this is an error.
+                                    let (text, span) = self.current_text_span();
                                     let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
-                                    let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                                    let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                                     return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                                 }
                             } else {
                                 // No word string - error.
+                                let (text, span) = self.current_text_span();
                                 let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
-                                let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                                let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                                 return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                             }
                         }
                         _ => {
                             // Unknown token kind - error.
+                            let (text, span) = self.current_text_span();
                             let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
-                            let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                            let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                             return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                         }
                     }
@@ -447,8 +488,9 @@ impl<'db> DynParser<'db> {
                 }
                 _ => {
                     // Not a token or branch - error.
+                    let (text, span) = self.current_text_span();
                     let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
-                    let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                    let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                 }
             }
@@ -500,8 +542,9 @@ impl<'db> DynParser<'db> {
                 }
             }
             // Not a negative number - this is an error (unexpected minus).
+            let (text, span) = self.current_text_span();
             let message = InternedText::new(self.db, "unexpected minus sign".S());
-            return ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+            return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
         }
 
         // Check for keywords.
@@ -539,6 +582,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                         return ast::Expr::NamedTuple(ast::ExprNamedTuple::new(
@@ -548,8 +592,9 @@ impl<'db> DynParser<'db> {
                         ));
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected () after tuple name".S());
-                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     }
                 }
             }
@@ -564,6 +609,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
                         return ast::Expr::NamedStruct(ast::ExprNamedStruct::new(
@@ -573,8 +619,9 @@ impl<'db> DynParser<'db> {
                         ));
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected {} after struct name".S());
-                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     }
                 }
             }
@@ -598,6 +645,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         Some(sub_parser.parse_expr_full())
                     } else {
@@ -620,6 +668,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         Some(sub_parser.parse_expr_full())
                     } else {
@@ -642,6 +691,7 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let entries = sub_parser.parse_comma_separated(|p| {
                             let key = p.parse_expr_full();
@@ -652,8 +702,9 @@ impl<'db> DynParser<'db> {
                         return ast::Expr::Map(ast::ExprMap::new(self.db, entries));
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected {} after map keyword".S());
-                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     }
                 }
             }
@@ -667,13 +718,15 @@ impl<'db> DynParser<'db> {
                             db: self.db,
                             tokens,
                             pos: 0,
+                            source_text: self.source_text,
                         };
                         let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                         return ast::Expr::Set(ast::ExprSet::new(self.db, elements));
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected {} after set keyword".S());
-                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, message));
+                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     }
                 }
             }
@@ -708,12 +761,13 @@ impl<'db> DynParser<'db> {
                             ast::Expr::Int(ast::ExprInt::new(self.db, value))
                         } else {
                             // Not a number, parse error for bare identifiers.
+                            let (text, span) = self.current_text_span();
                             self.next();
                             let message = InternedText::new(
                                 self.db,
                                 format!("Unexpected identifier: {}", word).S()
                             );
-                            ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
+                            ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message))
                         }
                     }
                     TokenKind::String => {
@@ -725,8 +779,9 @@ impl<'db> DynParser<'db> {
                         ast::Expr::String(ast::ExprString::new(self.db, value))
                     }
                     _ => {
+                        let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "unexpected token in DynParser expression".S());
-                        ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
+                        ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message))
                     }
                 }
             }
@@ -738,6 +793,7 @@ impl<'db> DynParser<'db> {
                     db: self.db,
                     tokens,
                     pos: 0,
+                    source_text: self.source_text,
                 };
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements))
@@ -750,6 +806,7 @@ impl<'db> DynParser<'db> {
                     db: self.db,
                     tokens,
                     pos: 0,
+                    source_text: self.source_text,
                 };
                 let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
                 ast::Expr::AnonStruct(ast::ExprAnonStruct::new(self.db, fields))
@@ -762,13 +819,15 @@ impl<'db> DynParser<'db> {
                     db: self.db,
                     tokens,
                     pos: 0,
+                    source_text: self.source_text,
                 };
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 ast::Expr::List(ast::ExprList::new(self.db, elements))
             }
             _ => {
+                let (text, span) = self.current_text_span();
                 let message = InternedText::new(self.db, "unexpected tree node in DynParser expression".S());
-                ast::Expr::ParseError(ast::ExprParseError::new(self.db, message))
+                ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message))
             }
         }
     }
@@ -868,6 +927,45 @@ impl<'db> DynParser<'db> {
                 }
             }
             _ => panic!("expected name"),
+        }
+    }
+
+    /// Get Text for error reporting.
+    /// Try source_text first, otherwise extract from current token.
+    fn get_error_text(&self) -> bct::text::Text<'db> {
+        if let Some(text) = self.source_text {
+            return text;
+        }
+        // Try to get from the first token.
+        if let Some(token) = self.tokens.first() {
+            match token {
+                TreeToken::Token(tok) => {
+                    let subtext = tok.text(self.db);
+                    return subtext.text(self.db);
+                }
+                _ => {}
+            }
+        }
+        // Last resort: create an empty text (this shouldn't happen in practice).
+        panic!("no source text available for error reporting")
+    }
+
+    /// Extract Text and ByteSpan from current position for error reporting.
+    fn current_text_span(&self) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
+        if self.pos < self.tokens.len() {
+            match &self.tokens[self.pos] {
+                TreeToken::Token(tok) => {
+                    let subtext = tok.text(self.db);
+                    (subtext.text(self.db), subtext.range(self.db))
+                }
+                TreeToken::Branch(_, _) => {
+                    // For branches, use 0..0 span.
+                    (self.get_error_text(), 0..0)
+                }
+            }
+        } else {
+            // End of input.
+            (self.get_error_text(), 0..0)
         }
     }
 }

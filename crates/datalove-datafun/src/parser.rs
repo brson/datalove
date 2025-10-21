@@ -58,6 +58,7 @@ fn parse_bracer<'db>(
 ) -> ast::Script<'db> {
     let mut parser = Parser {
         db,
+        bracer,
     };
 
     // Get line iterator - newlines inside balanced braces don't count as line breaks.
@@ -106,6 +107,7 @@ fn is_line_separator<'db>(db: &'db dyn crate::Db, token: Token<'db>) -> bool {
 
 struct Parser<'db> {
     db: &'db dyn crate::Db,
+    bracer: Bracer<'db>,
 }
 
 impl<'db> Parser<'db> {
@@ -140,8 +142,9 @@ impl<'db> Parser<'db> {
             Some("import") => self.parse_import(&mut tokens),
             Some("if") => self.parse_if(&mut tokens, remaining_lines),
             _ => {
+                let (text, span) = self.peek_text_span(&mut tokens);
                 let message = InternedText::new(self.db, "unexpected statement".S());
-                ast::Statement::ParseError(ast::StmtParseError::new(self.db, message))
+                ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message))
             }
         }
     }
@@ -191,8 +194,9 @@ impl<'db> Parser<'db> {
                 self.parse_fun_params(iter)
             }
             _ => {
+                let (text, span) = self.peek_text_span(tokens);
                 let message = InternedText::new(self.db, "expected parameter list".S());
-                return ast::Statement::ParseError(ast::StmtParseError::new(self.db, message));
+                return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
             }
         };
 
@@ -358,8 +362,9 @@ impl<'db> Parser<'db> {
 
                 // Need forward slash
                 if !self.peek_sigil(tokens, Sigil::SlashForward) {
+                    let (text, span) = self.peek_text_span(tokens);
                     let message = InternedText::new(self.db, "expected '/' after import space".S());
-                    return ast::Statement::ParseError(ast::StmtParseError::new(self.db, message));
+                    return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
                 }
                 self.eat_sigil(tokens, Sigil::SlashForward);
 
@@ -367,8 +372,9 @@ impl<'db> Parser<'db> {
 
                 // Need forward slash
                 if !self.peek_sigil(tokens, Sigil::SlashForward) {
+                    let (text, span) = self.peek_text_span(tokens);
                     let message = InternedText::new(self.db, "expected '/' after package alias".S());
-                    return ast::Statement::ParseError(ast::StmtParseError::new(self.db, message));
+                    return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
                 }
                 self.eat_sigil(tokens, Sigil::SlashForward);
 
@@ -405,8 +411,9 @@ impl<'db> Parser<'db> {
                 ))
             }
             _ => {
+                let (text, span) = self.peek_text_span(tokens);
                 let message = InternedText::new(self.db, "expected 'module' or 'data' after 'require'".S());
-                ast::Statement::ParseError(ast::StmtParseError::new(self.db, message))
+                ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message))
             }
         }
     }
@@ -422,8 +429,9 @@ impl<'db> Parser<'db> {
 
         // Need dot sigil.
         if !self.peek_sigil(tokens, Sigil::Dot) {
+            let (text, span) = self.peek_text_span(tokens);
             let message = InternedText::new(self.db, "expected '.' after module name".S());
-            return ast::Statement::ParseError(ast::StmtParseError::new(self.db, message));
+            return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
         }
         self.eat_sigil(tokens, Sigil::Dot);
 
@@ -810,11 +818,12 @@ impl<'db> Parser<'db> {
                                 }
                             }
                         } else {
+                            let (text, span) = self.peek_text_span(tokens);
                             tokens.next();
                             let message = InternedText::new(self.db, "unexpected token in expression".S());
                             ast::ExprFun::new(
                                 self.db,
-                                ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, message))
+                                ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))
                             )
                         }
                     }
@@ -834,10 +843,11 @@ impl<'db> Parser<'db> {
                 }
             }
             None => {
+                let (text, span) = self.peek_text_span(tokens);
                 let message = InternedText::new(self.db, "expected expression".S());
                 ast::ExprFun::new(
                     self.db,
-                    ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, message))
+                    ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))
                 )
             }
         }
@@ -927,10 +937,11 @@ impl<'db> Parser<'db> {
         let iter = match tokens.next() {
             Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
             _ => {
+                let (text, span) = self.peek_text_span(tokens);
                 let message = InternedText::new(self.db, "expected tuple".S());
                 return ast::ExprFun::new(
                     self.db,
-                    ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, message))
+                    ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))
                 );
             }
         };
@@ -1063,6 +1074,43 @@ impl<'db> Parser<'db> {
         sigil: Sigil,
     ) {
         self.eat_sigil(tokens, sigil)
+    }
+
+    /// Get the source Text for error reporting.
+    fn source_text(&self) -> bct::text::Text<'db> {
+        let chunk_lex = self.bracer.chunk(self.db);
+        // Get text from the first token (ChunkLex.chunk is private).
+        if let Some(token) = chunk_lex.tokens(self.db).first() {
+            let subtext = token.text(self.db);
+            subtext.text(self.db)
+        } else {
+            // No tokens - shouldn't happen in practice, but we need to return something.
+            panic!("no tokens available for source text extraction")
+        }
+    }
+
+    /// Extract Text and ByteSpan from a TreeToken for error reporting.
+    fn extract_text_span(&self, token: &TreeToken<'db>) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
+        match token {
+            TreeToken::Token(tok) => {
+                let subtext = tok.text(self.db);
+                (subtext.text(self.db), subtext.range(self.db))
+            }
+            TreeToken::Branch(_, _) => {
+                // For branches, we can't easily get a span, so use 0..0.
+                (self.source_text(), 0..0)
+            }
+        }
+    }
+
+    /// Try to extract Text and ByteSpan from the next token in the iterator.
+    /// If no token is available, returns the source text with a 0..0 span.
+    fn peek_text_span(&self, tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
+        if let Some(token) = tokens.peek() {
+            self.extract_text_span(token)
+        } else {
+            (self.source_text(), 0..0)
+        }
     }
 }
 

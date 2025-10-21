@@ -1,6 +1,7 @@
 use rmx::prelude::*;
 
-use bct::text::InternedText;
+use bct::text::{InternedText, Text};
+use datalove_diagnostic::ByteSpan;
 use crate::datalit;
 
 /// Result of parsing a source text into statements.
@@ -99,6 +100,8 @@ pub struct StmtIf<'db> {
 
 #[salsa::tracked]
 pub struct StmtParseError<'db> {
+    pub text: Text<'db>,
+    pub span: ByteSpan,
     pub message: InternedText<'db>,
 }
 
@@ -206,5 +209,7 @@ pub struct ExprTryResult<'db> {
 
 #[salsa::tracked]
 pub struct ExprFunParseError<'db> {
+    pub text: Text<'db>,
+    pub span: ByteSpan,
     pub message: InternedText<'db>,
 }
