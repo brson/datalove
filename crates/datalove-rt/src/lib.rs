@@ -48,6 +48,7 @@ pub mod pretty;
 pub mod btreemap;
 pub mod set;
 pub mod list;
+pub mod tensor;
 pub mod destroy;
 
 /// A runtime handle. Needed for all calls.
@@ -1030,5 +1031,63 @@ pub unsafe extern "C" fn dtlv_rti_list_extend_from_slice_local(
             slice_len,
             element_tydesc_ref,
         )
+    }
+}
+
+// ============================================================================
+// Tensor Operations
+// ============================================================================
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_tensor_create_from_slice_local(
+    rt: LocalRtHandle,
+    slice_ptr_ref: *const u8,
+    slice_len: u32,
+    element_tydesc: *const rtdt::TyDesc,
+    shape_in: *mut u8,
+    shape_tydesc: *const rtdt::TyDesc,
+    layout: u8,
+    tensor_value_out: *mut u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || tensor_value_out.is_null() || tensor_tydesc.is_null()
+            || slice_ptr_ref.is_null() || element_tydesc.is_null()
+            || shape_in.is_null() || shape_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
+        let shape_tydesc_ref = rtdt::TyDescRef::from_ptr(shape_tydesc);
+        tensor::tensor_create_from_slice_impl(
+            rt_ref,
+            slice_ptr_ref,
+            slice_len,
+            element_tydesc_ref,
+            shape_in,
+            shape_tydesc_ref,
+            layout,
+            tensor_value_out,
+            tensor_tydesc_ref,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_tensor_destroy_local(
+    rt: LocalRtHandle,
+    tensor_value_in: *mut u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || tensor_value_in.is_null() || tensor_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        tensor::tensor_destroy_impl(rt_ref, tensor_value_in, tensor_tydesc_ref)
     }
 }
