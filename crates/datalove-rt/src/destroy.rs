@@ -98,6 +98,11 @@ pub unsafe fn any_destroy_local(
                 crate::set::set_destroy_impl(rt_ref, value_in, tydesc)
             }
 
+            // Tensor has allocations.
+            rtdt::TyTag::Tensor => {
+                todo!("tensor destruction not yet implemented")
+            }
+
             // Tuple - recursively destroy fields.
             rtdt::TyTag::Tuple => {
                 for field in ty.iter_tuple_fields() {

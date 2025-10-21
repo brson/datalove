@@ -233,6 +233,9 @@ fn eq_tydesc(
                 let elem_ty_b = td_b.set_element_ty();
                 eq_tydesc(elem_ty_a, elem_ty_b)
             }
+            rtdt::TyTag::Tensor => {
+                todo!("tensor type descriptor comparison not yet implemented")
+            }
             rtdt::TyTag::Option => {
                 let inner_ty_a = td_a.option_inner_ty();
                 let inner_ty_b = td_b.option_inner_ty();
@@ -524,6 +527,9 @@ unsafe fn eq_value(
                     element_ty,
                     float_policy,
                 )
+            }
+            rtdt::TyTag::Tensor => {
+                todo!("tensor value comparison not yet implemented")
             }
             rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
@@ -968,6 +974,9 @@ unsafe fn cmp_value(
                     element_ty,
                     float_policy,
                 )
+            }
+            rtdt::TyTag::Tensor => {
+                todo!("tensor value ordering not yet implemented")
             }
             rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.

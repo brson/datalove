@@ -224,6 +224,39 @@ pub struct SetNodeLeafLayout {
     pub keys_offset: u32,
 }
 
+/// Heap-allocated strided multidimensional array.
+///
+/// Tensors store a pointer to the base allocation plus an offset to the view's
+/// first element. This design supports linear types: when transforming an owned
+/// tensor to a view, the base pointer is preserved for proper deallocation.
+///
+/// The rank (number of dimensions) is known at compile time via the type descriptor.
+/// Shape and strides are heap-allocated arrays of length rank.
+#[repr(C)]
+pub struct Tensor {
+    pub ptr_base: *mut u8,
+    pub offset_elems: u32,
+    pub shape: *const u32,
+    pub strides: *const u32,
+    pub layout: TensorLayout,
+}
+
+/// Memory layout convention for tensors.
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TensorLayout {
+    RowMajor = 1,
+    ColMajor = 2,
+    RowMajorTransposed = 3,
+    ColMajorTransposed = 4,
+}
+
+/// Computed layout information for a Tensor.
+pub struct TensorLayoutInfo {
+    pub size: u32,
+    pub align: u32,
+}
+
 
 
 
@@ -342,6 +375,7 @@ pub enum TyTag {
     String = 0x51,
     Map = 0x52,
     Set = 0x53,
+    Tensor = 0x54,
 
     Option = 0x60,
     Result = 0x61,
@@ -360,6 +394,7 @@ pub union TyInfo {
     pub list: TyInfoList,
     pub map: TyInfoMap,
     pub set: TyInfoSet,
+    pub tensor: TyInfoTensor,
     pub option: TyInfoOption,
     pub result: TyInfoResult,
 }
@@ -431,6 +466,13 @@ pub struct TyInfoMap {
 #[derive(Copy, Clone)]
 pub struct TyInfoSet {
     pub element_tydesc: *const TyDesc,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoTensor {
+    pub element_tydesc: *const TyDesc,
+    pub rank: u32,
 }
 
 #[repr(C)]

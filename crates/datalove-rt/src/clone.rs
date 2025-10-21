@@ -281,6 +281,11 @@ unsafe fn clone_impl(
             RtStatus::Ok
         }
 
+        // Tensor - clone tensor structure.
+        TyTag::Tensor => {
+            todo!("tensor cloning not yet implemented")
+        }
+
         // Option - copy tag and clone payload if Some.
         TyTag::Option => {
             let opt_in = unsafe { &*(value_in as *const rtdt::Option) };
