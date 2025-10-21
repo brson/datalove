@@ -55,6 +55,7 @@
 
 ## far future
 
+- syntax highlighter cli
 - datafun packages as wasm components
 - ergonomic bitops and bitfields
 - `datalove lit-tycheck` - run the type checker and report
