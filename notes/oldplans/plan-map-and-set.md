@@ -92,7 +92,7 @@ This project is to bring maps and sets to feature parity with lists.
 - dtlv_rti_list_remove_local
 - dtlv_rti_list_reserve_local
 - dtlv_rti_list_shrink_to_fit_local
-- dtlv_rti_list_clone_from_slice_local
+- dtlv_rti_list_create_from_slice_local
 - dtlv_rti_list_extend_from_slice_local
 
 ## Implementation Plan

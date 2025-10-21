@@ -728,6 +728,35 @@ pub unsafe extern "C" fn dtlv_rti_list_create_local(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_list_create_from_slice_local(
+    rt: LocalRtHandle,
+    slice_ptr_ref: *const u8,
+    slice_len: u32,
+    element_tydesc: *const rtdt::TyDesc,
+    list_value_out: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || list_value_out.is_null() || list_tydesc.is_null()
+            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
+        list::list_create_from_slice_impl(
+            rt_ref,
+            slice_ptr_ref,
+            slice_len,
+            element_tydesc_ref,
+            list_value_out,
+            list_tydesc_ref,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_list_destroy_local(
     rt: LocalRtHandle,
     value_in: *mut u8,
@@ -971,35 +1000,6 @@ pub unsafe extern "C" fn dtlv_rti_list_shrink_to_fit_local(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_clone_from_slice_local(
-    rt: LocalRtHandle,
-    list_value_out: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    slice_ptr_ref: *const u8,
-    slice_len: u32,
-    element_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    unsafe {
-        if rt.is_null() || list_value_out.is_null() || list_tydesc.is_null()
-            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
-            return RtStatus::Error;
-        }
-
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
-        list::list_clone_from_slice_impl(
-            rt_ref,
-            list_value_out,
-            list_tydesc_ref,
-            slice_ptr_ref,
-            slice_len,
-            element_tydesc_ref,
         )
     }
 }

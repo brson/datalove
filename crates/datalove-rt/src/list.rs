@@ -32,6 +32,66 @@ pub unsafe fn list_create_impl(
     }
 }
 
+/// Create a List from a slice of elements (clones elements).
+pub unsafe fn list_create_from_slice_impl(
+    rt: &mut RtLocal,
+    slice_ptr_ref: *const u8,
+    slice_len: u32,
+    element_tydesc: rtdt::TyDescRef,
+    list_value_out: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    unsafe {
+        if list_value_out.is_null()
+            || slice_ptr_ref.is_null() {
+            return RtStatus::Error;
+        }
+
+        let list_ptr = list_value_out as *mut List;
+
+        // Create empty list.
+        let status = list_create_impl(rt, list_value_out, list_tydesc);
+        if status != RtStatus::Ok {
+            return status;
+        }
+
+        if slice_len == 0 {
+            return RtStatus::Ok;
+        }
+
+        let element_size = element_tydesc.size();
+        let element_align = element_tydesc.align();
+
+        // Allocate buffer with exact capacity.
+        let data = rt.alloc.alloc(element_size, element_align, slice_len);
+        if data.is_null() {
+            return RtStatus::Error;
+        }
+
+        (*list_ptr).data = data;
+        (*list_ptr).capacity = slice_len;
+
+        // Clone each element from the slice.
+        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        for i in 0..slice_len {
+            let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
+            let dest_ptr = data.add((i * element_size) as usize);
+
+            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr);
+            if status != RtStatus::Ok {
+                // Clean up partially created list.
+                (*list_ptr).size = i;
+                let _ = list_destroy_impl(rt, list_value_out, list_tydesc);
+                return status;
+            }
+        }
+
+        (*list_ptr).size = slice_len;
+
+        RtStatus::Ok
+    }
+}
+
 /// Destroy a List and free all elements and buffer.
 pub unsafe fn list_destroy_impl(
     rt: &mut RtLocal,
@@ -516,66 +576,6 @@ pub unsafe fn list_shrink_to_fit_impl(
 // ============================================================================
 // Bulk Operations
 // ============================================================================
-
-/// Create a List from a slice of elements (clones elements).
-pub unsafe fn list_clone_from_slice_impl(
-    rt: &mut RtLocal,
-    list_value_out: *mut u8,
-    list_tydesc: rtdt::TyDescRef,
-    slice_ptr_ref: *const u8,
-    slice_len: u32,
-    element_tydesc: rtdt::TyDescRef,
-) -> RtStatus {
-    unsafe {
-        if list_value_out.is_null()
-            || slice_ptr_ref.is_null() {
-            return RtStatus::Error;
-        }
-
-        let list_ptr = list_value_out as *mut List;
-
-        // Create empty list.
-        let status = list_create_impl(rt, list_value_out, list_tydesc);
-        if status != RtStatus::Ok {
-            return status;
-        }
-
-        if slice_len == 0 {
-            return RtStatus::Ok;
-        }
-
-        let element_size = element_tydesc.size();
-        let element_align = element_tydesc.align();
-
-        // Allocate buffer with exact capacity.
-        let data = rt.alloc.alloc(element_size, element_align, slice_len);
-        if data.is_null() {
-            return RtStatus::Error;
-        }
-
-        (*list_ptr).data = data;
-        (*list_ptr).capacity = slice_len;
-
-        // Clone each element from the slice.
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
-        for i in 0..slice_len {
-            let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
-            let dest_ptr = data.add((i * element_size) as usize);
-
-            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr);
-            if status != RtStatus::Ok {
-                // Clean up partially created list.
-                (*list_ptr).size = i;
-                let _ = list_destroy_impl(rt, list_value_out, list_tydesc);
-                return status;
-            }
-        }
-
-        (*list_ptr).size = slice_len;
-
-        RtStatus::Ok
-    }
-}
 
 /// Append all elements from a slice to the list (clones elements).
 pub unsafe fn list_extend_from_slice_impl(

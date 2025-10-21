@@ -63,7 +63,7 @@ pub struct List {
 
 ### Bulk Operations
 
-- `list_clone_from_slice_impl` - Create list from slice of elements.
+- `list_create_from_slice_impl` - Create list from slice of elements.
   - Clones all elements from the slice.
 
 - `list_extend_from_slice_impl` - Append slice of elements to list.
@@ -84,7 +84,7 @@ All FFI functions follow the naming convention `dtlv_rti_list_*_local`:
 9. `dtlv_rti_list_remove_local`
 10. `dtlv_rti_list_reserve_local`
 11. `dtlv_rti_list_shrink_to_fit_local`
-12. `dtlv_rti_list_clone_from_slice_local`
+12. `dtlv_rti_list_create_from_slice_local`
 13. `dtlv_rti_list_extend_from_slice_local`
 
 ## Implementation Notes
