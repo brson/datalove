@@ -7,6 +7,8 @@
 //! - Salsa accumulators for automatic collection
 //! - Multi-source diagnostic support
 
+#![allow(unused)]
+
 use bct::text::{Text, InternedText};
 use salsa::Accumulator;
 use salsa::plumbing::AsId;
