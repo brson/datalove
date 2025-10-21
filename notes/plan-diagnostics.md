@@ -19,18 +19,15 @@ Design a comprehensive diagnostic system inspired by Rust's compiler, using Sals
 ### Core Abstraction: Text + ByteSpan
 
 **Inside Salsa (pure, memoizable):**
-- Diagnostics reference `Text` (salsa-tracked) + `ByteSpan` (byte offsets)
+- Diagnostics reference `Text` (salsa-tracked)
 - Never reference `Source` or file paths
 - Parser/compiler works only with `Text`/`SubText`
-- Future-proof: chunks can be refactored without breaking diagnostics
 
 **Outside Salsa (driver/REPL):**
 - Maintains `HashMap<Text, SourceMetadata>`
 - `SourceMetadata` includes:
   - `path: Option<PathBuf>` - file path (if from file)
   - `display_name: String` - for display (e.g., "<repl-5>" or "main.df")
-  - `base_offset: usize` - where this Text starts in original source
-- Converts byte offsets → line:column using original source text
 - Renders diagnostics with file paths and positions
 
 ### New Crate: `datalove-diagnostic`
