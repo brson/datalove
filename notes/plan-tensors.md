@@ -241,9 +241,13 @@ Col-major: `strides[i] = product(shape[..i])`
 
 Standard library functions needed:
 
-something like this...
+Implemented (stubs in rt/lib.rs and rt/src/tensor.rs):
 
-- `tensor_new(element_tydesc: *const TyDesc, rank: u32, shape: *const u32, layout: TensorLayout) -> Tensor`
+- `dtlv_rti_tensor_create_from_slice_local` - creates tensor from flat slice + shape (by-move) + layout
+- `dtlv_rti_tensor_destroy_local` - frees all three allocations (shape, strides, data)
+
+Planned:
+
 - `tensor_slice(tensor: Tensor, ranges: *const SliceRange) -> Tensor`
 - `tensor_transpose(tensor: Tensor, perm: *const u32) -> Tensor`
 - `tensor_reshape(tensor: Tensor, new_shape: *const u32) -> Result<Tensor, Error>`
