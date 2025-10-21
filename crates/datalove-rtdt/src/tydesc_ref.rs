@@ -202,6 +202,30 @@ impl<'a> TyDescRef<'a> {
         }
     }
 
+    /// Returns the element type descriptor for a Tensor type.
+    ///
+    /// # Panics
+    /// Panics if this is not a Tensor type.
+    pub fn tensor_element_ty(&self) -> TyDescRef<'a> {
+        assert_eq!(self.inner.type_tag, TyTag::Tensor);
+        unsafe {
+            let info = self.inner.type_info.tensor;
+            TyDescRef::from_ptr(info.element_tydesc)
+        }
+    }
+
+    /// Returns the rank (number of dimensions) for a Tensor type.
+    ///
+    /// # Panics
+    /// Panics if this is not a Tensor type.
+    pub fn tensor_rank(&self) -> u32 {
+        assert_eq!(self.inner.type_tag, TyTag::Tensor);
+        unsafe {
+            let info = self.inner.type_info.tensor;
+            info.rank
+        }
+    }
+
     // Generic container accessors.
 
     /// Returns the inner type descriptor for an Option type.

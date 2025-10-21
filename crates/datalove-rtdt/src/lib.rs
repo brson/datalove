@@ -236,6 +236,7 @@ pub struct SetNodeLeafLayout {
 pub struct Tensor {
     pub ptr_base: *mut u8,
     pub offset_elems: u32,
+    pub capacity_elems: u32,
     pub shape: *const u32,
     pub strides: *const u32,
     pub layout: TensorLayout,
