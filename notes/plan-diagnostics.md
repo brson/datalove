@@ -349,14 +349,21 @@ match expr.kind {
 
 ## Migration Plan
 
-### Phase 1: Create diagnostic crate
-- [ ] Create `crates/datalove-diagnostic/`
-- [ ] Add to workspace Cargo.toml
-- [ ] Add dependency on `bct` (for Text, InternedText)
-- [ ] Define core types: Diagnostic, DiagnosticLabel, Suggestion, Severity, LabelStyle
-- [ ] Define accumulators: ParseDiagnostic, TypeDiagnostic, ResolutionDiagnostic, LintDiagnostic
-- [ ] Implement DiagnosticBuilder with builder methods
-- [ ] Write basic tests
+### Phase 1: Create diagnostic crate ✅ COMPLETE
+- [x] Create `crates/datalove-diagnostic/`
+- [x] Add to workspace Cargo.toml (auto-included via `members = ["crates/*"]`)
+- [x] Add dependency on `bct` (for Text, InternedText)
+- [x] Define core types: Diagnostic, DiagnosticLabel, Suggestion, Severity, LabelStyle
+- [x] Define accumulators: ParseDiagnostic, TypeDiagnostic, ResolutionDiagnostic, LintDiagnostic
+- [x] Implement DiagnosticBuilder with builder methods
+- [ ] Write basic tests (deferred - will test via integration)
+
+**Implementation Notes:**
+- Salsa accumulators cannot store types with lifetime parameters directly
+- Solution: Created `StoredDiagnostic` that uses `salsa::Id` instead of typed references
+- Conversion methods: `Diagnostic::to_stored()` and `StoredDiagnostic::to_diagnostic()`
+- This keeps the public API clean while working within Salsa's constraints
+- The crate compiles successfully with only expected dead_code warnings
 
 ### Phase 2: Update AST error nodes
 - [ ] Add `text: Text<'db>` and `span: ByteSpan` to datafun::StmtParseError

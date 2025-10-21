@@ -1,0 +1,10 @@
+[package]
+name = "datalove-diagnostic"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+bct.workspace = true
+salsa.workspace = true

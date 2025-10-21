@@ -1434,6 +1434,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-diagnostic"
+version = "0.1.0"
+dependencies = [
+ "bct",
+ "salsa",
+]
+
+[[package]]
 name = "datalove-exampletest"
 version = "0.1.0"
 dependencies = [
