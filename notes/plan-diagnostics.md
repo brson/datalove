@@ -425,11 +425,30 @@ match expr.kind {
 - All existing tests pass without modifications
 
 ### Phase 4: Type checker diagnostics
-- [ ] Remove `Vec<TypeError>` from TypeContext
-- [ ] Emit TypeDiagnostic via accumulators instead
-- [ ] Track Text + ByteSpan for expressions (may need AST updates)
-- [ ] Update all error reporting sites
-- [ ] Keep error handling in type checker (return Err, etc.)
+- [ ] **Part A: Datalit implementation**
+  - [ ] Add span infrastructure (ExprId newtype, ParseResult tracked struct)
+  - [ ] Update datalit parser to build expr_spans BTreeMap
+  - [ ] Update datalit call sites (14 files) to use ParseResult
+  - [ ] Update datalit type checker to emit TypeDiagnostic (~50 error sites)
+  - [ ] Assign error codes T001-T050 for datalit type errors
+  - [ ] Test: `cargo test -p datalove-datalit`
+- [ ] **Part B: Datafun implementation**
+  - [ ] Add span infrastructure (ExprFunId newtype, update Script)
+  - [ ] Update datafun parser to build expr_spans BTreeMap (12 ExprFun::new sites)
+  - [ ] Update datafun call sites (7 files)
+  - [ ] Update datafun type checker to emit TypeDiagnostic (~43 error sites)
+  - [ ] Assign error codes F001-F050 for datafun type errors
+  - [ ] Test: `cargo test -p datalove-datafun`
+- [ ] **Part C: Documentation**
+  - [ ] Update plan-diagnostics.md with error code catalog
+  - [ ] Document span side table pattern
+
+**Design:**
+- Use BTreeMap<ExprId, (Text, ByteSpan)> in tracked structs with #[returns(ref)]
+- Newtype IDs (ExprId, ExprFunId) for type safety
+- Track spans only for expressions that generate type errors
+- Keep Vec<TypeError> alongside accumulators during migration (backward compatibility)
+- Implementation order: datalit first (datafun depends on it)
 
 ### Phase 5: Resolution diagnostics
 - [ ] Update resolution pass to emit ResolutionDiagnostic
