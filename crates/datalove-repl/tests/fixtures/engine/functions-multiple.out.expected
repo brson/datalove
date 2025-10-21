@@ -7,17 +7,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "inc"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "fun double(x: @u32): @u32\n  ret x + x\nend fun",
@@ -27,22 +19,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "double"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "inc(@5)",
@@ -52,24 +31,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@6"
-      }
+      "Error": "type error(s): UnresolvedName(\"inc\")"
     },
-    "environment": [
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "double(@5)",
@@ -79,24 +43,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@10"
-      }
+      "Error": "type error(s): UnresolvedName(\"double\")"
     },
-    "environment": [
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "double(inc(@5))",
@@ -106,24 +55,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@12"
-      }
+      "Error": "type error(s): UnresolvedName(\"double\")"
     },
-    "environment": [
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "inc(double(@5))",
@@ -133,24 +67,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@11"
-      }
+      "Error": "type error(s): UnresolvedName(\"inc\")"
     },
-    "environment": [
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "fun multiply(a: @u32, b: @u32): @u32\n  ret a * b\nend fun",
@@ -160,27 +79,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "multiply"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Mul\", ty: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "multiply",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun",
@@ -190,32 +91,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "add"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "add",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "multiply",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "fun compute(x: @u32, y: @u32): @u32\n  let a = add(x, y)\n  let b = multiply(a, @2)\n  ret b\nend fun",
@@ -225,37 +103,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "compute"
-      }
+      "Error": "type error(s): UnresolvedName(\"add\"), UnresolvedName(\"multiply\"), UnresolvedName(\"b\")"
     },
-    "environment": [
-      {
-        "name": "add",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "compute",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "multiply",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "compute(@3, @4)",
@@ -265,48 +115,8 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@14"
-      }
+      "Error": "type error(s): UnresolvedName(\"compute\")"
     },
-    "environment": [
-      {
-        "name": "a",
-        "ty": "unknown",
-        "value": "@7"
-      },
-      {
-        "name": "add",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "b",
-        "ty": "unknown",
-        "value": "@14"
-      },
-      {
-        "name": "compute",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "inc",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "multiply",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   }
 ]

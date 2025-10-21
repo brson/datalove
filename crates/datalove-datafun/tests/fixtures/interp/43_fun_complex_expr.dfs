@@ -1,7 +1,19 @@
-fun calc(a: @u32, b: @u32, c: @u32): @u32
-  let x = a + b
-  let y = x * c
-  let z = y - a
+fun add(a: @u32, b: @u32): ?u32
+  ret a +? b
+end fun
+
+fun mul(a: @u32, b: @u32): ?u32
+  ret a *? b
+end fun
+
+fun sub(a: @u32, b: @u32): ?u32
+  ret a -? b
+end fun
+
+fun calc(a: @u32, b: @u32, c: @u32): ?u32
+  let x = add(a, b)?
+  let y = mul(x, c)?
+  let z = sub(y, a)?
   ret z
 end fun
 

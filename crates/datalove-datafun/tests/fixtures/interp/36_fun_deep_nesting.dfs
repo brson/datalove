@@ -1,9 +1,21 @@
-fun complex(a: @u32, b: @u32): @u32
-  let sum = a + b
+fun add(a: @u32, b: @u32): ?u32
+  ret a +? b
+end fun
+
+fun sub(a: @u32, b: @u32): ?u32
+  ret a -? b
+end fun
+
+fun mul(a: @u32, b: @u32): ?u32
+  ret a *? b
+end fun
+
+fun complex(a: @u32, b: @u32): ?u32
+  let sum = add(a, b)?
   if sum .> @10
-    let x = sum - @10
+    let x = sub(sum, @10)?
     if x .> @5
-      let y = x * @2
+      let y = mul(x, @2)?
       ret y
     else
       ret x

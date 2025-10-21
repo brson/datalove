@@ -1,14 +1,14 @@
-fun add(a: @u32, b: @u32): @u32
-  ret a + b
+fun add(a: @u32, b: @u32): ?u32
+  ret a +? b
 end fun
 
-fun multiply(a: @u32, b: @u32): @u32
-  ret a * b
+fun multiply(a: @u32, b: @u32): ?u32
+  ret a *? b
 end fun
 
-fun compute(x: @u32): @u32
-  let y = add(x, @2)
-  let z = multiply(y, @3)
+fun compute(x: @u32): ?u32
+  let y = add(x, @2)?
+  let z = multiply(y, @3)?
   ret z
 end fun
 

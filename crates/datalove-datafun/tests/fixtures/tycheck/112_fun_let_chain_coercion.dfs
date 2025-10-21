@@ -10,7 +10,8 @@ end fun
 
 fun test_chain(): @?u32
   let x: @u32 = @10
-  let y: @u32 = x + @5
-  let z: @?u32 = y
-  ret z
+  let y: !@u32 = x +! @5
+  let z: @!u32 = y
+  let w: @?u32 = z
+  ret w
 end fun

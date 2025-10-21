@@ -1,9 +1,8 @@
-fun process(n: @u32): @u32
+fun process(n: @u32): !@u32
   if n .> @0
-    let doubled = n * @2
+    let doubled: !@u32 = n *! @2
     ret doubled
   else
-    let zero = @0
-    ret zero
+    ret @0
   end if
 end fun

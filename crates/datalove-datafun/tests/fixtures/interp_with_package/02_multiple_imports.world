@@ -2,12 +2,12 @@
 module sys/std/u32
 ----------
 
-fun add(x: @u32, y: @u32): @u32
-  ret x + y
+fun add(x: @u32, y: @u32): ?u32
+  ret x +? y
 end fun
 
-fun double(x: @u32): @u32
-  ret x + x
+fun double(x: @u32): ?u32
+  ret x +? x
 end fun
 
 ----------
@@ -19,5 +19,9 @@ require module sys/std/u32
 import u32.add
 import u32.double
 
-let x = add(@5, @10)
-let output = double(x)
+fun compute(): ?u32
+  let x = add(@5, @10)?
+  ret double(x)
+end fun
+
+let output = compute()

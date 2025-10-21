@@ -2,8 +2,8 @@
 module sys/std/u32
 ----------
 
-fun negate(x: @u32): @u32
-  ret @0 - x
+fun negate(x: @u32): ?u32
+  ret @0 -? x
 end fun
 
 ----------

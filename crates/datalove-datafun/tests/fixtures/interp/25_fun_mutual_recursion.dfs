@@ -1,16 +1,20 @@
-fun is_even(n: @u32): @u32
+fun sub(a: @u32, b: @u32): ?u32
+  ret a -? b
+end fun
+
+fun is_even(n: @u32): ?u32
   if n == @0
     ret @1
   else
-    ret is_odd(n - @1)
+    ret is_odd(sub(n, @1)?)
   end if
 end fun
 
-fun is_odd(n: @u32): @u32
+fun is_odd(n: @u32): ?u32
   if n == @0
     ret @0
   else
-    ret is_even(n - @1)
+    ret is_even(sub(n, @1)?)
   end if
 end fun
 

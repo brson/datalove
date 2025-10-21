@@ -1,9 +1,11 @@
-fun double(x: @u32): @u32
-  ret x + x
+fun double(x: @u32): ?u32
+  ret x +? x
 end fun
 
-fun add_double(a: @u32, b: @u32): @u32
-  ret double(a) + double(b)
+fun add_double(a: @u32, b: @u32): ?u32
+  let da = double(a)?
+  let db = double(b)?
+  ret da +? db
 end fun
 
 let output = add_double(@3, @5)

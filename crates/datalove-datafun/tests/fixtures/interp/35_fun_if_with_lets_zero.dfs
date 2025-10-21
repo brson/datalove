@@ -1,6 +1,10 @@
-fun process(n: @u32): @u32
+fun mul(a: @u32, b: @u32): ?u32
+  ret a *? b
+end fun
+
+fun process(n: @u32): ?u32
   if n .> @0
-    let doubled = n * @2
+    let doubled = mul(n, @2)?
     ret doubled
   else
     let zero = @0

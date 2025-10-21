@@ -1,9 +1,13 @@
-fun inc(x: @u32): @u32
-  ret x + @1
+fun inc(x: @u32): ?u32
+  ret x +? @1
 end fun
 
-fun double(x: @u32): @u32
-  ret x * @2
+fun double(x: @u32): ?u32
+  ret x *? @2
 end fun
 
-let output = double(inc(@10))
+fun compute(x: @u32): ?u32
+  ret double(inc(x)?)
+end fun
+
+let output = compute(@10)

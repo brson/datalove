@@ -1,2 +1,6 @@
+fun add(a: @u32, b: @u32): ?u32
+  ret a +? b
+end fun
+
 let x = @100
-let output = x + x
+let output = add(x, x)

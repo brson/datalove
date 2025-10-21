@@ -56,11 +56,7 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@300"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
     },
     "environment": [
       {

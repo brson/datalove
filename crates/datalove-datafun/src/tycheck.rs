@@ -1077,9 +1077,9 @@ fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
 /// Validate that a binary operation is supported for the given type.
 ///
 /// Rules per README:
-/// - Floats (f32): bare ops only (+ - * /)
-/// - Bigints (int): bare ops except div (+ - *), plus /? and /!
-/// - Fixed ints: checked and optional ops only (+! -! *! /! +? -? *? /?)
+/// - Floats (f32): bare ops only (+ - * /), comparisons
+/// - Bigints (int): bare ops except div (+ - *), plus /? and /!, comparisons
+/// - Fixed ints: checked and optional ops only (+! -! *! /! +? -? *? /?), comparisons
 fn validate_operation_for_type<'db>(
     db: &'db dyn crate::Db,
     op: BinOp,
@@ -1093,17 +1093,17 @@ fn validate_operation_for_type<'db>(
     };
 
     let is_valid = match datalit_ty {
-        // Floats: only bare ops.
+        // Floats: only bare ops and comparisons.
         datalit::tycheck::Type::F32 => {
-            matches!(op, Add | Sub | Mul | Div)
+            matches!(op, Add | Sub | Mul | Div | Lt | Gt | Le | Ge | Eq | Ne)
         }
 
-        // Bigints: bare ops except div, plus /? and /!
+        // Bigints: bare ops except div, plus /? and /!, and comparisons.
         datalit::tycheck::Type::Int => {
-            matches!(op, Add | Sub | Mul | DivOptional | DivChecked)
+            matches!(op, Add | Sub | Mul | DivOptional | DivChecked | Lt | Gt | Le | Ge | Eq | Ne)
         }
 
-        // Fixed ints: only checked and optional ops.
+        // Fixed ints: only checked and optional ops, and comparisons.
         datalit::tycheck::Type::U8 |
         datalit::tycheck::Type::I8 |
         datalit::tycheck::Type::U16 |
@@ -1115,7 +1115,8 @@ fn validate_operation_for_type<'db>(
             matches!(
                 op,
                 AddChecked | SubChecked | MulChecked | DivChecked |
-                AddOptional | SubOptional | MulOptional | DivOptional
+                AddOptional | SubOptional | MulOptional | DivOptional |
+                Lt | Gt | Le | Ge | Eq | Ne
             )
         }
 

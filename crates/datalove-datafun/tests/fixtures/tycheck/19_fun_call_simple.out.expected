@@ -10,12 +10,12 @@
           "type": "@u32"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "!@u32"
     },
     {
       "kind": "variable",
       "name": "result",
-      "type": "u32"
+      "type": "@!@u32"
     }
   ]
 }

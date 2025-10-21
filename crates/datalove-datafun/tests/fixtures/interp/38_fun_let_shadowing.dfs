@@ -1,6 +1,14 @@
-fun shadow(x: @u32): @u32
-  let x = x + @1
-  let x = x * @2
+fun add(a: @u32, b: @u32): ?u32
+  ret a +? b
+end fun
+
+fun mul(a: @u32, b: @u32): ?u32
+  ret a *? b
+end fun
+
+fun shadow(x: @u32): ?u32
+  let x = add(x, @1)?
+  let x = mul(x, @2)?
   ret x
 end fun
 

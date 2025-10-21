@@ -1,5 +1,5 @@
-fun add(a: @u32, b: @u32): @u32
-  ret a + b
+fun add(a: @u32, b: @u32): !@u32
+  ret a +! b
 end fun
 
 let result = add(@10, @20)

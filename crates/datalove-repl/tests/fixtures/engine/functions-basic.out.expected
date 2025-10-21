@@ -7,17 +7,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "double"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "double(@21)",
@@ -27,19 +19,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@42"
-      }
+      "Error": "type error(s): UnresolvedName(\"double\")"
     },
-    "environment": [
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun",
@@ -49,22 +31,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "add"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "add",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "add(@10, @20)",
@@ -74,24 +43,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@30"
-      }
+      "Error": "type error(s): UnresolvedName(\"add\")"
     },
-    "environment": [
-      {
-        "name": "add",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "fun get_five(): @u32\n  ret @5\nend fun",
@@ -106,16 +60,6 @@
       }
     },
     "environment": [
-      {
-        "name": "add",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
       {
         "name": "get_five",
         "ty": "function",
@@ -138,16 +82,6 @@
       }
     },
     "environment": [
-      {
-        "name": "add",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "double",
-        "ty": "function",
-        "value": ""
-      },
       {
         "name": "get_five",
         "ty": "function",

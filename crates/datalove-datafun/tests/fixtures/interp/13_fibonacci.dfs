@@ -1,8 +1,18 @@
-fun fib(n: @u32): @u32
+fun sub(a: @u32, b: @u32): ?u32
+  ret a -? b
+end fun
+
+fun add(a: @u32, b: @u32): ?u32
+  ret a +? b
+end fun
+
+fun fib(n: @u32): ?u32
   if n .< @2
     ret @1
   else
-    ret fib(n - @1) + fib(n - @2)
+    let a = fib(sub(n, @1)?)?
+    let b = fib(sub(n, @2)?)?
+    ret add(a, b)
   end if
 end fun
 

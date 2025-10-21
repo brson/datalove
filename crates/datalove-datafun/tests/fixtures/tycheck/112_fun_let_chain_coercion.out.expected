@@ -1,5 +1,15 @@
 {
-  "errors": [],
+  "errors": [
+    {
+      "actual": "@!u32",
+      "expected": "@?u32",
+      "kind": "TypeMismatch"
+    },
+    {
+      "kind": "UnresolvedName",
+      "name": "w"
+    }
+  ],
   "judgements": [
     {
       "kind": "function",
