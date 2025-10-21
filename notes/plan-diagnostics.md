@@ -10,13 +10,17 @@
   - datalit parser: 21/21 error sites updated ✅
   - ast_serde: Deferred (recommendation: keep serde simple, only serialize message field)
   - All tests passing ✅
-- 🔲 Phases 3-7: Not yet started
+- ✅ Phase 3 Complete: Parser diagnostics implemented
+  - datafun parser: 9/9 error sites emit ParseDiagnostic ✅
+  - datalit parser: 21/21 error sites emit ParseDiagnostic ✅
+  - Error codes assigned: P001-P009 (datafun), D001-D020 (datalit)
+  - All tests passing ✅
+- 🔲 Phases 4-7: Not yet started
 
 **Next Steps:**
-1. Phase 3: Update datafun parser to emit ParseDiagnostic accumulators
-2. Phase 3: Update datalit parser to emit ParseDiagnostic accumulators
-3. Phase 4: Type checker diagnostics
-4. Phase 5: Resolution diagnostics
+1. Phase 4: Type checker diagnostics
+2. Phase 5: Resolution diagnostics
+3. Phase 6: Driver integration (retrieve and render diagnostics)
 
 ## Overview
 
@@ -406,12 +410,19 @@ match expr.kind {
 - ast_serde: Keeping serde versions simple with just `message` field (text/span are for diagnostic emission, not serialization)
 - Source text extraction: Uses first token's SubText to get parent Text (ChunkLex.chunk is private)
 
-### Phase 3: Parser diagnostics
-- [ ] Update datafun parser to emit ParseDiagnostic accumulators
-- [ ] Extract Text + ByteSpan from tokens (SubText)
-- [ ] Keep error node creation (for error recovery)
-- [ ] Update datalit parser similarly
-- [ ] Test that both error nodes and diagnostics are created
+### Phase 3: Parser diagnostics ✅ COMPLETE
+- [x] Update datafun parser to emit ParseDiagnostic accumulators
+- [x] Extract Text + ByteSpan from tokens (SubText)
+- [x] Keep error node creation (for error recovery)
+- [x] Update datalit parser similarly
+- [x] Test that both error nodes and diagnostics are created
+
+**Implementation Notes:**
+- Added diagnostic imports to both parsers
+- At each error site: emit diagnostic, then create error node
+- Used `span.clone()` when passing to DiagnosticBuilder to avoid move errors
+- Error codes: P001-P009 for datafun parser, D001-D020 for datalit parser
+- All existing tests pass without modifications
 
 ### Phase 4: Type checker diagnostics
 - [ ] Remove `Vec<TypeError>` from TypeContext

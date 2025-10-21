@@ -24,6 +24,7 @@ use bct::{
 use crate::ast;
 use crate::datalit;
 use crate::script;
+use datalove_diagnostic::DiagnosticBuilder;
 
 /// Parse a specific unit from a Script.
 /// Returns the parsed statements for that unit.
@@ -144,6 +145,12 @@ impl<'db> Parser<'db> {
             _ => {
                 let (text, span) = self.peek_text_span(&mut tokens);
                 let message = InternedText::new(self.db, "unexpected statement".S());
+
+                DiagnosticBuilder::error(self.db, "unexpected statement")
+                    .code("P001")
+                    .primary_label(text, span.clone(), "expected 'let', 'fun', 'ret', 'require', 'import', or 'if'")
+                    .emit_parse();
+
                 ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message))
             }
         }
@@ -196,6 +203,12 @@ impl<'db> Parser<'db> {
             _ => {
                 let (text, span) = self.peek_text_span(tokens);
                 let message = InternedText::new(self.db, "expected parameter list".S());
+
+                DiagnosticBuilder::error(self.db, "expected parameter list")
+                    .code("P002")
+                    .primary_label(text, span.clone(), "expected '(' to start parameter list")
+                    .emit_parse();
+
                 return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
             }
         };
@@ -364,6 +377,12 @@ impl<'db> Parser<'db> {
                 if !self.peek_sigil(tokens, Sigil::SlashForward) {
                     let (text, span) = self.peek_text_span(tokens);
                     let message = InternedText::new(self.db, "expected '/' after import space".S());
+
+                    DiagnosticBuilder::error(self.db, "expected '/' in module path")
+                        .code("P003")
+                        .primary_label(text, span.clone(), "expected '/' after import space")
+                        .emit_parse();
+
                     return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
                 }
                 self.eat_sigil(tokens, Sigil::SlashForward);
@@ -374,6 +393,12 @@ impl<'db> Parser<'db> {
                 if !self.peek_sigil(tokens, Sigil::SlashForward) {
                     let (text, span) = self.peek_text_span(tokens);
                     let message = InternedText::new(self.db, "expected '/' after package alias".S());
+
+                    DiagnosticBuilder::error(self.db, "expected '/' in module path")
+                        .code("P004")
+                        .primary_label(text, span.clone(), "expected '/' after package alias")
+                        .emit_parse();
+
                     return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
                 }
                 self.eat_sigil(tokens, Sigil::SlashForward);
@@ -413,6 +438,12 @@ impl<'db> Parser<'db> {
             _ => {
                 let (text, span) = self.peek_text_span(tokens);
                 let message = InternedText::new(self.db, "expected 'module' or 'data' after 'require'".S());
+
+                DiagnosticBuilder::error(self.db, "expected 'module' or 'data' after 'require'")
+                    .code("P005")
+                    .primary_label(text, span.clone(), "expected 'module' or 'data'")
+                    .emit_parse();
+
                 ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message))
             }
         }
@@ -431,6 +462,12 @@ impl<'db> Parser<'db> {
         if !self.peek_sigil(tokens, Sigil::Dot) {
             let (text, span) = self.peek_text_span(tokens);
             let message = InternedText::new(self.db, "expected '.' after module name".S());
+
+            DiagnosticBuilder::error(self.db, "expected '.' in import statement")
+                .code("P006")
+                .primary_label(text, span.clone(), "expected '.' after module name")
+                .emit_parse();
+
             return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
         }
         self.eat_sigil(tokens, Sigil::Dot);
@@ -821,6 +858,12 @@ impl<'db> Parser<'db> {
                             let (text, span) = self.peek_text_span(tokens);
                             tokens.next();
                             let message = InternedText::new(self.db, "unexpected token in expression".S());
+
+                            DiagnosticBuilder::error(self.db, "unexpected token in expression")
+                                .code("P007")
+                                .primary_label(text, span.clone(), "unexpected token")
+                                .emit_parse();
+
                             ast::ExprFun::new(
                                 self.db,
                                 ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))
@@ -845,6 +888,12 @@ impl<'db> Parser<'db> {
             None => {
                 let (text, span) = self.peek_text_span(tokens);
                 let message = InternedText::new(self.db, "expected expression".S());
+
+                DiagnosticBuilder::error(self.db, "expected expression")
+                    .code("P008")
+                    .primary_label(text, span.clone(), "expected expression")
+                    .emit_parse();
+
                 ast::ExprFun::new(
                     self.db,
                     ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))
@@ -939,6 +988,12 @@ impl<'db> Parser<'db> {
             _ => {
                 let (text, span) = self.peek_text_span(tokens);
                 let message = InternedText::new(self.db, "expected tuple".S());
+
+                DiagnosticBuilder::error(self.db, "expected tuple")
+                    .code("P009")
+                    .primary_label(text, span.clone(), "expected '(' to start tuple")
+                    .emit_parse();
+
                 return ast::ExprFun::new(
                     self.db,
                     ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))

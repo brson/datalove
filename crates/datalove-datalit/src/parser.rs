@@ -20,6 +20,7 @@ use bct::{
 };
 
 use crate::ast;
+use datalove_diagnostic::DiagnosticBuilder;
 
 #[salsa::tracked]
 pub fn parse<'db>(
@@ -166,6 +167,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected () after tuple keyword".S());
+
+                        DiagnosticBuilder::error(self.db, "expected () after tuple keyword")
+                            .code("D001")
+                            .primary_label(text, span.clone(), "expected '(' after 'tuple'")
+                            .emit_parse();
+
                         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
@@ -193,6 +200,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected {} after struct keyword".S());
+
+                        DiagnosticBuilder::error(self.db, "expected {} after struct keyword")
+                            .code("D002")
+                            .primary_label(text, span.clone(), "expected '{' after 'struct'")
+                            .emit_parse();
+
                         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
@@ -221,6 +234,12 @@ impl<'db> DynParser<'db> {
                         _ => {
                             let (text, span) = self.current_text_span();
                             let message = InternedText::new(self.db, "expected {} after enum keyword".S());
+
+                            DiagnosticBuilder::error(self.db, "expected {} after enum keyword")
+                                .code("D003")
+                                .primary_label(text, span.clone(), "expected '{' after 'enum'")
+                                .emit_parse();
+
                             ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                         }
                     }
@@ -247,6 +266,12 @@ impl<'db> DynParser<'db> {
                         _ => {
                             let (text, span) = self.current_text_span();
                             let message = InternedText::new(self.db, "expected {} after enum name".S());
+
+                            DiagnosticBuilder::error(self.db, "expected {} after enum name")
+                                .code("D004")
+                                .primary_label(text, span.clone(), "expected '{' after enum name")
+                                .emit_parse();
+
                             ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                         }
                     }
@@ -273,6 +298,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected <> after map keyword".S());
+
+                        DiagnosticBuilder::error(self.db, "expected <> after map keyword")
+                            .code("D005")
+                            .primary_label(text, span.clone(), "expected '<' after 'map'")
+                            .emit_parse();
+
                         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
@@ -296,6 +327,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected <> after set keyword".S());
+
+                        DiagnosticBuilder::error(self.db, "expected <> after set keyword")
+                            .code("D006")
+                            .primary_label(text, span.clone(), "expected '<' after 'set'")
+                            .emit_parse();
+
                         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
@@ -319,6 +356,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected <> after list keyword".S());
+
+                        DiagnosticBuilder::error(self.db, "expected <> after list keyword")
+                            .code("D007")
+                            .primary_label(text, span.clone(), "expected '<' after 'list'")
+                            .emit_parse();
+
                         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
@@ -368,6 +411,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "unknown type hint in DynParser".S());
+
+                        DiagnosticBuilder::error(self.db, "unknown type hint")
+                            .code("D008")
+                            .primary_label(text, span.clone(), "unexpected token in type hint")
+                            .emit_parse();
+
                         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
                     }
                 }
@@ -460,6 +509,12 @@ impl<'db> DynParser<'db> {
                                     // Not a number - this is an error.
                                     let (text, span) = self.current_text_span();
                                     let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+
+                                    DiagnosticBuilder::error(self.db, "expected heap sigil @ or # before expression")
+                                        .code("D009")
+                                        .primary_label(text, span.clone(), "expected '@' or '#' before expression")
+                                        .emit_parse();
+
                                     let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                                     return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                                 }
@@ -467,6 +522,12 @@ impl<'db> DynParser<'db> {
                                 // No word string - error.
                                 let (text, span) = self.current_text_span();
                                 let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+
+                                DiagnosticBuilder::error(self.db, "expected heap sigil @ or # before expression")
+                                    .code("D010")
+                                    .primary_label(text, span.clone(), "expected '@' or '#' before expression")
+                                    .emit_parse();
+
                                 let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                                 return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                             }
@@ -475,6 +536,12 @@ impl<'db> DynParser<'db> {
                             // Unknown token kind - error.
                             let (text, span) = self.current_text_span();
                             let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+
+                            DiagnosticBuilder::error(self.db, "expected heap sigil @ or # before expression")
+                                .code("D011")
+                                .primary_label(text, span.clone(), "expected '@' or '#' before expression")
+                                .emit_parse();
+
                             let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                             return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                         }
@@ -490,6 +557,12 @@ impl<'db> DynParser<'db> {
                     // Not a token or branch - error.
                     let (text, span) = self.current_text_span();
                     let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
+
+                    DiagnosticBuilder::error(self.db, "expected heap sigil @ or # before expression")
+                        .code("D012")
+                        .primary_label(text, span.clone(), "expected '@' or '#' before expression")
+                        .emit_parse();
+
                     let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
                 }
@@ -544,6 +617,12 @@ impl<'db> DynParser<'db> {
             // Not a negative number - this is an error (unexpected minus).
             let (text, span) = self.current_text_span();
             let message = InternedText::new(self.db, "unexpected minus sign".S());
+
+            DiagnosticBuilder::error(self.db, "unexpected minus sign")
+                .code("D013")
+                .primary_label(text, span.clone(), "unexpected '-' not followed by number")
+                .emit_parse();
+
             return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
         }
 
@@ -594,6 +673,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected () after tuple name".S());
+
+                        DiagnosticBuilder::error(self.db, "expected () after tuple name")
+                            .code("D014")
+                            .primary_label(text, span.clone(), "expected '(' after tuple name")
+                            .emit_parse();
+
                         return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     }
                 }
@@ -621,6 +706,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected {} after struct name".S());
+
+                        DiagnosticBuilder::error(self.db, "expected {} after struct name")
+                            .code("D015")
+                            .primary_label(text, span.clone(), "expected '{' after struct name")
+                            .emit_parse();
+
                         return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     }
                 }
@@ -704,6 +795,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected {} after map keyword".S());
+
+                        DiagnosticBuilder::error(self.db, "expected {} after map keyword")
+                            .code("D016")
+                            .primary_label(text, span.clone(), "expected '{' after 'map'")
+                            .emit_parse();
+
                         return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     }
                 }
@@ -726,6 +823,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "expected {} after set keyword".S());
+
+                        DiagnosticBuilder::error(self.db, "expected {} after set keyword")
+                            .code("D017")
+                            .primary_label(text, span.clone(), "expected '{' after 'set'")
+                            .emit_parse();
+
                         return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     }
                 }
@@ -767,6 +870,12 @@ impl<'db> DynParser<'db> {
                                 self.db,
                                 format!("Unexpected identifier: {}", word).S()
                             );
+
+                            DiagnosticBuilder::error(self.db, &format!("unexpected identifier '{}'", word))
+                                .code("D019")
+                                .primary_label(text, span.clone(), "unexpected identifier")
+                                .emit_parse();
+
                             ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message))
                         }
                     }
@@ -781,6 +890,12 @@ impl<'db> DynParser<'db> {
                     _ => {
                         let (text, span) = self.current_text_span();
                         let message = InternedText::new(self.db, "unexpected token in DynParser expression".S());
+
+                        DiagnosticBuilder::error(self.db, "unexpected token in expression")
+                            .code("D020")
+                            .primary_label(text, span.clone(), "unexpected token")
+                            .emit_parse();
+
                         ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message))
                     }
                 }
@@ -827,6 +942,12 @@ impl<'db> DynParser<'db> {
             _ => {
                 let (text, span) = self.current_text_span();
                 let message = InternedText::new(self.db, "unexpected tree node in DynParser expression".S());
+
+                DiagnosticBuilder::error(self.db, "unexpected token in expression")
+                    .code("D018")
+                    .primary_label(text, span.clone(), "unexpected token")
+                    .emit_parse();
+
                 ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message))
             }
         }
