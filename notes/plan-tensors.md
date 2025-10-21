@@ -35,11 +35,14 @@ This differs from storing direct pointer to first element.
 
 ## Core Structure
 
+**Status**: Implemented in crates/datalove-rtdt/src/lib.rs:236-243
+
 ```rust
 #[repr(C)]
 pub struct Tensor {
     pub ptr_base: *mut u8,       // Pointer to base of data buffer allocation
     pub offset_elems: u32,        // Offset in elements from base to first element of view
+    pub capacity_elems: u32,      // Total capacity of base buffer in elements
     pub shape: *const u32,        // Heap-allocated array of dimension sizes (length = rank)
     pub strides: *const u32,      // Heap-allocated array of strides in elements (length = rank)
     pub layout: TensorLayout,     // Layout tag
@@ -50,14 +53,18 @@ pub struct Tensor {
 
 - `ptr_base`: Base allocation pointer. Always points to start of buffer, even for views. Used for deallocation.
 - `offset_elems`: Element offset from base to this view's first element. Zero for full tensors.
+- `capacity_elems`: Total capacity of base buffer in elements. Follows List/String pattern.
 - `shape`: Points to heap array of N dimension sizes (N = rank, known at compile time).
 - `strides`: Points to heap array of N stride values in elements.
 - `layout`: Enum indicating memory layout convention.
 
 ## Layout Options
 
+**Status**: Implemented in crates/datalove-rtdt/src/lib.rs:246-253
+
 ```rust
 #[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TensorLayout {
     RowMajor = 1,           // C-style: last dimension varies fastest, strides = [D₁×...×Dₙ, D₂×...×Dₙ, ..., Dₙ, 1]
     ColMajor = 2,           // Fortran/Julia-style: first dimension varies fastest, strides = [1, D₁, D₁×D₂, ..., D₁×...×Dₙ₋₁]
@@ -75,9 +82,15 @@ pub enum TensorLayout {
 
 ## Type System Integration
 
+**Status**: Implemented in crates/datalove-rtdt/src/lib.rs
+
 ### TyDesc Extension
 
-Add tensor variant to type descriptor:
+Tensor variants added to type descriptor:
+
+- `TyTag::Tensor = 0x54` (line 379)
+- `TyInfo::tensor` union variant (line 398)
+- `TyInfoTensor` struct (lines 474-477)
 
 ```rust
 #[repr(u8)]
@@ -93,6 +106,7 @@ pub union TyInfo {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct TyInfoTensor {
     pub element_tydesc: *const TyDesc,
     pub rank: u32,
@@ -256,16 +270,20 @@ Planned:
 
 ### Layout Information
 
-Add computed layout struct like other collection types:
+**Status**: Implemented in crates/datalove-rtdt/src/lib.rs:256-259
+
+Computed layout struct added:
 
 ```rust
-pub struct TensorLayout {
+pub struct TensorLayoutInfo {
     pub size: u32,               // sizeof(Tensor) struct
     pub align: u32,              // alignment
-    pub data_offset: u32,        // offset to data buffer
-    pub total_elements: u32,     // product of shape dimensions
 }
 ```
+
+Note: Unlike the plan, data_offset and total_elements are not included.
+The Tensor struct is fixed-size so data_offset is not needed.
+Total elements can be computed from shape when needed.
 
 ### Memory Management
 
@@ -285,3 +303,36 @@ Consider for future:
 - **Broadcasting**: Operations on tensors with compatible shapes
 - **SIMD operations**: Vectorized element-wise operations for contiguous layouts
 - **GPU interop**: Pointer exchange with GPU tensor libraries
+
+## Implementation Status Summary
+
+### Completed
+
+**Data Structures** (crates/datalove-rtdt/src/lib.rs):
+- `Tensor` struct (lines 236-243) - includes capacity_elems field
+- `TensorLayout` enum (lines 246-253)
+- `TensorLayoutInfo` struct (lines 256-259)
+- `TyTag::Tensor` variant (line 379)
+- `TyInfo::tensor` variant (line 398)
+- `TyInfoTensor` struct (lines 474-477)
+
+**Runtime API Stubs** (crates/datalove-rt/src/lib.rs and src/tensor.rs):
+- `dtlv_rti_tensor_create_from_slice_local` (lib.rs:1042)
+- `dtlv_rti_tensor_destroy_local` (lib.rs:1079)
+- Implementation stubs in src/tensor.rs (todo!)
+
+### Next Steps
+
+1. Implement stride computation helpers (row-major and column-major)
+2. Implement `tensor_create_from_slice_impl`:
+   - Extract shape from moved-in list argument
+   - Allocate data buffer with capacity
+   - Copy elements from slice
+   - Allocate and populate shape array
+   - Compute and allocate strides array
+3. Implement `tensor_destroy_impl`:
+   - Free shape array
+   - Free strides array
+   - Free data buffer
+4. Add support in clone, destroy, eq, and cmp modules
+5. Implement tensor operations (slice, transpose, reshape, get, set)
