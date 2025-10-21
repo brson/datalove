@@ -548,6 +548,7 @@ impl<'db> Parser<'db> {
         // Collect tokens for the type hint, stopping at delimiters that mark the end of a type.
         // We stop at `=` (assignment) or `,` (parameter separator) at depth 0.
         // These delimiters are NOT consumed, so they remain in the iterator.
+        // fixme this is so brittle
         let mut collected = Vec::new();
 
         while let Some(token) = tokens.peek() {
