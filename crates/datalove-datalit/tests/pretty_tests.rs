@@ -6,7 +6,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let db = datalove_datalit::Database::default();
     let source = bct::input::Source::new(&db, source_text.S());
 
-    let ast = datalove_datalit::parser::parse(&db, source);
+    let parse_result = datalove_datalit::parser::parse(&db, source);
+    let ast = parse_result.expr;
     Ok(datalove_datalit::pretty::pretty_print(&db, ast))
 }
 

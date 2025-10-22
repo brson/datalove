@@ -116,13 +116,14 @@ impl LitTycheckCommand {
         let source = Source::new(&db, contents.S());
 
         // Parse the expression.
-        let expr = datalit::parser::parse(&db, source);
+        let parse_result = datalit::parser::parse(&db, source);
+        let ast = parse_result.expr;
 
         // Resolve names.
-        let resolved = datalit::resolve::resolve_names(&db, expr);
+        let resolved = datalit::resolve::resolve_names(&db, ast);
 
         // Type check.
-        let result = datalit::tycheck::type_check(&db, expr, resolved);
+        let result = datalit::tycheck::type_check(&db, ast, resolved);
 
         // Report errors.
         let errors = result.errors(&db);
@@ -151,10 +152,11 @@ impl LitAstCommand {
         let source = Source::new(&db, contents.S());
 
         // Parse the expression.
-        let expr = datalit::parser::parse(&db, source);
+        let parse_result = datalit::parser::parse(&db, source);
+        let ast = parse_result.expr;
 
         // Convert to serializable AST and print.
-        let serde_ast = datalit::ast_serde::ExprFull::from_ast(&db, expr);
+        let serde_ast = datalit::ast_serde::ExprFull::from_ast(&db, ast);
         println!("{:#?}", serde_ast);
 
         Ok(())
@@ -173,10 +175,11 @@ impl LitPrettyCommand {
         let source = Source::new(&db, contents.S());
 
         // Parse the expression.
-        let expr = datalit::parser::parse(&db, source);
+        let parse_result = datalit::parser::parse(&db, source);
+        let ast = parse_result.expr;
 
         // Pretty print using the pretty printer.
-        let pretty_printed = datalit::pretty::pretty_print(&db, expr);
+        let pretty_printed = datalit::pretty::pretty_print(&db, ast);
         println!("{}", pretty_printed);
 
         Ok(())
@@ -192,10 +195,12 @@ impl LitOpCommand {
 
         // Parse both expressions.
         let source1 = Source::new(&db, self.expr1.S());
-        let expr1 = datalit::parser::parse(&db, source1);
+        let parse_result1 = datalit::parser::parse(&db, source1);
+        let expr1 = parse_result1.expr;
 
         let source2 = Source::new(&db, self.expr2.S());
-        let expr2 = datalit::parser::parse(&db, source2);
+        let parse_result2 = datalit::parser::parse(&db, source2);
+        let expr2 = parse_result2.expr;
 
         // Resolve and type check.
         let resolved1 = datalit::resolve::resolve_names(&db, expr1);

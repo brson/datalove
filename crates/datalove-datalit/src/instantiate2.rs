@@ -920,9 +920,9 @@ mod tests {
         }
     }
 
-    fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<TypecheckResult<'db>> {
+    fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<TypecheckResult<'db>> {
         let source = bct::input::Source::new(db, source_text.to_string());
-        let parsed = crate::parser::parse(db, source);
+        let parsed = crate::parser::parse_for_test(db, source);
         let resolved = crate::resolve::resolve_names(db, parsed);
         let typechecked = crate::tycheck::type_check(db, parsed, resolved);
         Ok(typechecked)
@@ -931,7 +931,7 @@ mod tests {
     #[test]
     fn test_instantiate_bool_true() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@true")?;
+        let typechecked = compile_str(&db, "@true")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -951,7 +951,7 @@ mod tests {
     #[test]
     fn test_instantiate_bool_false() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@false")?;
+        let typechecked = compile_str(&db, "@false")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -971,7 +971,7 @@ mod tests {
     #[test]
     fn test_instantiate_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@42")?;
+        let typechecked = compile_str(&db, "@42")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -991,7 +991,7 @@ mod tests {
     #[test]
     fn test_instantiate_f32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@3.14")?;
+        let typechecked = compile_str(&db, "@3.14")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1011,7 +1011,7 @@ mod tests {
     #[test]
     fn test_instantiate_string() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, r#"@"hello""#)?;
+        let typechecked = compile_str(&db, r#"@"hello""#)?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1035,7 +1035,7 @@ mod tests {
     #[test]
     fn test_instantiate_empty_string() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, r#"@"""#)?;
+        let typechecked = compile_str(&db, r#"@"""#)?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1058,7 +1058,7 @@ mod tests {
     #[test]
     fn test_instantiate_tuple_simple() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@(@true, @42)")?;
+        let typechecked = compile_str(&db, "@(@true, @42)")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1086,7 +1086,7 @@ mod tests {
     #[test]
     fn test_instantiate_int_small() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @int / @42")?;
+        let typechecked = compile_str(&db, ": @int / @42")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1110,7 +1110,7 @@ mod tests {
     #[test]
     fn test_instantiate_int_zero() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @int / @0")?;
+        let typechecked = compile_str(&db, ": @int / @0")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1134,7 +1134,7 @@ mod tests {
     #[test]
     fn test_instantiate_anon_struct() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@{x = @1, y = @2}")?;
+        let typechecked = compile_str(&db, "@{x = @1, y = @2}")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1169,7 +1169,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_no_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
+        let typechecked = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1193,7 +1193,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_with_scalar_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
+        let typechecked = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1222,7 +1222,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@[@1, @2, @3, @4, @5]")?;
+        let typechecked = compile_str(&db, "@[@1, @2, @3, @4, @5]")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1251,7 +1251,7 @@ mod tests {
     #[test]
     fn test_instantiate_empty_list() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @[@u32] / @[]")?;
+        let typechecked = compile_str(&db, ": @[@u32] / @[]")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1274,7 +1274,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@u32 / @none")?;
+        let typechecked = compile_str(&db, ": @?@u32 / @none")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1295,7 +1295,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_some_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@u32 / @42")?;
+        let typechecked = compile_str(&db, ": @?@u32 / @42")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1320,7 +1320,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_string() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, r#"@[@"hello", @"world"]"#)?;
+        let typechecked = compile_str(&db, r#"@[@"hello", @"world"]"#)?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1354,7 +1354,7 @@ mod tests {
     #[test]
     fn test_instantiate_nested_option_some_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@?@u32 / @42")?;
+        let typechecked = compile_str(&db, ": @?@?@u32 / @42")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1388,7 +1388,7 @@ mod tests {
     #[test]
     fn test_instantiate_named_tuple() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @tuple Point(@u32, @u32) / @tuple Point(@1, @2)")?;
+        let typechecked = compile_str(&db, ": @tuple Point(@u32, @u32) / @tuple Point(@1, @2)")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1416,7 +1416,7 @@ mod tests {
     #[test]
     fn test_instantiate_int_large() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @int / @1234567890123456789")?;
+        let typechecked = compile_str(&db, ": @int / @1234567890123456789")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1445,7 +1445,7 @@ mod tests {
     #[test]
     fn test_instantiate_named_struct() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @struct Point {x = @10, y = @20}")?;
+        let typechecked = compile_str(&db, ": @struct Point {x: @u32, y: @u32} / @struct Point {x = @10, y = @20}")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1473,7 +1473,7 @@ mod tests {
     #[test]
     fn test_instantiate_anon_to_named_struct() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @struct Point {x: @u32, y: @u32} / @{x = @5, y = @15}")?;
+        let typechecked = compile_str(&db, ": @struct Point {x: @u32, y: @u32} / @{x = @5, y = @15}")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1501,7 +1501,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_anon_to_named_coercion() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Error")?;
+        let typechecked = compile_str(&db, ": @enum Status { Ok, Error } / @enum Error")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1522,7 +1522,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_with_tuple_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum { Ok(@(@u32, @u32)), Err(@string) } / @enum Ok(@(@10, @20))")?;
+        let typechecked = compile_str(&db, ": @enum { Ok(@(@u32, @u32)), Err(@string) } / @enum Ok(@(@10, @20))")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1564,7 +1564,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_with_struct_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum { Data(@{x: @u32, y: @u32}), None } / @enum Data(@{x = @5, y = @15})")?;
+        let typechecked = compile_str(&db, ": @enum { Data(@{x: @u32, y: @u32}), None } / @enum Data(@{x = @5, y = @15})")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1606,7 +1606,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_of_tuples() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@[@(@1, @2), @(@3, @4), @(@5, @6)]")?;
+        let typechecked = compile_str(&db, "@[@(@1, @2), @(@3, @4), @(@5, @6)]")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1646,7 +1646,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_tuple_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@(@u32, @u32) / @none")?;
+        let typechecked = compile_str(&db, ": @?@(@u32, @u32) / @none")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1672,7 +1672,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_tuple_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@(@u32, @u32) / @(@10, @20)")?;
+        let typechecked = compile_str(&db, ": @?@(@u32, @u32) / @(@10, @20)")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1706,7 +1706,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_struct_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@{x: @u32, y: @u32} / @none")?;
+        let typechecked = compile_str(&db, ": @?@{x: @u32, y: @u32} / @none")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1732,7 +1732,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_struct_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@{x: @u32, y: @u32} / @{x = @100, y = @200}")?;
+        let typechecked = compile_str(&db, ": @?@{x: @u32, y: @u32} / @{x = @100, y = @200}")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1766,7 +1766,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_list_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@[@u32] / @none")?;
+        let typechecked = compile_str(&db, ": @?@[@u32] / @none")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1790,7 +1790,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_list_some_empty() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@[@u32] / @[]")?;
+        let typechecked = compile_str(&db, ": @?@[@u32] / @[]")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1819,7 +1819,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_list_some_nonempty() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@[@u32] / @[@1, @2, @3]")?;
+        let typechecked = compile_str(&db, ": @?@[@u32] / @[@1, @2, @3]")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1850,7 +1850,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_string_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@string / @none")?;
+        let typechecked = compile_str(&db, ": @?@string / @none")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1874,7 +1874,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_enum_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@enum { Ok, Error } / @none")?;
+        let typechecked = compile_str(&db, ": @?@enum { Ok, Error } / @none")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1900,7 +1900,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_enum_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@enum { Ok, Error(@string) } / @enum Error(@\"failed\")")?;
+        let typechecked = compile_str(&db, ": @?@enum { Ok, Error(@string) } / @enum Error(@\"failed\")")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1938,7 +1938,7 @@ mod tests {
     #[test]
     fn test_instantiate_nested_option_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@?@u32 / @none")?;
+        let typechecked = compile_str(&db, ": @?@?@u32 / @none")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1965,7 +1965,7 @@ mod tests {
     #[test]
     fn test_instantiate_nested_option_some_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@?@u32 / @none")?;
+        let typechecked = compile_str(&db, ": @?@?@u32 / @none")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1986,7 +1986,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_option_of_tuple() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@?@(@u32, @bool) / @(@5, @true)")?;
+        let typechecked = compile_str(&db, ": @?@?@(@u32, @bool) / @(@5, @true)")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2029,7 +2029,7 @@ mod tests {
     #[test]
     fn test_instantiate_result_ok_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @!@u32 / @42")?;
+        let typechecked = compile_str(&db, ": @!@u32 / @42")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2054,7 +2054,7 @@ mod tests {
     #[test]
     fn test_instantiate_result_err() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @!@u32 / @error @\"oops\"")?;
+        let typechecked = compile_str(&db, ": @!@u32 / @error @\"oops\"")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2088,7 +2088,7 @@ mod tests {
     #[test]
     fn test_instantiate_error() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@error @42")?;
+        let typechecked = compile_str(&db, "@error @42")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);

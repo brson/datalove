@@ -14,14 +14,16 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Step 1: Parse the original datalit.
     let db = datalit::Database::default();
     let source = bct::input::Source::new(&db, source_text.S());
-    let ast = datalit::parser::parse(&db, source);
+    let parse_result = datalit::parser::parse(&db, source);
+    let ast = parse_result.expr;
 
     // Step 2: Pretty-print the AST.
     let pretty1 = datalit::pretty::pretty_print(&db, ast);
 
     // Step 3: Parse the pretty-printed output.
     let source2 = bct::input::Source::new(&db, pretty1.S());
-    let ast2 = datalit::parser::parse(&db, source2);
+    let parse_result2 = datalit::parser::parse(&db, source2);
+    let ast2 = parse_result2.expr;
 
     // Step 4: Pretty-print again.
     let pretty2 = datalit::pretty::pretty_print(&db, ast2);

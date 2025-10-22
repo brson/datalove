@@ -8,7 +8,8 @@ use datalove_rt::rt_local::RtLocal;
 
 fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
     let source = bct::input::Source::new(db, source_text.to_string());
-    let parsed = datalove_datalit::parser::parse(db, source);
+    let parse_result = datalove_datalit::parser::parse(db, source);
+    let parsed = parse_result.expr;
     let resolved = datalove_datalit::resolve::resolve_names(db, parsed);
     let typechecked = datalove_datalit::tycheck::type_check(db, parsed, resolved);
     Ok(typechecked)

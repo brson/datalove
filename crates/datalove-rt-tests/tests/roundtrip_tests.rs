@@ -126,7 +126,8 @@ fn compile_and_instantiate<'db>(
     source_text: &str,
 ) -> Result<(datalit::instantiate2::InstantiatedValue, datalit::tycheck::TypecheckResult<'db>), String> {
     let source = bct::input::Source::new(db, source_text.S());
-    let parsed = datalit::parser::parse(db, source);
+    let parse_result = datalit::parser::parse(db, source);
+    let parsed = parse_result.expr;
     let resolved = datalit::resolve::resolve_names(db, parsed);
     let typechecked = datalit::tycheck::type_check(db, parsed, resolved);
 
@@ -187,7 +188,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Step 5: Parse and typecheck the second pretty-print to get the third type.
     let source3 = bct::input::Source::new(&db, pretty2.S());
-    let parsed3 = datalit::parser::parse(&db, source3);
+    let parse_result3 = datalit::parser::parse(&db, source3);
+    let parsed3 = parse_result3.expr;
     let resolved3 = datalit::resolve::resolve_names(&db, parsed3);
     let tycheck3 = datalit::tycheck::type_check(&db, parsed3, resolved3);
     let type3 = tycheck3.root_type(&db).X();

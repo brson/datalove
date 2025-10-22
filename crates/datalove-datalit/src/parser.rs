@@ -22,22 +22,24 @@ use bct::{
 use crate::ast;
 use datalove_diagnostic::DiagnosticBuilder;
 
-#[salsa::tracked]
+/// Parse a Source into a datalit expression with span information.
+///
+/// This function must be called from within a Salsa tracked function context.
+/// For tests, use the test helper modules which provide tracked wrappers.
 pub fn parse<'db>(
     db: &'db dyn crate::Db,
     source: Source,
-) -> ast::ExprFull<'db> {
+) -> ast::ParseResult<'db> {
     let chunk = source_map::basic_source_map(db, source);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
     parse_bracer(db, bracer)
 }
 
-#[salsa::tracked]
 fn parse_bracer<'db>(
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
-) -> ast::ExprFull<'db> {
+) -> ast::ParseResult<'db> {
     let chunk_lex = bracer.chunk(db);
     // Get source text from the first token.
     let source_text = chunk_lex.tokens(db).first().map(|token| {
@@ -54,7 +56,7 @@ fn parse_bracer<'db>(
 pub fn parse_from_tokens<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
-) -> ast::ExprFull<'db> {
+) -> ast::ParseResult<'db> {
     parse_from_tokens_with_source(db, tokens, None)
 }
 
@@ -63,14 +65,16 @@ fn parse_from_tokens_with_source<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
     source_text: Option<bct::text::Text<'db>>,
-) -> ast::ExprFull<'db> {
+) -> ast::ParseResult<'db> {
     let mut dyn_parser = DynParser {
         db,
         tokens,
         pos: 0,
         source_text,
+        expr_spans: Vec::new(),
     };
-    dyn_parser.parse_expr_full()
+    let expr = dyn_parser.parse_expr_full();
+    ast::ParseResult::new(expr, dyn_parser.expr_spans)
 }
 
 /// Parse a type hint and heap from a vector of tokens.
@@ -85,6 +89,7 @@ pub fn parse_type_hint_and_heap_from_tokens<'db>(
         tokens,
         pos: 0,
         source_text: None,
+        expr_spans: Vec::new(),
     };
     let type_hint = dyn_parser.parse_type_hint_and_heap();
     let consumed = dyn_parser.pos;
@@ -96,6 +101,7 @@ struct DynParser<'db> {
     tokens: Vec<TreeToken<'db>>,
     pos: usize,
     source_text: Option<bct::text::Text<'db>>,
+    expr_spans: Vec<(ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
 }
 
 impl<'db> DynParser<'db> {
@@ -156,6 +162,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                         ast::TypeHint::NamedTuple(ast::TypeHintNamedTuple::new(
@@ -189,6 +196,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                         ast::TypeHint::NamedStruct(ast::TypeHintNamedStruct::new(
@@ -224,6 +232,7 @@ impl<'db> DynParser<'db> {
                                 tokens,
                                 pos: 0,
                                 source_text: self.source_text,
+                                expr_spans: Vec::new(),
                             };
                             let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
                             ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum::new(
@@ -255,6 +264,7 @@ impl<'db> DynParser<'db> {
                                 tokens,
                                 pos: 0,
                                 source_text: self.source_text,
+                                expr_spans: Vec::new(),
                             };
                             let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
                             ast::TypeHint::NamedEnum(ast::TypeHintNamedEnum::new(
@@ -289,6 +299,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let key_type = sub_parser.parse_type_hint_and_heap();
                         sub_parser.need_sigil(Sigil::Comma);
@@ -320,6 +331,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
                         ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
@@ -349,6 +361,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
                         ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
@@ -378,6 +391,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                         ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
@@ -391,6 +405,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
                         ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
@@ -404,6 +419,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                         ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
@@ -442,6 +458,7 @@ impl<'db> DynParser<'db> {
                 tokens: tokens.clone(),
                 pos: 0,
                 source_text: self.source_text,
+                expr_spans: Vec::new(),
             };
             let payload_type = sub_parser.parse_type_hint_and_heap();
 
@@ -469,8 +486,11 @@ impl<'db> DynParser<'db> {
     }
 
     fn parse_expr_full(&mut self) -> ast::ExprFull<'db> {
+        // Capture span before parsing.
+        let (text, span) = self.current_text_span();
+
         // Check for `: type / expr` pattern.
-        if self.peek_sigil(Sigil::Colon) {
+        let expr_full = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
             let type_hint = self.parse_type_hint_and_heap();
             self.need_sigil(Sigil::SlashForward);
@@ -480,7 +500,12 @@ impl<'db> DynParser<'db> {
             // No type hint, just parse expression.
             let expr = self.parse_expr_and_heap();
             ast::ExprFull::new(self.db, None, expr)
-        }
+        };
+
+        // Record span for this expression.
+        self.expr_spans.push((expr_full, text, span));
+
+        expr_full
     }
 
     fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
@@ -662,6 +687,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                         return ast::Expr::NamedTuple(ast::ExprNamedTuple::new(
@@ -695,6 +721,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
                         return ast::Expr::NamedStruct(ast::ExprNamedStruct::new(
@@ -737,6 +764,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         Some(sub_parser.parse_expr_full())
                     } else {
@@ -760,6 +788,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         Some(sub_parser.parse_expr_full())
                     } else {
@@ -783,6 +812,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let entries = sub_parser.parse_comma_separated(|p| {
                             let key = p.parse_expr_full();
@@ -816,6 +846,7 @@ impl<'db> DynParser<'db> {
                             tokens,
                             pos: 0,
                             source_text: self.source_text,
+                            expr_spans: Vec::new(),
                         };
                         let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                         return ast::Expr::Set(ast::ExprSet::new(self.db, elements));
@@ -909,6 +940,7 @@ impl<'db> DynParser<'db> {
                     tokens,
                     pos: 0,
                     source_text: self.source_text,
+                    expr_spans: Vec::new(),
                 };
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements))
@@ -922,6 +954,7 @@ impl<'db> DynParser<'db> {
                     tokens,
                     pos: 0,
                     source_text: self.source_text,
+                    expr_spans: Vec::new(),
                 };
                 let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
                 ast::Expr::AnonStruct(ast::ExprAnonStruct::new(self.db, fields))
@@ -935,6 +968,7 @@ impl<'db> DynParser<'db> {
                     tokens,
                     pos: 0,
                     source_text: self.source_text,
+                    expr_spans: Vec::new(),
                 };
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 ast::Expr::List(ast::ExprList::new(self.db, elements))
@@ -1064,11 +1098,21 @@ impl<'db> DynParser<'db> {
                     let subtext = tok.text(self.db);
                     return subtext.text(self.db);
                 }
+                TreeToken::Branch(_, iter) => {
+                    // Try to find a Token inside the branch.
+                    for inner_token in iter.clone() {
+                        if let Some(TreeToken::Token(tok)) = inner_token.without_space(self.db) {
+                            let subtext = tok.text(self.db);
+                            return subtext.text(self.db);
+                        }
+                    }
+                }
                 _ => {}
             }
         }
-        // Last resort: create an empty text (this shouldn't happen in practice).
-        panic!("no source text available for error reporting")
+        // Last resort: create an empty text as a fallback.
+        // This can happen when parsing tokens without source_text (e.g., from datafun parser).
+        bct::text::Text::new(self.db, String::new())
     }
 
     /// Extract Text and ByteSpan from current position for error reporting.
@@ -1091,11 +1135,24 @@ impl<'db> DynParser<'db> {
     }
 }
 
+/// Test-only tracked wrapper around parse() to provide Salsa context.
+///
+/// This allows tests to call parse() which creates tracked AST nodes.
+/// Regular code should call parse() from within a tracked function context.
+#[salsa::tracked]
+#[cfg(test)]
+pub(crate) fn parse_for_test<'db>(
+    db: &'db dyn crate::Db,
+    source: Source,
+) -> ast::ExprFull<'db> {
+    parse(db, source).expr
+}
+
 #[test]
 fn test_parse_bool() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@true"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     assert!(matches!(expr, ast::Expr::True));
 }
@@ -1104,7 +1161,7 @@ fn test_parse_bool() {
 fn test_parse_bool_with_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @bool / @true"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     assert!(matches!(type_hint, ast::TypeHint::Bool));
     let expr = ast.expr(db).expr(db);
@@ -1115,7 +1172,7 @@ fn test_parse_bool_with_type() {
 fn test_parse_int() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@42"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::Int(e) => assert_eq!(e.value(db).as_str(db), "42"),
@@ -1127,7 +1184,7 @@ fn test_parse_int() {
 fn test_parse_tuple() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@(@true, @1)"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::AnonTuple(e) => assert_eq!(e.elements(db).len(), 2),
@@ -1139,7 +1196,7 @@ fn test_parse_tuple() {
 fn test_parse_list() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@[@1, @2, @3]"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::List(e) => assert_eq!(e.elements(db).len(), 3),
@@ -1151,7 +1208,7 @@ fn test_parse_list() {
 fn test_parse_float() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@1.0"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::Float(e) => assert_eq!(e.value(db).as_str(db), "1.0"),
@@ -1164,7 +1221,7 @@ fn test_parse_float() {
 fn test_parse_float_with_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @f32 / @1.0"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     assert!(matches!(type_hint, ast::TypeHint::F32));
     let expr = ast.expr(db).expr(db);
@@ -1178,7 +1235,7 @@ fn test_parse_float_with_type() {
 fn test_parse_anon_enum_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @enum { Foo, Bar: @u32 } / @enum Foo"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::AnonEnum(e) => {
@@ -1193,7 +1250,7 @@ fn test_parse_anon_enum_type() {
 fn test_parse_string() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(r#": @string / @"hello world""#));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::String(s) => {
@@ -1207,7 +1264,7 @@ fn test_parse_string() {
 fn test_parse_struct() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @struct Foo { field1: @bool } / @struct Foo { field1 = @true }"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::NamedStruct(s) => {
@@ -1230,7 +1287,7 @@ fn test_parse_struct() {
 fn test_parse_map() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @map <@u32, @u32> / @map { @0 = @5, @2 = @2 }"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::Map(_) => {}
@@ -1249,7 +1306,7 @@ fn test_parse_map() {
 fn test_parse_set() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @set <@u32> / @set { @1, @2, @3 }"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::Set(_) => {}
@@ -1268,7 +1325,7 @@ fn test_parse_set() {
 fn test_parse_named_tuple() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @tuple Bar (@bool, @u32) / @tuple Bar (@true, @1)"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::NamedTuple(t) => {
@@ -1291,7 +1348,7 @@ fn test_parse_named_tuple() {
 fn test_parse_enum_variant_no_payload() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@enum Foo"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::AnonEnum(e) => {
@@ -1306,7 +1363,7 @@ fn test_parse_enum_variant_no_payload() {
 fn test_parse_enum_variant_with_payload() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@enum Bar(@2)"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::AnonEnum(e) => {
@@ -1321,7 +1378,7 @@ fn test_parse_enum_variant_with_payload() {
 fn test_parse_enum_variant_with_tuple() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@enum Baz(@(@true, @1))"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::AnonEnum(e) => {
@@ -1342,7 +1399,7 @@ fn test_parse_enum_variant_with_tuple() {
 fn test_parse_named_enum_with_dot() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@enum Quux.Bar(@(@true, @1))"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::NamedEnum(e) => {
@@ -1365,7 +1422,7 @@ fn test_parse_enum_variant_with_extra_tokens_error() {
     let ref db = crate::Database::default();
     // This should error: Ok(@u32, @string) - multiple types without explicit tuple.
     let source = Source::new(db, S(": @enum { Ok(@u32, @string) } / @enum Ok(@1)"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::AnonEnum(e) => {
@@ -1395,7 +1452,7 @@ fn test_parse_list_multiline() {
     // Datalit parser doesn't split on newlines, but newlines in whitespace are fine.
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@[\n@1,\n@2,\n@3\n]"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::List(e) => assert_eq!(e.elements(db).len(), 3),
@@ -1408,7 +1465,7 @@ fn test_parse_tuple_multiline() {
     // Datalit parser doesn't split on newlines, but newlines in whitespace are fine.
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@(\n@true,\n@1\n)"));
-    let ast = parse(db, source);
+    let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr(db);
     match expr {
         ast::Expr::AnonTuple(e) => assert_eq!(e.elements(db).len(), 2),

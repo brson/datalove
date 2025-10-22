@@ -375,7 +375,7 @@ fn resolve_expr_refs<'db>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::parse;
+    use crate::parser::parse_for_test;
     use bct::input::Source;
 
     #[test]
@@ -385,7 +385,7 @@ mod tests {
             db,
             S(": @struct Point { x: @u32, y: @u32 } / @struct Point { x = @1, y = @2 }")
         );
-        let ast = parse(db, source);
+        let ast = parse_for_test(db, source);
         let resolved = resolve_names(db, ast);
 
         // Should have one resolution for "Point".
@@ -409,7 +409,7 @@ mod tests {
             db,
             S(": @struct Outer { inner: @struct Inner { x: @u32 } } / @struct Outer { inner = @struct Inner { x = @1 } }")
         );
-        let ast = parse(db, source);
+        let ast = parse_for_test(db, source);
         let resolved = resolve_names(db, ast);
 
         // Should have resolution for "Outer" (inner struct definition is in type hint, not referenced in expr).
@@ -427,7 +427,7 @@ mod tests {
             db,
             S(": @tuple Pair (@u32, @u32) / @tuple Pair (@1, @2)")
         );
-        let ast = parse(db, source);
+        let ast = parse_for_test(db, source);
         let resolved = resolve_names(db, ast);
 
         // Should have one resolution for "Pair".
@@ -445,7 +445,7 @@ mod tests {
             db,
             S(": @enum Result { Ok: @u32, Err: @string } / @enum Result.Ok(@42)")
         );
-        let ast = parse(db, source);
+        let ast = parse_for_test(db, source);
         let resolved = resolve_names(db, ast);
 
         // Should have one resolution for "Result".

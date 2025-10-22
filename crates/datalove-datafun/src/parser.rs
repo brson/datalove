@@ -969,7 +969,8 @@ impl<'db> Parser<'db> {
         }
 
         // Parse the collected tokens as a datalit expression.
-        let datalit_expr = datalit::parser::parse_from_tokens(self.db, datalit_tokens);
+        let parse_result = datalit::parser::parse_from_tokens(self.db, datalit_tokens);
+        let datalit_expr = parse_result.expr;
 
         ast::ExprFun::new(
             self.db,
