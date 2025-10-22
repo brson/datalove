@@ -53,6 +53,7 @@ pub unsafe fn tensor_create_from_slice_impl(
     slice_ptr_ref: *const u8,
     slice_len: u32,
     element_tydesc_ref: TyDescRef,
+    // u32 x rank
     shape_in: *mut u8,
     shape_tydesc_ref: TyDescRef,
     layout: u8,
@@ -209,6 +210,7 @@ pub unsafe fn tensor_get_impl(
     _rt_ref: &mut RtLocal,
     tensor_value_ref: *const u8,
     tensor_tydesc_ref: TyDescRef,
+    // u32 x rank
     indices_ptr: *const u32,
     element_ptr_out: *mut *const u8,
 ) -> RtStatus {
