@@ -266,7 +266,9 @@ pub unsafe fn tensor_set_impl(
     rt_ref: &mut RtLocal,
     tensor_value_ref: *mut u8,
     tensor_tydesc_ref: TyDescRef,
+    // fixme in pointer
     indices_ptr: *const u32,
+    // fixme in pointer
     value_ptr: *const u8,
 ) -> RtStatus {
     unsafe {
@@ -336,10 +338,13 @@ pub unsafe fn tensor_set_impl(
 /// Creates a view with dimensions reordered according to the permutation.
 /// For 2D tensors, perm is typically [1, 0] to swap rows and columns.
 /// The permutation array must have length equal to rank.
+//
+// fixme verify the semantics of the in/out args here
 pub unsafe fn tensor_transpose_impl(
     rt_ref: &mut RtLocal,
     tensor_value_in: *mut u8,
     tensor_tydesc_ref: TyDescRef,
+    // fixme in/out/ref etc?
     perm_ptr: *const u32,
     tensor_value_out: *mut u8,
 ) -> RtStatus {
