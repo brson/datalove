@@ -203,19 +203,19 @@ pub unsafe fn tensor_create_from_slice_impl(
     }
 }
 
-/// Gets a pointer to an element at the specified indices.
+/// Gets an element at the specified indices by cloning it.
 ///
-/// Validates indices against shape and computes linear offset.
+/// Validates indices, computes linear offset, and clones element to output.
 pub unsafe fn tensor_get_impl(
-    _rt_ref: &mut RtLocal,
+    rt_ref: &mut RtLocal,
     tensor_value_ref: *const u8,
     tensor_tydesc_ref: TyDescRef,
     // u32 x rank
     indices_ptr: *const u32,
-    element_ptr_out: *mut *const u8,
+    element_value_out: *mut u8,
 ) -> RtStatus {
     unsafe {
-        if tensor_value_ref.is_null() || indices_ptr.is_null() || element_ptr_out.is_null() {
+        if tensor_value_ref.is_null() || indices_ptr.is_null() || element_value_out.is_null() {
             return RtStatus::Error;
         }
 
@@ -253,9 +253,16 @@ pub unsafe fn tensor_get_impl(
         let element_size = element_ty.size() as usize;
         let element_ptr = ptr_base.add(linear_offset as usize * element_size);
 
-        *element_ptr_out = element_ptr;
+        // Clone element to output buffer.
+        let rt_handle = rt_ref as *mut RtLocal as crate::LocalRtHandle;
+        let status = crate::clone::clone_value(
+            rt_handle,
+            element_ptr,
+            element_ty.as_ptr(),
+            element_value_out,
+        );
 
-        RtStatus::Ok
+        status
     }
 }
 

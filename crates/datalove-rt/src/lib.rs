@@ -1098,11 +1098,11 @@ pub unsafe extern "C" fn dtlv_rti_tensor_get_local(
     tensor_value_ref: *const u8,
     tensor_tydesc: *const rtdt::TyDesc,
     indices_ptr: *const u32,
-    element_ptr_out: *mut *const u8,
+    element_value_out: *mut u8,
 ) -> RtStatus {
     unsafe {
         if rt.is_null() || tensor_value_ref.is_null() || tensor_tydesc.is_null()
-            || indices_ptr.is_null() || element_ptr_out.is_null() {
+            || indices_ptr.is_null() || element_value_out.is_null() {
             return RtStatus::Error;
         }
 
@@ -1113,7 +1113,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_get_local(
             tensor_value_ref,
             tensor_tydesc_ref,
             indices_ptr,
-            element_ptr_out,
+            element_value_out,
         )
     }
 }

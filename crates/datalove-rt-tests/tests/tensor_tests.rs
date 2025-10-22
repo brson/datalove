@@ -679,7 +679,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
     // Get each element and verify.
     for i in 0..5 {
         let indices = [i];
-        let mut element_ptr: *const u8 = std::ptr::null();
+        let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
             datalove_rt::dtlv_rti_tensor_get_local(
@@ -687,14 +687,23 @@ fn test_tensor_get_1d() -> AnyResult<()> {
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &mut element_ptr as *mut *const u8,
+                element_value.as_mut_ptr() as *mut u8,
             )
         };
         assert_eq!(status, datalove_rt::RtStatus::Ok);
-        assert!(!element_ptr.is_null());
 
-        let value = unsafe { *(element_ptr as *const u32) };
+        let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, slice_data[i as usize]);
+
+        // Destroy the cloned element.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_any_destroy_local(
+                rt,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
     }
 
     // Destroy tensor.
@@ -765,7 +774,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
     ];
 
     for (indices, expected) in test_cases {
-        let mut element_ptr: *const u8 = std::ptr::null();
+        let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
             datalove_rt::dtlv_rti_tensor_get_local(
@@ -773,14 +782,23 @@ fn test_tensor_get_2d() -> AnyResult<()> {
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &mut element_ptr as *mut *const u8,
+                element_value.as_mut_ptr() as *mut u8,
             )
         };
         assert_eq!(status, datalove_rt::RtStatus::Ok);
-        assert!(!element_ptr.is_null());
 
-        let value = unsafe { *(element_ptr as *const u32) };
+        let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected);
+
+        // Destroy the cloned element.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_any_destroy_local(
+                rt,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
     }
 
     // Destroy tensor.
@@ -850,7 +868,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
     ];
 
     for (indices, expected) in test_cases {
-        let mut element_ptr: *const u8 = std::ptr::null();
+        let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
             datalove_rt::dtlv_rti_tensor_get_local(
@@ -858,14 +876,23 @@ fn test_tensor_get_3d() -> AnyResult<()> {
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &mut element_ptr as *mut *const u8,
+                element_value.as_mut_ptr() as *mut u8,
             )
         };
         assert_eq!(status, datalove_rt::RtStatus::Ok);
-        assert!(!element_ptr.is_null());
 
-        let value = unsafe { *(element_ptr as *const u32) };
+        let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected);
+
+        // Destroy the cloned element.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_any_destroy_local(
+                rt,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
     }
 
     // Destroy tensor.
@@ -931,7 +958,7 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
     ];
 
     for indices in invalid_indices {
-        let mut element_ptr: *const u8 = std::ptr::null();
+        let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
             datalove_rt::dtlv_rti_tensor_get_local(
@@ -939,7 +966,7 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &mut element_ptr as *mut *const u8,
+                element_value.as_mut_ptr() as *mut u8,
             )
         };
         assert_eq!(status, datalove_rt::RtStatus::Error);
@@ -1001,7 +1028,7 @@ fn test_tensor_get_null_pointers() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::RtStatus::Ok);
 
     let indices = [0];
-    let mut element_ptr: *const u8 = std::ptr::null();
+    let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
     // Null tensor.
     let status = unsafe {
@@ -1010,7 +1037,7 @@ fn test_tensor_get_null_pointers() -> AnyResult<()> {
             std::ptr::null(),
             &*tensor_tydesc as *const rtdt::TyDesc,
             indices.as_ptr(),
-            &mut element_ptr as *mut *const u8,
+            element_value.as_mut_ptr() as *mut u8,
         )
     };
     assert_eq!(status, datalove_rt::RtStatus::Error);
@@ -1022,7 +1049,7 @@ fn test_tensor_get_null_pointers() -> AnyResult<()> {
             &tensor as *const rtdt::Tensor as *const u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
             std::ptr::null(),
-            &mut element_ptr as *mut *const u8,
+            element_value.as_mut_ptr() as *mut u8,
         )
     };
     assert_eq!(status, datalove_rt::RtStatus::Error);
@@ -1114,7 +1141,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
     ];
 
     for (indices, expected) in test_cases {
-        let mut element_ptr: *const u8 = std::ptr::null();
+        let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
             datalove_rt::dtlv_rti_tensor_get_local(
@@ -1122,14 +1149,23 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &mut element_ptr as *mut *const u8,
+                element_value.as_mut_ptr() as *mut u8,
             )
         };
         assert_eq!(status, datalove_rt::RtStatus::Ok);
-        assert!(!element_ptr.is_null());
 
-        let value = unsafe { *(element_ptr as *const u32) };
+        let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected);
+
+        // Destroy the cloned element.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_any_destroy_local(
+                rt,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
     }
 
     // Destroy tensor.
@@ -1211,7 +1247,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
     // Verify all elements were updated.
     for i in 0..5 {
         let indices = [i];
-        let mut element_ptr: *const u8 = std::ptr::null();
+        let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
             datalove_rt::dtlv_rti_tensor_get_local(
@@ -1219,13 +1255,23 @@ fn test_tensor_set_1d() -> AnyResult<()> {
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &mut element_ptr as *mut *const u8,
+                element_value.as_mut_ptr() as *mut u8,
             )
         };
         assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-        let value = unsafe { *(element_ptr as *const u32) };
+        let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, 100 + i * 10);
+
+        // Destroy the cloned element.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_any_destroy_local(
+                rt,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
     }
 
     // Destroy tensor.
@@ -1316,7 +1362,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
     ];
 
     for (indices, expected_value) in expected {
-        let mut element_ptr: *const u8 = std::ptr::null();
+        let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
             datalove_rt::dtlv_rti_tensor_get_local(
@@ -1324,13 +1370,23 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &mut element_ptr as *mut *const u8,
+                element_value.as_mut_ptr() as *mut u8,
             )
         };
         assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-        let value = unsafe { *(element_ptr as *const u32) };
+        let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected_value);
+
+        // Destroy the cloned element.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_any_destroy_local(
+                rt,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
     }
 
     // Destroy tensor.
@@ -1404,20 +1460,30 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::RtStatus::Ok);
 
     // Verify the update.
-    let mut element_ptr: *const u8 = std::ptr::null();
+    let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
     let status = unsafe {
         datalove_rt::dtlv_rti_tensor_get_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
             indices.as_ptr(),
-            &mut element_ptr as *mut *const u8,
+            element_value.as_mut_ptr() as *mut u8,
         )
     };
     assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-    let value = unsafe { *(element_ptr as *const u32) };
+    let mut value = unsafe { element_value.assume_init() };
     assert_eq!(value, 999);
+
+    // Destroy the cloned element.
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            &mut value as *mut u32 as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
 
     // Destroy tensor.
     let status = unsafe {
@@ -1496,7 +1562,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
 
     // Verify updates.
     for (indices, expected_value) in updates {
-        let mut element_ptr: *const u8 = std::ptr::null();
+        let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
             datalove_rt::dtlv_rti_tensor_get_local(
@@ -1504,13 +1570,23 @@ fn test_tensor_set_3d() -> AnyResult<()> {
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &mut element_ptr as *mut *const u8,
+                element_value.as_mut_ptr() as *mut u8,
             )
         };
         assert_eq!(status, datalove_rt::RtStatus::Ok);
 
-        let value = unsafe { *(element_ptr as *const u32) };
+        let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected_value);
+
+        // Destroy the cloned element.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_any_destroy_local(
+                rt,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
     }
 
     // Destroy tensor.
@@ -1796,19 +1872,30 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
     ];
 
     for (indices, expected) in test_cases {
-        let mut element_ptr: *const u8 = ptr::null();
+        let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
         let status = unsafe {
             datalove_rt::dtlv_rti_tensor_get_local(
                 rt,
                 &transposed as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &mut element_ptr as *mut *const u8,
+                element_value.as_mut_ptr() as *mut u8,
             )
         };
         assert_eq!(status, datalove_rt::RtStatus::Ok);
-        let value = unsafe { *(element_ptr as *const u32) };
+
+        let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected);
+
+        // Destroy the cloned element.
+        let status = unsafe {
+            datalove_rt::dtlv_rti_any_destroy_local(
+                rt,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::RtStatus::Ok);
     }
 
     // Clean up.
@@ -2332,6 +2419,118 @@ fn test_tensor_transpose_null_pointers() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::RtStatus::Error);
 
     // Clean up.
+    let status = unsafe {
+        datalove_rt::dtlv_rti_tensor_destroy_local(
+            rt,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test that tensor_get clones elements and caller destroys them.
+#[test]
+fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
+    let rt = datalove_rt::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(1);
+    let (list_tydesc, list_element_tydesc) = create_list_u32_tydesc();
+
+    // Create a 1D tensor: [10, 20, 30]
+    let slice_data: Vec<u32> = vec![10, 20, 30];
+    let mut shape_list = unsafe {
+        create_runtime_u32_list(rt, &[3], &*list_tydesc, &*list_element_tydesc)
+    };
+
+    let mut tensor = rtdt::Tensor {
+        ptr_base: std::ptr::null_mut(),
+        offset_elems: 0,
+        capacity_elems: 0,
+        shape: std::ptr::null(),
+        strides: std::ptr::null(),
+        layout: rtdt::TensorLayout::RowMajor,
+    };
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+            rt,
+            slice_data.as_ptr() as *const u8,
+            slice_data.len() as u32,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut shape_list as *mut rtdt::List as *mut u8,
+            &*list_tydesc as *const rtdt::TyDesc,
+            rtdt::TensorLayout::RowMajor as u8,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Get element at index 1 (value = 20).
+    let indices = [1];
+    let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_tensor_get_local(
+            rt,
+            &tensor as *const rtdt::Tensor as *const u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+            indices.as_ptr(),
+            element_value.as_mut_ptr() as *mut u8,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Verify the cloned value.
+    let mut value = unsafe { element_value.assume_init() };
+    assert_eq!(value, 20);
+
+    // Caller is responsible for destroying the cloned element.
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            &mut value as *mut u32 as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Get another element to demonstrate the pattern multiple times.
+    let indices = [2];
+    let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
+
+    let status = unsafe {
+        datalove_rt::dtlv_rti_tensor_get_local(
+            rt,
+            &tensor as *const rtdt::Tensor as *const u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+            indices.as_ptr(),
+            element_value.as_mut_ptr() as *mut u8,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    let mut value = unsafe { element_value.assume_init() };
+    assert_eq!(value, 30);
+
+    // Again, caller destroys the cloned element.
+    let status = unsafe {
+        datalove_rt::dtlv_rti_any_destroy_local(
+            rt,
+            &mut value as *mut u32 as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::RtStatus::Ok);
+
+    // Destroy tensor.
     let status = unsafe {
         datalove_rt::dtlv_rti_tensor_destroy_local(
             rt,
