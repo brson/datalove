@@ -257,6 +257,207 @@ pub unsafe fn tensor_get_impl(
     }
 }
 
+/// Sets an element at the specified indices.
+///
+/// Validates indices, destroys old value, and clones new value into place.
+pub unsafe fn tensor_set_impl(
+    rt_ref: &mut RtLocal,
+    tensor_value_ref: *mut u8,
+    tensor_tydesc_ref: TyDescRef,
+    indices_ptr: *const u32,
+    value_ptr: *const u8,
+) -> RtStatus {
+    unsafe {
+        if tensor_value_ref.is_null() || indices_ptr.is_null() || value_ptr.is_null() {
+            return RtStatus::Error;
+        }
+
+        let element_ty = tensor_tydesc_ref.tensor_element_ty();
+        let rank = tensor_tydesc_ref.tensor_rank();
+
+        let tensor_ptr = tensor_value_ref as *mut crate::rtdt::Tensor;
+        let ptr_base = (*tensor_ptr).ptr_base;
+        let offset_elems = (*tensor_ptr).offset_elems;
+        let shape_ptr = (*tensor_ptr).shape as *const u32;
+        let strides_ptr = (*tensor_ptr).strides as *const u32;
+
+        if ptr_base.is_null() || shape_ptr.is_null() || strides_ptr.is_null() || rank == 0 {
+            return RtStatus::Error;
+        }
+
+        // Validate indices and compute linear offset.
+        let indices_slice = std::slice::from_raw_parts(indices_ptr, rank as usize);
+        let shape_slice = std::slice::from_raw_parts(shape_ptr, rank as usize);
+        let strides_slice = std::slice::from_raw_parts(strides_ptr, rank as usize);
+
+        let mut linear_offset = offset_elems;
+        for i in 0..rank as usize {
+            let index = indices_slice[i];
+            let dim = shape_slice[i];
+
+            if index >= dim {
+                return RtStatus::Error;
+            }
+
+            linear_offset = linear_offset.saturating_add(index.saturating_mul(strides_slice[i]));
+        }
+
+        // Compute element pointer.
+        let element_size = element_ty.size() as usize;
+        let element_ptr = ptr_base.add(linear_offset as usize * element_size);
+
+        // Destroy old value at this location.
+        let rt_handle = rt_ref as *mut RtLocal as crate::LocalRtHandle;
+        let status = crate::destroy::any_destroy_local(
+            rt_handle,
+            element_ptr,
+            element_ty.as_ptr(),
+        );
+        if status != RtStatus::Ok {
+            return status;
+        }
+
+        // Clone new value into this location.
+        let status = crate::clone::clone_value(
+            rt_handle,
+            value_ptr,
+            element_ty.as_ptr(),
+            element_ptr,
+        );
+
+        status
+    }
+}
+
+/// Transposes a tensor by permuting its dimensions.
+///
+/// Creates a view with dimensions reordered according to the permutation.
+/// For 2D tensors, perm is typically [1, 0] to swap rows and columns.
+/// The permutation array must have length equal to rank.
+pub unsafe fn tensor_transpose_impl(
+    rt_ref: &mut RtLocal,
+    tensor_value_in: *mut u8,
+    tensor_tydesc_ref: TyDescRef,
+    perm_ptr: *const u32,
+    tensor_value_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        if tensor_value_in.is_null() || perm_ptr.is_null() || tensor_value_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rank = tensor_tydesc_ref.tensor_rank();
+        if rank == 0 {
+            return RtStatus::Error;
+        }
+
+        let tensor_in_ptr = tensor_value_in as *mut crate::rtdt::Tensor;
+        let tensor_out_ptr = tensor_value_out as *mut crate::rtdt::Tensor;
+
+        let ptr_base = (*tensor_in_ptr).ptr_base;
+        let offset_elems = (*tensor_in_ptr).offset_elems;
+        let capacity_elems = (*tensor_in_ptr).capacity_elems;
+        let shape_in_ptr = (*tensor_in_ptr).shape;
+        let strides_in_ptr = (*tensor_in_ptr).strides;
+        let layout_in = (*tensor_in_ptr).layout;
+
+        if ptr_base.is_null() || shape_in_ptr.is_null() || strides_in_ptr.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Validate permutation.
+        let perm_slice = std::slice::from_raw_parts(perm_ptr, rank as usize);
+        let mut seen = vec![false; rank as usize];
+        for &p in perm_slice {
+            if p >= rank {
+                return RtStatus::Error;
+            }
+            if seen[p as usize] {
+                return RtStatus::Error;
+            }
+            seen[p as usize] = true;
+        }
+
+        // Allocate new shape array.
+        let shape_out_ptr = rt_ref.alloc.alloc(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+        ) as *mut u32;
+        if shape_out_ptr.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Allocate new strides array.
+        let strides_out_ptr = rt_ref.alloc.alloc(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+        ) as *mut u32;
+        if strides_out_ptr.is_null() {
+            rt_ref.alloc.free(
+                std::mem::size_of::<u32>() as u32,
+                std::mem::align_of::<u32>() as u32,
+                rank,
+                shape_out_ptr as *mut u8,
+            );
+            return RtStatus::Error;
+        }
+
+        // Copy permuted shape and strides.
+        for i in 0..rank as usize {
+            let src_idx = perm_slice[i] as usize;
+            *shape_out_ptr.add(i) = *shape_in_ptr.add(src_idx);
+            *strides_out_ptr.add(i) = *strides_in_ptr.add(src_idx);
+        }
+
+        // Determine output layout.
+        // For 2D transpose ([1, 0]): RowMajor <-> ColMajorTransposed, ColMajor <-> RowMajorTransposed
+        let layout_out = if rank == 2 && perm_slice == [1, 0] {
+            match layout_in {
+                crate::rtdt::TensorLayout::RowMajor => crate::rtdt::TensorLayout::ColMajorTransposed,
+                crate::rtdt::TensorLayout::ColMajor => crate::rtdt::TensorLayout::RowMajorTransposed,
+                crate::rtdt::TensorLayout::RowMajorTransposed => crate::rtdt::TensorLayout::ColMajor,
+                crate::rtdt::TensorLayout::ColMajorTransposed => crate::rtdt::TensorLayout::RowMajor,
+            }
+        } else {
+            // For non-standard permutations, keep layout as-is (strides encode the transformation).
+            layout_in
+        };
+
+        // Initialize output tensor.
+        (*tensor_out_ptr).ptr_base = ptr_base;
+        (*tensor_out_ptr).offset_elems = offset_elems;
+        (*tensor_out_ptr).capacity_elems = capacity_elems;
+        (*tensor_out_ptr).shape = shape_out_ptr;
+        (*tensor_out_ptr).strides = strides_out_ptr;
+        (*tensor_out_ptr).layout = layout_out;
+
+        // Free old shape and strides arrays from input tensor.
+        rt_ref.alloc.free(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+            shape_in_ptr as *mut u8,
+        );
+        rt_ref.alloc.free(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+            strides_in_ptr as *mut u8,
+        );
+
+        // Clear input tensor (linear type system: ownership transferred).
+        (*tensor_in_ptr).ptr_base = std::ptr::null_mut();
+        (*tensor_in_ptr).offset_elems = 0;
+        (*tensor_in_ptr).capacity_elems = 0;
+        (*tensor_in_ptr).shape = std::ptr::null();
+        (*tensor_in_ptr).strides = std::ptr::null();
+
+        RtStatus::Ok
+    }
+}
+
 /// Destroys a tensor, freeing all three allocations.
 ///
 /// Frees the shape array, strides array, and data buffer.

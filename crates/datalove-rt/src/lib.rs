@@ -1117,3 +1117,55 @@ pub unsafe extern "C" fn dtlv_rti_tensor_get_local(
         )
     }
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_tensor_set_local(
+    rt: LocalRtHandle,
+    tensor_value_ref: *mut u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+    indices_ptr: *const u32,
+    value_ptr: *const u8,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || tensor_value_ref.is_null() || tensor_tydesc.is_null()
+            || indices_ptr.is_null() || value_ptr.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        tensor::tensor_set_impl(
+            rt_ref,
+            tensor_value_ref,
+            tensor_tydesc_ref,
+            indices_ptr,
+            value_ptr,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_tensor_transpose_local(
+    rt: LocalRtHandle,
+    tensor_value_in: *mut u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+    perm_ptr: *const u32,
+    tensor_value_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || tensor_value_in.is_null() || tensor_tydesc.is_null()
+            || perm_ptr.is_null() || tensor_value_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        tensor::tensor_transpose_impl(
+            rt_ref,
+            tensor_value_in,
+            tensor_tydesc_ref,
+            perm_ptr,
+            tensor_value_out,
+        )
+    }
+}

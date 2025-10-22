@@ -255,18 +255,18 @@ Col-major: `strides[i] = product(shape[..i])`
 
 Standard library functions needed:
 
-Implemented (stubs in rt/lib.rs and rt/src/tensor.rs):
+Implemented:
 
 - `dtlv_rti_tensor_create_from_slice_local` - creates tensor from flat slice + shape (by-move) + layout
 - `dtlv_rti_tensor_destroy_local` - frees all three allocations (shape, strides, data)
+- `dtlv_rti_tensor_get_local` - gets pointer to element at specified indices
+- `dtlv_rti_tensor_set_local` - sets element at specified indices (destroys old, clones new)
+- `dtlv_rti_tensor_transpose_local` - creates zero-copy transposed view with permuted dimensions
 
 Planned:
 
 - `tensor_slice(tensor: Tensor, ranges: *const SliceRange) -> Tensor`
-- `tensor_transpose(tensor: Tensor, perm: *const u32) -> Tensor`
 - `tensor_reshape(tensor: Tensor, new_shape: *const u32) -> Result<Tensor, Error>`
-- `tensor_get(tensor: &Tensor, indices: *const u32) -> *const u8`
-- `tensor_set(tensor: &mut Tensor, indices: *const u32, value: *const u8)`
 
 ### Layout Information
 
@@ -316,23 +316,34 @@ Consider for future:
 - `TyInfo::tensor` variant (line 398)
 - `TyInfoTensor` struct (lines 474-477)
 
-**Runtime API Stubs** (crates/datalove-rt/src/lib.rs and src/tensor.rs):
-- `dtlv_rti_tensor_create_from_slice_local` (lib.rs:1042)
-- `dtlv_rti_tensor_destroy_local` (lib.rs:1079)
-- Implementation stubs in src/tensor.rs (todo!)
+**Runtime Functions** (crates/datalove-rt/src/tensor.rs):
+- Stride computation helpers (lines 14-45):
+  - `compute_row_major_strides` - computes strides for row-major layout
+  - `compute_col_major_strides` - computes strides for column-major layout
+- `tensor_create_from_slice_impl` (lines 51-203) - creates tensor from slice + shape + layout
+- `tensor_get_impl` (lines 208-258) - gets pointer to element at indices
+- `tensor_set_impl` (lines 263-330) - sets element at indices (destroy + clone)
+- `tensor_transpose_impl` (lines 337-459) - zero-copy transpose with dimension permutation
+- `tensor_destroy_impl` (lines 461-420) - frees all allocations
+
+**FFI Exports** (crates/datalove-rt/src/lib.rs):
+- `dtlv_rti_tensor_create_from_slice_local` (lines 1042-1076)
+- `dtlv_rti_tensor_destroy_local` (lines 1078-1093)
+- `dtlv_rti_tensor_get_local` (lines 1095-1119)
+- `dtlv_rti_tensor_set_local` (lines 1121-1145)
+- `dtlv_rti_tensor_transpose_local` (lines 1147-1171)
+
+**Tests** (crates/datalove-rt-tests/tests/tensor_tests.rs):
+- 27 comprehensive tests covering:
+  - Tensor creation (1D, 2D, 3D with row-major and column-major layouts)
+  - Tensor destruction
+  - Element access (get/set for 1D, 2D, 3D tensors)
+  - Transpose (2D row/col-major, 3D, identity, invalid permutations)
+  - Edge cases (null pointers, mismatched sizes, out-of-bounds access)
 
 ### Next Steps
 
-1. Implement stride computation helpers (row-major and column-major)
-2. Implement `tensor_create_from_slice_impl`:
-   - Extract shape from moved-in list argument
-   - Allocate data buffer with capacity
-   - Copy elements from slice
-   - Allocate and populate shape array
-   - Compute and allocate strides array
-3. Implement `tensor_destroy_impl`:
-   - Free shape array
-   - Free strides array
-   - Free data buffer
-4. Add support in clone, destroy, eq, and cmp modules
-5. Implement tensor operations (slice, transpose, reshape, get, set)
+1. Add support in clone, destroy, eq, and cmp modules
+2. Implement remaining tensor operations:
+   - `tensor_slice` - create view of subregion
+   - `tensor_reshape` - change shape (if compatible)
