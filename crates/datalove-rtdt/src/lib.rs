@@ -235,9 +235,11 @@ pub struct SetNodeLeafLayout {
 #[repr(C)]
 pub struct Tensor {
     pub ptr_base: *mut u8,
-    pub offset_elems: u32,
     pub capacity_elems: u32,
+    pub offset_elems: u32,
+    // u32 x rank
     pub shape: *const u32,
+    // u32 x rank
     pub strides: *const u32,
     pub layout: TensorLayout,
 }
