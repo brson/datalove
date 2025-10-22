@@ -259,7 +259,7 @@ Implemented:
 
 - `dtlv_rti_tensor_create_from_slice_local` - creates tensor from flat slice + shape (by-move) + layout
 - `dtlv_rti_tensor_destroy_local` - frees all three allocations (shape, strides, data)
-- `dtlv_rti_tensor_get_local` - gets pointer to element at specified indices
+- `dtlv_rti_tensor_get_local` - clones element at specified indices (caller must destroy)
 - `dtlv_rti_tensor_set_local` - sets element at specified indices (destroys old, clones new)
 - `dtlv_rti_tensor_transpose_local` - creates zero-copy transposed view with permuted dimensions
 
@@ -321,23 +321,24 @@ Consider for future:
   - `compute_row_major_strides` - computes strides for row-major layout
   - `compute_col_major_strides` - computes strides for column-major layout
 - `tensor_create_from_slice_impl` (lines 51-203) - creates tensor from slice + shape + layout
-- `tensor_get_impl` (lines 208-258) - gets pointer to element at indices
-- `tensor_set_impl` (lines 263-330) - sets element at indices (destroy + clone)
-- `tensor_transpose_impl` (lines 337-459) - zero-copy transpose with dimension permutation
-- `tensor_destroy_impl` (lines 461-420) - frees all allocations
+- `tensor_get_impl` (lines 206-267) - clones element at indices to output buffer
+- `tensor_set_impl` (lines 269-330) - sets element at indices (destroy + clone)
+- `tensor_transpose_impl` (lines 332-459) - zero-copy transpose with dimension permutation
+- `tensor_destroy_impl` (lines 464-549) - frees all allocations
 
 **FFI Exports** (crates/datalove-rt/src/lib.rs):
 - `dtlv_rti_tensor_create_from_slice_local` (lines 1042-1076)
 - `dtlv_rti_tensor_destroy_local` (lines 1078-1093)
-- `dtlv_rti_tensor_get_local` (lines 1095-1119)
+- `dtlv_rti_tensor_get_local` (lines 1096-1119) - takes element_value_out buffer for cloned element
 - `dtlv_rti_tensor_set_local` (lines 1121-1145)
 - `dtlv_rti_tensor_transpose_local` (lines 1147-1171)
 
 **Tests** (crates/datalove-rt-tests/tests/tensor_tests.rs):
-- 27 comprehensive tests covering:
+- 28 comprehensive tests covering:
   - Tensor creation (1D, 2D, 3D with row-major and column-major layouts)
   - Tensor destruction
   - Element access (get/set for 1D, 2D, 3D tensors)
+  - Clone and destroy pattern for tensor_get (test_tensor_get_clones_and_caller_destroys)
   - Transpose (2D row/col-major, 3D, identity, invalid permutations)
   - Edge cases (null pointers, mismatched sizes, out-of-bounds access)
 
