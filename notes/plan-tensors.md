@@ -368,3 +368,302 @@ Tensor support added to all type-generic runtime modules:
 Implement remaining tensor operations:
 - `tensor_slice` - create view of subregion
 - `tensor_reshape` - change shape (if compatible)
+
+## Slice and Reshape Implementation Plan
+
+### Overview
+
+Both `slice` and `reshape` transform a tensor by value (move semantics).
+They return `Result<Tensor, Error>` where:
+- **Ok**: Contains the transformed tensor
+- **Err**: Contains packed original unchanged tensor for reclamation
+
+This allows the caller to recover the original tensor on failure, maintaining linear type system invariants.
+
+### Result Type Structure
+
+Result type layout (from rtdt/src/lib.rs:286-303):
+```rust
+#[repr(C)]
+pub struct Result {
+    pub tag: ResultTag,  // 1 byte: Ok=1, Err=2
+    // Padding, then payload at computed offset
+}
+
+pub enum ResultTag {
+    Ok = 1,
+    Err = 2,
+}
+```
+
+Layout computation (rtdt/layout module):
+- Tag size: 1 byte
+- Payload offset: align_up(1, max(align(T), align(Error)))
+- Total size: tag_size + padding + max(size(T), size(Error))
+
+Error type (rtdt/src/lib.rs:335-338):
+```rust
+pub struct Error {
+    primary: u64,
+    secondary: u64,
+}
+```
+
+Error uses anypack encoding (same as Data):
+- Can pack (tydesc, value_ptr) for heap values
+- Can inline small values
+- See anypack.rs for construction methods
+
+### Tensor Slice
+
+**Signature:**
+```rust
+pub unsafe fn tensor_slice_impl(
+    rt_ref: &mut RtLocal,
+    tensor_value_in: *mut u8,
+    tensor_tydesc_ref: TyDescRef,
+    ranges_ptr: *const SliceRange,
+    result_value_out: *mut u8,
+    result_tydesc_ref: TyDescRef,
+) -> RtStatus
+```
+
+**Input:**
+- `tensor_value_in`: Moved-in tensor to slice
+- `ranges_ptr`: Array of rank SliceRange structs (one per dimension)
+- `result_value_out`: Output buffer for Result<Tensor, Error>
+
+**SliceRange Structure:**
+```rust
+#[repr(C)]
+pub struct SliceRange {
+    pub start: u32,  // Inclusive start index
+    pub end: u32,    // Exclusive end index
+}
+```
+
+**Algorithm:**
+
+1. **Validation Phase:**
+   - Check null pointers
+   - Validate rank > 0
+   - Extract tensor fields: ptr_base, offset_elems, capacity_elems, shape, strides, layout
+   - For each dimension i:
+     - Validate: 0 <= ranges[i].start < ranges[i].end <= shape[i]
+   - If any validation fails: goto error path
+
+2. **Error Path (validation failed):**
+   - Pack original tensor into Error value
+   - Construct Error with tensor's tydesc and pointer to original tensor value
+   - Write Error to result payload at computed offset
+   - Set result.tag = ResultTag::Err
+   - Return RtStatus::Ok (function succeeded, result contains error)
+
+3. **Success Path (validation passed):**
+   - Allocate new shape array (rank * sizeof(u32))
+   - Allocate new strides array (rank * sizeof(u32))
+   - If allocation fails: goto error path
+   - Compute new offset: offset_elems += sum(ranges[i].start * strides[i])
+   - Copy strides (unchanged from input)
+   - Compute new shape: new_shape[i] = ranges[i].end - ranges[i].start
+   - Free input tensor's shape/strides arrays
+   - Construct output tensor with new shape/strides and updated offset
+   - Write tensor to result payload at computed offset
+   - Set result.tag = ResultTag::Ok
+   - Return RtStatus::Ok
+
+**Key Points:**
+- Slicing creates a view: shares same data buffer (ptr_base unchanged)
+- Only offset changes (moves first element pointer)
+- Shape becomes smaller (subregion dimensions)
+- Strides unchanged (same memory layout)
+- Input tensor's shape/strides freed after successful transformation
+- Input tensor's data buffer ownership transferred to output tensor
+- On error, entire input tensor structure preserved in Error
+
+**Example:**
+Slice [10, 20] tensor with ranges [[2:7], [5:15]]:
+- Input: offset=0, shape=[10,20], strides=[20,1]
+- New offset: 0 + (2*20 + 5*1) = 45 elements
+- New shape: [5, 10] (7-2=5 rows, 15-5=10 cols)
+- Strides: [20, 1] (unchanged)
+- Result: view of 5x10 subregion starting at original[2,5]
+
+### Tensor Reshape
+
+**Signature:**
+```rust
+pub unsafe fn tensor_reshape_impl(
+    rt_ref: &mut RtLocal,
+    tensor_value_in: *mut u8,
+    tensor_tydesc_ref: TyDescRef,
+    new_shape_in: *mut u8,  // List<u32>, moved in
+    new_shape_tydesc_ref: TyDescRef,
+    result_value_out: *mut u8,
+    result_tydesc_ref: TyDescRef,
+) -> RtStatus
+```
+
+**Input:**
+- `tensor_value_in`: Moved-in tensor to reshape
+- `new_shape_in`: Moved-in List<u32> with new dimensions
+- `result_value_out`: Output buffer for Result<Tensor, Error>
+
+**Algorithm:**
+
+1. **Validation Phase:**
+   - Check null pointers
+   - Extract new_shape from List (shape data ptr, new rank)
+   - Validate new_rank > 0
+   - Compute total elements from new_shape
+   - Check tensor is contiguous (required for reshape):
+     - Verify strides match either row-major or col-major pattern
+     - Row-major: strides[i] == product(shape[i+1..])
+     - Col-major: strides[i] == product(shape[..i])
+   - Compute current total elements from current shape
+   - Validate: new_total_elems == current_total_elems
+   - Validate: offset_elems == 0 (can only reshape full tensor, not view)
+   - If any validation fails: goto error path
+
+2. **Error Path (validation failed):**
+   - Destroy new_shape List (not needed)
+   - Need to pack BOTH tensor and new_shape into Error
+   - Problem: Error holds single value, but we have two to return
+   - **Solution:** Pack tensor only (new_shape already destroyed)
+   - Pack original tensor into Error value
+   - Write Error to result payload
+   - Set result.tag = ResultTag::Err
+   - Return RtStatus::Ok
+
+3. **Success Path (validation passed):**
+   - Extract layout from tensor (preserve row/col-major)
+   - Compute new strides based on layout:
+     - Row-major: strides[i] = product(new_shape[i+1..])
+     - Col-major: strides[i] = product(new_shape[..i])
+   - Allocate new strides array
+   - If allocation fails: goto error path (must destroy new_shape List)
+   - Steal shape array from new_shape List (take ownership of its data pointer)
+   - Free new_shape List struct (but not its data - we're using it)
+   - Free old strides array from input tensor
+   - Construct output tensor with new shape/strides arrays
+   - Copy other fields: ptr_base, offset_elems (must be 0), capacity_elems, layout
+   - Write tensor to result payload
+   - Set result.tag = ResultTag::Ok
+   - Return RtStatus::Ok
+
+**Key Points:**
+- Reshape changes shape but not total elements
+- Requires contiguous tensor (view creation destroyed contiguity)
+- Requires offset_elems == 0 (only full tensor, not subview)
+- Strides recomputed based on new shape and layout
+- Data buffer unchanged (zero-copy operation)
+- Input tensor's shape freed, new_shape's data array reused
+- Input tensor's strides freed, new strides allocated
+- On error, original tensor returned in Error, new_shape destroyed
+
+**Contiguity Check:**
+```rust
+fn is_contiguous(shape: &[u32], strides: &[u32]) -> bool {
+    is_row_major_contiguous(shape, strides) || is_col_major_contiguous(shape, strides)
+}
+
+fn is_row_major_contiguous(shape: &[u32], strides: &[u32]) -> bool {
+    for i in 0..shape.len() {
+        let expected = shape[i+1..].iter().product::<u32>();
+        if strides[i] != expected {
+            return false;
+        }
+    }
+    true
+}
+
+fn is_col_major_contiguous(shape: &[u32], strides: &[u32]) -> bool {
+    for i in 0..shape.len() {
+        let expected = shape[..i].iter().product::<u32>();
+        if strides[i] != expected {
+            return false;
+        }
+    }
+    true
+}
+```
+
+**Example:**
+Reshape [6, 10] row-major tensor to [3, 4, 5]:
+- Input: shape=[6,10], strides=[10,1], 60 elements, offset=0, row-major
+- Validation: 60 == 3*4*5 ✓, offset==0 ✓, contiguous ✓
+- New strides (row-major): [4*5=20, 5, 1]
+- Result: shape=[3,4,5], strides=[20,5,1], same data buffer
+
+**Error Cases:**
+- Non-contiguous tensor: created by slice/transpose
+- View tensor: offset_elems != 0
+- Size mismatch: new_shape elements != current elements
+- Invalid new_shape: rank=0 or contains zeros
+
+### FFI Exports
+
+**Slice:**
+```rust
+#[no_mangle]
+pub unsafe extern "C" fn dtlv_rti_tensor_slice_local(
+    rt_handle: RtHandle,
+    tensor_value_in: *mut u8,
+    tensor_tydesc: TyDescHandle,
+    ranges_ptr: *const u8,
+    result_value_out: *mut u8,
+    result_tydesc: TyDescHandle,
+) -> RtStatus
+```
+
+**Reshape:**
+```rust
+#[no_mangle]
+pub unsafe extern "C" fn dtlv_rti_tensor_reshape_local(
+    rt_handle: RtHandle,
+    tensor_value_in: *mut u8,
+    tensor_tydesc: TyDescHandle,
+    new_shape_in: *mut u8,
+    new_shape_tydesc: TyDescHandle,
+    result_value_out: *mut u8,
+    result_tydesc: TyDescHandle,
+) -> RtStatus
+```
+
+### Testing Strategy
+
+**Slice Tests:**
+1. Valid 2D slice (middle subregion)
+2. Valid 3D slice (various ranges)
+3. Edge case: slice to single element
+4. Edge case: slice full range (identity)
+5. Error: out of bounds (start >= end)
+6. Error: invalid range (start > dimension)
+7. Error: end > dimension size
+8. Verify: result is Ok with correct tensor
+9. Verify: error result contains original tensor
+10. Verify: sliced tensor can be destroyed
+11. Verify: error tensor can be extracted and destroyed
+
+**Reshape Tests:**
+1. Valid reshape: 2D to 3D (e.g., [6,10] -> [3,4,5])
+2. Valid reshape: 3D to 2D (e.g., [2,3,4] -> [6,4])
+3. Valid reshape: same rank, different shape ([12] -> [3,4])
+4. Error: size mismatch ([6,10] -> [7,9])
+5. Error: non-contiguous tensor (after slice)
+6. Error: view tensor (offset != 0)
+7. Edge case: reshape to 1D (flatten)
+8. Edge case: reshape from 1D to nD
+9. Verify: layout preserved (row-major stays row-major)
+10. Verify: data buffer unchanged (pointer equality)
+11. Verify: error result contains original tensor
+
+### Implementation Order
+
+1. Define SliceRange struct in rtdt/src/lib.rs
+2. Implement contiguity check helpers in tensor.rs
+3. Implement tensor_slice_impl in tensor.rs
+4. Implement tensor_reshape_impl in tensor.rs
+5. Add FFI exports in rt/src/lib.rs
+6. Write comprehensive tests in rt-tests/tests/tensor_tests.rs
+7. Update plan document with "Implemented" status
