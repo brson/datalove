@@ -57,7 +57,31 @@ pub fn parse_from_tokens<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
 ) -> ast::ParseResult<'db> {
-    parse_from_tokens_with_source(db, tokens, None)
+    // Try to extract source text from the first token for better error reporting.
+    let source_text = tokens.first().and_then(|token| {
+        match token {
+            TreeToken::Token(tok) => {
+                let subtext = tok.text(db);
+                Some(subtext.text(db))
+            }
+            TreeToken::Branch(_, iter) => {
+                // Look inside the branch for a token.
+                iter.clone().find_map(|inner| {
+                    inner.without_space(db).and_then(|t| {
+                        match t {
+                            TreeToken::Token(tok) => {
+                                let subtext = tok.text(db);
+                                Some(subtext.text(db))
+                            }
+                            _ => None
+                        }
+                    })
+                })
+            }
+            _ => None
+        }
+    });
+    parse_from_tokens_with_source(db, tokens, source_text)
 }
 
 /// Parse a datalit expression from tokens with an optional source Text for error reporting.
@@ -1142,6 +1166,16 @@ impl<'db> DynParser<'db> {
 #[salsa::tracked]
 #[cfg(test)]
 pub(crate) fn parse_for_test<'db>(
+    db: &'db dyn crate::Db,
+    source: Source,
+) -> ast::ExprFull<'db> {
+    parse(db, source).expr
+}
+
+/// Public wrapper for integration tests.
+/// Integration tests are compiled as separate binaries and need pub access.
+#[salsa::tracked]
+pub fn parse_integration_test<'db>(
     db: &'db dyn crate::Db,
     source: Source,
 ) -> ast::ExprFull<'db> {

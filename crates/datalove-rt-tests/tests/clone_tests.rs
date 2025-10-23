@@ -6,19 +6,23 @@ use datalove_datalit::{Database, instantiate2};
 use datalove_datalit::tydesc_table::TyDescTable;
 use datalove_rt::rt_local::RtLocal;
 
-fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
-    let source = bct::input::Source::new(db, source_text.to_string());
+#[salsa::tracked]
+fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
     let parsed = parse_result.expr;
     let resolved = datalove_datalit::resolve::resolve_names(db, parsed);
-    let typechecked = datalove_datalit::tycheck::type_check(db, parsed, resolved);
-    Ok(typechecked)
+    datalove_datalit::tycheck::type_check(db, parsed, resolved)
+}
+
+fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_datalit::tycheck::TypecheckResult<'db>> {
+    let source = bct::input::Source::new(db, source_text.to_string());
+    Ok(compile(db, source))
 }
 
 #[test]
 fn test_clone_empty_map() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile(&db, ": @map <@u32, @string> / @map {}")?;
+    let typechecked = compile_str(&db, ": @map <@u32, @string> / @map {}")?;
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -64,7 +68,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
 #[test]
 fn test_clone_map_single_entry() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile(&db, ": @map <@u32, @string> / @map { 1 = \"hello\" }")?;
+    let typechecked = compile_str(&db, ": @map <@u32, @string> / @map { 1 = \"hello\" }")?;
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -110,7 +114,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
 #[test]
 fn test_clone_map_multiple_entries() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile(&db,
+    let typechecked = compile_str(&db,
         ": @map <@u32, @string> / @map { 1 = \"one\", 2 = \"two\", 3 = \"three\", 4 = \"four\", 5 = \"five\" }"
     )?;
 
@@ -158,7 +162,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
 #[test]
 fn test_clone_map_nested_values() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile(&db,
+    let typechecked = compile_str(&db,
         ": @map <@u32, @(@u32, @string)> / @map { 1 = @(10, \"first\"), 2 = @(20, \"second\") }"
     )?;
 
@@ -206,7 +210,7 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
 #[test]
 fn test_clone_empty_set() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile(&db, ": @set <@u32> / @set {}")?;
+    let typechecked = compile_str(&db, ": @set <@u32> / @set {}")?;
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -252,7 +256,7 @@ fn test_clone_empty_set() -> AnyResult<()> {
 #[test]
 fn test_clone_set_single_element() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile(&db, ": @set <@u32> / @set { 42 }")?;
+    let typechecked = compile_str(&db, ": @set <@u32> / @set { 42 }")?;
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -298,7 +302,7 @@ fn test_clone_set_single_element() -> AnyResult<()> {
 #[test]
 fn test_clone_set_multiple_elements() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile(&db,
+    let typechecked = compile_str(&db,
         ": @set <@u32> / @set { 1, 2, 3, 4, 5 }"
     )?;
 
@@ -346,7 +350,7 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
 #[test]
 fn test_clone_set_string_elements() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile(&db,
+    let typechecked = compile_str(&db,
         ": @set <@string> / @set { \"apple\", \"banana\", \"cherry\" }"
     )?;
 
@@ -394,7 +398,7 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
 #[test]
 fn test_clone_set_nested_tuples() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile(&db,
+    let typechecked = compile_str(&db,
         ": @set <@(@u32, @string)> / @set { @(1, \"one\"), @(2, \"two\") }"
     )?;
 

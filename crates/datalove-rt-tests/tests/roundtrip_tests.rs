@@ -119,6 +119,18 @@ fn types_equal<'db>(
 }
 
 /// Compile and instantiate a datalit value.
+#[salsa::tracked]
+fn compile<'db>(
+    db: &'db dyn salsa::Database,
+    source: bct::input::Source,
+) -> (datalit::ast::ExprFull<'db>, datalit::resolve::ResolvedExpr<'db>, datalit::tycheck::TypecheckResult<'db>) {
+    let parse_result = datalit::parser::parse(db, source);
+    let parsed = parse_result.expr;
+    let resolved = datalit::resolve::resolve_names(db, parsed);
+    let typechecked = datalit::tycheck::type_check(db, parsed, resolved);
+    (parsed, resolved, typechecked)
+}
+
 fn compile_and_instantiate<'db>(
     db: &'db datalit::Database,
     rt: &mut rt::rt_local::RtLocal,
@@ -126,10 +138,7 @@ fn compile_and_instantiate<'db>(
     source_text: &str,
 ) -> Result<(datalit::instantiate2::InstantiatedValue, datalit::tycheck::TypecheckResult<'db>), String> {
     let source = bct::input::Source::new(db, source_text.S());
-    let parse_result = datalit::parser::parse(db, source);
-    let parsed = parse_result.expr;
-    let resolved = datalit::resolve::resolve_names(db, parsed);
-    let typechecked = datalit::tycheck::type_check(db, parsed, resolved);
+    let (parsed, _resolved, typechecked) = compile(db, source);
 
     // Check if we have a root type.
     if typechecked.root_type(db).is_none() {
@@ -188,10 +197,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Step 5: Parse and typecheck the second pretty-print to get the third type.
     let source3 = bct::input::Source::new(&db, pretty2.S());
-    let parse_result3 = datalit::parser::parse(&db, source3);
-    let parsed3 = parse_result3.expr;
-    let resolved3 = datalit::resolve::resolve_names(&db, parsed3);
-    let tycheck3 = datalit::tycheck::type_check(&db, parsed3, resolved3);
+    let (_parsed3, _resolved3, tycheck3) = compile(&db, source3);
     let type3 = tycheck3.root_type(&db).X();
 
     // Step 6: Check that all three types and heaps are identical.

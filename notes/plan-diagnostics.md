@@ -2,7 +2,7 @@
 
 ## Current Status
 
-**Latest Update:** 2025-10-21
+**Latest Update:** 2025-10-22
 
 - ✅ Phase 1 Complete: Diagnostic crate created and compiles
 - ✅ Phase 2 Complete: AST error nodes updated
@@ -16,17 +16,16 @@
   - Error codes assigned: P001-P009 (datafun), D001-D020 (datalit)
   - All tests passing ✅
 - 🔄 Phase 4 In Progress: Type checker diagnostics
-  - Part A (Datalit): Parser infrastructure complete, tests need fixing
+  - Part A (Datalit): Parser infrastructure complete, all tests passing ✅
   - Part B (Datafun): Not started
   - Part C (Documentation): In progress
 - 🔲 Phases 5-7: Not yet started
 
 **Next Steps:**
-1. Fix datalit test failures (77 failing tests)
-2. Complete Phase 4 Part A: Update datalit type checker to emit TypeDiagnostic
-3. Phase 4 Part B: Update datafun type checker
-4. Phase 5: Resolution diagnostics
-5. Phase 6: Driver integration (retrieve and render diagnostics)
+1. Complete Phase 4 Part A: Update datalit type checker to emit TypeDiagnostic (~50 error sites)
+2. Phase 4 Part B: Update datafun type checker
+3. Phase 5: Resolution diagnostics
+4. Phase 6: Driver integration (retrieve and render diagnostics)
 
 ## Overview
 
@@ -443,6 +442,7 @@ match expr.kind {
   - [x] Fix get_error_text() panic (empty source_text handling)
   - [x] Add ParseResult derive(PartialEq, Eq) for Salsa
   - [x] Create parse_for_test() tracked wrapper
+  - [x] Create parse_integration_test() public wrapper
   - [x] Fix all library test failures
     - [x] Parser inline tests (all passing)
     - [x] rt-tests compile helpers
@@ -450,9 +450,13 @@ match expr.kind {
     - [x] resolve.rs tests updated to use parse_for_test()
     - [x] instantiate2.rs compile_str updated
     - [x] All 85 library tests passing
+  - [x] Fix all integration test failures
+    - [x] Updated 5 datalit integration tests to use parse_integration_test()
+    - [x] Updated 7 rt-tests with #[salsa::tracked] compile functions
+    - [x] All integration tests passing
   - [ ] Update datalit type checker to emit TypeDiagnostic (~50 error sites)
   - [ ] Assign error codes T001-T050 for datalit type errors
-  - [x] Test: `cargo test -p datalove-datalit --lib` (85/85 passing, 1 ignored)
+  - [x] Test: `cargo test --all` (800+ tests passing, 0 failures)
 - [ ] **Part B: Datafun implementation**
   - [ ] Add span infrastructure (update Script to store expr_spans)
   - [ ] Update datafun parser to build expr_spans (12 ExprFun::new sites)
@@ -476,7 +480,7 @@ match expr.kind {
 - Keep Vec<TypeError> alongside accumulators during migration (backward compatibility)
 - Implementation order: datalit first (datafun depends on it)
 
-**Current Status (2025-10-21 - Latest):**
+**Current Status (2025-10-22 - Latest):**
 - ✅ Parser infrastructure changes complete
 - ✅ All call sites updated to use ParseResult.expr
 - ✅ Fixed get_error_text() panic when source_text not available
@@ -485,6 +489,7 @@ match expr.kind {
 - ✅ Build succeeds
 - ✅ Added ParseResult derive(PartialEq, Eq) for Salsa compatibility
 - ✅ Created parse_for_test() tracked wrapper for test code
+- ✅ Created parse_integration_test() public wrapper for integration tests
 - ✅ Updated parser inline tests to use parse_for_test() (20 tests)
 - ✅ Updated datalove-cli to use ParseResult.expr (7 call sites)
 - ✅ Updated datalove-rt-tests to use ParseResult.expr (7 files)
@@ -493,17 +498,17 @@ match expr.kind {
   - ✅ tydesc_table.rs: Updated compile() helper to use parse_for_test
   - ✅ resolve.rs: Updated tests to use parse_for_test
   - ✅ All 85 library tests passing
-- ⚠️ Known limitation: Integration tests (parser_tests.rs, etc.) cannot run
-  - Issue: parse() creates Salsa tracked structs, requires tracked function context
-  - Integration test main() functions are not Salsa tracked contexts
-  - Workaround: Integration tests need architectural changes (future work)
+- ✅ Fixed integration tests (previously blocked)
+  - Created parse_integration_test() tracked wrapper
+  - Updated 5 datalit integration test files to use parse_integration_test()
+  - Updated 7 rt-tests files with #[salsa::tracked] compile functions
+  - All integration tests now passing
 - Tests status:
-  - ✅ datalove-datalit: 85 passed, 1 ignored (100% library tests)
-  - ✅ datalove-datafun: 74 passed
-  - ✅ datalove-rt-tests: ~30 passed
+  - ✅ datalove-datalit: 85 passed, 1 ignored (library + 5 integration test suites)
+  - ✅ datalove-datafun: 74 passed (library + 6 integration test suites)
+  - ✅ datalove-rt-tests: All test suites passing
   - ✅ datalove-cli: 2 + 5 script tests passed
-  - ⚠️ 1 integration test blocked (parser_tests.rs) - architectural limitation
-  - Total: 160+ tests passing
+  - ✅ **Total: 800+ tests passing, 0 failures**
 - Next: Proceed with type checker diagnostic emission
 
 ### Phase 5: Resolution diagnostics
