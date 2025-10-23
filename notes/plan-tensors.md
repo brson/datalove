@@ -342,9 +342,29 @@ Consider for future:
   - Transpose (2D row/col-major, 3D, identity, invalid permutations)
   - Edge cases (null pointers, mismatched sizes, out-of-bounds access)
 
+### Type-Generic Runtime Operations
+
+**Status**: Completed
+
+Tensor support added to all type-generic runtime modules:
+
+- **destroy.rs** (lines 101-158): Already implemented - frees data buffer, shape array, and strides array
+- **clone.rs** (lines 284-364): Deep clone implementation - allocates new buffers, recursively clones elements
+- **cmp.rs** (eq_tydesc, lines 236-243): Type descriptor equality - compares element type and rank
+- **cmp.rs** (eq_value, lines 536-620): Value equality following Julia semantics - compares shapes and visible elements
+- **cmp.rs** (cmp_value, lines 1065-1160): Lexicographic ordering - compares shapes then elements
+
+**Equality Semantics** (following Julia):
+- Tensors with different shapes are not equal
+- Only visible elements are compared (layout/strides ignored)
+- Element-wise comparison using strides to compute offsets
+
+**Ordering Semantics**:
+- Shapes compared lexicographically dimension-by-dimension
+- If shapes equal, elements compared lexicographically in iteration order
+
 ### Next Steps
 
-1. Add support in clone, destroy, eq, and cmp modules
-2. Implement remaining tensor operations:
-   - `tensor_slice` - create view of subregion
-   - `tensor_reshape` - change shape (if compatible)
+Implement remaining tensor operations:
+- `tensor_slice` - create view of subregion
+- `tensor_reshape` - change shape (if compatible)

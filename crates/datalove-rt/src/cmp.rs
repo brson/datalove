@@ -234,7 +234,12 @@ fn eq_tydesc(
                 eq_tydesc(elem_ty_a, elem_ty_b)
             }
             rtdt::TyTag::Tensor => {
-                todo!("tensor type descriptor comparison not yet implemented")
+                let elem_ty_a = td_a.tensor_element_ty();
+                let elem_ty_b = td_b.tensor_element_ty();
+                let rank_a = td_a.tensor_rank();
+                let rank_b = td_b.tensor_rank();
+
+                rank_a == rank_b && eq_tydesc(elem_ty_a, elem_ty_b)
             }
             rtdt::TyTag::Option => {
                 let inner_ty_a = td_a.option_inner_ty();
@@ -529,7 +534,89 @@ unsafe fn eq_value(
                 )
             }
             rtdt::TyTag::Tensor => {
-                todo!("tensor value comparison not yet implemented")
+                let tensor_a = unsafe { &*(value_a as *const rtdt::Tensor) };
+                let tensor_b = unsafe { &*(value_b as *const rtdt::Tensor) };
+
+                let rank = td.tensor_rank();
+
+                // Compare shapes.
+                if rank > 0 {
+                    let shape_a = unsafe { std::slice::from_raw_parts(tensor_a.shape, rank as usize) };
+                    let shape_b = unsafe { std::slice::from_raw_parts(tensor_b.shape, rank as usize) };
+
+                    if shape_a != shape_b {
+                        return false;
+                    }
+
+                    // Compute total number of elements.
+                    let total_elems = shape_a.iter().product::<u32>();
+
+                    if total_elems == 0 {
+                        return true;  // Empty tensors with matching shapes are equal.
+                    }
+
+                    let element_ty = td.tensor_element_ty();
+                    let element_size = element_ty.size() as usize;
+                    let strides_a = unsafe { std::slice::from_raw_parts(tensor_a.strides, rank as usize) };
+                    let strides_b = unsafe { std::slice::from_raw_parts(tensor_b.strides, rank as usize) };
+
+                    // Iterate through all multi-dimensional indices.
+                    let mut indices = vec![0u32; rank as usize];
+                    for _ in 0..total_elems {
+                        // Compute linear offset for tensor_a.
+                        let mut offset_a = tensor_a.offset_elems;
+                        for (i, &idx) in indices.iter().enumerate() {
+                            offset_a += idx * strides_a[i];
+                        }
+                        let elem_a = unsafe {
+                            tensor_a.ptr_base.add((offset_a as usize) * element_size)
+                        };
+
+                        // Compute linear offset for tensor_b.
+                        let mut offset_b = tensor_b.offset_elems;
+                        for (i, &idx) in indices.iter().enumerate() {
+                            offset_b += idx * strides_b[i];
+                        }
+                        let elem_b = unsafe {
+                            tensor_b.ptr_base.add((offset_b as usize) * element_size)
+                        };
+
+                        // Compare elements.
+                        if !eq_value(elem_a, elem_b, element_ty, float_policy) {
+                            return false;
+                        }
+
+                        // Increment indices (like odometer).
+                        let mut carry = 1;
+                        for i in (0..rank as usize).rev() {
+                            if carry == 0 {
+                                break;
+                            }
+                            indices[i] += carry;
+                            if indices[i] >= shape_a[i] {
+                                indices[i] = 0;
+                                carry = 1;
+                            } else {
+                                carry = 0;
+                            }
+                        }
+                    }
+
+                    true
+                } else {
+                    // Rank 0 tensor (scalar).
+                    let element_ty = td.tensor_element_ty();
+                    let element_size = element_ty.size() as usize;
+
+                    let elem_a = unsafe {
+                        tensor_a.ptr_base.add((tensor_a.offset_elems as usize) * element_size)
+                    };
+                    let elem_b = unsafe {
+                        tensor_b.ptr_base.add((tensor_b.offset_elems as usize) * element_size)
+                    };
+
+                    eq_value(elem_a, elem_b, element_ty, float_policy)
+                }
             }
             rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.
@@ -976,7 +1063,100 @@ unsafe fn cmp_value(
                 )
             }
             rtdt::TyTag::Tensor => {
-                todo!("tensor value ordering not yet implemented")
+                let tensor_a = unsafe { &*(value_a as *const rtdt::Tensor) };
+                let tensor_b = unsafe { &*(value_b as *const rtdt::Tensor) };
+
+                let rank = td.tensor_rank();
+
+                // Compare shapes lexicographically.
+                if rank > 0 {
+                    let shape_a = unsafe { std::slice::from_raw_parts(tensor_a.shape, rank as usize) };
+                    let shape_b = unsafe { std::slice::from_raw_parts(tensor_b.shape, rank as usize) };
+
+                    // Compare shapes dimension by dimension.
+                    for i in 0..rank as usize {
+                        if shape_a[i] < shape_b[i] {
+                            return crate::RtOrdering::Less;
+                        } else if shape_a[i] > shape_b[i] {
+                            return crate::RtOrdering::Greater;
+                        }
+                    }
+
+                    // Shapes are equal, compare elements.
+                    let total_elems = shape_a.iter().product::<u32>();
+
+                    if total_elems == 0 {
+                        return crate::RtOrdering::Equal;  // Empty tensors with matching shapes are equal.
+                    }
+
+                    let element_ty = td.tensor_element_ty();
+                    let element_size = element_ty.size() as usize;
+                    let strides_a = unsafe { std::slice::from_raw_parts(tensor_a.strides, rank as usize) };
+                    let strides_b = unsafe { std::slice::from_raw_parts(tensor_b.strides, rank as usize) };
+
+                    // Iterate through all multi-dimensional indices lexicographically.
+                    let mut indices = vec![0u32; rank as usize];
+                    for _ in 0..total_elems {
+                        // Compute linear offset for tensor_a.
+                        let mut offset_a = tensor_a.offset_elems;
+                        for (i, &idx) in indices.iter().enumerate() {
+                            offset_a += idx * strides_a[i];
+                        }
+                        let elem_a = unsafe {
+                            tensor_a.ptr_base.add((offset_a as usize) * element_size)
+                        };
+
+                        // Compute linear offset for tensor_b.
+                        let mut offset_b = tensor_b.offset_elems;
+                        for (i, &idx) in indices.iter().enumerate() {
+                            offset_b += idx * strides_b[i];
+                        }
+                        let elem_b = unsafe {
+                            tensor_b.ptr_base.add((offset_b as usize) * element_size)
+                        };
+
+                        // Compare elements.
+                        let elem_cmp = cmp_value(elem_a, elem_b, element_ty, float_policy);
+                        match elem_cmp {
+                            crate::RtOrdering::Less => return crate::RtOrdering::Less,
+                            crate::RtOrdering::Greater => return crate::RtOrdering::Greater,
+                            crate::RtOrdering::Error => return crate::RtOrdering::Error,
+                            crate::RtOrdering::Equal => {
+                                // Continue to next element.
+                            }
+                        }
+
+                        // Increment indices (like odometer).
+                        let mut carry = 1;
+                        for i in (0..rank as usize).rev() {
+                            if carry == 0 {
+                                break;
+                            }
+                            indices[i] += carry;
+                            if indices[i] >= shape_a[i] {
+                                indices[i] = 0;
+                                carry = 1;
+                            } else {
+                                carry = 0;
+                            }
+                        }
+                    }
+
+                    crate::RtOrdering::Equal
+                } else {
+                    // Rank 0 tensor (scalar).
+                    let element_ty = td.tensor_element_ty();
+                    let element_size = element_ty.size() as usize;
+
+                    let elem_a = unsafe {
+                        tensor_a.ptr_base.add((tensor_a.offset_elems as usize) * element_size)
+                    };
+                    let elem_b = unsafe {
+                        tensor_b.ptr_base.add((tensor_b.offset_elems as usize) * element_size)
+                    };
+
+                    cmp_value(elem_a, elem_b, element_ty, float_policy)
+                }
             }
             rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 // Not yet implemented.

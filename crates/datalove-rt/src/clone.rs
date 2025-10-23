@@ -281,9 +281,86 @@ unsafe fn clone_impl(
             RtStatus::Ok
         }
 
-        // Tensor - clone tensor structure.
+        // Tensor - allocate new buffers and clone each element.
         TyTag::Tensor => {
-            todo!("tensor cloning not yet implemented")
+            let tensor_in = unsafe { &*(value_in as *const rtdt::Tensor) };
+            let tensor_out = unsafe { &mut *(value_out as *mut rtdt::Tensor) };
+
+            let element_ty = ty.tensor_element_ty();
+            let rank = ty.tensor_rank();
+            let elem_size = element_ty.size();
+            let elem_align = element_ty.align();
+
+            // Empty tensor or null pointer.
+            if tensor_in.capacity_elems == 0 || tensor_in.ptr_base.is_null() {
+                tensor_out.ptr_base = std::ptr::null_mut();
+                tensor_out.offset_elems = 0;
+                tensor_out.capacity_elems = 0;
+                tensor_out.shape = std::ptr::null();
+                tensor_out.strides = std::ptr::null();
+                tensor_out.layout = tensor_in.layout;
+            } else {
+                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
+
+                // Allocate new data buffer.
+                let new_data = unsafe {
+                    rt_ref.alloc.alloc(elem_size, elem_align, tensor_in.capacity_elems)
+                };
+
+                // Clone each element in the capacity buffer.
+                for i in 0..tensor_in.capacity_elems {
+                    let elem_in = unsafe { tensor_in.ptr_base.add((i * elem_size) as usize) };
+                    let elem_out = unsafe { new_data.add((i * elem_size) as usize) };
+
+                    let status = unsafe {
+                        clone_impl(rt, elem_in, element_ty, elem_out)
+                    };
+
+                    if status != RtStatus::Ok {
+                        return status;
+                    }
+                }
+
+                // Allocate and copy shape array.
+                let new_shape = if rank > 0 && !tensor_in.shape.is_null() {
+                    unsafe {
+                        let shape_ptr = rt_ref.alloc.alloc(4, 4, rank) as *mut u32;
+                        std::ptr::copy_nonoverlapping(
+                            tensor_in.shape,
+                            shape_ptr,
+                            rank as usize
+                        );
+                        shape_ptr as *const u32
+                    }
+                } else {
+                    std::ptr::null()
+                };
+
+                // Allocate and copy strides array.
+                let new_strides = if rank > 0 && !tensor_in.strides.is_null() {
+                    unsafe {
+                        let strides_ptr = rt_ref.alloc.alloc(4, 4, rank) as *mut u32;
+                        std::ptr::copy_nonoverlapping(
+                            tensor_in.strides,
+                            strides_ptr,
+                            rank as usize
+                        );
+                        strides_ptr as *const u32
+                    }
+                } else {
+                    std::ptr::null()
+                };
+
+                // Copy metadata.
+                tensor_out.ptr_base = new_data;
+                tensor_out.offset_elems = tensor_in.offset_elems;
+                tensor_out.capacity_elems = tensor_in.capacity_elems;
+                tensor_out.shape = new_shape;
+                tensor_out.strides = new_strides;
+                tensor_out.layout = tensor_in.layout;
+            }
+
+            RtStatus::Ok
         }
 
         // Option - copy tag and clone payload if Some.
