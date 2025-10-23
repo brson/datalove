@@ -561,3 +561,201 @@ pub unsafe fn tensor_destroy_impl(
         RtStatus::Ok
     }
 }
+
+/// Creates a slice view of a tensor.
+///
+/// The input tensor is moved in and transformed to a view by updating its
+/// offset and shape. Returns Result<Tensor, Error> - on error, the original
+/// tensor is packed into the Error value for reclamation.
+pub unsafe fn tensor_slice_impl(
+    rt_ref: &mut RtLocal,
+    tensor_value_in: *mut u8,
+    tensor_tydesc_ref: TyDescRef,
+    ranges_ptr: *const crate::rtdt::SliceRange,
+    result_value_out: *mut u8,
+    result_tydesc_ref: TyDescRef,
+) -> RtStatus {
+    unsafe {
+        // Null pointer checks.
+        if tensor_value_in.is_null() || ranges_ptr.is_null() || result_value_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Extract tensor fields.
+        let tensor_ptr = tensor_value_in as *mut crate::rtdt::Tensor;
+        let ptr_base = (*tensor_ptr).ptr_base;
+        let capacity_elems = (*tensor_ptr).capacity_elems;
+        let offset_elems = (*tensor_ptr).offset_elems;
+        let shape_ptr = (*tensor_ptr).shape;
+        let strides_ptr = (*tensor_ptr).strides;
+        let layout = (*tensor_ptr).layout;
+
+        // Extract rank from tydesc.
+        let rank = tensor_tydesc_ref.tensor_rank();
+
+        // Validate rank > 0.
+        if rank == 0 {
+            return error_path(
+                rt_ref,
+                tensor_value_in,
+                tensor_tydesc_ref,
+                result_value_out,
+                result_tydesc_ref,
+            );
+        }
+
+        // Convert to slices for easier access.
+        let shape = std::slice::from_raw_parts(shape_ptr, rank as usize);
+        let strides = std::slice::from_raw_parts(strides_ptr, rank as usize);
+        let ranges = std::slice::from_raw_parts(ranges_ptr, rank as usize);
+
+        // Validate ranges.
+        for i in 0..rank as usize {
+            let start = ranges[i].start;
+            let end = ranges[i].end;
+            let dim_size = shape[i];
+
+            // Check: 0 <= start < end <= shape[i]
+            if start >= end || end > dim_size {
+                return error_path(
+                    rt_ref,
+                    tensor_value_in,
+                    tensor_tydesc_ref,
+                    result_value_out,
+                    result_tydesc_ref,
+                );
+            }
+        }
+
+        // Allocate new shape array.
+        let new_shape_ptr = rt_ref.alloc.alloc(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+        ) as *mut u32;
+
+        if new_shape_ptr.is_null() {
+            return error_path(
+                rt_ref,
+                tensor_value_in,
+                tensor_tydesc_ref,
+                result_value_out,
+                result_tydesc_ref,
+            );
+        }
+
+        // Allocate new strides array.
+        let new_strides_ptr = rt_ref.alloc.alloc(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+        ) as *mut u32;
+
+        if new_strides_ptr.is_null() {
+            // Clean up shape allocation.
+            rt_ref.alloc.free(
+                std::mem::size_of::<u32>() as u32,
+                std::mem::align_of::<u32>() as u32,
+                rank,
+                new_shape_ptr as *mut u8,
+            );
+            return error_path(
+                rt_ref,
+                tensor_value_in,
+                tensor_tydesc_ref,
+                result_value_out,
+                result_tydesc_ref,
+            );
+        }
+
+        // Compute new offset and populate new shape/strides.
+        let mut new_offset = offset_elems;
+        for i in 0..rank as usize {
+            // Update offset: offset += ranges[i].start * strides[i]
+            new_offset = new_offset.saturating_add(
+                ranges[i].start.saturating_mul(strides[i])
+            );
+
+            // New shape: new_shape[i] = ranges[i].end - ranges[i].start
+            *new_shape_ptr.add(i) = ranges[i].end - ranges[i].start;
+
+            // Copy stride unchanged.
+            *new_strides_ptr.add(i) = strides[i];
+        }
+
+        // Free old shape and strides arrays.
+        rt_ref.alloc.free(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+            shape_ptr as *mut u8,
+        );
+        rt_ref.alloc.free(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+            strides_ptr as *mut u8,
+        );
+
+        // Construct output tensor.
+        let out_tensor_ptr = compute_result_payload_ptr(result_value_out, result_tydesc_ref)
+            as *mut crate::rtdt::Tensor;
+
+        let out_tensor = crate::rtdt::Tensor {
+            ptr_base,
+            capacity_elems,
+            offset_elems: new_offset,
+            shape: new_shape_ptr,
+            strides: new_strides_ptr,
+            layout,
+        };
+
+        std::ptr::write(out_tensor_ptr, out_tensor);
+
+        // Set Result tag to Ok.
+        let result_ptr = result_value_out as *mut crate::rtdt::Result;
+        std::ptr::write(&mut (*result_ptr).tag, crate::rtdt::ResultTag::Ok);
+
+        return RtStatus::Ok;
+
+        // Helper function for error path.
+        unsafe fn error_path(
+            rt_ref: &mut RtLocal,
+            tensor_value_in: *mut u8,
+            tensor_tydesc_ref: TyDescRef,
+            result_value_out: *mut u8,
+            result_tydesc_ref: TyDescRef,
+        ) -> RtStatus {
+            unsafe {
+                // Copy the tensor into the result's error payload.
+                let payload_ptr = compute_result_payload_ptr(result_value_out, result_tydesc_ref);
+                let tensor_src = tensor_value_in as *const crate::rtdt::Tensor;
+                let tensor_dst = payload_ptr as *mut crate::rtdt::Tensor;
+                let tensor_value = std::ptr::read(tensor_src);
+                std::ptr::write(tensor_dst, tensor_value);
+
+                // Set Result tag to Err.
+                let result_ptr = result_value_out as *mut crate::rtdt::Result;
+                std::ptr::write(&mut (*result_ptr).tag, crate::rtdt::ResultTag::Err);
+
+                RtStatus::Ok
+            }
+        }
+
+        // Helper to compute payload offset in Result<T>.
+        unsafe fn compute_result_payload_ptr(
+            result_ptr: *mut u8,
+            result_tydesc_ref: TyDescRef,
+        ) -> *mut u8 {
+            unsafe {
+                // Extract ok_tydesc from result type descriptor.
+                let ok_tydesc_ref = result_tydesc_ref.result_ok_ty();
+
+                let ok_align = ok_tydesc_ref.align();
+                let payload_offset = crate::rtdt::layout::result_payload_offset(ok_align);
+
+                result_ptr.add(payload_offset as usize)
+            }
+        }
+    }
+}

@@ -260,6 +260,16 @@ pub struct TensorLayoutInfo {
     pub align: u32,
 }
 
+/// Range specification for tensor slicing.
+///
+/// Represents a half-open interval [start, end).
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct SliceRange {
+    pub start: u32,
+    pub end: u32,
+}
+
 
 
 

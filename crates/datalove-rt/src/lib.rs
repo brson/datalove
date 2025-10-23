@@ -1169,3 +1169,32 @@ pub unsafe extern "C" fn dtlv_rti_tensor_transpose_local(
         )
     }
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_tensor_slice_local(
+    rt: LocalRtHandle,
+    tensor_value_in: *mut u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+    ranges_ptr: *const rtdt::SliceRange,
+    result_value_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || tensor_value_in.is_null() || tensor_tydesc.is_null()
+            || ranges_ptr.is_null() || result_value_out.is_null() || result_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        let result_tydesc_ref = rtdt::TyDescRef::from_ptr(result_tydesc);
+        tensor::tensor_slice_impl(
+            rt_ref,
+            tensor_value_in,
+            tensor_tydesc_ref,
+            ranges_ptr,
+            result_value_out,
+            result_tydesc_ref,
+        )
+    }
+}
