@@ -2,7 +2,7 @@
 
 ## Current Status
 
-**Latest Update:** 2025-10-23
+**Latest Update:** 2025-10-24
 
 - ✅ Phase 1 Complete: Diagnostic crate created and compiles
 - ✅ Phase 2 Complete: AST error nodes updated
@@ -15,11 +15,14 @@
   - datalit parser: 21/21 error sites emit ParseDiagnostic ✅
   - Error codes assigned: P001-P009 (datafun), D001-D020 (datalit)
   - All tests passing ✅
-- 🔄 Phase 4 In Progress: Type checker diagnostics
-  - Part A (Datalit): Parser infrastructure complete, all tests passing ✅
-  - Part B (Datafun): Not started
-  - Part C (Documentation): In progress
-- 🔲 Phase 5: Not yet started
+- ✅ Phase 4 Part A Complete: Datalit type checker diagnostics
+  - Parser infrastructure complete ✅
+  - Type checker diagnostic emission: 45/45 error sites updated ✅
+  - Error codes assigned: T001-T046 (datalit type errors)
+  - All 800+ tests passing ✅
+- 🔲 Phase 4 Part B: Datafun type checker diagnostics (not started)
+- 🔲 Phase 4 Part C: Documentation (not started)
+- 🔲 Phase 5: Resolution diagnostics (not yet started)
 - 🔄 Phase 6 In Progress: Driver integration (basic)
   - Basic diagnostic retrieval and rendering in CLI ✅
   - Error testing infrastructure in place ✅
@@ -27,10 +30,9 @@
 - 🔲 Phase 7: Not yet started
 
 **Next Steps:**
-1. Complete Phase 4 Part A: Update datalit type checker to emit TypeDiagnostic (~50 error sites)
-2. Phase 4 Part B: Update datafun type checker
-3. Phase 5: Resolution diagnostics
-4. Phase 6: Complete driver integration (SourceMap, improved rendering)
+1. Phase 4 Part B: Update datafun type checker to emit TypeDiagnostic (~43 error sites)
+2. Phase 5: Resolution diagnostics
+3. Phase 6: Complete driver integration (SourceMap, improved rendering)
 
 ## Overview
 
@@ -435,7 +437,7 @@ match expr.kind {
 - All existing tests pass without modifications
 
 ### Phase 4: Type checker diagnostics - 🔄 IN PROGRESS
-- [ ] **Part A: Datalit implementation** - 🔄 IN PROGRESS
+- [x] **Part A: Datalit implementation** - ✅ COMPLETE
   - [x] Add span infrastructure (ParseResult struct)
   - [x] Update datalit parser to collect expr_spans during parsing
   - [x] Update parser return types to ParseResult
@@ -459,8 +461,8 @@ match expr.kind {
     - [x] Updated 5 datalit integration tests to use parse_integration_test()
     - [x] Updated 7 rt-tests with #[salsa::tracked] compile functions
     - [x] All integration tests passing
-  - [ ] Update datalit type checker to emit TypeDiagnostic (~50 error sites)
-  - [ ] Assign error codes T001-T050 for datalit type errors
+  - [x] Update datalit type checker to emit TypeDiagnostic (45 error sites updated)
+  - [x] Assign error codes T001-T046 for datalit type errors
   - [x] Test: `cargo test --all` (800+ tests passing, 0 failures)
 - [ ] **Part B: Datafun implementation**
   - [ ] Add span infrastructure (update Script to store expr_spans)
@@ -485,7 +487,7 @@ match expr.kind {
 - Keep Vec<TypeError> alongside accumulators during migration (backward compatibility)
 - Implementation order: datalit first (datafun depends on it)
 
-**Current Status (2025-10-22 - Latest):**
+**Current Status (2025-10-24 - Latest):**
 - ✅ Parser infrastructure changes complete
 - ✅ All call sites updated to use ParseResult.expr
 - ✅ Fixed get_error_text() panic when source_text not available
@@ -508,13 +510,25 @@ match expr.kind {
   - Updated 5 datalit integration test files to use parse_integration_test()
   - Updated 7 rt-tests files with #[salsa::tracked] compile functions
   - All integration tests now passing
+- ✅ Type checker diagnostic emission complete
+  - Updated 45 error sites in crates/datalove-datalit/src/tycheck.rs
+  - Error codes T001-T046 assigned:
+    - T001-T004: UnresolvedName (named tuple, struct, enum)
+    - T001, T005-T012: IntOutOfRange (u32, u8, i8, u16, i16, i32, u64, i64)
+    - T013-T017: CannotSynthesize (empty list/set/map, None, AnonEnum, ParseError)
+    - T018-T032: TypeMismatch (15 sites: collections, enums, structs, tuples, subsumption)
+    - T033-T037: HeapMismatch (5 sites: list, set, map keys/values, general)
+    - T038-T041: ArityMismatch (4 sites: tuples and structs)
+    - T042-T043: FieldOrderMismatch (2 sites: struct field ordering)
+    - T044-T046: VariantNotFound (3 sites: enum variants)
+  - Pattern: ctx.get_span() check → DiagnosticBuilder → emit_type() → keep Err(TypeError) for compatibility
 - Tests status:
-  - ✅ datalove-datalit: 85 passed, 1 ignored (library + 5 integration test suites)
-  - ✅ datalove-datafun: 74 passed (library + 6 integration test suites)
+  - ✅ datalove-datalit: 125 passed, 1 ignored (library + integration tests)
+  - ✅ datalove-datafun: 74 passed (library + integration tests)
   - ✅ datalove-rt-tests: All test suites passing
-  - ✅ datalove-cli: 2 + 5 script tests passed
+  - ✅ datalove-cli: 13 tests passed (5 script + 8 error tests)
   - ✅ **Total: 800+ tests passing, 0 failures**
-- Next: Proceed with type checker diagnostic emission
+- **Phase 4 Part A: COMPLETE**
 
 ### Phase 5: Resolution diagnostics
 - [ ] Update resolution pass to emit ResolutionDiagnostic

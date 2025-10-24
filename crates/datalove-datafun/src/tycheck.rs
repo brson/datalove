@@ -685,7 +685,7 @@ fn synthesize_expr<'db>(
         ExprFunKind::Datalit(datalit_expr) => {
             // Delegate to datalit type checker.
             // We need to create a dummy resolved expr for datalit.
-            let resolved = datalit::resolve::resolve_names(db, datalit_expr);
+            let resolved = datalit::resolve::resolve_names(db, datalit_expr, vec![]);
             let tycheck_result = datalit::tycheck::type_check(db, datalit_expr, resolved);
 
             // Check for errors.
@@ -1095,7 +1095,7 @@ fn check_expr<'db>(
                 );
 
                 // Resolve names and type check with expected type.
-                let resolved = datalit::resolve::resolve_names(db, datalit_expr);
+                let resolved = datalit::resolve::resolve_names(db, datalit_expr, vec![]);
                 let tycheck_result = datalit::tycheck::type_check_with_expected(
                     db,
                     datalit_expr,

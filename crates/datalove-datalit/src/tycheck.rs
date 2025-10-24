@@ -1,8 +1,9 @@
 use rmx::prelude::*;
-use bct::text::InternedText;
+use bct::text::{InternedText, Text};
 use std::collections::HashMap;
 use crate::ast::*;
 use crate::resolve::{ResolvedExpr, Resolution};
+use datalove_diagnostic::{ByteSpan, DiagnosticBuilder};
 
 /// Type representation (synthesized types, mirrors TypeHint but without parse errors).
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -158,6 +159,7 @@ pub struct TypecheckResult<'db> {
 struct TypeContext<'db> {
     db: &'db dyn crate::Db,
     resolutions: HashMap<InternedText<'db>, Resolution<'db>>,
+    expr_spans: HashMap<salsa::Id, (Text<'db>, ByteSpan)>,
     errors: Vec<TypeError>,
 }
 
@@ -169,9 +171,23 @@ impl<'db> TypeContext<'db> {
             .map(|entry| (entry.name(db), entry.resolution(db)))
             .collect();
 
+        // Build a hashmap for fast span lookup.
+        let expr_spans = resolved
+            .expr_spans(db)
+            .iter()
+            .map(|stored_span| {
+                use salsa::plumbing::FromId;
+                (
+                    stored_span.expr_id,
+                    (Text::from_id(stored_span.text_id), stored_span.span.clone())
+                )
+            })
+            .collect();
+
         TypeContext {
             db,
             resolutions,
+            expr_spans,
             errors: Vec::new(),
         }
     }
@@ -182,6 +198,12 @@ impl<'db> TypeContext<'db> {
 
     fn lookup_resolution(&self, name: InternedText<'db>) -> Option<Resolution<'db>> {
         self.resolutions.get(&name).copied()
+    }
+
+    /// Look up the source location for an expression.
+    fn get_span(&self, expr: ExprFull<'db>) -> Option<(Text<'db>, ByteSpan)> {
+        use salsa::plumbing::AsId;
+        self.expr_spans.get(&expr.as_id()).cloned()
     }
 }
 
@@ -274,6 +296,14 @@ fn synthesize<'db>(
             if value_str.parse::<u32>().is_ok() {
                 Type::U32
             } else {
+                // T001: Integer out of range.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "integer literal out of range")
+                        .code("T001")
+                        .primary_label(text, span, "value too large for u32")
+                        .note("integer literals default to u32 type, which has a maximum value of 4,294,967,295")
+                        .emit_type();
+                }
                 return Err(TypeError::IntOutOfRange);
             }
         }
@@ -286,7 +316,18 @@ fn synthesize<'db>(
             let name = t.name(db);
             let resolution = ctx
                 .lookup_resolution(name)
-                .ok_or_else(|| TypeError::UnresolvedName(name.as_str(db).to_string()))?;
+                .ok_or_else(|| {
+                    // T002: Unresolved name (named tuple).
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        let msg = format!("cannot find type `{}`", name.as_str(db));
+                        DiagnosticBuilder::error(db, &msg)
+                            .code("T002")
+                            .primary_label(text, span, "not found in this scope")
+                            .note("named types must be defined in the type hint before they can be used")
+                            .emit_type();
+                    }
+                    TypeError::UnresolvedName(name.as_str(db).to_string())
+                })?;
 
             let definition = resolution.definition(db);
             let expected_type = convert_type_hint(db, definition)?;
@@ -302,7 +343,18 @@ fn synthesize<'db>(
             let name = s.name(db);
             let resolution = ctx
                 .lookup_resolution(name)
-                .ok_or_else(|| TypeError::UnresolvedName(name.as_str(db).to_string()))?;
+                .ok_or_else(|| {
+                    // T003: Unresolved name (named struct).
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        let msg = format!("cannot find type `{}`", name.as_str(db));
+                        DiagnosticBuilder::error(db, &msg)
+                            .code("T003")
+                            .primary_label(text, span, "not found in this scope")
+                            .note("named types must be defined in the type hint before they can be used")
+                            .emit_type();
+                    }
+                    TypeError::UnresolvedName(name.as_str(db).to_string())
+                })?;
 
             let definition = resolution.definition(db);
             let expected_type = convert_type_hint(db, definition)?;
@@ -318,7 +370,18 @@ fn synthesize<'db>(
             let name = e.enum_name(db);
             let resolution = ctx
                 .lookup_resolution(name)
-                .ok_or_else(|| TypeError::UnresolvedName(name.as_str(db).to_string()))?;
+                .ok_or_else(|| {
+                    // T004: Unresolved name (named enum).
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        let msg = format!("cannot find type `{}`", name.as_str(db));
+                        DiagnosticBuilder::error(db, &msg)
+                            .code("T004")
+                            .primary_label(text, span, "not found in this scope")
+                            .note("named types must be defined in the type hint before they can be used")
+                            .emit_type();
+                    }
+                    TypeError::UnresolvedName(name.as_str(db).to_string())
+                })?;
 
             let definition = resolution.definition(db);
             let expected_type = convert_type_hint(db, definition)?;
@@ -357,7 +420,14 @@ fn synthesize<'db>(
         Expr::List(l) => {
             let elements = l.elements(db);
             if elements.is_empty() {
-                // Cannot synthesize type for empty list.
+                // T013: Cannot synthesize type for empty list.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "cannot infer type for empty list")
+                        .code("T013")
+                        .primary_label(text, span, "type annotation required")
+                        .note("provide a type hint to specify the element type, e.g., ': @list(@u32) / @list()'")
+                        .emit_type();
+                }
                 return Err(TypeError::CannotSynthesize);
             }
 
@@ -368,12 +438,33 @@ fn synthesize<'db>(
             for elem in &elements[1..] {
                 let elem_type = synthesize(ctx, *elem)?;
                 if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
+                    // T018: List element type mismatch.
+                    if let Some((text, span)) = ctx.get_span(*elem) {
+                        let msg = format!("mismatched types in list");
+                        DiagnosticBuilder::error(db, &msg)
+                            .code("T018")
+                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                                type_to_string(db, first_type.ty(db)),
+                                type_to_string(db, elem_type.ty(db))))
+                            .note("all elements in a list must have the same type")
+                            .emit_type();
+                    }
                     return Err(TypeError::TypeMismatch {
                         expected: type_to_string(db, first_type.ty(db)),
                         actual: type_to_string(db, elem_type.ty(db)),
                     });
                 }
                 if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
+                    // T033: List element heap mismatch.
+                    if let Some((text, span)) = ctx.get_span(*elem) {
+                        DiagnosticBuilder::error(db, "heap allocation mismatch in list")
+                            .code("T033")
+                            .primary_label(text, span, &format!("expected {}, found {}",
+                                heap_to_string(first_type.heap(db)),
+                                heap_to_string(elem_type.heap(db))))
+                            .note("all elements in a list must have compatible heap allocations")
+                            .emit_type();
+                    }
                     return Err(TypeError::HeapMismatch {
                         expected_heap: heap_to_string(first_type.heap(db)),
                         actual_heap: heap_to_string(elem_type.heap(db)),
@@ -388,7 +479,14 @@ fn synthesize<'db>(
         Expr::Set(s) => {
             let elements = s.elements(db);
             if elements.is_empty() {
-                // Cannot synthesize type for empty set.
+                // T014: Cannot synthesize type for empty set.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "cannot infer type for empty set")
+                        .code("T014")
+                        .primary_label(text, span, "type annotation required")
+                        .note("provide a type hint to specify the element type, e.g., ': @set(@u32) / @set()'")
+                        .emit_type();
+                }
                 return Err(TypeError::CannotSynthesize);
             }
 
@@ -399,12 +497,33 @@ fn synthesize<'db>(
             for elem in &elements[1..] {
                 let elem_type = synthesize(ctx, *elem)?;
                 if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
+                    // T019: Set element type mismatch.
+                    if let Some((text, span)) = ctx.get_span(*elem) {
+                        let msg = format!("mismatched types in set");
+                        DiagnosticBuilder::error(db, &msg)
+                            .code("T019")
+                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                                type_to_string(db, first_type.ty(db)),
+                                type_to_string(db, elem_type.ty(db))))
+                            .note("all elements in a set must have the same type")
+                            .emit_type();
+                    }
                     return Err(TypeError::TypeMismatch {
                         expected: type_to_string(db, first_type.ty(db)),
                         actual: type_to_string(db, elem_type.ty(db)),
                     });
                 }
                 if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
+                    // T034: Set element heap mismatch.
+                    if let Some((text, span)) = ctx.get_span(*elem) {
+                        DiagnosticBuilder::error(db, "heap allocation mismatch in set")
+                            .code("T034")
+                            .primary_label(text, span, &format!("expected {}, found {}",
+                                heap_to_string(first_type.heap(db)),
+                                heap_to_string(elem_type.heap(db))))
+                            .note("all elements in a set must have compatible heap allocations")
+                            .emit_type();
+                    }
                     return Err(TypeError::HeapMismatch {
                         expected_heap: heap_to_string(first_type.heap(db)),
                         actual_heap: heap_to_string(elem_type.heap(db)),
@@ -419,7 +538,14 @@ fn synthesize<'db>(
         Expr::Map(m) => {
             let entries = m.entries(db);
             if entries.is_empty() {
-                // Cannot synthesize type for empty map.
+                // T015: Cannot synthesize type for empty map.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "cannot infer type for empty map")
+                        .code("T015")
+                        .primary_label(text, span, "type annotation required")
+                        .note("provide a type hint to specify the key and value types, e.g., ': @map(@string, @u32) / @map()'")
+                        .emit_type();
+                }
                 return Err(TypeError::CannotSynthesize);
             }
 
@@ -434,12 +560,33 @@ fn synthesize<'db>(
                 let value_type = synthesize(ctx, entry.value(db))?;
 
                 if !types_equivalent(db, first_key_type.ty(db), key_type.ty(db)) {
+                    // T020: Map key type mismatch.
+                    if let Some((text, span)) = ctx.get_span(entry.key(db)) {
+                        let msg = format!("mismatched key types in map");
+                        DiagnosticBuilder::error(db, &msg)
+                            .code("T020")
+                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                                type_to_string(db, first_key_type.ty(db)),
+                                type_to_string(db, key_type.ty(db))))
+                            .note("all keys in a map must have the same type")
+                            .emit_type();
+                    }
                     return Err(TypeError::TypeMismatch {
                         expected: type_to_string(db, first_key_type.ty(db)),
                         actual: type_to_string(db, key_type.ty(db)),
                     });
                 }
                 if !heaps_compatible(first_key_type.heap(db), key_type.heap(db)) {
+                    // T035: Map key heap mismatch.
+                    if let Some((text, span)) = ctx.get_span(entry.key(db)) {
+                        DiagnosticBuilder::error(db, "heap allocation mismatch in map keys")
+                            .code("T035")
+                            .primary_label(text, span, &format!("expected {}, found {}",
+                                heap_to_string(first_key_type.heap(db)),
+                                heap_to_string(key_type.heap(db))))
+                            .note("all keys in a map must have compatible heap allocations")
+                            .emit_type();
+                    }
                     return Err(TypeError::HeapMismatch {
                         expected_heap: heap_to_string(first_key_type.heap(db)),
                         actual_heap: heap_to_string(key_type.heap(db)),
@@ -447,12 +594,33 @@ fn synthesize<'db>(
                 }
 
                 if !types_equivalent(db, first_value_type.ty(db), value_type.ty(db)) {
+                    // T021: Map value type mismatch.
+                    if let Some((text, span)) = ctx.get_span(entry.value(db)) {
+                        let msg = format!("mismatched value types in map");
+                        DiagnosticBuilder::error(db, &msg)
+                            .code("T021")
+                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                                type_to_string(db, first_value_type.ty(db)),
+                                type_to_string(db, value_type.ty(db))))
+                            .note("all values in a map must have the same type")
+                            .emit_type();
+                    }
                     return Err(TypeError::TypeMismatch {
                         expected: type_to_string(db, first_value_type.ty(db)),
                         actual: type_to_string(db, value_type.ty(db)),
                     });
                 }
                 if !heaps_compatible(first_value_type.heap(db), value_type.heap(db)) {
+                    // T036: Map value heap mismatch.
+                    if let Some((text, span)) = ctx.get_span(entry.value(db)) {
+                        DiagnosticBuilder::error(db, "heap allocation mismatch in map values")
+                            .code("T036")
+                            .primary_label(text, span, &format!("expected {}, found {}",
+                                heap_to_string(first_value_type.heap(db)),
+                                heap_to_string(value_type.heap(db))))
+                            .note("all values in a map must have compatible heap allocations")
+                            .emit_type();
+                    }
                     return Err(TypeError::HeapMismatch {
                         expected_heap: heap_to_string(first_value_type.heap(db)),
                         actual_heap: heap_to_string(value_type.heap(db)),
@@ -471,7 +639,21 @@ fn synthesize<'db>(
 
         // Cannot synthesize for these - need type context.
         Expr::AnonEnum(_)
-        | Expr::None => return Err(TypeError::CannotSynthesize),
+        | Expr::None => {
+            // T016: Cannot synthesize type for anonymous enum or None.
+            if let Some((text, span)) = ctx.get_span(expr) {
+                let msg = match expr_and_heap.expr(db) {
+                    Expr::None => "cannot infer type for None value",
+                    _ => "cannot infer type for anonymous enum",
+                };
+                DiagnosticBuilder::error(db, msg)
+                    .code("T016")
+                    .primary_label(text, span, "type annotation required")
+                    .note("provide a type hint to specify the expected type")
+                    .emit_type();
+            }
+            return Err(TypeError::CannotSynthesize);
+        }
 
         // Rule: Syn-Tensor - synthesize tensor by synthesizing all elements (must have same type).
         Expr::Tensor(t) => {
@@ -518,7 +700,17 @@ fn synthesize<'db>(
             Type::Tensor(TypeTensor::new(db, first_type, rank))
         }
 
-        Expr::ParseError(_) => return Err(TypeError::CannotSynthesize),
+        Expr::ParseError(_) => {
+            // T017: Cannot synthesize type for parse error.
+            if let Some((text, span)) = ctx.get_span(expr) {
+                DiagnosticBuilder::error(db, "cannot type-check expression with parse errors")
+                    .code("T017")
+                    .primary_label(text, span, "parse error occurred here")
+                    .note("fix the parse error before type checking")
+                    .emit_type();
+            }
+            return Err(TypeError::CannotSynthesize);
+        }
     };
 
     Ok(TypeAndHeap::new(db, heap, ty))
@@ -538,6 +730,16 @@ fn check<'db>(
     let expected_heap = expected.heap(db);
 
     if !heaps_compatible(actual_heap, expected_heap) {
+        // T037: General heap mismatch.
+        if let Some((text, span)) = ctx.get_span(expr) {
+            DiagnosticBuilder::error(db, "heap allocation mismatch")
+                .code("T037")
+                .primary_label(text, span, &format!("expected {}, found {}",
+                    heap_to_string(expected_heap),
+                    heap_to_string(actual_heap)))
+                .note("heap-allocated and stack-allocated values cannot be mixed")
+                .emit_type();
+        }
         return Err(TypeError::HeapMismatch {
             expected_heap: heap_to_string(expected_heap),
             actual_heap: heap_to_string(actual_heap),
@@ -577,6 +779,16 @@ fn check<'db>(
             let expr_without_hint = ExprFull::new(db, None, *expr_and_heap);
             let synthesized = synthesize(ctx, expr_without_hint)?;
             if !types_equivalent(db, synthesized.ty(db), expected_type) {
+                // T022: Type mismatch for primitive literal.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    let msg = format!("mismatched types");
+                    DiagnosticBuilder::error(db, &msg)
+                        .code("T022")
+                        .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                            type_to_string(db, expected_type),
+                            type_to_string(db, synthesized.ty(db))))
+                        .emit_type();
+                }
                 return Err(TypeError::TypeMismatch {
                     expected: type_to_string(db, expected_type),
                     actual: type_to_string(db, synthesized.ty(db)),
@@ -591,6 +803,14 @@ fn check<'db>(
             if value_str.parse::<u8>().is_ok() {
                 Ok(())
             } else {
+                // T005: Integer out of range for u8.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "integer literal out of range for type u8")
+                        .code("T005")
+                        .primary_label(text, span, "value out of range")
+                        .note("u8 can represent values from 0 to 255")
+                        .emit_type();
+                }
                 Err(TypeError::IntOutOfRange)
             }
         }
@@ -600,6 +820,14 @@ fn check<'db>(
             if value_str.parse::<i8>().is_ok() {
                 Ok(())
             } else {
+                // T006: Integer out of range for i8.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "integer literal out of range for type i8")
+                        .code("T006")
+                        .primary_label(text, span, "value out of range")
+                        .note("i8 can represent values from -128 to 127")
+                        .emit_type();
+                }
                 Err(TypeError::IntOutOfRange)
             }
         }
@@ -609,6 +837,14 @@ fn check<'db>(
             if value_str.parse::<u16>().is_ok() {
                 Ok(())
             } else {
+                // T007: Integer out of range for u16.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "integer literal out of range for type u16")
+                        .code("T007")
+                        .primary_label(text, span, "value out of range")
+                        .note("u16 can represent values from 0 to 65,535")
+                        .emit_type();
+                }
                 Err(TypeError::IntOutOfRange)
             }
         }
@@ -618,6 +854,14 @@ fn check<'db>(
             if value_str.parse::<i16>().is_ok() {
                 Ok(())
             } else {
+                // T008: Integer out of range for i16.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "integer literal out of range for type i16")
+                        .code("T008")
+                        .primary_label(text, span, "value out of range")
+                        .note("i16 can represent values from -32,768 to 32,767")
+                        .emit_type();
+                }
                 Err(TypeError::IntOutOfRange)
             }
         }
@@ -627,6 +871,14 @@ fn check<'db>(
             if value_str.parse::<u32>().is_ok() {
                 Ok(())
             } else {
+                // T009: Integer out of range for u32.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "integer literal out of range for type u32")
+                        .code("T009")
+                        .primary_label(text, span, "value out of range")
+                        .note("u32 can represent values from 0 to 4,294,967,295")
+                        .emit_type();
+                }
                 Err(TypeError::IntOutOfRange)
             }
         }
@@ -636,6 +888,14 @@ fn check<'db>(
             if value_str.parse::<i32>().is_ok() {
                 Ok(())
             } else {
+                // T010: Integer out of range for i32.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "integer literal out of range for type i32")
+                        .code("T010")
+                        .primary_label(text, span, "value out of range")
+                        .note("i32 can represent values from -2,147,483,648 to 2,147,483,647")
+                        .emit_type();
+                }
                 Err(TypeError::IntOutOfRange)
             }
         }
@@ -645,6 +905,14 @@ fn check<'db>(
             if value_str.parse::<u64>().is_ok() {
                 Ok(())
             } else {
+                // T011: Integer out of range for u64.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "integer literal out of range for type u64")
+                        .code("T011")
+                        .primary_label(text, span, "value out of range")
+                        .note("u64 can represent values from 0 to 18,446,744,073,709,551,615")
+                        .emit_type();
+                }
                 Err(TypeError::IntOutOfRange)
             }
         }
@@ -654,6 +922,14 @@ fn check<'db>(
             if value_str.parse::<i64>().is_ok() {
                 Ok(())
             } else {
+                // T012: Integer out of range for i64.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "integer literal out of range for type i64")
+                        .code("T012")
+                        .primary_label(text, span, "value out of range")
+                        .note("i64 can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807")
+                        .emit_type();
+                }
                 Err(TypeError::IntOutOfRange)
             }
         }
@@ -669,6 +945,14 @@ fn check<'db>(
             let expected_fields = expected_tuple.fields(db);
 
             if elements.len() != expected_fields.len() {
+                // T038: Tuple arity mismatch.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "tuple has wrong number of elements")
+                        .code("T038")
+                        .primary_label(text, span, &format!("expected {} element(s), found {}",
+                            expected_fields.len(), elements.len()))
+                        .emit_type();
+                }
                 return Err(TypeError::ArityMismatch {
                     expected: expected_fields.len(),
                     actual: elements.len(),
@@ -688,6 +972,14 @@ fn check<'db>(
             let expected_fields = expected_struct.fields(db);
 
             if fields.len() != expected_fields.len() {
+                // T039: Struct arity mismatch.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "struct has wrong number of fields")
+                        .code("T039")
+                        .primary_label(text, span, &format!("expected {} field(s), found {}",
+                            expected_fields.len(), fields.len()))
+                        .emit_type();
+                }
                 return Err(TypeError::ArityMismatch {
                     expected: expected_fields.len(),
                     actual: fields.len(),
@@ -699,6 +991,15 @@ fn check<'db>(
                 let expected_name = expected_field.name(db);
 
                 if field_name != expected_name {
+                    // T042: Struct field order mismatch.
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "struct fields in wrong order")
+                            .code("T042")
+                            .primary_label(text, span, &format!("expected field `{}`, found `{}`",
+                                expected_name.as_str(db), field_name.as_str(db)))
+                            .note("struct fields must appear in the same order as the type definition")
+                            .emit_type();
+                    }
                     return Err(TypeError::FieldOrderMismatch);
                 }
 
@@ -714,6 +1015,14 @@ fn check<'db>(
             let expected_fields = expected_struct.fields(db);
 
             if fields.len() != expected_fields.len() {
+                // T040: Struct arity mismatch (anon -> named coercion).
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "struct has wrong number of fields")
+                        .code("T040")
+                        .primary_label(text, span, &format!("expected {} field(s), found {}",
+                            expected_fields.len(), fields.len()))
+                        .emit_type();
+                }
                 return Err(TypeError::ArityMismatch {
                     expected: expected_fields.len(),
                     actual: fields.len(),
@@ -725,6 +1034,15 @@ fn check<'db>(
                 let expected_name = expected_field.name(db);
 
                 if field_name != expected_name {
+                    // T043: Struct field order mismatch (anon -> named coercion).
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "struct fields in wrong order")
+                            .code("T043")
+                            .primary_label(text, span, &format!("expected field `{}`, found `{}`",
+                                expected_name.as_str(db), field_name.as_str(db)))
+                            .note("struct fields must appear in the same order as the type definition")
+                            .emit_type();
+                    }
                     return Err(TypeError::FieldOrderMismatch);
                 }
 
@@ -740,6 +1058,15 @@ fn check<'db>(
             let expected_name = expected_struct.name(db);
 
             if name != expected_name {
+                // T023: Named struct type mismatch.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    let msg = format!("mismatched struct types");
+                    DiagnosticBuilder::error(db, &msg)
+                        .code("T023")
+                        .primary_label(text, span, &format!("expected `@struct {}`, found `@struct {}`",
+                            expected_name.as_str(db), name.as_str(db)))
+                        .emit_type();
+                }
                 return Err(TypeError::TypeMismatch {
                     expected: format!("@struct {}", expected_name.as_str(db)),
                     actual: format!("@struct {}", name.as_str(db)),
@@ -765,6 +1092,13 @@ fn check<'db>(
                 .iter()
                 .find(|v| v.name(db) == variant_name)
                 .ok_or_else(|| {
+                    // T044: Enum variant not found.
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, &format!("variant `{}` not found in enum", variant_name.as_str(db)))
+                            .code("T044")
+                            .primary_label(text, span, "variant not defined")
+                            .emit_type();
+                    }
                     TypeError::VariantNotFound(variant_name.as_str(db).to_string())
                 })?;
 
@@ -773,14 +1107,32 @@ fn check<'db>(
                     check(ctx, payload, expected_payload)
                 }
                 (None, None) => Ok(()),
-                (Some(_), None) => Err(TypeError::TypeMismatch {
-                    expected: "no payload".to_string(),
-                    actual: "payload".to_string(),
-                }),
-                (None, Some(_)) => Err(TypeError::TypeMismatch {
-                    expected: "payload".to_string(),
-                    actual: "no payload".to_string(),
-                }),
+                (Some(_), None) => {
+                    // T024: Enum variant payload mismatch (has payload, expected none).
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
+                            .code("T024")
+                            .primary_label(text, span, "expected no payload, found payload")
+                            .emit_type();
+                    }
+                    Err(TypeError::TypeMismatch {
+                        expected: "no payload".to_string(),
+                        actual: "payload".to_string(),
+                    })
+                }
+                (None, Some(_)) => {
+                    // T025: Enum variant payload mismatch (no payload, expected payload).
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
+                            .code("T025")
+                            .primary_label(text, span, "expected payload, found no payload")
+                            .emit_type();
+                    }
+                    Err(TypeError::TypeMismatch {
+                        expected: "payload".to_string(),
+                        actual: "no payload".to_string(),
+                    })
+                }
             }
         }
 
@@ -793,6 +1145,13 @@ fn check<'db>(
                 .iter()
                 .find(|v| v.name(db) == variant_name)
                 .ok_or_else(|| {
+                    // T045: Enum variant not found (anon -> named coercion).
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, &format!("variant `{}` not found in enum", variant_name.as_str(db)))
+                            .code("T045")
+                            .primary_label(text, span, "variant not defined")
+                            .emit_type();
+                    }
                     TypeError::VariantNotFound(variant_name.as_str(db).to_string())
                 })?;
 
@@ -801,14 +1160,32 @@ fn check<'db>(
                     check(ctx, payload, expected_payload)
                 }
                 (None, None) => Ok(()),
-                (Some(_), None) => Err(TypeError::TypeMismatch {
-                    expected: "no payload".to_string(),
-                    actual: "payload".to_string(),
-                }),
-                (None, Some(_)) => Err(TypeError::TypeMismatch {
-                    expected: "payload".to_string(),
-                    actual: "no payload".to_string(),
-                }),
+                (Some(_), None) => {
+                    // T026: Enum variant payload mismatch (has payload, expected none) - NamedEnum coercion.
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
+                            .code("T026")
+                            .primary_label(text, span, "expected no payload, found payload")
+                            .emit_type();
+                    }
+                    Err(TypeError::TypeMismatch {
+                        expected: "no payload".to_string(),
+                        actual: "payload".to_string(),
+                    })
+                }
+                (None, Some(_)) => {
+                    // T027: Enum variant payload mismatch (no payload, expected payload) - NamedEnum coercion.
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
+                            .code("T027")
+                            .primary_label(text, span, "expected payload, found no payload")
+                            .emit_type();
+                    }
+                    Err(TypeError::TypeMismatch {
+                        expected: "payload".to_string(),
+                        actual: "no payload".to_string(),
+                    })
+                }
             }
         }
 
@@ -818,6 +1195,15 @@ fn check<'db>(
             let expected_name = expected_enum.name(db);
 
             if enum_name != expected_name {
+                // T028: Named enum type mismatch.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    let msg = format!("mismatched enum types");
+                    DiagnosticBuilder::error(db, &msg)
+                        .code("T028")
+                        .primary_label(text, span, &format!("expected `@enum {}`, found `@enum {}`",
+                            expected_name.as_str(db), enum_name.as_str(db)))
+                        .emit_type();
+                }
                 return Err(TypeError::TypeMismatch {
                     expected: format!("@enum {}", expected_name.as_str(db)),
                     actual: format!("@enum {}", enum_name.as_str(db)),
@@ -831,6 +1217,13 @@ fn check<'db>(
                 .iter()
                 .find(|v| v.name(db) == variant_name)
                 .ok_or_else(|| {
+                    // T046: Enum variant not found (named enum exact match).
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, &format!("variant `{}` not found in enum", variant_name.as_str(db)))
+                            .code("T046")
+                            .primary_label(text, span, "variant not defined")
+                            .emit_type();
+                    }
                     TypeError::VariantNotFound(variant_name.as_str(db).to_string())
                 })?;
 
@@ -839,14 +1232,32 @@ fn check<'db>(
                     check(ctx, payload, expected_payload)
                 }
                 (None, None) => Ok(()),
-                (Some(_), None) => Err(TypeError::TypeMismatch {
-                    expected: "no payload".to_string(),
-                    actual: "payload".to_string(),
-                }),
-                (None, Some(_)) => Err(TypeError::TypeMismatch {
-                    expected: "payload".to_string(),
-                    actual: "no payload".to_string(),
-                }),
+                (Some(_), None) => {
+                    // T029: Enum variant payload mismatch (has payload, expected none) - NamedEnum exact.
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
+                            .code("T029")
+                            .primary_label(text, span, "expected no payload, found payload")
+                            .emit_type();
+                    }
+                    Err(TypeError::TypeMismatch {
+                        expected: "no payload".to_string(),
+                        actual: "payload".to_string(),
+                    })
+                }
+                (None, Some(_)) => {
+                    // T030: Enum variant payload mismatch (no payload, expected payload) - NamedEnum exact.
+                    if let Some((text, span)) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
+                            .code("T030")
+                            .primary_label(text, span, "expected payload, found no payload")
+                            .emit_type();
+                    }
+                    Err(TypeError::TypeMismatch {
+                        expected: "payload".to_string(),
+                        actual: "no payload".to_string(),
+                    })
+                }
             }
         }
 
@@ -932,6 +1343,14 @@ fn check<'db>(
             let expected_fields = expected_tuple.fields(db);
 
             if elements.len() != expected_fields.len() {
+                // T041: Tuple arity mismatch (anon -> named coercion).
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "tuple has wrong number of elements")
+                        .code("T041")
+                        .primary_label(text, span, &format!("expected {} element(s), found {}",
+                            expected_fields.len(), elements.len()))
+                        .emit_type();
+                }
                 return Err(TypeError::ArityMismatch {
                     expected: expected_fields.len(),
                     actual: elements.len(),
@@ -951,6 +1370,15 @@ fn check<'db>(
             let expected_name = expected_tuple.name(db);
 
             if name != expected_name {
+                // T031: Named tuple type mismatch.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    let msg = format!("mismatched tuple types");
+                    DiagnosticBuilder::error(db, &msg)
+                        .code("T031")
+                        .primary_label(text, span, &format!("expected `@tuple {}`, found `@tuple {}`",
+                            expected_name.as_str(db), name.as_str(db)))
+                        .emit_type();
+                }
                 return Err(TypeError::TypeMismatch {
                     expected: format!("@tuple {}", expected_name.as_str(db)),
                     actual: format!("@tuple {}", name.as_str(db)),
@@ -975,6 +1403,16 @@ fn check<'db>(
             if types_equivalent(db, synthesized.ty(db), expected_type) {
                 Ok(())
             } else {
+                // T032: General type mismatch (subsumption fallback).
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    let msg = format!("mismatched types");
+                    DiagnosticBuilder::error(db, &msg)
+                        .code("T032")
+                        .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                            type_to_string(db, expected_type),
+                            type_to_string(db, synthesized.ty(db))))
+                        .emit_type();
+                }
                 Err(TypeError::TypeMismatch {
                     expected: type_to_string(db, expected_type),
                     actual: type_to_string(db, synthesized.ty(db)),

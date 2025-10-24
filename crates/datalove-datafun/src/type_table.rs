@@ -422,7 +422,7 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
         // Then, get the type for this expression from the typechecker.
         // For now, we need to run the typechecker on this expression.
         // This is a bit inefficient, but works for initial implementation.
-        let resolved = datalit::resolve::resolve_names(self.db, expr);
+        let resolved = datalit::resolve::resolve_names(self.db, expr, vec![]);
         let tycheck_result = datalit::tycheck::type_check(self.db, expr, resolved);
 
         if let Some(root_type) = tycheck_result.root_type(self.db) {

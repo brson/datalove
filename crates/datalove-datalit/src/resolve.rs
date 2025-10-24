@@ -1,8 +1,9 @@
 use rmx::prelude::*;
-use bct::text::InternedText;
+use bct::text::{InternedText, Text};
 use std::collections::HashMap;
 
 use crate::ast::*;
+use datalove_diagnostic::ByteSpan;
 
 /// Unique identifier for a binding site.
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
@@ -42,6 +43,14 @@ pub struct ResolutionErrorEntry<'db> {
     pub error: ResolutionError,
 }
 
+/// Stored span entry (no lifetimes for Salsa storage).
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct StoredSpan {
+    pub expr_id: salsa::Id,
+    pub text_id: salsa::Id,
+    pub span: ByteSpan,
+}
+
 /// Resolution result for an expression.
 #[salsa::tracked]
 pub struct ResolvedExpr<'db> {
@@ -53,6 +62,9 @@ pub struct ResolvedExpr<'db> {
 
     /// List of resolution errors.
     pub errors: Vec<ResolutionErrorEntry<'db>>,
+
+    /// Expression span table from parsing (for diagnostic emission).
+    pub expr_spans: Vec<StoredSpan>,
 }
 
 /// Main entry point: resolve all names in an expression.
@@ -66,6 +78,7 @@ pub struct ResolvedExpr<'db> {
 pub fn resolve_names<'db>(
     db: &'db dyn crate::Db,
     expr: ExprFull<'db>,
+    expr_spans: Vec<(ExprFull<'db>, Text<'db>, ByteSpan)>,
 ) -> ResolvedExpr<'db> {
     let mut scope = Scope::new();
     let mut next_id = 0u32;
@@ -92,7 +105,20 @@ pub fn resolve_names<'db>(
         .map(|(name, error)| ResolutionErrorEntry::new(db, name, error))
         .collect();
 
-    ResolvedExpr::new(db, expr, resolutions, errors)
+    // Convert expr_spans to StoredSpan for salsa storage.
+    let stored_spans = expr_spans
+        .into_iter()
+        .map(|(expr, text, span)| {
+            use salsa::plumbing::AsId;
+            StoredSpan {
+                expr_id: expr.as_id(),
+                text_id: text.as_id(),
+                span,
+            }
+        })
+        .collect();
+
+    ResolvedExpr::new(db, expr, resolutions, errors, stored_spans)
 }
 
 /// Scope tracking during resolution.
@@ -395,7 +421,7 @@ mod tests {
             S(": @struct Point { x: @u32, y: @u32 } / @struct Point { x = @1, y = @2 }")
         );
         let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, ast);
+        let resolved = resolve_names(db, ast, vec![]);
 
         // Should have one resolution for "Point".
         assert_eq!(resolved.resolutions(db).len(), 1);
@@ -419,7 +445,7 @@ mod tests {
             S(": @struct Outer { inner: @struct Inner { x: @u32 } } / @struct Outer { inner = @struct Inner { x = @1 } }")
         );
         let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, ast);
+        let resolved = resolve_names(db, ast, vec![]);
 
         // Should have resolution for "Outer" (inner struct definition is in type hint, not referenced in expr).
         assert_eq!(resolved.resolutions(db).len(), 1);
@@ -437,7 +463,7 @@ mod tests {
             S(": @tuple Pair (@u32, @u32) / @tuple Pair (@1, @2)")
         );
         let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, ast);
+        let resolved = resolve_names(db, ast, vec![]);
 
         // Should have one resolution for "Pair".
         assert_eq!(resolved.resolutions(db).len(), 1);
@@ -455,7 +481,7 @@ mod tests {
             S(": @enum Result { Ok: @u32, Err: @string } / @enum Result.Ok(@42)")
         );
         let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, ast);
+        let resolved = resolve_names(db, ast, vec![]);
 
         // Should have one resolution for "Result".
         assert_eq!(resolved.resolutions(db).len(), 1);
