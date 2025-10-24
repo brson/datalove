@@ -145,17 +145,41 @@ struct StoredLabel {
 #[salsa::accumulator]
 pub struct ParseDiagnostic(StoredDiagnostic);
 
+impl ParseDiagnostic {
+    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
+        self.0.to_diagnostic(db)
+    }
+}
+
 /// Salsa accumulator for type checking diagnostics.
 #[salsa::accumulator]
 pub struct TypeDiagnostic(StoredDiagnostic);
+
+impl TypeDiagnostic {
+    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
+        self.0.to_diagnostic(db)
+    }
+}
 
 /// Salsa accumulator for name resolution diagnostics.
 #[salsa::accumulator]
 pub struct ResolutionDiagnostic(StoredDiagnostic);
 
+impl ResolutionDiagnostic {
+    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
+        self.0.to_diagnostic(db)
+    }
+}
+
 /// Salsa accumulator for lint diagnostics.
 #[salsa::accumulator]
 pub struct LintDiagnostic(StoredDiagnostic);
+
+impl LintDiagnostic {
+    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
+        self.0.to_diagnostic(db)
+    }
+}
 
 impl<'db> Diagnostic<'db> {
     /// Convert to stored form for accumulation.

@@ -1,0 +1,5 @@
+Parse errors:
+error[D007]: expected <> after list keyword
+  --> expected '<' after 'list'
+     | 
+Error: 1 parse error(s)

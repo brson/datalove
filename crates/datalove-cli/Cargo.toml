@@ -11,6 +11,7 @@ bct.workspace = true
 datalove.path = "../datalove"
 datalove-datalit.path = "../datalove-datalit"
 datalove-datafun.path = "../datalove-datafun"
+datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-rt.path = "../datalove-rt"
 datalove-repl.path = "../datalove-repl"
 datalove-repl-term.path = "../datalove-repl-term"
@@ -28,4 +29,9 @@ datalove-exampletest.path = "../datalove-exampletest"
 [[test]]
 name = "script_tests"
 path = "tests/script_tests.rs"
+harness = false
+
+[[test]]
+name = "error_tests"
+path = "tests/error_tests.rs"
 harness = false

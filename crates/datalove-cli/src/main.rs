@@ -309,6 +309,34 @@ impl ScriptCommand {
         }
     }
 
+    fn render_diagnostics(&self, db: &dyn datalove_datafun::Db, source: bct::input::Source) -> AnyResult<()> {
+        use datalove_diagnostic::ParseDiagnostic;
+
+        let parse_diags = datalove_datafun::parser::parse::accumulated::<ParseDiagnostic>(db, source);
+
+        if !parse_diags.is_empty() {
+            eprintln!("Parse errors:");
+            for diag_wrapper in &parse_diags {
+                let diag = diag_wrapper.to_diagnostic(db);
+                let code_str = diag.code.map(|c| c.as_str(db)).unwrap_or("");
+                let message = diag.message.as_str(db);
+                eprintln!("error[{}]: {}", code_str, message);
+
+                for label in &diag.labels {
+                    let text_str = label.text.as_str(db);
+                    let span_str = &text_str[label.span.start..label.span.end];
+                    if let Some(label_msg) = label.message {
+                        eprintln!("  --> {}", label_msg.as_str(db));
+                    }
+                    eprintln!("     | {}", span_str);
+                }
+            }
+            bail!("{} parse error(s)", parse_diags.len());
+        }
+
+        Ok(())
+    }
+
     fn run_without_sys(&self) -> AnyResult<()> {
         use datalove_datafun as datafun;
         use bct::input::Source;
@@ -321,6 +349,9 @@ impl ScriptCommand {
 
         // Parse the script.
         let script = datafun::parser::parse(&db, source);
+
+        // Check for parse diagnostics.
+        self.render_diagnostics(&db, source)?;
 
         // Type check the script.
         let tycheck_result = datafun::tycheck::type_check(&db, script);
@@ -367,6 +398,9 @@ impl ScriptCommand {
 
         // Parse the script.
         let script = datafun::parser::parse(&db, source);
+
+        // Check for parse diagnostics.
+        self.render_diagnostics(&db, source)?;
 
         // Load package world from sys/ directory.
         let manifest_dir = env!("CARGO_MANIFEST_DIR");

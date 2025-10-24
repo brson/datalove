@@ -1,0 +1,5 @@
+Parse errors:
+error[D001]: expected () after tuple keyword
+  --> expected '(' after 'tuple'
+     | 
+Error: 1 parse error(s)

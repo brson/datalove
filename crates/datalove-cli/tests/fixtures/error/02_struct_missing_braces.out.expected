@@ -1,0 +1,5 @@
+Parse errors:
+error[D002]: expected {} after struct keyword
+  --> expected '{' after 'struct'
+     | 
+Error: 1 parse error(s)

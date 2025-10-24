@@ -1,0 +1,5 @@
+Parse errors:
+error[D006]: expected <> after set keyword
+  --> expected '<' after 'set'
+     | 
+Error: 1 parse error(s)

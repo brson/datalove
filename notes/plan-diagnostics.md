@@ -2,7 +2,7 @@
 
 ## Current Status
 
-**Latest Update:** 2025-10-22
+**Latest Update:** 2025-10-23
 
 - ✅ Phase 1 Complete: Diagnostic crate created and compiles
 - ✅ Phase 2 Complete: AST error nodes updated
@@ -19,13 +19,18 @@
   - Part A (Datalit): Parser infrastructure complete, all tests passing ✅
   - Part B (Datafun): Not started
   - Part C (Documentation): In progress
-- 🔲 Phases 5-7: Not yet started
+- 🔲 Phase 5: Not yet started
+- 🔄 Phase 6 In Progress: Driver integration (basic)
+  - Basic diagnostic retrieval and rendering in CLI ✅
+  - Error testing infrastructure in place ✅
+  - Full SourceMap implementation pending
+- 🔲 Phase 7: Not yet started
 
 **Next Steps:**
 1. Complete Phase 4 Part A: Update datalit type checker to emit TypeDiagnostic (~50 error sites)
 2. Phase 4 Part B: Update datafun type checker
 3. Phase 5: Resolution diagnostics
-4. Phase 6: Driver integration (retrieve and render diagnostics)
+4. Phase 6: Complete driver integration (SourceMap, improved rendering)
 
 ## Overview
 
@@ -517,13 +522,30 @@ match expr.kind {
 - [ ] Keep error return values for control flow
 
 ### Phase 6: Driver integration
+- [x] Retrieve diagnostics via ::accumulated after compilation (basic implementation)
+- [x] Implement basic diagnostic renderer for testing
 - [ ] Create SourceMap in REPL
 - [ ] Create SourceMap in CLI
 - [ ] Register Text → SourceMetadata when creating Sources
 - [ ] Track base_offset for chunks (if/when we split sources)
-- [ ] Retrieve diagnostics via ::accumulated after compilation
-- [ ] Implement diagnostic renderer (convert bytes → line:col)
+- [ ] Improve diagnostic renderer (convert bytes → line:col, show file paths)
 - [ ] Consider using annotate-snippets crate for pretty rendering
+
+**Error Testing Infrastructure (2025-10-23):**
+- ✅ Added ParseDiagnostic retrieval to CLI script command
+- ✅ Implemented basic text-based diagnostic renderer
+- ✅ Created error_tests.rs test suite (separate from script_tests)
+- ✅ 8 error test fixtures covering parse error codes:
+  - D001: Missing parentheses after tuple keyword
+  - D002: Missing braces after struct keyword
+  - D004: Missing braces after enum name
+  - D005: Missing braces after map keyword
+  - D006: Missing braces after set keyword
+  - D007: Missing brackets after list keyword
+  - D013: Unexpected minus sign
+  - D019: Unexpected identifier
+- ✅ All error tests passing (13 total CLI tests: 5 script + 8 error)
+- Note: Error output format is temporary - will be improved with proper SourceMap in Phase 6
 
 ### Phase 7: Additional features
 - [ ] Add LintDiagnostic support (warnings about code style, etc.)

@@ -1,0 +1,1 @@
+let output: enum Baz = @42

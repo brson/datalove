@@ -1,0 +1,5 @@
+Parse errors:
+error[D013]: unexpected minus sign
+  --> unexpected '-' not followed by number
+     | 
+Error: 1 parse error(s)

@@ -1,0 +1,5 @@
+Parse errors:
+error[D004]: expected {} after enum name
+  --> expected '{' after enum name
+     | 
+Error: 1 parse error(s)
