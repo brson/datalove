@@ -204,6 +204,11 @@ fn instantiate_expr_into<'db>(
             instantiate_set(db, rt, &set_expr.elements(db), set_ty.element_type(db), tydesc_table, tydesc, dest_ptr)
         }
 
+        (Expr::Tensor(tensor_expr), Type::Tensor(tensor_ty)) => {
+            let tydesc = tydesc_table.get_or_create(ty);
+            instantiate_tensor(db, rt, &tensor_expr.shape(db), &tensor_expr.elements(db), tensor_ty.element_type(db), tensor_ty.layout(db), tydesc_table, tydesc, dest_ptr)
+        }
+
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
@@ -846,6 +851,97 @@ fn instantiate_set<'db>(
     }
 
     Ok(set_ptr as *const u8)
+}
+
+fn instantiate_tensor<'db>(
+    db: &'db dyn crate::Db,
+    rt: &mut datalove_rt::rt_local::RtLocal,
+    shape: &[u32],
+    elements: &[ExprFull<'db>],
+    element_type: TypeAndHeap<'db>,
+    layout: crate::tycheck::TensorLayout,
+    tydesc_table: &mut TyDescTable<'db>,
+    _tensor_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
+) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let element_ty = element_type.ty(db);
+    let element_tydesc = tydesc_table.get_or_create(element_ty);
+    let element_size = unsafe { (*element_tydesc).size };
+    let element_align = unsafe { (*element_tydesc).align };
+
+    let rank = shape.len();
+    let total_elems: usize = shape.iter().map(|&d| d as usize).product();
+
+    unsafe {
+        // Allocate tensor data array.
+        let data_ptr = if total_elems > 0 {
+            let array_ptr = rt.alloc.alloc(element_size, element_align, total_elems as u32);
+
+            for (i, elem) in elements.iter().enumerate() {
+                let elem_dest = array_ptr.add(i * element_size as usize);
+                instantiate_expr_into(db, rt, *elem, element_ty, tydesc_table, elem_dest)?;
+            }
+            array_ptr
+        } else {
+            std::ptr::null_mut()
+        };
+
+        // Allocate shape array.
+        let shape_ptr = if rank > 0 {
+            let shape_array = rt.alloc.alloc(std::mem::size_of::<u32>() as u32, std::mem::align_of::<u32>() as u32, rank as u32) as *mut u32;
+            for (i, &dim) in shape.iter().enumerate() {
+                *shape_array.add(i) = dim;
+            }
+            shape_array as *const u32
+        } else {
+            std::ptr::null()
+        };
+
+        // Allocate and compute strides array.
+        let strides_ptr = if rank > 0 {
+            let strides_array = rt.alloc.alloc(std::mem::size_of::<u32>() as u32, std::mem::align_of::<u32>() as u32, rank as u32) as *mut u32;
+
+            // Compute strides based on layout.
+            match layout {
+                crate::tycheck::TensorLayout::RowMajor => {
+                    // RowMajor: strides[i] = product of dims[i+1..rank].
+                    for i in 0..rank {
+                        let stride = shape[i+1..rank].iter().map(|&d| d as u32).product::<u32>();
+                        *strides_array.add(i) = if stride == 0 { 1 } else { stride };
+                    }
+                }
+                crate::tycheck::TensorLayout::ColMajor => {
+                    // ColMajor: strides[i] = product of dims[0..i].
+                    for i in 0..rank {
+                        let stride = shape[0..i].iter().map(|&d| d as u32).product::<u32>();
+                        *strides_array.add(i) = if stride == 0 { 1 } else { stride };
+                    }
+                }
+            }
+
+            strides_array as *const u32
+        } else {
+            std::ptr::null()
+        };
+
+        // Convert layout to rtdt::TensorLayout.
+        let rtdt_layout = match layout {
+            crate::tycheck::TensorLayout::RowMajor => rtdt::TensorLayout::RowMajor,
+            crate::tycheck::TensorLayout::ColMajor => rtdt::TensorLayout::ColMajor,
+        };
+
+        // Fill in the Tensor struct.
+        let tensor_ptr = dest_ptr as *mut rtdt::Tensor;
+        (*tensor_ptr).ptr_base = data_ptr;
+        (*tensor_ptr).capacity_elems = total_elems as u32;
+        (*tensor_ptr).offset_elems = 0;
+        (*tensor_ptr).shape = shape_ptr;
+        (*tensor_ptr).strides = strides_ptr;
+        (*tensor_ptr).layout = rtdt_layout;
+
+        Ok(dest_ptr as *const u8)
+    }
 }
 
 // ============================================================================
@@ -2108,6 +2204,114 @@ mod tests {
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::U32);
             let inner_value = *(inner_value_ptr as *const u32);
             assert_eq!(inner_value, 42);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_tensor_2d_u32() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, ": tensor<u32, 2> / @tensor [2, 3] [1, 2, 3, 4, 5, 6]")?;
+        let rt = datalove_rt::rt_local::RtLocal::new();
+        let mut guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+
+            let tensor = inst.ptr as *const rtdt::Tensor;
+            assert_eq!((*tensor).capacity_elems, 6);
+            assert_eq!((*tensor).offset_elems, 0);
+            assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
+
+            // Check shape [2, 3]
+            let shape = std::slice::from_raw_parts((*tensor).shape, 2);
+            assert_eq!(shape, &[2, 3]);
+
+            // Check strides [3, 1] (row-major)
+            let strides = std::slice::from_raw_parts((*tensor).strides, 2);
+            assert_eq!(strides, &[3, 1]);
+
+            // Check data [1, 2, 3, 4, 5, 6]
+            let data = std::slice::from_raw_parts((*tensor).ptr_base as *const u32, 6);
+            assert_eq!(data, &[1, 2, 3, 4, 5, 6]);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_tensor_1d_f32() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, ": tensor<f32, 1> / @tensor [5] [1.0, 2.0, 3.0, 4.0, 5.0]")?;
+        let rt = datalove_rt::rt_local::RtLocal::new();
+        let mut guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+
+            let tensor = inst.ptr as *const rtdt::Tensor;
+            assert_eq!((*tensor).capacity_elems, 5);
+            assert_eq!((*tensor).offset_elems, 0);
+            assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
+
+            // Check shape [5]
+            let shape = std::slice::from_raw_parts((*tensor).shape, 1);
+            assert_eq!(shape, &[5]);
+
+            // Check strides [1] (row-major, but for 1D doesn't matter)
+            let strides = std::slice::from_raw_parts((*tensor).strides, 1);
+            assert_eq!(strides, &[1]);
+
+            // Check data [1.0, 2.0, 3.0, 4.0, 5.0]
+            let data = std::slice::from_raw_parts((*tensor).ptr_base as *const f32, 5);
+            assert_eq!(data, &[1.0, 2.0, 3.0, 4.0, 5.0]);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_tensor_col_major() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, ": tensor<u32, 2, col_major> / @tensor [2, 3] [1, 2, 3, 4, 5, 6]")?;
+        let rt = datalove_rt::rt_local::RtLocal::new();
+        let mut guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+
+            let tensor = inst.ptr as *const rtdt::Tensor;
+            assert_eq!((*tensor).capacity_elems, 6);
+            assert_eq!((*tensor).offset_elems, 0);
+            assert_eq!((*tensor).layout, rtdt::TensorLayout::ColMajor);
+
+            // Check shape [2, 3]
+            let shape = std::slice::from_raw_parts((*tensor).shape, 2);
+            assert_eq!(shape, &[2, 3]);
+
+            // Check strides [1, 2] (col-major)
+            let strides = std::slice::from_raw_parts((*tensor).strides, 2);
+            assert_eq!(strides, &[1, 2]);
+
+            // Check data [1, 2, 3, 4, 5, 6]
+            let data = std::slice::from_raw_parts((*tensor).ptr_base as *const u32, 6);
+            assert_eq!(data, &[1, 2, 3, 4, 5, 6]);
         }
         Ok(())
     }

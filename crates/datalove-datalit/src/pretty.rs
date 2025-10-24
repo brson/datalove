@@ -262,8 +262,18 @@ fn pretty_type<'db>(
             pretty_type_and_heap(db, &r.inner_type(db), out);
         }
 
-        Type::Tensor(_t) => {
-            out.push_str("<todo:tensor-type>");
+        Type::Tensor(t) => {
+            out.push_str("tensor<");
+            pretty_type_and_heap(db, &t.element_type(db), out);
+            out.push_str(", ");
+            out.push_str(&t.rank(db).to_string());
+            match t.layout(db) {
+                crate::tycheck::TensorLayout::RowMajor => {}
+                crate::tycheck::TensorLayout::ColMajor => {
+                    out.push_str(", col_major");
+                }
+            }
+            out.push('>');
         }
     }
 }
@@ -444,8 +454,22 @@ fn pretty_type_hint<'db>(
             pretty_type_hint_and_heap(db, r.inner_type(db), out);
         }
 
-        TypeHint::Tensor(_t) => {
-            out.push_str("<todo:tensor>");
+        TypeHint::Tensor(t) => {
+            out.push_str("tensor<");
+            pretty_type_hint_and_heap(db, t.element_type(db), out);
+            out.push_str(", ");
+            out.push_str(&t.rank(db).to_string());
+            if let Some(layout) = t.layout(db) {
+                match layout {
+                    crate::ast::TensorLayoutHint::RowMajor => {
+                        out.push_str(", row_major");
+                    }
+                    crate::ast::TensorLayoutHint::ColMajor => {
+                        out.push_str(", col_major");
+                    }
+                }
+            }
+            out.push('>');
         }
 
         TypeHint::ParseError(e) => {
@@ -611,8 +635,24 @@ fn pretty_expr<'db>(
             out.push('}');
         }
 
-        Expr::Tensor(_t) => {
-            out.push_str("<todo:tensor>");
+        Expr::Tensor(t) => {
+            out.push_str("tensor [");
+            let shape = t.shape(db);
+            for (i, &dim) in shape.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(&dim.to_string());
+            }
+            out.push_str("] [");
+            let elements = t.elements(db);
+            for (i, elem) in elements.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                pretty_expr_full(db, *elem, out, indent);
+            }
+            out.push(']');
         }
 
         Expr::Data(d) => {

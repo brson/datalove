@@ -481,8 +481,51 @@ fn synthesize<'db>(
         Expr::AnonEnum(_)
         | Expr::None => return Err(TypeError::CannotSynthesize),
 
-        // Tensor synthesis - TODO: implement proper synthesis.
-        Expr::Tensor(_) => todo!("Tensor type synthesis"),
+        // Rule: Syn-Tensor - synthesize tensor by synthesizing all elements (must have same type).
+        Expr::Tensor(t) => {
+            let shape = t.shape(db);
+            let elements = t.elements(db);
+
+            if elements.is_empty() {
+                // Cannot synthesize type for empty tensor.
+                return Err(TypeError::CannotSynthesize);
+            }
+
+            // Calculate expected element count from shape.
+            let expected_count = shape.iter().map(|&d| d as usize).product::<usize>();
+            if elements.len() != expected_count {
+                return Err(TypeError::ArityMismatch {
+                    expected: expected_count,
+                    actual: elements.len(),
+                });
+            }
+
+            // Synthesize first element to get the expected type.
+            let first_type = synthesize(ctx, elements[0])?;
+
+            // Check remaining elements against first type.
+            for elem in &elements[1..] {
+                let elem_type = synthesize(ctx, *elem)?;
+                if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
+                    return Err(TypeError::TypeMismatch {
+                        expected: type_to_string(db, first_type.ty(db)),
+                        actual: type_to_string(db, elem_type.ty(db)),
+                    });
+                }
+                if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
+                    return Err(TypeError::HeapMismatch {
+                        expected_heap: heap_to_string(first_type.heap(db)),
+                        actual_heap: heap_to_string(elem_type.heap(db)),
+                    });
+                }
+            }
+
+            // Rank is the length of the shape vector.
+            let rank = shape.len() as u32;
+
+            // Default to RowMajor layout.
+            Type::Tensor(TypeTensor::new(db, first_type, rank, TensorLayout::RowMajor))
+        }
 
         Expr::ParseError(_) => return Err(TypeError::CannotSynthesize),
     };
@@ -847,6 +890,38 @@ fn check<'db>(
             let elements = s.elements(db);
             let element_type = expected_set.element_type(db);
 
+            for elem in elements {
+                check(ctx, elem, element_type)?;
+            }
+
+            Ok(())
+        }
+
+        // Rule: Check-Tensor
+        (Expr::Tensor(t), Type::Tensor(expected_tensor)) => {
+            let shape = t.shape(db);
+            let elements = t.elements(db);
+            let element_type = expected_tensor.element_type(db);
+
+            // Verify rank matches.
+            let rank = shape.len() as u32;
+            if rank != expected_tensor.rank(db) {
+                return Err(TypeError::ArityMismatch {
+                    expected: expected_tensor.rank(db) as usize,
+                    actual: rank as usize,
+                });
+            }
+
+            // Calculate expected element count from shape.
+            let expected_count = shape.iter().map(|&d| d as usize).product::<usize>();
+            if elements.len() != expected_count {
+                return Err(TypeError::ArityMismatch {
+                    expected: expected_count,
+                    actual: elements.len(),
+                });
+            }
+
+            // Check all elements against expected element type.
             for elem in elements {
                 check(ctx, elem, element_type)?;
             }

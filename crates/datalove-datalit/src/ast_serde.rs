@@ -50,6 +50,7 @@ pub enum TypeHint {
     Set(TypeHintSet),
     Option(TypeHintOption),
     Result(TypeHintResult),
+    Tensor(TypeHintTensor),
     Data,
     Error,
     ParseError(TypeHintParseError),
@@ -127,6 +128,19 @@ pub struct TypeHintResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TypeHintTensor {
+    pub element_type: Box<TypeHintAndHeap>,
+    pub rank: u32,
+    pub layout: Option<TensorLayoutHint>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TensorLayoutHint {
+    RowMajor,
+    ColMajor,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprAndHeap {
     pub heap: Heap,
     pub expr: Expr,
@@ -148,6 +162,7 @@ pub enum Expr {
     List(ExprList),
     Map(ExprMap),
     Set(ExprSet),
+    Tensor(ExprTensor),
     None,
     Data(ExprData),
     Err(ExprErr),
@@ -232,6 +247,12 @@ pub struct ExprSet {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprTensor {
+    pub shape: Vec<u32>,
+    pub elements: Vec<ExprFull>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprData {
     pub value: Box<ExprFull>,
 }
@@ -306,7 +327,7 @@ impl TypeHint {
             crate::ast::TypeHint::Set(t) => TypeHint::Set(TypeHintSet::from_ast(db, t)),
             crate::ast::TypeHint::Option(t) => TypeHint::Option(TypeHintOption::from_ast(db, t)),
             crate::ast::TypeHint::Result(t) => TypeHint::Result(TypeHintResult::from_ast(db, t)),
-            crate::ast::TypeHint::Tensor(_t) => todo!("TypeHint::Tensor serialization"),
+            crate::ast::TypeHint::Tensor(t) => TypeHint::Tensor(TypeHintTensor::from_ast(db, t)),
             crate::ast::TypeHint::Data => TypeHint::Data,
             crate::ast::TypeHint::Error => TypeHint::Error,
             crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
@@ -424,6 +445,25 @@ impl TypeHintResult {
     }
 }
 
+impl TypeHintTensor {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintTensor<'db>) -> Self {
+        TypeHintTensor {
+            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type(db))),
+            rank: ast.rank(db),
+            layout: ast.layout(db).map(TensorLayoutHint::from_ast),
+        }
+    }
+}
+
+impl TensorLayoutHint {
+    pub fn from_ast(ast: crate::ast::TensorLayoutHint) -> Self {
+        match ast {
+            crate::ast::TensorLayoutHint::RowMajor => TensorLayoutHint::RowMajor,
+            crate::ast::TensorLayoutHint::ColMajor => TensorLayoutHint::ColMajor,
+        }
+    }
+}
+
 impl ExprAndHeap {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAndHeap<'db>) -> Self {
         ExprAndHeap {
@@ -450,7 +490,7 @@ impl Expr {
             crate::ast::Expr::List(e) => Expr::List(ExprList::from_ast(db, e)),
             crate::ast::Expr::Map(e) => Expr::Map(ExprMap::from_ast(db, e)),
             crate::ast::Expr::Set(e) => Expr::Set(ExprSet::from_ast(db, e)),
-            crate::ast::Expr::Tensor(_e) => todo!("Expr::Tensor serialization"),
+            crate::ast::Expr::Tensor(e) => Expr::Tensor(ExprTensor::from_ast(db, e)),
             crate::ast::Expr::None => Expr::None,
             crate::ast::Expr::Data(e) => Expr::Data(ExprData::from_ast(db, e)),
             crate::ast::Expr::Err(e) => Expr::Err(ExprErr::from_ast(db, e)),
@@ -573,6 +613,15 @@ impl ExprMapEntry {
 impl ExprSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSet<'db>) -> Self {
         ExprSet {
+            elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+        }
+    }
+}
+
+impl ExprTensor {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTensor<'db>) -> Self {
+        ExprTensor {
+            shape: ast.shape(db),
             elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
         }
     }

@@ -270,7 +270,7 @@ impl<'db> TyDescTable<'db> {
             Type::Set(s) => self.create_set_tydesc(s.element_type(self.db)),
             Type::Option(o) => self.create_option_tydesc(o.inner_type(self.db)),
             Type::Result(r) => self.create_result_tydesc(r.inner_type(self.db)),
-            Type::Tensor(_t) => todo!("create_tensor_tydesc"),
+            Type::Tensor(t) => self.create_tensor_tydesc(t.element_type(self.db), t.rank(self.db)),
         }
     }
 
@@ -472,6 +472,23 @@ impl<'db> TyDescTable<'db> {
             type_info: rtdt::TyInfo {
                 list: rtdt::TyInfoList {
                     element_tydesc,
+                },
+            },
+        })
+    }
+
+    fn create_tensor_tydesc(&mut self, element_type: TypeAndHeap<'db>, rank: u32) -> Box<rtdt::TyDesc> {
+        // Recursively create TyDesc for element type.
+        let element_tydesc = self.get_or_create(element_type.ty(self.db));
+
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Tensor,
+            size: std::mem::size_of::<rtdt::Tensor>() as u32,
+            align: std::mem::align_of::<rtdt::Tensor>() as u32,
+            type_info: rtdt::TyInfo {
+                tensor: rtdt::TyInfoTensor {
+                    element_tydesc,
+                    rank,
                 },
             },
         })
