@@ -177,3 +177,28 @@ pub unsafe extern "C" fn dtlv_rti_int_neg(
         ibig_to_rtdt_int(rt_ref, result, result_out as *mut rtdt::Int)
     }
 }
+
+/// Division of bigints: a / b.
+/// Caller must ensure b is not zero.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_int_div_checked(
+    rt: LocalRtHandle,
+    a_in: *const u8,
+    a_tydesc: *const rtdt::TyDesc,
+    b_in: *const u8,
+    b_tydesc: *const rtdt::TyDesc,
+    result_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
+        return RtStatus::Error;
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut RtLocal);
+        let a = rtdt_int_to_ibig(a_in as *const rtdt::Int);
+        let b = rtdt_int_to_ibig(b_in as *const rtdt::Int);
+        let result = a / b;
+        ibig_to_rtdt_int(rt_ref, result, result_out as *mut rtdt::Int)
+    }
+}

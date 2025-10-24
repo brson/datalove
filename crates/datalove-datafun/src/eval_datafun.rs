@@ -787,6 +787,38 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
                 _ => Err(InterpError::TypeError(format!("Unsupported type {:?} for checked division", tytag))),
             }
         }
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            let result_result_tydesc = make_result_tydesc_int(ctx);
+
+            // Check for division by zero by converting to IBig and comparing.
+            let b_ibig = unsafe { rt::int_math::rtdt_int_to_ibig(b_ptr as *const rtdt::Int) };
+            if b_ibig == ibig::IBig::from(0) {
+                return create_result_divzero_err(ctx, result_result_tydesc);
+            }
+
+            // Allocate result Int.
+            let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
+            if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
+                let status = unsafe {
+                    rt::int_math::dtlv_rti_int_div_checked(
+                        Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                        a_ptr as *const u8,
+                        a_tydesc,
+                        b_ptr as *const u8,
+                        b_tydesc,
+                        result_ptr as *mut u8,
+                        result_tydesc,
+                    )
+                };
+                if status == RtStatus::Ok {
+                    create_result_ok(ctx, result, result_result_tydesc)
+                } else {
+                    Err(InterpError::RuntimeError("Int division failed".to_string()))
+                }
+            } else {
+                Err(InterpError::RuntimeError("Failed to allocate Int".to_string()))
+            }
+        }
         _ => Err(InterpError::TypeError("Unsupported types for checked division".to_string())),
     }
 }
@@ -2216,4 +2248,20 @@ fn make_result_tydesc_i32<'db>(
     let i32_ty = crate::datalit::tycheck::Type::I32;
     let i32_tydesc = ctx.tydesc_table.get_or_create(&i32_ty);
     ctx.tydesc_table.create_result_from_inner_tydesc(i32_tydesc)
+}
+
+/// Create Result<Int> type descriptor.
+fn make_result_tydesc_int<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> *const datalove_rtdt::TyDesc {
+    let int_ty = crate::datalit::tycheck::Type::Int;
+    let int_tydesc = ctx.tydesc_table.get_or_create(&int_ty);
+    ctx.tydesc_table.create_result_from_inner_tydesc(int_tydesc)
+}
+
+/// Check if an Int value is zero.
+unsafe fn is_int_zero(int_ptr: *const datalove_rtdt::Int) -> bool {
+    unsafe {
+        (*int_ptr).size_and_sign == 0
+    }
 }

@@ -1,0 +1,4 @@
+// Test bigint checked division (successful).
+let a: @int = @300
+let b: @int = @3
+let output = a /! b
