@@ -31,6 +31,7 @@ pub enum Type<'db> {
     Set(TypeSet<'db>),
     Option(TypeOption<'db>),
     Result(TypeResult<'db>),
+    Tensor(TypeTensor<'db>),
     Data,
     Error,
 }
@@ -111,6 +112,20 @@ pub struct TypeOption<'db> {
 #[salsa::tracked]
 pub struct TypeResult<'db> {
     pub inner_type: TypeAndHeap<'db>,
+}
+
+#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum TensorLayout {
+    RowMajor,
+    ColMajor,
+}
+
+#[salsa::tracked]
+pub struct TypeTensor<'db> {
+    pub element_type: TypeAndHeap<'db>,
+    pub rank: u32,
+    pub layout: TensorLayout,
 }
 
 /// Type error representation.
@@ -465,6 +480,9 @@ fn synthesize<'db>(
         // Cannot synthesize for these - need type context.
         Expr::AnonEnum(_)
         | Expr::None => return Err(TypeError::CannotSynthesize),
+
+        // Tensor synthesis - TODO: implement proper synthesis.
+        Expr::Tensor(_) => todo!("Tensor type synthesis"),
 
         Expr::ParseError(_) => return Err(TypeError::CannotSynthesize),
     };
@@ -1029,6 +1047,16 @@ pub fn convert_type_hint<'db>(
             Type::Result(TypeResult::new(db, inner_type))
         }
 
+        TypeHint::Tensor(t) => {
+            let element_type = convert_type_hint(db, t.element_type(db))?;
+            let layout = match t.layout(db) {
+                Some(TensorLayoutHint::RowMajor) => TensorLayout::RowMajor,
+                Some(TensorLayoutHint::ColMajor) => TensorLayout::ColMajor,
+                None => TensorLayout::RowMajor, // Default to row-major
+            };
+            Type::Tensor(TypeTensor::new(db, element_type, t.rank(db), layout))
+        }
+
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
     };
 
@@ -1156,6 +1184,12 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
             types_and_heaps_equivalent(db, &r1.inner_type(db), &r2.inner_type(db))
         }
 
+        (Type::Tensor(t1), Type::Tensor(t2)) => {
+            t1.rank(db) == t2.rank(db)
+                && t1.layout(db) == t2.layout(db)
+                && types_and_heaps_equivalent(db, &t1.element_type(db), &t2.element_type(db))
+        }
+
         _ => false,
     }
 }
@@ -1262,6 +1296,16 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             let heap = heap_to_string(inner.heap(db));
             let ty_str = type_to_string(db, inner.ty(db));
             format!("@!{}{}", heap, ty_str)
+        }
+        Type::Tensor(t) => {
+            let elem = t.element_type(db);
+            let heap = heap_to_string(elem.heap(db));
+            let ty_str = type_to_string(db, elem.ty(db));
+            let layout = match t.layout(db) {
+                TensorLayout::RowMajor => "",
+                TensorLayout::ColMajor => ", col_major",
+            };
+            format!("@tensor<{}{}, {}{}>", heap, ty_str, t.rank(db), layout)
         }
     }
 }

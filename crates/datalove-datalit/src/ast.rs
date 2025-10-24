@@ -71,6 +71,7 @@ pub enum TypeHint<'db> {
     Set(TypeHintSet<'db>),
     Option(TypeHintOption<'db>),
     Result(TypeHintResult<'db>),
+    Tensor(TypeHintTensor<'db>),
     Data,
     Error,
     ParseError(TypeHintParseError<'db>),
@@ -147,6 +148,20 @@ pub struct TypeHintResult<'db> {
     pub inner_type: TypeHintAndHeap<'db>,
 }
 
+#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum TensorLayoutHint {
+    RowMajor,
+    ColMajor,
+}
+
+#[salsa::tracked]
+pub struct TypeHintTensor<'db> {
+    pub element_type: TypeHintAndHeap<'db>,
+    pub rank: u32,
+    pub layout: Option<TensorLayoutHint>,
+}
+
 #[salsa::tracked]
 pub struct ExprAndHeap<'db> {
     pub heap: Heap,
@@ -172,6 +187,7 @@ pub enum Expr<'db> {
     List(ExprList<'db>),
     Map(ExprMap<'db>),
     Set(ExprSet<'db>),
+    Tensor(ExprTensor<'db>),
     None,
     Data(ExprData<'db>),
     Err(ExprErr<'db>),
@@ -252,6 +268,12 @@ pub struct ExprMapEntry<'db> {
 
 #[salsa::tracked]
 pub struct ExprSet<'db> {
+    pub elements: Vec<ExprFull<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprTensor<'db> {
+    pub shape: Vec<u32>,
     pub elements: Vec<ExprFull<'db>>,
 }
 

@@ -51,6 +51,7 @@ fn type_hint_to_string(db: &dyn datalove_datafun::Db, type_hint: datalove_datali
         TypeHint::NamedStruct(_) |
         TypeHint::AnonEnum(_) |
         TypeHint::NamedEnum(_) |
+        TypeHint::Tensor(_) |
         TypeHint::Data |
         TypeHint::Error |
         TypeHint::ParseError(_) => {

@@ -240,6 +240,9 @@ fn collect_type_hint_names_inner<'db>(
         TypeHint::Result(r) => {
             collect_type_hint_names(db, r.inner_type(db), scope, next_id);
         }
+        TypeHint::Tensor(t) => {
+            collect_type_hint_names(db, t.element_type(db), scope, next_id);
+        }
         TypeHint::Bool
         | TypeHint::U8
         | TypeHint::I8
@@ -348,6 +351,12 @@ fn resolve_expr_refs<'db>(
         }
         Expr::Set(s) => {
             for element in s.elements(db) {
+                let element_expr = element.expr(db).expr(db);
+                resolve_expr_refs(db, element_expr, scope, resolutions, errors);
+            }
+        }
+        Expr::Tensor(t) => {
+            for element in t.elements(db) {
                 let element_expr = element.expr(db).expr(db);
                 resolve_expr_refs(db, element_expr, scope, resolutions, errors);
             }

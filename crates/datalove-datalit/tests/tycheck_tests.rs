@@ -170,6 +170,20 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
                 "inner_type": type_to_json(db, r.inner_type(db))
             })
         }
+
+        Type::Tensor(t) => {
+            let layout_str = match t.layout(db) {
+                datalove_datalit::tycheck::TensorLayout::RowMajor => "RowMajor",
+                datalove_datalit::tycheck::TensorLayout::ColMajor => "ColMajor",
+            };
+            json!({
+                "kind": "Tensor",
+                "heap": heap_str,
+                "element_type": type_to_json(db, t.element_type(db)),
+                "rank": t.rank(db),
+                "layout": layout_str
+            })
+        }
     }
 }
 

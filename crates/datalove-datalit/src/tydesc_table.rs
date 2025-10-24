@@ -270,6 +270,7 @@ impl<'db> TyDescTable<'db> {
             Type::Set(s) => self.create_set_tydesc(s.element_type(self.db)),
             Type::Option(o) => self.create_option_tydesc(o.inner_type(self.db)),
             Type::Result(r) => self.create_result_tydesc(r.inner_type(self.db)),
+            Type::Tensor(_t) => todo!("create_tensor_tydesc"),
         }
     }
 

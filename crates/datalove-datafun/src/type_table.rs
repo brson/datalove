@@ -512,6 +512,12 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
                 }
             }
 
+            Expr::Tensor(t) => {
+                for elem in t.elements(self.db) {
+                    self.visit_datalit_expr(elem)?;
+                }
+            }
+
             Expr::Data(d) => {
                 self.visit_datalit_expr(d.value(self.db))?;
             }

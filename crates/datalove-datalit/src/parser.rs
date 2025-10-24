@@ -403,6 +403,65 @@ impl<'db> DynParser<'db> {
                     }
                 }
             }
+            Some("tensor") => {
+                self.eat_word("tensor");
+                // Expect angle bracket with <element_type, rank, optional_layout>.
+                match self.peek() {
+                    Some(TreeToken::Branch(Sigil::AngleOpen, iter)) => {
+                        self.next(); // Consume the branch.
+                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                        let mut sub_parser = DynParser {
+                            db: self.db,
+                            tokens,
+                            pos: 0,
+                            source_text: self.source_text,
+                            expr_spans: Vec::new(),
+                        };
+                        let element_type = sub_parser.parse_type_hint_and_heap();
+                        sub_parser.need_sigil(Sigil::Comma);
+
+                        let rank = match sub_parser.parse_u32_literal() {
+                            Some(r) => r,
+                            None => {
+                                let (text, span) = sub_parser.current_text_span();
+                                let message = InternedText::new(self.db, "expected rank (positive integer)".S());
+
+                                DiagnosticBuilder::error(self.db, "expected rank (positive integer)")
+                                    .code("D008")
+                                    .primary_label(text, span.clone(), "expected rank")
+                                    .emit_parse();
+
+                                return ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message));
+                            }
+                        };
+
+                        let layout = if sub_parser.peek_sigil(Sigil::Comma) {
+                            sub_parser.eat_sigil(Sigil::Comma);
+                            sub_parser.parse_tensor_layout()
+                        } else {
+                            None
+                        };
+
+                        ast::TypeHint::Tensor(ast::TypeHintTensor::new(
+                            self.db,
+                            element_type,
+                            rank,
+                            layout,
+                        ))
+                    }
+                    _ => {
+                        let (text, span) = self.current_text_span();
+                        let message = InternedText::new(self.db, "expected <> after tensor keyword".S());
+
+                        DiagnosticBuilder::error(self.db, "expected <> after tensor keyword")
+                            .code("D009")
+                            .primary_label(text, span.clone(), "expected '<' after 'tensor'")
+                            .emit_parse();
+
+                        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
+                    }
+                }
+            }
             _ => {
                 // Check for branches: parentheses for tuples, brackets for lists, braces for structs.
                 match self.peek() {
@@ -698,6 +757,72 @@ impl<'db> DynParser<'db> {
                 self.eat_word("error");
                 let value = self.parse_expr_full();
                 return ast::Expr::Err(ast::ExprErr::new(self.db, value));
+            }
+            Some("tensor") => {
+                self.eat_word("tensor");
+
+                // Parse shape: [dim1, dim2, ...]
+                let shape = match self.peek() {
+                    Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
+                        self.next(); // Consume the branch.
+                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                        let mut sub_parser = DynParser {
+                            db: self.db,
+                            tokens,
+                            pos: 0,
+                            source_text: self.source_text,
+                            expr_spans: Vec::new(),
+                        };
+                        sub_parser.parse_comma_separated(|p| {
+                            match p.parse_u32_literal() {
+                                Some(dim) => dim,
+                                None => {
+                                    panic!("expected dimension value in tensor shape");
+                                }
+                            }
+                        })
+                    }
+                    _ => {
+                        let (text, span) = self.current_text_span();
+                        let message = InternedText::new(self.db, "expected shape [...] after tensor keyword".S());
+
+                        DiagnosticBuilder::error(self.db, "expected shape [...] after tensor keyword")
+                            .code("D010")
+                            .primary_label(text, span.clone(), "expected '[' for tensor shape")
+                            .emit_parse();
+
+                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
+                    }
+                };
+
+                // Parse data: [elem1, elem2, ...]
+                let elements = match self.peek() {
+                    Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
+                        self.next(); // Consume the branch.
+                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                        let mut sub_parser = DynParser {
+                            db: self.db,
+                            tokens,
+                            pos: 0,
+                            source_text: self.source_text,
+                            expr_spans: Vec::new(),
+                        };
+                        sub_parser.parse_comma_separated(|p| p.parse_expr_full())
+                    }
+                    _ => {
+                        let (text, span) = self.current_text_span();
+                        let message = InternedText::new(self.db, "expected data [...] after tensor shape".S());
+
+                        DiagnosticBuilder::error(self.db, "expected data [...] after tensor shape")
+                            .code("D011")
+                            .primary_label(text, span.clone(), "expected '[' for tensor data")
+                            .emit_parse();
+
+                        return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
+                    }
+                };
+
+                return ast::Expr::Tensor(ast::ExprTensor::new(self.db, shape, elements));
             }
             Some("tuple") => {
                 self.eat_word("tuple");
@@ -1106,6 +1231,35 @@ impl<'db> DynParser<'db> {
                 }
             }
             _ => panic!("expected name"),
+        }
+    }
+
+    fn parse_u32_literal(&mut self) -> Option<u32> {
+        match self.peek() {
+            Some(TreeToken::Token(tok)) => {
+                if let Some(word) = tok.word_str(self.db) {
+                    if let Ok(value) = word.parse::<u32>() {
+                        self.next();
+                        return Some(value);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn parse_tensor_layout(&mut self) -> Option<ast::TensorLayoutHint> {
+        match self.peek_word() {
+            Some("row_major") => {
+                self.eat_word("row_major");
+                Some(ast::TensorLayoutHint::RowMajor)
+            }
+            Some("col_major") => {
+                self.eat_word("col_major");
+                Some(ast::TensorLayoutHint::ColMajor)
+            }
+            _ => None,
         }
     }
 

@@ -261,6 +261,10 @@ fn pretty_type<'db>(
             out.push('!');
             pretty_type_and_heap(db, &r.inner_type(db), out);
         }
+
+        Type::Tensor(_t) => {
+            out.push_str("<todo:tensor-type>");
+        }
     }
 }
 
@@ -440,6 +444,10 @@ fn pretty_type_hint<'db>(
             pretty_type_hint_and_heap(db, r.inner_type(db), out);
         }
 
+        TypeHint::Tensor(_t) => {
+            out.push_str("<todo:tensor>");
+        }
+
         TypeHint::ParseError(e) => {
             out.push_str("<parse-error: ");
             out.push_str(e.message(db).as_str(db));
@@ -601,6 +609,10 @@ fn pretty_expr<'db>(
                 pretty_expr_full(db, *elem, out, indent);
             }
             out.push('}');
+        }
+
+        Expr::Tensor(_t) => {
+            out.push_str("<todo:tensor>");
         }
 
         Expr::Data(d) => {
