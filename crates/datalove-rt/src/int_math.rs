@@ -7,7 +7,7 @@ use crate::{LocalRtHandle, RtStatus};
 use ibig::IBig;
 
 /// Convert rtdt::Int to ibig::IBig.
-pub unsafe fn rtdt_int_to_ibig(int_ptr: *const rtdt::Int) -> IBig {
+pub(crate) unsafe fn rtdt_int_to_ibig(int_ptr: *const rtdt::Int) -> IBig {
     unsafe {
         let int = &*int_ptr;
         let size_and_sign = int.size_and_sign;
@@ -179,7 +179,7 @@ pub unsafe extern "C" fn dtlv_rti_int_neg(
 }
 
 /// Division of bigints: a / b.
-/// Caller must ensure b is not zero.
+/// Returns RtStatus::Error if b is zero.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_int_div_checked(
     rt: LocalRtHandle,
@@ -198,6 +198,12 @@ pub unsafe extern "C" fn dtlv_rti_int_div_checked(
         let rt_ref = &mut *(rt as *mut RtLocal);
         let a = rtdt_int_to_ibig(a_in as *const rtdt::Int);
         let b = rtdt_int_to_ibig(b_in as *const rtdt::Int);
+
+        // Check for division by zero.
+        if b == IBig::from(0) {
+            return RtStatus::Error;
+        }
+
         let result = a / b;
         ibig_to_rtdt_int(rt_ref, result, result_out as *mut rtdt::Int)
     }

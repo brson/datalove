@@ -790,12 +790,6 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let result_result_tydesc = make_result_tydesc_int(ctx);
 
-            // Check for division by zero by converting to IBig and comparing.
-            let b_ibig = unsafe { rt::int_math::rtdt_int_to_ibig(b_ptr as *const rtdt::Int) };
-            if b_ibig == ibig::IBig::from(0) {
-                return create_result_divzero_err(ctx, result_result_tydesc);
-            }
-
             // Allocate result Int.
             let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
@@ -813,7 +807,8 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
                 if status == RtStatus::Ok {
                     create_result_ok(ctx, result, result_result_tydesc)
                 } else {
-                    Err(InterpError::RuntimeError("Int division failed".to_string()))
+                    // RT function returns Error for division by zero.
+                    create_result_divzero_err(ctx, result_result_tydesc)
                 }
             } else {
                 Err(InterpError::RuntimeError("Failed to allocate Int".to_string()))

@@ -1417,7 +1417,6 @@ dependencies = [
  "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
- "ibig",
  "rustmax",
  "salsa",
  "serde",
