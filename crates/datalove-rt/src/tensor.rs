@@ -44,6 +44,61 @@ fn compute_col_major_strides(shape: &[u32]) -> Vec<u32> {
     strides
 }
 
+// ============================================================================
+// Contiguity Check Helpers
+// ============================================================================
+
+/// Check if strides match row-major contiguous pattern.
+///
+/// Row-major: strides[i] == product(shape[i+1..])
+fn is_row_major_contiguous(shape: &[u32], strides: &[u32]) -> bool {
+    if shape.len() != strides.len() {
+        return false;
+    }
+
+    for i in 0..shape.len() {
+        let mut expected = 1u32;
+        for j in (i + 1)..shape.len() {
+            expected = expected.saturating_mul(shape[j]);
+        }
+        if strides[i] != expected {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Check if strides match column-major contiguous pattern.
+///
+/// Column-major: strides[i] == product(shape[..i])
+fn is_col_major_contiguous(shape: &[u32], strides: &[u32]) -> bool {
+    if shape.len() != strides.len() {
+        return false;
+    }
+
+    for i in 0..shape.len() {
+        let mut expected = 1u32;
+        for j in 0..i {
+            expected = expected.saturating_mul(shape[j]);
+        }
+        if strides[i] != expected {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Check if tensor is contiguous (either row-major or column-major).
+fn is_contiguous(shape: &[u32], strides: &[u32]) -> bool {
+    is_row_major_contiguous(shape, strides) || is_col_major_contiguous(shape, strides)
+}
+
+// ============================================================================
+// Tensor Creation
+// ============================================================================
+
 /// Creates a tensor from a flat slice of elements and a shape.
 ///
 /// The shape is moved in and ownership is transferred.
@@ -707,6 +762,205 @@ pub unsafe fn tensor_slice_impl(
             offset_elems: new_offset,
             shape: new_shape_ptr,
             strides: new_strides_ptr,
+            layout,
+        };
+
+        std::ptr::write(out_tensor_ptr, out_tensor);
+
+        // Set Result tag to Ok.
+        let result_ptr = result_value_out as *mut crate::rtdt::Result;
+        std::ptr::write(&mut (*result_ptr).tag, crate::rtdt::ResultTag::Ok);
+
+        return RtStatus::Ok;
+
+        // Helper function for error path.
+        unsafe fn error_path(
+            rt_ref: &mut RtLocal,
+            tensor_value_in: *mut u8,
+            tensor_tydesc_ref: TyDescRef,
+            result_value_out: *mut u8,
+            result_tydesc_ref: TyDescRef,
+        ) -> RtStatus {
+            unsafe {
+                // Copy the tensor into the result's error payload.
+                let payload_ptr = compute_result_payload_ptr(result_value_out, result_tydesc_ref);
+                let tensor_src = tensor_value_in as *const crate::rtdt::Tensor;
+                let tensor_dst = payload_ptr as *mut crate::rtdt::Tensor;
+                let tensor_value = std::ptr::read(tensor_src);
+                std::ptr::write(tensor_dst, tensor_value);
+
+                // Set Result tag to Err.
+                let result_ptr = result_value_out as *mut crate::rtdt::Result;
+                std::ptr::write(&mut (*result_ptr).tag, crate::rtdt::ResultTag::Err);
+
+                RtStatus::Ok
+            }
+        }
+
+        // Helper to compute payload offset in Result<T>.
+        unsafe fn compute_result_payload_ptr(
+            result_ptr: *mut u8,
+            result_tydesc_ref: TyDescRef,
+        ) -> *mut u8 {
+            unsafe {
+                // Extract ok_tydesc from result type descriptor.
+                let ok_tydesc_ref = result_tydesc_ref.result_ok_ty();
+
+                let ok_align = ok_tydesc_ref.align();
+                let payload_offset = crate::rtdt::layout::result_payload_offset(ok_align);
+
+                result_ptr.add(payload_offset as usize)
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Tensor Reshape
+// ============================================================================
+
+/// Reshape a tensor to a new shape.
+///
+/// Validates that the tensor is contiguous and the new shape has the same total
+/// number of elements. Returns Result<Tensor, Error> where Error contains the
+/// original tensor on failure.
+pub unsafe fn tensor_reshape_impl(
+    rt_ref: &mut RtLocal,
+    tensor_value_in: *mut u8,
+    tensor_tydesc_ref: TyDescRef,
+    new_shape_in: *mut u8,
+    new_shape_tydesc_ref: TyDescRef,
+    result_value_out: *mut u8,
+    result_tydesc_ref: TyDescRef,
+) -> RtStatus {
+    unsafe {
+        // Validate inputs.
+        if tensor_value_in.is_null() || new_shape_in.is_null() || result_value_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Extract new_shape from the moved-in List<u32>.
+        let new_shape_list_ptr = new_shape_in as *mut crate::rtdt::List;
+        let new_shape_data = (*new_shape_list_ptr).data as *const u32;
+        let new_rank = (*new_shape_list_ptr).size;
+
+        // Validate new rank.
+        if new_rank == 0 || new_shape_data.is_null() {
+            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
+        }
+
+        // Extract tensor fields.
+        let rank = tensor_tydesc_ref.tensor_rank();
+        if rank == 0 {
+            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
+        }
+
+        let tensor_ptr = tensor_value_in as *mut crate::rtdt::Tensor;
+        let ptr_base = (*tensor_ptr).ptr_base;
+        let capacity_elems = (*tensor_ptr).capacity_elems;
+        let offset_elems = (*tensor_ptr).offset_elems;
+        let shape_ptr = (*tensor_ptr).shape;
+        let strides_ptr = (*tensor_ptr).strides;
+        let layout = (*tensor_ptr).layout;
+
+        // Create slices for validation.
+        let shape = std::slice::from_raw_parts(shape_ptr, rank as usize);
+        let strides = std::slice::from_raw_parts(strides_ptr, rank as usize);
+        let new_shape = std::slice::from_raw_parts(new_shape_data, new_rank as usize);
+
+        // Validate offset_elems == 0 (can only reshape full tensor, not view).
+        if offset_elems != 0 {
+            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
+        }
+
+        // Validate tensor is contiguous.
+        if !is_contiguous(shape, strides) {
+            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
+        }
+
+        // Compute current total elements.
+        let mut current_total = 1u32;
+        for &dim in shape {
+            current_total = current_total.saturating_mul(dim);
+        }
+
+        // Compute new total elements.
+        let mut new_total = 1u32;
+        for &dim in new_shape {
+            new_total = new_total.saturating_mul(dim);
+        }
+
+        // Validate total elements match.
+        if current_total != new_total {
+            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
+        }
+
+        // Determine layout from current strides.
+        let is_row_major = is_row_major_contiguous(shape, strides);
+
+        // Compute new strides based on layout.
+        let new_strides_vec = if is_row_major {
+            compute_row_major_strides(new_shape)
+        } else {
+            compute_col_major_strides(new_shape)
+        };
+
+        // Allocate new strides array.
+        let strides_size = std::mem::size_of::<u32>() as u32;
+        let strides_align = std::mem::align_of::<u32>() as u32;
+        let new_strides_ptr = rt_ref.alloc.alloc(strides_size, strides_align, new_rank);
+        if new_strides_ptr.is_null() {
+            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
+        }
+
+        // Copy new strides into allocated array.
+        let new_strides_ptr_typed = new_strides_ptr as *mut u32;
+        for (i, &stride) in new_strides_vec.iter().enumerate() {
+            std::ptr::write(new_strides_ptr_typed.add(i), stride);
+        }
+
+        // Allocate new shape array and copy from new_shape List.
+        let shape_size = std::mem::size_of::<u32>() as u32;
+        let shape_align = std::mem::align_of::<u32>() as u32;
+        let new_shape_ptr = rt_ref.alloc.alloc(shape_size, shape_align, new_rank);
+        if new_shape_ptr.is_null() {
+            // Free new_strides before returning.
+            rt_ref.alloc.free(strides_size, strides_align, new_rank, new_strides_ptr);
+            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
+        }
+
+        // Copy shape data from List to new array.
+        let new_shape_ptr_typed = new_shape_ptr as *mut u32;
+        for i in 0..new_rank as usize {
+            std::ptr::write(new_shape_ptr_typed.add(i), new_shape[i]);
+        }
+
+        // Free old strides array.
+        rt_ref.alloc.free(strides_size, strides_align, rank, strides_ptr as *mut u8);
+
+        // Free old shape array.
+        rt_ref.alloc.free(shape_size, shape_align, rank, shape_ptr as *mut u8);
+
+        // Destroy the new_shape List (including its data).
+        let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+
+        // Construct output tensor.
+        let payload_ptr = compute_result_payload_ptr(result_value_out, result_tydesc_ref);
+        let out_tensor_ptr = payload_ptr as *mut crate::rtdt::Tensor;
+
+        let out_tensor = crate::rtdt::Tensor {
+            ptr_base,
+            capacity_elems,
+            offset_elems: 0,
+            shape: new_shape_ptr_typed,
+            strides: new_strides_ptr_typed,
             layout,
         };
 

@@ -1199,3 +1199,36 @@ pub unsafe extern "C" fn dtlv_rti_tensor_slice_local(
         )
     }
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_tensor_reshape_local(
+    rt: LocalRtHandle,
+    tensor_value_in: *mut u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+    new_shape_in: *mut u8,
+    new_shape_tydesc: *const rtdt::TyDesc,
+    result_value_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || tensor_value_in.is_null() || tensor_tydesc.is_null()
+            || new_shape_in.is_null() || new_shape_tydesc.is_null()
+            || result_value_out.is_null() || result_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        let new_shape_tydesc_ref = rtdt::TyDescRef::from_ptr(new_shape_tydesc);
+        let result_tydesc_ref = rtdt::TyDescRef::from_ptr(result_tydesc);
+        tensor::tensor_reshape_impl(
+            rt_ref,
+            tensor_value_in,
+            tensor_tydesc_ref,
+            new_shape_in,
+            new_shape_tydesc_ref,
+            result_value_out,
+            result_tydesc_ref,
+        )
+    }
+}
