@@ -1515,6 +1515,7 @@ name = "datalove-rt"
 version = "0.1.0"
 dependencies = [
  "datalove-rtdt",
+ "ibig",
  "libc",
  "proptest",
  "rustmax",
@@ -2732,6 +2733,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "ibig"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1fcc7f316b2c079dde77564a1360639c1a956a23fa96122732e416cb10717bb"
+dependencies = [
+ "cfg-if",
+ "num-traits",
+ "rand 0.8.5",
+ "static_assertions",
 ]
 
 [[package]]

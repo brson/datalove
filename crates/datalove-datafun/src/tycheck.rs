@@ -883,6 +883,9 @@ fn synthesize_unaryop<'db>(
 
     // Determine result type based on operator.
     let result_ty = match op {
+        // Bare negation: returns same type as operand (for bigints).
+        UnaryOp::Neg => operand_ty,
+
         // Optional negation: Option<T>.
         UnaryOp::NegOptional => {
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.

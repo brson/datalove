@@ -4,6 +4,7 @@ use rmx::prelude::*;
 use crate::ast::*;
 use crate::interp::{InterpContext, InterpResult, InterpError};
 use crate::value::Value;
+use datalove_rt::{self as rt, LocalRtHandle, RtStatus};
 
 /// Evaluate a datafun expression.
 pub fn eval_expr<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>) -> InterpResult {
@@ -267,11 +268,45 @@ fn eval_unaryop<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>, unaryop: 
     use UnaryOp::*;
 
     match op {
+        // Bare negation (for bigints).
+        Neg => eval_neg(ctx, operand_value),
+
         // Optional negation.
         NegOptional => eval_neg_optional(ctx, operand_value, result_tydesc),
 
         // Result negation.
         NegResult => eval_neg_result(ctx, operand_value, result_tydesc),
+    }
+}
+
+/// Evaluate bare negation (for bigints).
+fn eval_neg(ctx: &mut InterpContext<'_>, operand: Value) -> InterpResult {
+    match operand {
+        Value::Int { ptr, tydesc } => {
+            // Allocate result Int.
+            let result = unsafe { Value::alloc_int(&mut ctx.rt, tydesc) };
+            if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
+                let status = unsafe {
+                    rt::int_math::dtlv_rti_int_neg(
+                        Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                        ptr as *const u8,
+                        tydesc,
+                        result_ptr as *mut u8,
+                        result_tydesc,
+                    )
+                };
+                if status == RtStatus::Ok {
+                    Ok(result)
+                } else {
+                    Err(InterpError::RuntimeError("Int negation failed".to_string()))
+                }
+            } else {
+                Err(InterpError::RuntimeError("Failed to allocate Int".to_string()))
+            }
+        }
+        _ => Err(InterpError::TypeError(
+            "Unsupported type for bare negation".to_string(),
+        )),
     }
 }
 
@@ -364,13 +399,37 @@ fn eval_neg_result(ctx: &mut InterpContext<'_>, operand: Value, operand_tydesc: 
 }
 
 /// Evaluate addition.
-fn eval_add(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_add(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
             // Wrapping addition.
             Ok(Value::from_u32(a.wrapping_add(b)))
         }
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_f32(a + b)),
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            // Allocate result Int.
+            let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
+            if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
+                let status = unsafe {
+                    rt::int_math::dtlv_rti_int_add(
+                        Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                        a_ptr as *const u8,
+                        a_tydesc,
+                        b_ptr as *const u8,
+                        b_tydesc,
+                        result_ptr as *mut u8,
+                        result_tydesc,
+                    )
+                };
+                if status == RtStatus::Ok {
+                    Ok(result)
+                } else {
+                    Err(InterpError::RuntimeError("Int addition failed".to_string()))
+                }
+            } else {
+                Err(InterpError::RuntimeError("Failed to allocate Int".to_string()))
+            }
+        }
         _ => Err(InterpError::TypeError(
             "Unsupported types for addition".to_string(),
         )),
@@ -378,13 +437,37 @@ fn eval_add(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResul
 }
 
 /// Evaluate subtraction.
-fn eval_sub(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_sub(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
             // Wrapping subtraction.
             Ok(Value::from_u32(a.wrapping_sub(b)))
         }
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_f32(a - b)),
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            // Allocate result Int.
+            let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
+            if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
+                let status = unsafe {
+                    rt::int_math::dtlv_rti_int_sub(
+                        Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                        a_ptr as *const u8,
+                        a_tydesc,
+                        b_ptr as *const u8,
+                        b_tydesc,
+                        result_ptr as *mut u8,
+                        result_tydesc,
+                    )
+                };
+                if status == RtStatus::Ok {
+                    Ok(result)
+                } else {
+                    Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
+                }
+            } else {
+                Err(InterpError::RuntimeError("Failed to allocate Int".to_string()))
+            }
+        }
         _ => Err(InterpError::TypeError(
             "Unsupported types for subtraction".to_string(),
         )),
@@ -392,13 +475,37 @@ fn eval_sub(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResul
 }
 
 /// Evaluate multiplication.
-fn eval_mul(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_mul(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => {
             // Wrapping multiplication.
             Ok(Value::from_u32(a.wrapping_mul(b)))
         }
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_f32(a * b)),
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            // Allocate result Int.
+            let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
+            if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
+                let status = unsafe {
+                    rt::int_math::dtlv_rti_int_mul(
+                        Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                        a_ptr as *const u8,
+                        a_tydesc,
+                        b_ptr as *const u8,
+                        b_tydesc,
+                        result_ptr as *mut u8,
+                        result_tydesc,
+                    )
+                };
+                if status == RtStatus::Ok {
+                    Ok(result)
+                } else {
+                    Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
+                }
+            } else {
+                Err(InterpError::RuntimeError("Failed to allocate Int".to_string()))
+            }
+        }
         _ => Err(InterpError::TypeError(
             "Unsupported types for multiplication".to_string(),
         )),

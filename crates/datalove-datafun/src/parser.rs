@@ -741,9 +741,10 @@ impl<'db> Parser<'db> {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> ast::ExprFun<'db> {
-        // Check for unary operators (-? or -!).
+        // Check for unary operators (-, -?, or -!).
         if let Some(TreeToken::Token(token)) = tokens.peek() {
             let unary_op = match token.kind(self.db) {
+                TokenKind::Sigil(Sigil::Minus) => Some(ast::UnaryOp::Neg),
                 TokenKind::Sigil(Sigil::MinusQuestion) => Some(ast::UnaryOp::NegOptional),
                 TokenKind::Sigil(Sigil::MinusExclamation) => Some(ast::UnaryOp::NegResult),
                 _ => None,

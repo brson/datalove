@@ -271,6 +271,9 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
 
                     // Compute result type based on operator.
                     let result_tydesc = match op {
+                        // Bare negation: same type as operand.
+                        UnaryOp::Neg => operand_tydesc,
+
                         // Optional negation: Option<T>.
                         UnaryOp::NegOptional => {
                             self.tydesc_table.create_option_from_inner_tydesc(operand_tydesc)

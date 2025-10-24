@@ -1,0 +1,3 @@
+// Test bigint negation.
+let a: @int = @42
+let output = -a

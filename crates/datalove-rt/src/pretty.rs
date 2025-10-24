@@ -237,13 +237,16 @@ unsafe fn pretty_f32(
 
 unsafe fn pretty_int(
     rt: LocalRtHandle,
-    _value_ref: *const u8,
+    value_ref: *const u8,
     string_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
-    // TODO: Implement bigint pretty printing.
     unsafe {
-        push_str(rt, string_mut, string_tydesc, b"<bigint>")
+        let int_ptr = value_ref as *const rtdt::Int;
+        let value = crate::int_math::rtdt_int_to_ibig(int_ptr);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
+        let s = value.to_string();
+        push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }
 

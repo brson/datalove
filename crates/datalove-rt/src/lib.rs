@@ -50,6 +50,7 @@ pub mod set;
 pub mod list;
 pub mod tensor;
 pub mod destroy;
+pub mod int_math;
 
 /// A runtime handle. Needed for all calls.
 ///

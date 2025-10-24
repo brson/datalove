@@ -9,6 +9,7 @@ edition.workspace = true
 rmx.workspace = true
 datalove-rtdt.path = "../datalove-rtdt"
 libc = "0.2"
+ibig = "0.3"
 
 [dev-dependencies]
 proptest = "1.5"

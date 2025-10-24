@@ -1,0 +1,4 @@
+// Test bigint subtraction.
+let a: @int = @500
+let b: @int = @200
+let output = a - b

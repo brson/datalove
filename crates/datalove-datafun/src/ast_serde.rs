@@ -157,6 +157,7 @@ pub enum BinOp {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum UnaryOp {
+    Neg,
     NegOptional,
     NegResult,
 }
@@ -388,6 +389,7 @@ impl BinOp {
 impl UnaryOp {
     pub fn from_ast(ast: crate::ast::UnaryOp) -> Self {
         match ast {
+            crate::ast::UnaryOp::Neg => UnaryOp::Neg,
             crate::ast::UnaryOp::NegOptional => UnaryOp::NegOptional,
             crate::ast::UnaryOp::NegResult => UnaryOp::NegResult,
         }

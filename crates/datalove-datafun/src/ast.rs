@@ -183,6 +183,7 @@ pub enum BinOp {
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum UnaryOp {
+    Neg,          // - (bare, for bigints)
     NegOptional,  // -?
     NegResult,    // -!
 }
