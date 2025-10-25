@@ -88,8 +88,62 @@ unsafe fn ibig_to_rtdt_int(
 /// Convert rtdt::Int to String for printing.
 pub(crate) unsafe fn int_to_string_impl(int_ptr: *const rtdt::Int) -> String {
     unsafe {
-        let value = rtdt_int_to_ibig(int_ptr);
-        value.to_string()
+        let int = &*int_ptr;
+        let size_and_sign = int.size_and_sign;
+        let abs_size = size_and_sign.abs() as usize;
+        let is_negative = size_and_sign < 0;
+
+        // Handle zero.
+        if abs_size == 0 {
+            return "0".to_string();
+        }
+
+        // Copy limbs to working buffer.
+        let limbs = std::slice::from_raw_parts(int.data, abs_size);
+        let mut working = limbs.to_vec();
+
+        // Convert to decimal by repeated division by 10^9.
+        const DIVISOR: u64 = 1_000_000_000;
+        let mut chunks = Vec::new();
+
+        loop {
+            // Divide working by DIVISOR, collecting remainder.
+            let mut remainder: u64 = 0;
+            let mut all_zero = true;
+
+            for i in (0..working.len()).rev() {
+                let current = (remainder << 32) | (working[i] as u64);
+                working[i] = (current / DIVISOR) as u32;
+                remainder = current % DIVISOR;
+
+                if working[i] != 0 {
+                    all_zero = false;
+                }
+            }
+
+            chunks.push(remainder as u32);
+
+            if all_zero {
+                break;
+            }
+        }
+
+        // Build string from chunks in reverse order.
+        let mut result = String::new();
+
+        if is_negative {
+            result.push('-');
+        }
+
+        // First chunk has no leading zeros.
+        result.push_str(&chunks.last().unwrap().to_string());
+
+        // Remaining chunks are padded to 9 digits.
+        for i in (0..chunks.len() - 1).rev() {
+            result.push_str(&format!("{:09}", chunks[i]));
+        }
+
+        result
     }
 }
 
