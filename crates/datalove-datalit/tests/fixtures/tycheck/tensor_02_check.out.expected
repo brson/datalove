@@ -1,0 +1,104 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Tensor": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "10"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "20"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "30"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "40"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "50"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "60"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            }
+          ],
+          "shape": [
+            3,
+            2
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "Tensor": {
+          "element_type": {
+            "heap": "Omitted",
+            "type_hint": "U32"
+          },
+          "layout": null,
+          "rank": 2
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "element_type": "u32",
+    "heap": "",
+    "kind": "Tensor",
+    "layout": "RowMajor",
+    "rank": 2
+  }
+}

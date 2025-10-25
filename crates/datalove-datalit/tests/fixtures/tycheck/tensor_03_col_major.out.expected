@@ -1,0 +1,82 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Tensor": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Float": {
+                    "value": "1.0"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Float": {
+                    "value": "2.0"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Float": {
+                    "value": "3.0"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Float": {
+                    "value": "4.0"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            }
+          ],
+          "shape": [
+            2,
+            2
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "Tensor": {
+          "element_type": {
+            "heap": "Omitted",
+            "type_hint": "F32"
+          },
+          "layout": "ColMajor",
+          "rank": 2
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "element_type": "f32",
+    "heap": "",
+    "kind": "Tensor",
+    "layout": "ColMajor",
+    "rank": 2
+  }
+}

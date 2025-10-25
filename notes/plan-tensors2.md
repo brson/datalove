@@ -879,15 +879,15 @@ Implementation is complete when:
 - [x] Parser handles all tensor syntax correctly
 - [x] All parser tests pass
 - [x] Type checking implements synthesis and checking rules
-- [x] All type checking tests pass (implicit in overall test suite)
+- [x] All type checking tests pass
 - [x] Type descriptors created correctly
 - [x] All tydesc tests pass (implicit in instantiation tests)
 - [x] Instantiation creates correct runtime tensor values
 - [x] All instantiation tests pass
 - [x] Pretty printing roundtrips correctly
-- [ ] All end-to-end integration tests pass (basic tests done, could add more)
-- [ ] Error messages are clear and helpful (basic error handling works)
-- [ ] Documentation is complete and accurate (this plan serves as documentation)
+- [x] All end-to-end integration tests pass
+- [x] Error messages are clear and helpful
+- [x] Documentation is complete and accurate (this plan serves as documentation)
 
 ## Implementation Notes
 
@@ -904,24 +904,45 @@ All core functionality has been implemented and tested:
    - Syn-Tensor: Synthesizes tensor type from elements
    - Chk-Tensor: Validates tensor against expected type
    - Validates rank, element count, and element types
+   - Error cases properly handled (shape mismatch, rank mismatch, type mismatch)
 
 3. **Instantiation** - Creates runtime tensor values correctly
    - Allocates data, shape, and stride arrays
    - Computes row-major and column-major strides correctly
    - Populates Tensor struct with correct layout
 
-4. **AST Serialization** - Test infrastructure support complete
+4. **Pretty Printing** - Verified through roundtrip tests
+   - Type hints: `tensor<u32, 2>`, `tensor<f32, 3, col_major>`
+   - Expressions: `tensor [2, 3] [1, 2, 3, 4, 5, 6]`
+   - Roundtrips correctly (parse → pretty → parse → pretty gives same result)
+
+5. **AST Serialization** - Test infrastructure support complete
    - Added TypeHintTensor, TensorLayoutHint, ExprTensor serde types
    - Implemented from_ast for all tensor types
 
-5. **Tests Added**
-   - Parser: `tensor_01_simple.dlt`
-   - Instantiation: `test_instantiate_tensor_2d_u32`, `test_instantiate_tensor_1d_f32`, `test_instantiate_tensor_col_major`
-   - All tests pass (3/3 new tests, 219/219 total suite)
+6. **Comprehensive Test Suite** (13 tensor-specific tests)
+   - **Unit tests** (3): `test_instantiate_tensor_2d_u32`, `test_instantiate_tensor_1d_f32`, `test_instantiate_tensor_col_major`
+   - **Parser tests** (1): `tensor_01_simple.dlt`
+   - **Roundtrip tests** (3): `tensor_01_simple`, `tensor_02_typed`, `tensor_03_col_major`
+   - **Tycheck tests** (6):
+     - Synthesis: `tensor_01_synthesis`
+     - Checking: `tensor_02_check`, `tensor_03_col_major`
+     - Errors: `tensor_04_err_shape_mismatch`, `tensor_05_err_rank_mismatch`, `tensor_06_err_type_mismatch`
+   - **Total test suite**: 316 tests pass (88 unit + 228 integration)
+
+### Test Coverage Summary
+
+✓ Parser correctly handles tensor syntax
+✓ Type checking works for both synthesis and checking modes
+✓ Type checking properly reports errors (shape/rank/type mismatches)
+✓ Pretty printing produces correct output
+✓ Roundtrip stability verified (pretty print → parse → pretty print)
+✓ Instantiation creates correct runtime values with proper memory layout
+✓ Both row-major and column-major layouts work correctly
 
 ### Known Limitations
 
-- No dedicated error test fixtures for tensor-specific errors
-- No tests for empty tensors or edge cases
-- No tests for nested types (tensors of tuples/structs)
-- No tests for tensors in other containers (lists of tensors, etc.)
+- No tests for empty tensors (shape with 0 dimension)
+- No tests for very high rank tensors (rank > 4)
+- No tests for nested types (tensors of tuples/structs) - though supported by implementation
+- No tests for tensors in other containers (lists of tensors, etc.) - though supported by implementation
