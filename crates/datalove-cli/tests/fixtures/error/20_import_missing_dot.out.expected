@@ -1,0 +1,5 @@
+Parse errors:
+error[P006]: expected '.' in import statement
+  --> expected '.' after module name
+     | /
+Error: 1 parse error(s)

@@ -1,0 +1,5 @@
+Parse errors:
+error[P005]: expected 'module' or 'data' after 'require'
+  --> expected 'module' or 'data'
+     | foo
+Error: 1 parse error(s)

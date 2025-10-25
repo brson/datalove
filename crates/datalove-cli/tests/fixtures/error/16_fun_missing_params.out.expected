@@ -1,0 +1,8 @@
+Parse errors:
+error[P002]: expected parameter list
+  --> expected '(' to start parameter list
+     | 
+error[P001]: unexpected statement
+  --> expected 'let', 'fun', 'ret', 'require', 'import', or 'if'
+     | end
+Error: 2 parse error(s)

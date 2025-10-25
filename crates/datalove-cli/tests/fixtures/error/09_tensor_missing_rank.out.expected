@@ -1,0 +1,5 @@
+Parse errors:
+error[D008]: expected rank (positive integer)
+  --> expected rank
+     | 
+Error: 1 parse error(s)

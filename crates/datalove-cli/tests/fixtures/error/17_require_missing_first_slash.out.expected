@@ -1,0 +1,5 @@
+Parse errors:
+error[P003]: expected '/' in module path
+  --> expected '/' after import space
+     | pkg
+Error: 1 parse error(s)

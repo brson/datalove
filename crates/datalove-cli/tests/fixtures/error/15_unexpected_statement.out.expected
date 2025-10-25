@@ -1,0 +1,5 @@
+Parse errors:
+error[P001]: unexpected statement
+  --> expected 'let', 'fun', 'ret', 'require', 'import', or 'if'
+     | foo
+Error: 1 parse error(s)

@@ -1,0 +1,5 @@
+Parse errors:
+error[D016]: expected {} after map keyword
+  --> expected '{' after 'map'
+     | 
+Error: 1 parse error(s)

@@ -1,0 +1,5 @@
+Parse errors:
+error[P004]: expected '/' in module path
+  --> expected '/' after package alias
+     | mod
+Error: 1 parse error(s)

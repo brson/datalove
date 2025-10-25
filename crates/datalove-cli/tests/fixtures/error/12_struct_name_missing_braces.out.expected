@@ -1,0 +1,5 @@
+Parse errors:
+error[D015]: expected {} after struct name
+  --> expected '{' after struct name
+     | 
+Error: 1 parse error(s)
