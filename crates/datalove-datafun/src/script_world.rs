@@ -94,6 +94,8 @@ pub fn execute_script_with_package_world<'db>(
     let script_typecheck = crate::tycheck::type_check_with_package_world(
         db,
         script,
+        vec![], // No spans available in this API
+        vec![], // No datalit spans available
         package_world,
         typecheck_result,
     );

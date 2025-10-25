@@ -119,7 +119,7 @@ impl<'db> InterpContext<'db> {
         // For each required module, parse it and collect function definitions.
         for (module_alias, package_module) in alias_map {
             let source = package_module.text(db);
-            let module_script = crate::parser::parse(db, source);
+            let module_script = crate::parser::parse(db, source).script;
 
             let mut module_funcs = HashMap::new();
             for statement in module_script.statements(db) {

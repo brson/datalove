@@ -147,8 +147,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let db = datalove_datafun::Database::default();
     let source = bct::input::Source::new(&db, source_text.S());
 
-    let script = datalove_datafun::parser::parse(&db, source);
-    let tycheck_result = datalove_datafun::tycheck::type_check(&db, script);
+    let script = datalove_datafun::parser::parse_for_diagnostics(&db, source);
+    // TODO: Pass actual spans once available
+    let tycheck_result = datalove_datafun::tycheck::type_check(&db, script, vec![], vec![]);
 
     // Collect type judgements for variables and functions.
     let mut judgements = Vec::new();

@@ -11,10 +11,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let source = bct::input::Source::new(&db, source_text.S());
 
     // Parse the script.
-    let script = datafun::parser::parse(&db, source);
+    let script = datafun::parser::parse_for_diagnostics(&db, source);
 
     // Type check the script.
-    let tycheck_result = datafun::tycheck::type_check(&db, script);
+    // TODO: Pass actual spans once available
+    let tycheck_result = datafun::tycheck::type_check(&db, script, vec![], vec![]);
     if !tycheck_result.errors(&db).is_empty() {
         return Err(format!("Type check errors: {} error(s)", tycheck_result.errors(&db).len()));
     }

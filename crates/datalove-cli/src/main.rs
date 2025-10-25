@@ -309,10 +309,15 @@ impl ScriptCommand {
         }
     }
 
-    fn render_diagnostics(&self, db: &dyn datalove_datafun::Db, source: bct::input::Source) -> AnyResult<()> {
+    fn render_diagnostics(
+        &self,
+        db: &dyn datalove_datafun::Db,
+        source: bct::input::Source,
+    ) -> AnyResult<()> {
         use datalove_diagnostic::ParseDiagnostic;
+        use datalove_datafun::parser;
 
-        let parse_diags = datalove_datafun::parser::parse::accumulated::<ParseDiagnostic>(db, source);
+        let parse_diags = parser::parse_for_diagnostics::accumulated::<ParseDiagnostic>(db, source);
 
         if !parse_diags.is_empty() {
             eprintln!("Parse errors:");
@@ -347,14 +352,15 @@ impl ScriptCommand {
         let source_text = rmx::std::fs::read_to_string(&self.file_path)?;
         let source = Source::new(&db, source_text.S());
 
-        // Parse the script.
-        let script = datafun::parser::parse(&db, source);
+        // Call tracked wrapper to enable diagnostic accumulation and get script.
+        let script = datafun::parser::parse_for_diagnostics(&db, source);
 
-        // Check for parse diagnostics.
+        // Render parse diagnostics (must be called after parse_for_diagnostics).
         self.render_diagnostics(&db, source)?;
 
         // Type check the script.
-        let tycheck_result = datafun::tycheck::type_check(&db, script);
+        // TODO: Pass actual spans once we have a way to retrieve them from parse_for_diagnostics.
+        let tycheck_result = datafun::tycheck::type_check(&db, script, vec![], vec![]);
         if !tycheck_result.errors(&db).is_empty() {
             bail!("Type check errors: {} error(s)", tycheck_result.errors(&db).len());
         }
@@ -396,10 +402,10 @@ impl ScriptCommand {
         let script_text = rmx::std::fs::read_to_string(&self.file_path)?;
         let source = Source::new(&db, script_text.S());
 
-        // Parse the script.
-        let script = datafun::parser::parse(&db, source);
+        // Call tracked wrapper to enable diagnostic accumulation and get script.
+        let script = datafun::parser::parse_for_diagnostics(&db, source);
 
-        // Check for parse diagnostics.
+        // Render parse diagnostics (must be called after parse_for_diagnostics).
         self.render_diagnostics(&db, source)?;
 
         // Load package world from sys/ directory.
@@ -449,9 +455,12 @@ impl ScriptCommand {
         }
 
         // Typecheck the script with package world context.
+        // TODO: Pass actual spans once we have a way to retrieve them from parse_for_diagnostics.
         let script_typecheck = datafun::tycheck::type_check_with_package_world(
             &db,
             script,
+            vec![],
+            vec![],
             package_world,
             *typecheck_result,
         );

@@ -1764,22 +1764,22 @@ mod tests {
     fn test_variable_reference_u32() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @42\nlet y = x"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
         // Type check the script.
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         // Build type table.
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         // Create interpreter context.
         let mut ctx = InterpContext::new(&db, type_table);
 
         // Execute the script.
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         // Verify that y has the same value as x.
@@ -1802,22 +1802,22 @@ mod tests {
     fn test_variable_reference_in_expression() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @10\nlet y = x + @5"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
         // Type check the script.
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         // Build type table.
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         // Create interpreter context.
         let mut ctx = InterpContext::new(&db, type_table);
 
         // Execute the script.
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         // Verify that y = x + 5 = 15.
@@ -1836,22 +1836,22 @@ mod tests {
     fn test_multiple_variable_references() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let a = @100\nlet b = a\nlet c = a + b"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
         // Type check the script.
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         // Build type table.
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         // Create interpreter context.
         let mut ctx = InterpContext::new(&db, type_table);
 
         // Execute the script.
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         // Verify that c = a + b = 100 + 100 = 200.
@@ -1872,17 +1872,17 @@ mod tests {
     fn test_eval_datalit_tuple() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @(1, 2, 3)"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         let x_name = bct::text::InternedText::new(&db, S("x"));
@@ -1901,17 +1901,17 @@ mod tests {
     fn test_eval_datalit_list() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @[1, 2, 3]"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         let x_name = bct::text::InternedText::new(&db, S("x"));
@@ -1930,17 +1930,17 @@ mod tests {
     fn test_eval_datalit_map() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @map { @1 = @10, @2 = @20 }"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         let x_name = bct::text::InternedText::new(&db, S("x"));
@@ -1959,17 +1959,17 @@ mod tests {
     fn test_eval_datalit_nested_tuple_in_list() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @[(1, 2), (3, 4)]"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         let x_name = bct::text::InternedText::new(&db, S("x"));
@@ -1988,17 +1988,17 @@ mod tests {
     fn test_eval_datalit_nested_list_in_tuple() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @(@[@1, @2, @3], @100)"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         let x_name = bct::text::InternedText::new(&db, S("x"));
@@ -2017,17 +2017,17 @@ mod tests {
     fn test_eval_datalit_set() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @set { @1, @2, @3 }"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         let x_name = bct::text::InternedText::new(&db, S("x"));
@@ -2046,17 +2046,17 @@ mod tests {
     fn test_eval_datalit_deeply_nested() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @(@[@(@1, @2)], @[@(@3, @4)])"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         let x_name = bct::text::InternedText::new(&db, S("x"));
@@ -2075,17 +2075,17 @@ mod tests {
     fn test_eval_variable_reference_tuple() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @(1, 2, 3)\nlet y = x"));
-        let script = crate::parser::parse(&db, source);
+        let parse_result = crate::parser::parse(&db, source);
 
-        let tycheck_result = type_check(&db, script);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         assert_eq!(tycheck_result.errors(&db).len(), 0, "Type errors found");
 
         let mut tydesc_table = crate::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = TypeTable::build(&db, script, tycheck_result, &mut tydesc_table)
+        let type_table = TypeTable::build(&db, parse_result.script, tycheck_result, &mut tydesc_table)
             .expect("Failed to build type table");
 
         let mut ctx = InterpContext::new(&db, type_table);
-        let result = ctx.execute(script);
+        let result = ctx.execute(parse_result.script);
         assert!(result.is_ok(), "Failed to execute script: {:?}", result);
 
         let x_name = bct::text::InternedText::new(&db, S("x"));

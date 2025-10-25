@@ -6,8 +6,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let db = datalove_datafun::Database::default();
     let source = bct::input::Source::new(&db, source_text.S());
 
-    let ast = datalove_datafun::parser::parse(&db, source);
-    let serde_ast = datalove_datafun::ast_serde::Script::from_ast(&db, ast);
+    let script = datalove_datafun::parser::parse_integration_test(&db, source);
+    let serde_ast = datalove_datafun::ast_serde::Script::from_ast(&db, script);
     Ok(rmx::serde_json::to_string_pretty(&serde_ast).X())
 }
 

@@ -34,7 +34,7 @@ fn module_import_demands<'db>(
     db: &'db dyn crate::Db,
     source: Source,
 ) -> ModuleImportDemands<'db> {
-    let ast = parser::parse(db, source);
+    let ast = parser::parse(db, source).script;
 
     let mut demands = Vec::new();
 

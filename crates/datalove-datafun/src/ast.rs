@@ -11,6 +11,27 @@ pub struct Script<'db> {
     pub statements: Vec<Statement<'db>>,
 }
 
+/// Result of parsing containing the script and span side table.
+///
+/// This is a regular struct (not Salsa-tracked) because Salsa tracked structs
+/// cannot contain Vec fields with lifetimes.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ParseResult<'db> {
+    pub script: Script<'db>,
+    pub expr_spans: Vec<(ExprFun<'db>, Text<'db>, ByteSpan)>,
+    pub datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, Text<'db>, ByteSpan)>,
+}
+
+impl<'db> ParseResult<'db> {
+    pub fn new(
+        script: Script<'db>,
+        expr_spans: Vec<(ExprFun<'db>, Text<'db>, ByteSpan)>,
+        datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, Text<'db>, ByteSpan)>,
+    ) -> Self {
+        ParseResult { script, expr_spans, datalit_expr_spans }
+    }
+}
+
 #[derive(Clone, Hash)]
 #[derive(salsa::Update)]
 pub enum Statement<'db> {

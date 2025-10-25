@@ -542,11 +542,11 @@ mod tests {
         source_text: &str,
     ) -> Result<(Script<'db>, TypeTable, datalit::tydesc_table::TyDescTable<'db>), String> {
         let source = Source::new(db, source_text.S());
-        let script = crate::parser::parse(db, source);
-        let tycheck_result = crate::tycheck::type_check(db, script);
+        let parse_result = crate::parser::parse(db, source);
+        let tycheck_result = crate::tycheck::type_check(db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(db);
-        let type_table = TypeTable::build(db, script, tycheck_result, &mut tydesc_table)?;
-        Ok((script, type_table, tydesc_table))
+        let type_table = TypeTable::build(db, parse_result.script, tycheck_result, &mut tydesc_table)?;
+        Ok((parse_result.script, type_table, tydesc_table))
     }
 
     #[test]
@@ -561,10 +561,10 @@ mod tests {
         let ref db = crate::Database::default();
         // This should fail because 'undefined' is not a known variable.
         let source = Source::new(db, S("let x = undefined"));
-        let script = crate::parser::parse(db, source);
-        let tycheck_result = crate::tycheck::type_check(db, script);
+        let parse_result = crate::parser::parse(db, source);
+        let tycheck_result = crate::tycheck::type_check(db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
         let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(db);
-        let result = TypeTable::build(db, script, tycheck_result, &mut tydesc_table);
+        let result = TypeTable::build(db, parse_result.script, tycheck_result, &mut tydesc_table);
         assert!(result.is_err(), "Expected build to fail with type errors");
     }
 
@@ -660,7 +660,7 @@ mod tests {
 
         // Create a new expression that's not in the type table.
         let new_source = Source::new(db, S("@999"));
-        let new_script = crate::parser::parse(db, new_source);
+        let new_script = crate::parser::parse(db, new_source).script;
         let new_statements = new_script.statements(db);
 
         // This should return null because it's not in our type table.

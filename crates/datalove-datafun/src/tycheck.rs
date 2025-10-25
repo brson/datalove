@@ -108,10 +108,25 @@ pub struct TypeContext<'db> {
     errors: Vec<TypeError>,
     /// Expression types, indexed by ExprFun ID.
     expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    /// Expression spans for datafun expressions (for diagnostic emission).
+    expr_spans: HashMap<salsa::Id, (bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
+    /// Expression spans for datalit expressions (passed to datalit type checker).
+    datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
 }
 
 impl<'db> TypeContext<'db> {
-    pub fn new(db: &'db dyn crate::Db) -> Self {
+    pub fn new(
+        db: &'db dyn crate::Db,
+        expr_spans: Vec<(ExprFun<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
+        datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
+    ) -> Self {
+        // Convert expr_spans Vec to HashMap for fast lookup.
+        use salsa::plumbing::AsId;
+        let expr_spans_map = expr_spans
+            .into_iter()
+            .map(|(expr, text, span)| (expr.as_id(), (text, span)))
+            .collect();
+
         TypeContext {
             db,
             variables: HashMap::new(),
@@ -119,11 +134,19 @@ impl<'db> TypeContext<'db> {
             expected_return_type: None,
             errors: Vec::new(),
             expr_types: Vec::new(),
+            expr_spans: expr_spans_map,
+            datalit_expr_spans,
         }
     }
 
     fn add_error(&mut self, error: TypeError) {
         self.errors.push(error);
+    }
+
+    /// Look up the source location for an expression.
+    fn get_span(&self, expr: ExprFun<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
+        use salsa::plumbing::AsId;
+        self.expr_spans.get(&expr.as_id()).cloned()
     }
 
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
@@ -169,8 +192,10 @@ impl<'db> TypeContext<'db> {
 pub fn type_check<'db>(
     db: &'db dyn crate::Db,
     script: Script<'db>,
+    expr_spans: Vec<(ExprFun<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
+    datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
 ) -> TypecheckResult<'db> {
-    let mut ctx = TypeContext::new(db);
+    let mut ctx = TypeContext::new(db, expr_spans, datalit_expr_spans);
 
     // First pass: collect all function signatures.
     for statement in script.statements(db) {
@@ -201,10 +226,12 @@ pub fn type_check<'db>(
 pub fn type_check_with_package_world<'db>(
     db: &'db dyn crate::Db,
     script: Script<'db>,
+    expr_spans: Vec<(ExprFun<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
+    datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
     package_world: crate::package::PackageWorld,
     package_world_typecheck: PackageWorldTypecheckResult<'db>,
 ) -> TypecheckResult<'db> {
-    let mut ctx = TypeContext::new(db);
+    let mut ctx = TypeContext::new(db, expr_spans, datalit_expr_spans);
 
     // Build module alias map from require statements.
     let graph = package_world_typecheck.graph(db);
@@ -278,7 +305,7 @@ pub fn lookup_variable_type<'db>(
     script: Script<'db>,
     name: InternedText<'db>,
 ) -> Option<TypeAndHeap<'db>> {
-    let mut ctx = TypeContext::new(db);
+    let mut ctx = TypeContext::new(db, vec![], vec![]);
 
     // First pass: collect all function signatures.
     for statement in script.statements(db) {
@@ -321,13 +348,14 @@ pub fn typecheck_package_world<'db>(
     for module in sorted_modules {
         // Parse the module.
         let source = module.text(db);
-        let script = crate::parser::parse(db, source);
+        let parse_result = crate::parser::parse(db, source);
+        let script = parse_result.script;
 
         // Build module alias map for this module.
         let alias_map = build_module_alias_map(db, script, graph, module);
 
         // Create type context for this module.
-        let mut ctx = TypeContext::new(db);
+        let mut ctx = TypeContext::new(db, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Add imported functions to context.
         // Scan for import statements and resolve them.
@@ -371,7 +399,7 @@ pub fn typecheck_package_world<'db>(
         // First pass: collect all function signatures from this module.
         for statement in script.statements(db) {
             if let Statement::Fun(stmt) = statement {
-                collect_function_signature(&mut ctx, stmt);
+                collect_function_signature(&mut ctx, &stmt);
             }
         }
 
@@ -684,8 +712,8 @@ fn synthesize_expr<'db>(
     match expr_kind {
         ExprFunKind::Datalit(datalit_expr) => {
             // Delegate to datalit type checker.
-            // We need to create a dummy resolved expr for datalit.
-            let resolved = datalit::resolve::resolve_names(db, datalit_expr, vec![]);
+            // Pass datalit expr_spans collected during parsing for diagnostic emission.
+            let resolved = datalit::resolve::resolve_names(db, datalit_expr, ctx.datalit_expr_spans.clone());
             let tycheck_result = datalit::tycheck::type_check(db, datalit_expr, resolved);
 
             // Check for errors.
@@ -1450,8 +1478,8 @@ mod tests {
     fn test_tycheck_simple_let() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x: @u32 = @42"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1461,8 +1489,8 @@ mod tests {
     fn test_tycheck_binop_add() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = a + b"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Will have errors because 'a' and 'b' are unresolved.
         assert!(tycheck_result.errors(&db).len() > 0);
@@ -1472,8 +1500,8 @@ mod tests {
     fn test_tycheck_binop_checked() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @1 +! @2"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors.
         // The result type should be Result<u32>.
@@ -1484,8 +1512,8 @@ mod tests {
     fn test_tycheck_fun_simple() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("fun foo(): @u32\n  ret @42\nend fun"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1495,8 +1523,8 @@ mod tests {
     fn test_tycheck_fun_params() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1506,8 +1534,8 @@ mod tests {
     fn test_tycheck_fun_checked() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): !@u32\n  ret a +! b\nend fun"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors.
         // Return type is Result<u32>, and a +! b returns Result<u32>.
@@ -1519,8 +1547,8 @@ mod tests {
         let db = crate::Database::default();
         // Fun returns u32 but body returns Result<u32>.
         let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): @u32\n  ret a +! b\nend fun"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have a type mismatch error.
         assert!(tycheck_result.errors(&db).len() > 0);
@@ -1532,8 +1560,8 @@ mod tests {
     fn test_tycheck_datalit_tuple() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @(1, 2, 3)"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors - tuple of integers.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1543,8 +1571,8 @@ mod tests {
     fn test_tycheck_datalit_list() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @[1, 2, 3]"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors - list of integers.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1554,8 +1582,8 @@ mod tests {
     fn test_tycheck_datalit_map() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @map { @1 = @10, @2 = @20 }"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors - map with integer keys and integer values.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1565,8 +1593,8 @@ mod tests {
     fn test_tycheck_datalit_nested_tuple_in_list() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @[(1, 2), (3, 4)]"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors - list of tuples.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1576,8 +1604,8 @@ mod tests {
     fn test_tycheck_datalit_nested_list_in_tuple() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @(@[@1, @2, @3], @100)"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors - tuple with nested list.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1587,8 +1615,8 @@ mod tests {
     fn test_tycheck_datalit_set() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @set { @1, @2, @3 }"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors - set of integers.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1598,8 +1626,8 @@ mod tests {
     fn test_tycheck_datalit_deeply_nested() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @(@[@(@1, @2)], @[@(@3, @4)])"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors - deeply nested structure.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
@@ -1609,8 +1637,8 @@ mod tests {
     fn test_tycheck_datalit_tuple_in_list() {
         let db = crate::Database::default();
         let source = bct::input::Source::new(&db, S("let x = @[@(@1, @2), @(@3, @4), @(@5, @6)]"));
-        let script = crate::parser::parse(&db, source);
-        let tycheck_result = type_check(&db, script);
+        let parse_result = crate::parser::parse(&db, source);
+        let tycheck_result = type_check(&db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
 
         // Should have no errors - list of tuples.
         assert_eq!(tycheck_result.errors(&db).len(), 0);

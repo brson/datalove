@@ -12,7 +12,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Parse the script.
     let source = bct::input::Source::new(&db, script_text.S());
-    let script = datafun::parser::parse(&db, source);
+    let script = datafun::parser::parse_for_diagnostics(&db, source);
 
     // Load package world from sys/ directory.
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -53,9 +53,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     }
 
     // Typecheck the script with package world context.
+    // TODO: Pass actual spans once available
     let script_typecheck = datafun::tycheck::type_check_with_package_world(
         &db,
         script,
+        vec![],
+        vec![],
         package_world,
         typecheck_result,
     );

@@ -38,28 +38,33 @@ pub fn parse_script_unit<'db>(
     let units = &script.units(db);
     let unit = units[unit_index];
     let source = unit.source(db);
-    parse(db, source)
+    parse(db, source).script
 }
 
-#[salsa::tracked]
+/// Parse a Source into a datafun script with span information.
+///
+/// NOTE: This must be called from within a Salsa tracked function because it
+/// creates tracked structs internally. For production code, call this from within
+/// a tracked context. For tests, use parse_for_test() wrapper.
 pub fn parse<'db>(
     db: &'db dyn crate::Db,
     source: Source,
-) -> ast::Script<'db> {
+) -> ast::ParseResult<'db> {
     let chunk = source_map::basic_source_map(db, source);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
     parse_bracer(db, bracer)
 }
 
-#[salsa::tracked]
 fn parse_bracer<'db>(
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
-) -> ast::Script<'db> {
+) -> ast::ParseResult<'db> {
     let mut parser = Parser {
         db,
         bracer,
+        expr_spans: Vec::new(),
+        datalit_expr_spans: Vec::new(),
     };
 
     // Get line iterator - newlines inside balanced braces don't count as line breaks.
@@ -93,7 +98,8 @@ fn parse_bracer<'db>(
         .collect();
 
     let statements = parser.parse_statements(lines);
-    ast::Script::new(db, statements)
+    let script = ast::Script::new(db, statements);
+    ast::ParseResult::new(script, parser.expr_spans, parser.datalit_expr_spans)
 }
 
 /// Check if a token acts as a line separator.
@@ -109,6 +115,8 @@ fn is_line_separator<'db>(db: &'db dyn crate::Db, token: Token<'db>) -> bool {
 struct Parser<'db> {
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
+    expr_spans: Vec<(ast::ExprFun<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
+    datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
 }
 
 impl<'db> Parser<'db> {
@@ -630,7 +638,15 @@ impl<'db> Parser<'db> {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> ast::ExprFun<'db> {
-        self.parse_expr_binop(tokens, 0)
+        // Capture span before parsing.
+        let (text, span) = self.peek_text_span(tokens);
+
+        let expr = self.parse_expr_binop(tokens, 0);
+
+        // Record span for this expression.
+        self.record_expr_span(expr, text, span);
+
+        expr
     }
 
     // Parse binary operations with precedence climbing algorithm.
@@ -972,6 +988,9 @@ impl<'db> Parser<'db> {
         let parse_result = datalit::parser::parse_from_tokens(self.db, datalit_tokens);
         let datalit_expr = parse_result.expr;
 
+        // Save datalit expr_spans for later use in type checking.
+        self.datalit_expr_spans.extend(parse_result.expr_spans);
+
         ast::ExprFun::new(
             self.db,
             ast::ExprFunKind::Datalit(datalit_expr)
@@ -1168,6 +1187,43 @@ impl<'db> Parser<'db> {
             (self.source_text(), 0..0)
         }
     }
+
+    /// Record an expression's source location for diagnostic emission.
+    fn record_expr_span(&mut self, expr: ast::ExprFun<'db>, text: bct::text::Text<'db>, span: datalove_diagnostic::ByteSpan) {
+        self.expr_spans.push((expr, text, span));
+    }
+}
+
+/// Tracked wrapper for tests that need Salsa queries.
+#[salsa::tracked]
+#[cfg(test)]
+pub(crate) fn parse_for_test<'db>(
+    db: &'db dyn crate::Db,
+    source: Source,
+) -> ast::Script<'db> {
+    parse(db, source).script
+}
+
+/// Public tracked wrapper for integration tests that returns just the Script.
+/// Integration tests are compiled as separate binaries and need pub access.
+#[salsa::tracked]
+pub fn parse_integration_test<'db>(
+    db: &'db dyn crate::Db,
+    source: Source,
+) -> ast::Script<'db> {
+    parse(db, source).script
+}
+
+/// Public tracked wrapper for integration code to enable diagnostic accumulation.
+/// This function should be called before parse() to accumulate diagnostics,
+/// then parse() can be called separately to get the full ParseResult.
+/// Returns just the Script to satisfy Salsa's type requirements.
+#[salsa::tracked]
+pub fn parse_for_diagnostics<'db>(
+    db: &'db dyn crate::Db,
+    source: Source,
+) -> ast::Script<'db> {
+    parse(db, source).script
 }
 
 
@@ -1179,7 +1235,7 @@ mod tests {
     fn test_parse_let_simple() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @42"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1195,7 +1251,7 @@ mod tests {
     fn test_parse_let_with_type() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x: @u32 = @42"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1211,7 +1267,7 @@ mod tests {
     fn test_parse_fun_simple() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("fun foo()\nend fun"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1229,7 +1285,7 @@ mod tests {
     fn test_parse_fun_with_params() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("fun increment(accum: @u64, amount: @u8): !@u64\nend fun"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1248,7 +1304,7 @@ mod tests {
     fn test_parse_fun_with_list_param() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("fun identity(a: @[@u32]): @[@u32]\n  ret a\nend fun"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1279,7 +1335,7 @@ mod tests {
     fn test_parse_fun_multiline_params() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("fun increment(\n  accum: @u64, amount: @u8,\n): !@u64\n  ret @0\nend fun"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1301,7 +1357,7 @@ mod tests {
     fn test_parse_require() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("require module sys/std/bool"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1318,7 +1374,7 @@ mod tests {
     fn test_parse_import() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("import u32.negate"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1334,7 +1390,7 @@ mod tests {
     fn test_parse_import_with_require() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("require module sys/std/u32\nimport u32.negate"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 2);
         match &statements[0] {
@@ -1356,7 +1412,7 @@ mod tests {
     fn test_parse_expr_bare_name() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = accum"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1377,7 +1433,7 @@ mod tests {
     fn test_parse_expr_datalit() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @42"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1398,7 +1454,7 @@ mod tests {
     fn test_parse_expr_binop_checked() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = a +! b"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1418,7 +1474,7 @@ mod tests {
     fn test_parse_expr_binop_optional() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = a +? b"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1438,7 +1494,7 @@ mod tests {
     fn test_parse_expr_binop_basic() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = a + b"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1458,7 +1514,7 @@ mod tests {
     fn test_parse_expr_binop_comparison() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = a .< b"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1480,7 +1536,7 @@ mod tests {
         // "a + b * c" should parse as "a + (b * c)"
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = a + b * c"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1508,7 +1564,7 @@ mod tests {
     fn test_parse_fun_with_binop_in_ret() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("fun increment(accum: @u64, amount: @u8): !@u64\n  ret accum +! amount\nend fun"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1536,7 +1592,7 @@ mod tests {
     fn test_parse_multiple_statements_with_semicolon() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @1; let y = @2"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 2);
         match &statements[0] {
@@ -1557,7 +1613,7 @@ mod tests {
     fn test_parse_semicolon_with_newline_mix() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @1; let y = @2\nlet z = @3"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 3);
         match &statements[0] {
@@ -1584,7 +1640,7 @@ mod tests {
     fn test_parse_require_with_semicolon() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("require module sys/std/bool; let x = @42"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 2);
         match &statements[0] {
@@ -1609,7 +1665,7 @@ mod tests {
     fn test_parse_datalit_tuple() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @(1, 2, 3)"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1630,7 +1686,7 @@ mod tests {
     fn test_parse_datalit_list() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @[1, 2, 3]"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1651,7 +1707,7 @@ mod tests {
     fn test_parse_datalit_map() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @map { @1 = @10, @2 = @20 }"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1672,7 +1728,7 @@ mod tests {
     fn test_parse_datalit_nested_tuple_in_list() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @[(1, 2), (3, 4)]"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1693,7 +1749,7 @@ mod tests {
     fn test_parse_datalit_nested_list_in_tuple() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @(@[@1, @2, @3], @100)"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1714,7 +1770,7 @@ mod tests {
     fn test_parse_datalit_set() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @set { @1, @2, @3 }"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
@@ -1735,7 +1791,7 @@ mod tests {
     fn test_parse_datalit_deeply_nested() {
         let ref db = crate::Database::default();
         let source = Source::new(db, S("let x = @(@[@(@1, @2)], @[@(@3, @4)])"));
-        let script = parse(db, source);
+        let script = parse_for_test(db, source);
         let statements = script.statements(db);
         assert_eq!(statements.len(), 1);
         match &statements[0] {
