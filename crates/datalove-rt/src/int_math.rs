@@ -145,9 +145,34 @@ pub(crate) unsafe fn int_neg_impl(
     result_out: *mut u8,
 ) -> RtStatus {
     unsafe {
-        let a = rtdt_int_to_ibig(a_in as *const rtdt::Int);
-        let result = -a;
-        ibig_to_rtdt_int(rt, result, result_out as *mut rtdt::Int)
+        let a = &*(a_in as *const rtdt::Int);
+        let result = &mut *(result_out as *mut rtdt::Int);
+
+        let size_and_sign = a.size_and_sign;
+        let abs_size = size_and_sign.abs() as usize;
+
+        // Handle zero.
+        if abs_size == 0 {
+            result.data = std::ptr::null();
+            result.size_and_sign = 0;
+            result.capacity = 0;
+            return RtStatus::Ok;
+        }
+
+        // Allocate limbs for result.
+        let limbs_ptr = rt.alloc.alloc(4, 4, abs_size as u32) as *mut u32;
+
+        // Copy limbs.
+        let src_limbs = std::slice::from_raw_parts(a.data, abs_size);
+        let dst_limbs = std::slice::from_raw_parts_mut(limbs_ptr, abs_size);
+        dst_limbs.copy_from_slice(src_limbs);
+
+        // Negate the sign.
+        result.data = limbs_ptr as *const u32;
+        result.size_and_sign = -size_and_sign;
+        result.capacity = abs_size as u32;
+
+        RtStatus::Ok
     }
 }
 

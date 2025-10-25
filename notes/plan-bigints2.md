@@ -1,6 +1,9 @@
 # Plan: Convert int_math from ibig to Custom Implementation
 
-## Status: PENDING
+## Status: IN PROGRESS
+
+## Progress
+- ✅ Phase 1: Negation (Trivial)
 
 ## Current State
 - `int_math.rs` uses `ibig` internally for all bigint operations
