@@ -435,18 +435,10 @@ impl<'db> DynParser<'db> {
                             }
                         };
 
-                        let layout = if sub_parser.peek_sigil(Sigil::Comma) {
-                            sub_parser.eat_sigil(Sigil::Comma);
-                            sub_parser.parse_tensor_layout()
-                        } else {
-                            None
-                        };
-
                         ast::TypeHint::Tensor(ast::TypeHintTensor::new(
                             self.db,
                             element_type,
                             rank,
-                            layout,
                         ))
                     }
                     _ => {
@@ -1343,19 +1335,6 @@ impl<'db> DynParser<'db> {
         }
     }
 
-    fn parse_tensor_layout(&mut self) -> Option<ast::TensorLayoutHint> {
-        match self.peek_word() {
-            Some("row_major") => {
-                self.eat_word("row_major");
-                Some(ast::TensorLayoutHint::RowMajor)
-            }
-            Some("col_major") => {
-                self.eat_word("col_major");
-                Some(ast::TensorLayoutHint::ColMajor)
-            }
-            _ => None,
-        }
-    }
 
     /// Get Text for error reporting.
     /// Try source_text first, otherwise extract from current token.

@@ -25,19 +25,18 @@ This plan covers implementing full datalit support for tensors, building on the 
 
 ### Type Hints
 
-Tensor type hints specify element type, rank, and optionally layout:
+Tensor type hints specify element type and rank:
 
 ```
-tensor<u32, 2>              # 2D tensor of u32, default row-major layout
+tensor<u32, 2>              # 2D tensor of u32
 tensor<f32, 3>              # 3D tensor of f32
 tensor<i32, 1>              # 1D tensor (vector)
-tensor<bool, 4, col_major>  # 4D tensor with column-major layout
+tensor<bool, 4>             # 4D tensor of bool
 ```
 
 **Type hint components:**
 - `element_type`: Any valid datalit type (u32, f32, tuples, structs, etc.)
 - `rank`: Positive integer literal (1, 2, 3, ...)
-- `layout` (optional): `row_major` or `col_major` (defaults to `row_major`)
 
 ### Expression Literals
 
@@ -50,14 +49,14 @@ Tensor expression literals provide shape and flat data:
 **Expression components:**
 - `tensor` keyword
 - First `[...]`: Shape list (dimensions), must match rank from type hint
-- Second `[...]`: Flat data list in row-major or column-major order
+- Second `[...]`: Flat data list in row-major order
 
 **Full examples:**
 
 ```
-# 2D tensor, row-major (default)
+# 2D tensor
 @tensor<u32, 2>[2, 3][1 2 3, 4 5 6]
-# Produces:
+# Produces (in row-major order):
 # [[1, 2, 3],
 #  [4, 5, 6]]
 
@@ -66,19 +65,13 @@ Tensor expression literals provide shape and flat data:
 
 # 1D tensor (vector)
 @tensor<f32, 1>[5][1.0, 2.0, 3.0, 4.0, 5.0]
-
-# Column-major layout
-@tensor<u32, 2, col_major>[2, 3][1 2 3, 4 5 6]
-# Produces (in column-major order):
-# [[1, 3, 5],
-#  [2, 4, 6]]
 ```
 
 **Rationale:**
 - Flat data avoids nested list parsing ambiguity
 - Explicit shape makes rank/dimensions clear
 - Follows existing keyword pattern (like `data`, `err`)
-- Layout in type hint rather than expression (type-level property)
+- All literals use row-major layout (layout is a runtime property, not a type property)
 
 ## Implementation Components
 
@@ -946,3 +939,28 @@ All core functionality has been implemented and tested:
 - No tests for very high rank tensors (rank > 4)
 - No tests for nested types (tensors of tuples/structs) - though supported by implementation
 - No tests for tensors in other containers (lists of tensors, etc.) - though supported by implementation
+
+### Layout Removal (2025-10-24)
+
+**Change**: Removed layout from the tensor type system entirely.
+
+**Rationale**: Layout is a runtime property, not a type property. The runtime `Tensor` struct has a `layout` field that is set at instantiation time and can be changed by operations like transpose. Having layout in the type created these problems:
+- Two tensors with different layouts would be different types (wrong semantics)
+- Runtime operations change layout dynamically
+- Layout is a physical representation detail, not a logical type property
+
+**Changes made**:
+1. **AST (ast.rs)**: Removed `TensorLayoutHint` enum and `layout` field from `TypeHintTensor`
+2. **Parser (parser.rs)**: Removed `parse_tensor_layout` function and layout parsing
+3. **Type checker (tycheck.rs)**: Removed `TensorLayout` enum, `layout` field from `TypeTensor`, and layout handling
+4. **Pretty printing (pretty.rs)**: Removed layout printing for tensor types and type hints
+5. **Instantiation (instantiate2.rs)**: Removed layout parameter, always use `RowMajor` for literals
+6. **AST serde (ast_serde.rs)**: Removed layout field and `TensorLayoutHint` serde type
+7. **Tests**: Updated all test files and expected outputs
+
+**Current syntax**:
+- Type hint: `tensor<element_type, rank>` (no layout parameter)
+- Expression: `@tensor [shape] [flat_data]`
+- Example: `: tensor<u32, 2> / @tensor [2, 3] [1 2 3, 4 5 6]`
+- All tensor literals are created with row-major layout in memory
+- Runtime operations can still work with different layouts (transpose, etc.)

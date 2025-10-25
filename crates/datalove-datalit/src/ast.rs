@@ -148,18 +148,10 @@ pub struct TypeHintResult<'db> {
     pub inner_type: TypeHintAndHeap<'db>,
 }
 
-#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub enum TensorLayoutHint {
-    RowMajor,
-    ColMajor,
-}
-
 #[salsa::tracked]
 pub struct TypeHintTensor<'db> {
     pub element_type: TypeHintAndHeap<'db>,
     pub rank: u32,
-    pub layout: Option<TensorLayoutHint>,
 }
 
 #[salsa::tracked]

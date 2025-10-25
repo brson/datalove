@@ -170,7 +170,6 @@
               }
             }
           },
-          "layout": null,
           "rank": 2
         }
       }
@@ -188,7 +187,6 @@
     },
     "heap": "",
     "kind": "Tensor",
-    "layout": "RowMajor",
     "rank": 2
   }
 }

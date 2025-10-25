@@ -206,7 +206,7 @@ fn instantiate_expr_into<'db>(
 
         (Expr::Tensor(tensor_expr), Type::Tensor(tensor_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tensor(db, rt, &tensor_expr.shape(db), &tensor_expr.elements(db), tensor_ty.element_type(db), tensor_ty.layout(db), tydesc_table, tydesc, dest_ptr)
+            instantiate_tensor(db, rt, &tensor_expr.shape(db), &tensor_expr.elements(db), tensor_ty.element_type(db), tydesc_table, tydesc, dest_ptr)
         }
 
         _ => bail!("Unsupported expression/type combination for instantiation"),
@@ -859,7 +859,6 @@ fn instantiate_tensor<'db>(
     shape: &[u32],
     elements: &[ExprFull<'db>],
     element_type: TypeAndHeap<'db>,
-    layout: crate::tycheck::TensorLayout,
     tydesc_table: &mut TyDescTable<'db>,
     _tensor_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
@@ -902,22 +901,11 @@ fn instantiate_tensor<'db>(
         let strides_ptr = if rank > 0 {
             let strides_array = rt.alloc.alloc(std::mem::size_of::<u32>() as u32, std::mem::align_of::<u32>() as u32, rank as u32) as *mut u32;
 
-            // Compute strides based on layout.
-            match layout {
-                crate::tycheck::TensorLayout::RowMajor => {
-                    // RowMajor: strides[i] = product of dims[i+1..rank].
-                    for i in 0..rank {
-                        let stride = shape[i+1..rank].iter().map(|&d| d as u32).product::<u32>();
-                        *strides_array.add(i) = if stride == 0 { 1 } else { stride };
-                    }
-                }
-                crate::tycheck::TensorLayout::ColMajor => {
-                    // ColMajor: strides[i] = product of dims[0..i].
-                    for i in 0..rank {
-                        let stride = shape[0..i].iter().map(|&d| d as u32).product::<u32>();
-                        *strides_array.add(i) = if stride == 0 { 1 } else { stride };
-                    }
-                }
+            // Compute strides for row-major layout.
+            // RowMajor: strides[i] = product of dims[i+1..rank].
+            for i in 0..rank {
+                let stride = shape[i+1..rank].iter().map(|&d| d as u32).product::<u32>();
+                *strides_array.add(i) = if stride == 0 { 1 } else { stride };
             }
 
             strides_array as *const u32
@@ -925,11 +913,8 @@ fn instantiate_tensor<'db>(
             std::ptr::null()
         };
 
-        // Convert layout to rtdt::TensorLayout.
-        let rtdt_layout = match layout {
-            crate::tycheck::TensorLayout::RowMajor => rtdt::TensorLayout::RowMajor,
-            crate::tycheck::TensorLayout::ColMajor => rtdt::TensorLayout::ColMajor,
-        };
+        // Always use row-major layout for tensor literals.
+        let rtdt_layout = rtdt::TensorLayout::RowMajor;
 
         // Fill in the Tensor struct.
         let tensor_ptr = dest_ptr as *mut rtdt::Tensor;
@@ -2281,9 +2266,9 @@ mod tests {
     }
 
     #[test]
-    fn test_instantiate_tensor_col_major() -> AnyResult<()> {
+    fn test_instantiate_tensor_rank4() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": tensor<u32, 2, col_major> / @tensor [2, 3] [1 2 3, 4 5 6]")?;
+        let typechecked = compile_str(&db, ": tensor<u32, 4> / @tensor [2, 2, 2, 2] [1 2, 3 4, 5 6, 7 8, 9 10, 11 12, 13 14, 15 16]")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2297,21 +2282,21 @@ mod tests {
             assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
-            assert_eq!((*tensor).capacity_elems, 6);
+            assert_eq!((*tensor).capacity_elems, 16);
             assert_eq!((*tensor).offset_elems, 0);
-            assert_eq!((*tensor).layout, rtdt::TensorLayout::ColMajor);
+            assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
 
-            // Check shape [2, 3]
-            let shape = std::slice::from_raw_parts((*tensor).shape, 2);
-            assert_eq!(shape, &[2, 3]);
+            // Check shape [2, 2, 2, 2]
+            let shape = std::slice::from_raw_parts((*tensor).shape, 4);
+            assert_eq!(shape, &[2, 2, 2, 2]);
 
-            // Check strides [1, 2] (col-major)
-            let strides = std::slice::from_raw_parts((*tensor).strides, 2);
-            assert_eq!(strides, &[1, 2]);
+            // Check strides [8, 4, 2, 1] (row-major for 4D)
+            let strides = std::slice::from_raw_parts((*tensor).strides, 4);
+            assert_eq!(strides, &[8, 4, 2, 1]);
 
-            // Check data [1, 2, 3, 4, 5, 6]
-            let data = std::slice::from_raw_parts((*tensor).ptr_base as *const u32, 6);
-            assert_eq!(data, &[1, 2, 3, 4, 5, 6]);
+            // Check data
+            let data = std::slice::from_raw_parts((*tensor).ptr_base as *const u32, 16);
+            assert_eq!(data, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         }
         Ok(())
     }

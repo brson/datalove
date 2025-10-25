@@ -1,1 +1,0 @@
-: tensor<u32, 2, col_major> / @tensor [2, 3] [1 2 3, 4 5 6]

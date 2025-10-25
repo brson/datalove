@@ -131,13 +131,6 @@ pub struct TypeHintResult {
 pub struct TypeHintTensor {
     pub element_type: Box<TypeHintAndHeap>,
     pub rank: u32,
-    pub layout: Option<TensorLayoutHint>,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum TensorLayoutHint {
-    RowMajor,
-    ColMajor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -450,19 +443,10 @@ impl TypeHintTensor {
         TypeHintTensor {
             element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type(db))),
             rank: ast.rank(db),
-            layout: ast.layout(db).map(TensorLayoutHint::from_ast),
         }
     }
 }
 
-impl TensorLayoutHint {
-    pub fn from_ast(ast: crate::ast::TensorLayoutHint) -> Self {
-        match ast {
-            crate::ast::TensorLayoutHint::RowMajor => TensorLayoutHint::RowMajor,
-            crate::ast::TensorLayoutHint::ColMajor => TensorLayoutHint::ColMajor,
-        }
-    }
-}
 
 impl ExprAndHeap {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAndHeap<'db>) -> Self {

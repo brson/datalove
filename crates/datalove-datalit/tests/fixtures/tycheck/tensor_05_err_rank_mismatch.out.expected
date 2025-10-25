@@ -87,7 +87,6 @@
             "heap": "Omitted",
             "type_hint": "U32"
           },
-          "layout": null,
           "rank": 3
         }
       }

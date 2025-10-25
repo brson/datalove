@@ -91,9 +91,98 @@
                 "heap": "Omitted"
               },
               "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "9"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "10"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "11"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "12"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "13"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "14"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "15"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "16"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
             }
           ],
           "shape": [
+            2,
             2,
             2,
             2
@@ -108,18 +197,18 @@
         "Tensor": {
           "element_type": {
             "heap": "Omitted",
-            "type_hint": "I32"
+            "type_hint": "U32"
           },
-          "rank": 3
+          "rank": 4
         }
       }
     }
   },
   "errors": [],
   "root_type": {
-    "element_type": "i32",
+    "element_type": "u32",
     "heap": "",
     "kind": "Tensor",
-    "rank": 3
+    "rank": 4
   }
 }

@@ -114,18 +114,10 @@ pub struct TypeResult<'db> {
     pub inner_type: TypeAndHeap<'db>,
 }
 
-#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub enum TensorLayout {
-    RowMajor,
-    ColMajor,
-}
-
 #[salsa::tracked]
 pub struct TypeTensor<'db> {
     pub element_type: TypeAndHeap<'db>,
     pub rank: u32,
-    pub layout: TensorLayout,
 }
 
 /// Type error representation.
@@ -523,8 +515,7 @@ fn synthesize<'db>(
             // Rank is the length of the shape vector.
             let rank = shape.len() as u32;
 
-            // Default to RowMajor layout.
-            Type::Tensor(TypeTensor::new(db, first_type, rank, TensorLayout::RowMajor))
+            Type::Tensor(TypeTensor::new(db, first_type, rank))
         }
 
         Expr::ParseError(_) => return Err(TypeError::CannotSynthesize),
@@ -1124,12 +1115,7 @@ pub fn convert_type_hint<'db>(
 
         TypeHint::Tensor(t) => {
             let element_type = convert_type_hint(db, t.element_type(db))?;
-            let layout = match t.layout(db) {
-                Some(TensorLayoutHint::RowMajor) => TensorLayout::RowMajor,
-                Some(TensorLayoutHint::ColMajor) => TensorLayout::ColMajor,
-                None => TensorLayout::RowMajor, // Default to row-major
-            };
-            Type::Tensor(TypeTensor::new(db, element_type, t.rank(db), layout))
+            Type::Tensor(TypeTensor::new(db, element_type, t.rank(db)))
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
@@ -1261,7 +1247,6 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
 
         (Type::Tensor(t1), Type::Tensor(t2)) => {
             t1.rank(db) == t2.rank(db)
-                && t1.layout(db) == t2.layout(db)
                 && types_and_heaps_equivalent(db, &t1.element_type(db), &t2.element_type(db))
         }
 
@@ -1376,11 +1361,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             let elem = t.element_type(db);
             let heap = heap_to_string(elem.heap(db));
             let ty_str = type_to_string(db, elem.ty(db));
-            let layout = match t.layout(db) {
-                TensorLayout::RowMajor => "",
-                TensorLayout::ColMajor => ", col_major",
-            };
-            format!("@tensor<{}{}, {}{}>", heap, ty_str, t.rank(db), layout)
+            format!("@tensor<{}{}, {}>", heap, ty_str, t.rank(db))
         }
     }
 }

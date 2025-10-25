@@ -64,7 +64,6 @@
     "element_type": "u32",
     "heap": "@",
     "kind": "Tensor",
-    "layout": "RowMajor",
     "rank": 2
   }
 }

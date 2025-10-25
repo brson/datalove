@@ -87,7 +87,6 @@
             "heap": "Omitted",
             "type_hint": "U32"
           },
-          "layout": null,
           "rank": 2
         }
       }
@@ -98,7 +97,6 @@
     "element_type": "u32",
     "heap": "",
     "kind": "Tensor",
-    "layout": "RowMajor",
     "rank": 2
   }
 }
