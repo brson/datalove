@@ -646,12 +646,32 @@ fn pretty_expr<'db>(
             }
             out.push_str("] [");
             let elements = t.elements(db);
-            for (i, elem) in elements.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
+            let rank = shape.len();
+
+            if rank == 1 {
+                // 1D tensor: comma-separated elements.
+                for (i, elem) in elements.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    pretty_expr_full(db, *elem, out, indent);
                 }
-                pretty_expr_full(db, *elem, out, indent);
+            } else {
+                // 2D+ tensor: comma-separated rows, space-separated elements.
+                let row_size = *shape.last().unwrap() as usize;
+                for (row_idx, row) in elements.chunks(row_size).enumerate() {
+                    if row_idx > 0 {
+                        out.push_str(", ");
+                    }
+                    for (elem_idx, elem) in row.iter().enumerate() {
+                        if elem_idx > 0 {
+                            out.push(' ');
+                        }
+                        pretty_expr_full(db, *elem, out, indent);
+                    }
+                }
             }
+
             out.push(']');
         }
 

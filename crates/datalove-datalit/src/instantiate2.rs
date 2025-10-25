@@ -2211,7 +2211,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_2d_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": tensor<u32, 2> / @tensor [2, 3] [1, 2, 3, 4, 5, 6]")?;
+        let typechecked = compile_str(&db, ": tensor<u32, 2> / @tensor [2, 3] [1 2 3, 4 5 6]")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2283,7 +2283,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_col_major() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": tensor<u32, 2, col_major> / @tensor [2, 3] [1, 2, 3, 4, 5, 6]")?;
+        let typechecked = compile_str(&db, ": tensor<u32, 2, col_major> / @tensor [2, 3] [1 2 3, 4 5 6]")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);

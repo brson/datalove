@@ -795,19 +795,85 @@ impl<'db> DynParser<'db> {
                     }
                 };
 
-                // Parse data: [elem1, elem2, ...]
+                // Parse data: For rank 1, comma-separated elements; for rank 2+, comma-separated rows with space-separated elements.
                 let elements = match self.peek() {
                     Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
                         self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                        };
-                        sub_parser.parse_comma_separated(|p| p.parse_expr_full())
+
+                        let rank = shape.len();
+                        if rank == 0 {
+                            let (text, span) = self.current_text_span();
+                            let message = InternedText::new(self.db, "tensor rank must be at least 1".S());
+
+                            DiagnosticBuilder::error(self.db, "tensor rank must be at least 1")
+                                .code("D012")
+                                .primary_label(text, span.clone(), "invalid rank")
+                                .emit_parse();
+
+                            return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
+                        }
+
+                        if rank == 1 {
+                            // 1D tensor: comma-separated elements [1, 2, 3, 4, 5].
+                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                            let mut sub_parser = DynParser {
+                                db: self.db,
+                                tokens,
+                                pos: 0,
+                                source_text: self.source_text,
+                                expr_spans: Vec::new(),
+                            };
+                            sub_parser.parse_comma_separated(|p| p.parse_expr_full())
+                        } else {
+                            // 2D+ tensor: comma-separated rows, space-separated elements [1 2 3, 4 5 6].
+                            let row_size = *shape.last().unwrap() as usize;
+                            let all_tokens: Vec<_> = iter.collect();
+
+                            // Split tokens by commas to get rows.
+                            let rows = self.split_tokens_by_comma(&all_tokens);
+                            let mut all_elements = Vec::new();
+
+                            for row_tokens in rows {
+                                // Filter spaces within the row to get individual element tokens.
+                                let elem_tokens: Vec<_> = row_tokens.into_iter()
+                                    .filter_map(|t| t.without_space(self.db))
+                                    .collect();
+
+                                // Parse each element in the row.
+                                let mut row_parser = DynParser {
+                                    db: self.db,
+                                    tokens: elem_tokens.clone(),
+                                    pos: 0,
+                                    source_text: self.source_text,
+                                    expr_spans: Vec::new(),
+                                };
+
+                                let mut row_elements = Vec::new();
+                                while row_parser.pos < row_parser.tokens.len() {
+                                    row_elements.push(row_parser.parse_expr_full());
+                                }
+
+                                // Validate row size matches the last dimension.
+                                if row_elements.len() != row_size {
+                                    let (text, span) = self.current_text_span();
+                                    let message = InternedText::new(
+                                        self.db,
+                                        format!("expected {} elements per row but got {}", row_size, row_elements.len()).S()
+                                    );
+
+                                    DiagnosticBuilder::error(self.db, "row size mismatch")
+                                        .code("D013")
+                                        .primary_label(text, span.clone(), &format!("expected {} elements", row_size))
+                                        .emit_parse();
+
+                                    return ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
+                                }
+
+                                all_elements.extend(row_elements);
+                            }
+
+                            all_elements
+                        }
                     }
                     _ => {
                         let (text, span) = self.current_text_span();
@@ -1161,6 +1227,34 @@ impl<'db> DynParser<'db> {
             }
         }
         items
+    }
+
+    fn split_tokens_by_comma(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
+        let mut rows = Vec::new();
+        let mut current_row = Vec::new();
+
+        for token in tokens {
+            match token {
+                TreeToken::Token(tok) if tok.kind(self.db) == TokenKind::Sigil(Sigil::Comma) => {
+                    // Found a comma, finish current row.
+                    if !current_row.is_empty() {
+                        rows.push(current_row.clone());
+                        current_row.clear();
+                    }
+                }
+                _ => {
+                    // Add token to current row.
+                    current_row.push(token.clone());
+                }
+            }
+        }
+
+        // Add the last row if non-empty.
+        if !current_row.is_empty() {
+            rows.push(current_row);
+        }
+
+        rows
     }
 
     fn peek(&self) -> Option<TreeToken<'db>> {

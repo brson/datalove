@@ -44,7 +44,7 @@ tensor<bool, 4, col_major>  # 4D tensor with column-major layout
 Tensor expression literals provide shape and flat data:
 
 ```
-@tensor [2, 3] [1, 2, 3, 4, 5, 6]
+@tensor [2, 3] [1 2 3, 4 5 6]
 ```
 
 **Expression components:**
@@ -56,19 +56,19 @@ Tensor expression literals provide shape and flat data:
 
 ```
 # 2D tensor, row-major (default)
-@tensor<u32, 2>[2, 3][1, 2, 3, 4, 5, 6]
+@tensor<u32, 2>[2, 3][1 2 3, 4 5 6]
 # Produces:
 # [[1, 2, 3],
 #  [4, 5, 6]]
 
 # 3D tensor
-@tensor<i32, 3>[2, 2, 2][1, 2, 3, 4, 5, 6, 7, 8]
+@tensor<i32, 3>[2, 2, 2][1 2, 3 4, 5 6, 7 8]
 
 # 1D tensor (vector)
 @tensor<f32, 1>[5][1.0, 2.0, 3.0, 4.0, 5.0]
 
 # Column-major layout
-@tensor<u32, 2, col_major>[2, 3][1, 2, 3, 4, 5, 6]
+@tensor<u32, 2, col_major>[2, 3][1 2 3, 4 5 6]
 # Produces (in column-major order):
 # [[1, 3, 5],
 #  [2, 4, 6]]
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_parse_tensor_expr_2d() {
-        // Parse: @tensor [2, 3] [1, 2, 3, 4, 5, 6]
+        // Parse: @tensor [2, 3] [1 2 3, 4 5 6]
     }
 
     #[test]
@@ -403,25 +403,25 @@ Add to `types_and_heaps_equivalent`:
 mod tests {
     #[test]
     fn test_typecheck_tensor_synthesis() {
-        // @tensor [2, 3] [1, 2, 3, 4, 5, 6]
+        // @tensor [2, 3] [1 2 3, 4 5 6]
         // Should synthesize: tensor<int, 2>
     }
 
     #[test]
     fn test_typecheck_tensor_with_hint() {
-        // @tensor<u32, 2>[2, 3][1, 2, 3, 4, 5, 6]
+        // @tensor<u32, 2>[2, 3][1 2 3, 4 5 6]
         // Should check: all elements are u32
     }
 
     #[test]
     fn test_typecheck_tensor_shape_mismatch() {
-        // @tensor [2, 3] [1, 2, 3, 4, 5]  // Only 5 elements, needs 6
+        // @tensor [2, 3] [1 2 3, 4 5]  // Only 5 elements, needs 6
         // Should error
     }
 
     #[test]
     fn test_typecheck_tensor_rank_mismatch() {
-        // @tensor<u32, 3>[2, 3][1, 2, 3, 4, 5, 6]  // Rank 3 vs rank 2
+        // @tensor<u32, 3>[2, 3][1 2 3, 4 5 6]  // Rank 3 vs rank 2
         // Should error
     }
 
@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_2d_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@tensor<u32, 2>[2, 3][1, 2, 3, 4, 5, 6]")?;
+        let typechecked = compile_str(&db, "@tensor<u32, 2>[2, 3][1 2 3, 4 5 6]")?;
         let rt = datalove_rt::rt_local::RtLocal::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -647,9 +647,9 @@ mod tests {
             let strides = std::slice::from_raw_parts((*tensor).strides, 2);
             assert_eq!(strides, &[3, 1]);
 
-            // Check data: [1, 2, 3, 4, 5, 6]
+            // Check data: [1 2 3, 4 5 6]
             let data = std::slice::from_raw_parts((*tensor).ptr_base as *const u32, 6);
-            assert_eq!(data, &[1, 2, 3, 4, 5, 6]);
+            assert_eq!(data, &[1 2 3, 4 5 6]);
         }
 
         Ok(())
@@ -662,12 +662,12 @@ mod tests {
 
     #[test]
     fn test_instantiate_tensor_3d() -> AnyResult<()> {
-        // @tensor<i32, 3>[2, 2, 2][1, 2, 3, 4, 5, 6, 7, 8]
+        // @tensor<i32, 3>[2, 2, 2][1 2, 3 4, 5 6, 7 8]
     }
 
     #[test]
     fn test_instantiate_tensor_col_major() -> AnyResult<()> {
-        // @tensor<u32, 2, col_major>[2, 3][1, 2, 3, 4, 5, 6]
+        // @tensor<u32, 2, col_major>[2, 3][1 2 3, 4 5 6]
         // Should have strides [1, 2] (col-major)
     }
 }
@@ -728,7 +728,7 @@ mod tests {
 
     #[test]
     fn test_pretty_tensor_expr() {
-        // tensor [2, 3] [1, 2, 3, 4, 5, 6]
+        // tensor [2, 3] [1 2 3, 4 5 6]
     }
 }
 ```
@@ -755,12 +755,12 @@ fn test_tensor_with_structs() -> AnyResult<()> {
 
 #[test]
 fn test_tensor_nested_in_list() -> AnyResult<()> {
-    // @[tensor<u32, 2>[2, 2][1, 2, 3, 4], tensor<u32, 2>[2, 2][5, 6, 7, 8]]
+    // @[tensor<u32, 2>[2, 2][1 2, 3 4], tensor<u32, 2>[2, 2][5, 6, 7, 8]]
 }
 
 #[test]
 fn test_tensor_in_option() -> AnyResult<()> {
-    // @option<tensor<u32, 2>>(tensor [2, 2] [1, 2, 3, 4])
+    // @option<tensor<u32, 2>>(tensor [2, 2] [1 2, 3 4])
 }
 ```
 
@@ -898,7 +898,7 @@ All core functionality has been implemented and tested:
 1. **AST and Parser** - Tensor type hints and expressions parse correctly
    - Type hint syntax: `tensor<element_type, rank>` or `tensor<element_type, rank, layout>`
    - Expression syntax: `tensor [shape] [flat_data]`
-   - Example: `: tensor<u32, 2> / @tensor [2, 3] [1, 2, 3, 4, 5, 6]`
+   - Example: `: tensor<u32, 2> / @tensor [2, 3] [1 2 3, 4 5 6]`
 
 2. **Type Checking** - Both synthesis and checking modes work
    - Syn-Tensor: Synthesizes tensor type from elements
@@ -913,7 +913,7 @@ All core functionality has been implemented and tested:
 
 4. **Pretty Printing** - Verified through roundtrip tests
    - Type hints: `tensor<u32, 2>`, `tensor<f32, 3, col_major>`
-   - Expressions: `tensor [2, 3] [1, 2, 3, 4, 5, 6]`
+   - Expressions: `tensor [2, 3] [1 2 3, 4 5 6]`
    - Roundtrips correctly (parse → pretty → parse → pretty gives same result)
 
 5. **AST Serialization** - Test infrastructure support complete
