@@ -7,7 +7,7 @@ use crate::{LocalRtHandle, RtStatus};
 use ibig::IBig;
 
 /// Convert rtdt::Int to ibig::IBig.
-pub(crate) unsafe fn rtdt_int_to_ibig(int_ptr: *const rtdt::Int) -> IBig {
+unsafe fn rtdt_int_to_ibig(int_ptr: *const rtdt::Int) -> IBig {
     unsafe {
         let int = &*int_ptr;
         let size_and_sign = int.size_and_sign;
@@ -85,117 +85,81 @@ unsafe fn ibig_to_rtdt_int(
     }
 }
 
-/// Add two bigints: a + b.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_add(
-    rt: LocalRtHandle,
-    a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
-    b_in: *const u8,
-    b_tydesc: *const rtdt::TyDesc,
-    result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
-        return RtStatus::Error;
-    }
-
+/// Convert rtdt::Int to String for printing.
+pub(crate) unsafe fn int_to_string_impl(int_ptr: *const rtdt::Int) -> String {
     unsafe {
-        let rt_ref = &mut *(rt as *mut RtLocal);
+        let value = rtdt_int_to_ibig(int_ptr);
+        value.to_string()
+    }
+}
+
+/// Add two bigints: a + b.
+pub(crate) unsafe fn int_add_impl(
+    rt: &mut RtLocal,
+    a_in: *const u8,
+    b_in: *const u8,
+    result_out: *mut u8,
+) -> RtStatus {
+    unsafe {
         let a = rtdt_int_to_ibig(a_in as *const rtdt::Int);
         let b = rtdt_int_to_ibig(b_in as *const rtdt::Int);
         let result = a + b;
-        ibig_to_rtdt_int(rt_ref, result, result_out as *mut rtdt::Int)
+        ibig_to_rtdt_int(rt, result, result_out as *mut rtdt::Int)
     }
 }
 
 /// Subtract two bigints: a - b.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_sub(
-    rt: LocalRtHandle,
+pub(crate) unsafe fn int_sub_impl(
+    rt: &mut RtLocal,
     a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
-        return RtStatus::Error;
-    }
-
     unsafe {
-        let rt_ref = &mut *(rt as *mut RtLocal);
         let a = rtdt_int_to_ibig(a_in as *const rtdt::Int);
         let b = rtdt_int_to_ibig(b_in as *const rtdt::Int);
         let result = a - b;
-        ibig_to_rtdt_int(rt_ref, result, result_out as *mut rtdt::Int)
+        ibig_to_rtdt_int(rt, result, result_out as *mut rtdt::Int)
     }
 }
 
 /// Multiply two bigints: a * b.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_mul(
-    rt: LocalRtHandle,
+pub(crate) unsafe fn int_mul_impl(
+    rt: &mut RtLocal,
     a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
-        return RtStatus::Error;
-    }
-
     unsafe {
-        let rt_ref = &mut *(rt as *mut RtLocal);
         let a = rtdt_int_to_ibig(a_in as *const rtdt::Int);
         let b = rtdt_int_to_ibig(b_in as *const rtdt::Int);
         let result = a * b;
-        ibig_to_rtdt_int(rt_ref, result, result_out as *mut rtdt::Int)
+        ibig_to_rtdt_int(rt, result, result_out as *mut rtdt::Int)
     }
 }
 
 /// Negate a bigint: -a.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_neg(
-    rt: LocalRtHandle,
+pub(crate) unsafe fn int_neg_impl(
+    rt: &mut RtLocal,
     a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    if rt.is_null() || a_in.is_null() || result_out.is_null() {
-        return RtStatus::Error;
-    }
-
     unsafe {
-        let rt_ref = &mut *(rt as *mut RtLocal);
         let a = rtdt_int_to_ibig(a_in as *const rtdt::Int);
         let result = -a;
-        ibig_to_rtdt_int(rt_ref, result, result_out as *mut rtdt::Int)
+        ibig_to_rtdt_int(rt, result, result_out as *mut rtdt::Int)
     }
 }
 
 /// Division of bigints: a / b.
 /// Returns RtStatus::Error if b is zero.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_div_checked(
-    rt: LocalRtHandle,
+pub(crate) unsafe fn int_div_checked_impl(
+    rt: &mut RtLocal,
     a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
-        return RtStatus::Error;
-    }
-
     unsafe {
-        let rt_ref = &mut *(rt as *mut RtLocal);
         let a = rtdt_int_to_ibig(a_in as *const rtdt::Int);
         let b = rtdt_int_to_ibig(b_in as *const rtdt::Int);
 
@@ -205,6 +169,6 @@ pub unsafe extern "C" fn dtlv_rti_int_div_checked(
         }
 
         let result = a / b;
-        ibig_to_rtdt_int(rt_ref, result, result_out as *mut rtdt::Int)
+        ibig_to_rtdt_int(rt, result, result_out as *mut rtdt::Int)
     }
 }

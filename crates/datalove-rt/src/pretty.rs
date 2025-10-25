@@ -243,9 +243,8 @@ unsafe fn pretty_int(
 ) -> Result<(), ()> {
     unsafe {
         let int_ptr = value_ref as *const rtdt::Int;
-        let value = crate::int_math::rtdt_int_to_ibig(int_ptr);
         push_str(rt, string_mut, string_tydesc, b"@")?;
-        let s = value.to_string();
+        let s = crate::int_math::int_to_string_impl(int_ptr);
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }

@@ -287,7 +287,7 @@ fn eval_neg(ctx: &mut InterpContext<'_>, operand: Value) -> InterpResult {
             let result = unsafe { Value::alloc_int(&mut ctx.rt, tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::int_math::dtlv_rti_int_neg(
+                    rt::dtlv_rti_int_neg(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         ptr as *const u8,
                         tydesc,
@@ -411,7 +411,7 @@ fn eval_add(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
             let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::int_math::dtlv_rti_int_add(
+                    rt::dtlv_rti_int_add(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         a_ptr as *const u8,
                         a_tydesc,
@@ -449,7 +449,7 @@ fn eval_sub(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
             let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::int_math::dtlv_rti_int_sub(
+                    rt::dtlv_rti_int_sub(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         a_ptr as *const u8,
                         a_tydesc,
@@ -487,7 +487,7 @@ fn eval_mul(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
             let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::int_math::dtlv_rti_int_mul(
+                    rt::dtlv_rti_int_mul(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         a_ptr as *const u8,
                         a_tydesc,
@@ -794,7 +794,7 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
             let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::int_math::dtlv_rti_int_div_checked(
+                    rt::dtlv_rti_int_div_checked(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         a_ptr as *const u8,
                         a_tydesc,

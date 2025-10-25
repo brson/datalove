@@ -50,7 +50,7 @@ pub mod set;
 pub mod list;
 pub mod tensor;
 pub mod destroy;
-pub mod int_math;
+mod int_math;
 
 /// A runtime handle. Needed for all calls.
 ///
@@ -235,6 +235,114 @@ pub unsafe extern "C" fn dtlv_rti_cmp_total(
 ) -> RtOrdering {
     unsafe {
         cmp::cmp_total(value_a, tydesc_a, value_b, tydesc_b)
+    }
+}
+
+// ============================================================================
+// Bigint arithmetic operations
+// ============================================================================
+
+/// Add two bigints: a + b.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_int_add(
+    rt: LocalRtHandle,
+    a_in: *const u8,
+    a_tydesc: *const rtdt::TyDesc,
+    b_in: *const u8,
+    b_tydesc: *const rtdt::TyDesc,
+    result_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
+        return RtStatus::Error;
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        int_math::int_add_impl(rt_ref, a_in, b_in, result_out)
+    }
+}
+
+/// Subtract two bigints: a - b.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_int_sub(
+    rt: LocalRtHandle,
+    a_in: *const u8,
+    a_tydesc: *const rtdt::TyDesc,
+    b_in: *const u8,
+    b_tydesc: *const rtdt::TyDesc,
+    result_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
+        return RtStatus::Error;
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        int_math::int_sub_impl(rt_ref, a_in, b_in, result_out)
+    }
+}
+
+/// Multiply two bigints: a * b.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_int_mul(
+    rt: LocalRtHandle,
+    a_in: *const u8,
+    a_tydesc: *const rtdt::TyDesc,
+    b_in: *const u8,
+    b_tydesc: *const rtdt::TyDesc,
+    result_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
+        return RtStatus::Error;
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        int_math::int_mul_impl(rt_ref, a_in, b_in, result_out)
+    }
+}
+
+/// Negate a bigint: -a.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_int_neg(
+    rt: LocalRtHandle,
+    a_in: *const u8,
+    a_tydesc: *const rtdt::TyDesc,
+    result_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    if rt.is_null() || a_in.is_null() || result_out.is_null() {
+        return RtStatus::Error;
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        int_math::int_neg_impl(rt_ref, a_in, result_out)
+    }
+}
+
+/// Divide two bigints: a / b.
+/// Returns RtStatus::Error if b is zero.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_int_div_checked(
+    rt: LocalRtHandle,
+    a_in: *const u8,
+    a_tydesc: *const rtdt::TyDesc,
+    b_in: *const u8,
+    b_tydesc: *const rtdt::TyDesc,
+    result_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
+        return RtStatus::Error;
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        int_math::int_div_checked_impl(rt_ref, a_in, b_in, result_out)
     }
 }
 
