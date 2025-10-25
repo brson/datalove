@@ -5,6 +5,7 @@
 ## Progress
 - ✅ Phase 1: Negation (Trivial)
 - ✅ Phase 2: String Conversion (Moderate)
+- ✅ Phase 3: Addition (Moderate)
 
 ## Current State
 - `int_math.rs` uses `ibig` internally for all bigint operations
