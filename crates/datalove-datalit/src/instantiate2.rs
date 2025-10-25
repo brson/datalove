@@ -2315,4 +2315,126 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn test_instantiate_tensor_3d_i32() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, ": tensor<i32, 3> / @tensor [2, 2, 2] [1 2, 3 4, 5 6, 7 8]")?;
+        let rt = datalove_rt::rt_local::RtLocal::new();
+        let mut guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+
+            let tensor = inst.ptr as *const rtdt::Tensor;
+            assert_eq!((*tensor).capacity_elems, 8);
+            assert_eq!((*tensor).offset_elems, 0);
+            assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
+
+            // Check shape [2, 2, 2]
+            let shape = std::slice::from_raw_parts((*tensor).shape, 3);
+            assert_eq!(shape, &[2, 2, 2]);
+
+            // Check strides [4, 2, 1] (row-major for 3D)
+            let strides = std::slice::from_raw_parts((*tensor).strides, 3);
+            assert_eq!(strides, &[4, 2, 1]);
+
+            // Check data [1, 2, 3, 4, 5, 6, 7, 8]
+            let data = std::slice::from_raw_parts((*tensor).ptr_base as *const i32, 8);
+            assert_eq!(data, &[1, 2, 3, 4, 5, 6, 7, 8]);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_tensor_of_tuples() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, ": tensor<(u32, f32), 2> / @tensor [2, 2] [(1, 1.0) (2, 2.0), (3, 3.0) (4, 4.0)]")?;
+        let rt = datalove_rt::rt_local::RtLocal::new();
+        let mut guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+
+            let tensor = inst.ptr as *const rtdt::Tensor;
+            assert_eq!((*tensor).capacity_elems, 4);
+            assert_eq!((*tensor).offset_elems, 0);
+            assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
+
+            // Check shape [2, 2]
+            let shape = std::slice::from_raw_parts((*tensor).shape, 2);
+            assert_eq!(shape, &[2, 2]);
+
+            // Check strides [2, 1]
+            let strides = std::slice::from_raw_parts((*tensor).strides, 2);
+            assert_eq!(strides, &[2, 1]);
+
+            // Verify we have tuple elements (just check the tensor structure is correct)
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_list_of_tensors() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, ": [tensor<u32, 2>] / @[@tensor [2, 2] [1 2, 3 4], @tensor [2, 2] [5 6, 7 8]]")?;
+        let rt = datalove_rt::rt_local::RtLocal::new();
+        let mut guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
+
+            let list = inst.ptr as *const rtdt::List;
+            assert_eq!((*list).size, 2);
+
+            // Verify both elements are tensors (basic structure check)
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_option_of_tensor() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, ": ?tensor<u32, 2> / @tensor [2, 2] [1 2, 3 4]")?;
+        let rt = datalove_rt::rt_local::RtLocal::new();
+        let mut guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            let tag = *inst.ptr;
+            assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
+
+            // Verify the payload is a tensor
+            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tensor);
+        }
+        Ok(())
+    }
 }

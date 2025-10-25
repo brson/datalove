@@ -1,0 +1,127 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Tensor": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "1"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "2"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "3"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "4"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "5"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "6"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "7"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "8"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            }
+          ],
+          "shape": [
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "Tensor": {
+          "element_type": {
+            "heap": "Omitted",
+            "type_hint": "I32"
+          },
+          "layout": null,
+          "rank": 3
+        }
+      }
+    }
+  },
+  "errors": [],
+  "root_type": {
+    "element_type": "i32",
+    "heap": "",
+    "kind": "Tensor",
+    "layout": "RowMajor",
+    "rank": 3
+  }
+}
