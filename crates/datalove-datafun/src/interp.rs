@@ -3,12 +3,22 @@
 use rmx::prelude::*;
 use std::collections::HashMap;
 use bct::text::InternedText;
+use bct::input::Source;
 use datalove_rt as rt;
 use datalove_rtdt as rtdt;
 
 use crate::ast::*;
 use crate::value::Value;
 use crate::type_table::TypeTable;
+
+/// Tracked helper to parse module scripts for interpreter.
+#[salsa::tracked]
+fn parse_module_for_interp<'db>(
+    db: &'db dyn crate::Db,
+    source: Source,
+) -> Script<'db> {
+    crate::parser::parse(db, source).script
+}
 
 /// Interpreter execution result.
 pub type InterpResult = Result<Value, InterpError>;
@@ -119,7 +129,7 @@ impl<'db> InterpContext<'db> {
         // For each required module, parse it and collect function definitions.
         for (module_alias, package_module) in alias_map {
             let source = package_module.text(db);
-            let module_script = crate::parser::parse(db, source).script;
+            let module_script = parse_module_for_interp(db, source);
 
             let mut module_funcs = HashMap::new();
             for statement in module_script.statements(db) {

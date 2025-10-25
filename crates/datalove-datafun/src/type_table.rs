@@ -536,17 +536,28 @@ mod tests {
     use super::*;
     use bct::input::Source;
 
-    /// Helper to build a type table from source code.
+    /// Tracked compile helper that does parse + typecheck.
+    #[salsa::tracked]
+    fn compile_source<'db>(
+        db: &'db dyn crate::Db,
+        source_text: bct::text::InternedText<'db>,
+    ) -> (Script<'db>, crate::tycheck::TypecheckResult<'db>) {
+        let source = Source::new(db, source_text.as_str(db).S());
+        let parse_result = crate::parser::parse(db, source);
+        let tycheck_result = crate::tycheck::type_check(db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
+        (parse_result.script, tycheck_result)
+    }
+
+    /// Helper to build type table (not tracked since TypeTable contains raw pointers).
     fn build_type_table_from_source<'db>(
         db: &'db dyn crate::Db,
         source_text: &str,
     ) -> Result<(Script<'db>, TypeTable, datalit::tydesc_table::TyDescTable<'db>), String> {
-        let source = Source::new(db, source_text.S());
-        let parse_result = crate::parser::parse(db, source);
-        let tycheck_result = crate::tycheck::type_check(db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
+        let source_interned = bct::text::InternedText::new(db, source_text.S());
+        let (script, tycheck_result) = compile_source(db, source_interned);
         let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(db);
-        let type_table = TypeTable::build(db, parse_result.script, tycheck_result, &mut tydesc_table)?;
-        Ok((parse_result.script, type_table, tydesc_table))
+        let type_table = TypeTable::build(db, script, tycheck_result, &mut tydesc_table)?;
+        Ok((script, type_table, tydesc_table))
     }
 
     #[test]
@@ -560,11 +571,7 @@ mod tests {
     fn test_type_table_build_with_type_errors() {
         let ref db = crate::Database::default();
         // This should fail because 'undefined' is not a known variable.
-        let source = Source::new(db, S("let x = undefined"));
-        let parse_result = crate::parser::parse(db, source);
-        let tycheck_result = crate::tycheck::type_check(db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
-        let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(db);
-        let result = TypeTable::build(db, parse_result.script, tycheck_result, &mut tydesc_table);
+        let result = build_type_table_from_source(db, "let x = undefined");
         assert!(result.is_err(), "Expected build to fail with type errors");
     }
 
@@ -652,6 +659,11 @@ mod tests {
         }
     }
 
+    #[salsa::tracked]
+    fn parse_script<'db>(db: &'db dyn crate::Db, source: Source) -> Script<'db> {
+        crate::parser::parse(db, source).script
+    }
+
     #[test]
     fn test_get_expr_type_returns_null_for_missing() {
         let ref db = crate::Database::default();
@@ -660,7 +672,7 @@ mod tests {
 
         // Create a new expression that's not in the type table.
         let new_source = Source::new(db, S("@999"));
-        let new_script = crate::parser::parse(db, new_source).script;
+        let new_script = parse_script(db, new_source);
         let new_statements = new_script.statements(db);
 
         // This should return null because it's not in our type table.
@@ -683,8 +695,7 @@ mod tests {
     #[test]
     fn test_type_table_with_multiple_expressions() {
         let ref db = crate::Database::default();
-        let source_text = "let x = @42\nlet y = @100\nlet z = @999";
-        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, source_text)
+        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, "let x = @42\nlet y = @100\nlet z = @999")
             .expect("Failed to build type table");
 
         let statements = script.statements(db);
@@ -714,8 +725,7 @@ mod tests {
     #[test]
     fn test_type_table_with_function() {
         let ref db = crate::Database::default();
-        let source_text = "fun foo(): @u32\n  ret @42\nend fun";
-        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, source_text)
+        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, "fun foo(): @u32\n  ret @42\nend fun")
             .expect("Failed to build type table");
 
         let statements = script.statements(db);
@@ -752,8 +762,7 @@ mod tests {
         let ref db = crate::Database::default();
         // Test with a simple let, since binops require variables which don't typecheck.
         // This test just verifies that expressions inside let statements get their types stored.
-        let source_text = "let x = @42\nlet y = @100";
-        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, source_text)
+        let (script, type_table, _tydesc_table) = build_type_table_from_source(db, "let x = @42\nlet y = @100")
             .expect("Failed to build type table");
 
         let statements = script.statements(db);

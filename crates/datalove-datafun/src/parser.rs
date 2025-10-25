@@ -42,10 +42,6 @@ pub fn parse_script_unit<'db>(
 }
 
 /// Parse a Source into a datafun script with span information.
-///
-/// NOTE: This must be called from within a Salsa tracked function because it
-/// creates tracked structs internally. For production code, call this from within
-/// a tracked context. For tests, use parse_for_test() wrapper.
 pub fn parse<'db>(
     db: &'db dyn crate::Db,
     source: Source,
@@ -99,7 +95,7 @@ fn parse_bracer<'db>(
 
     let statements = parser.parse_statements(lines);
     let script = ast::Script::new(db, statements);
-    ast::ParseResult::new(script, parser.expr_spans, parser.datalit_expr_spans)
+    ast::ParseResult::new(db, script, parser.expr_spans, parser.datalit_expr_spans)
 }
 
 /// Check if a token acts as a line separator.
@@ -1194,9 +1190,8 @@ impl<'db> Parser<'db> {
     }
 }
 
-/// Tracked wrapper for tests that need Salsa queries.
+/// Tracked wrapper for parser tests that only need the Script.
 #[salsa::tracked]
-#[cfg(test)]
 pub(crate) fn parse_for_test<'db>(
     db: &'db dyn crate::Db,
     source: Source,
