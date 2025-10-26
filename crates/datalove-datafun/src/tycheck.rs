@@ -839,13 +839,36 @@ fn synthesize_binop<'db>(
     // Determine result type based on operator.
     use BinOp::*;
     let result_ty = match op {
-        // Basic arithmetic: same type.
-        Add | Sub | Mul | Div => {
+        // Basic arithmetic: only floats and bigints.
+        Add | Sub | Mul => {
+            if !is_float_type(operand_ty) && !is_bigint_type(operand_ty) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_ty),
+                });
+            }
             lhs_ty
         }
 
-        // Checked arithmetic: Result<T>.
-        AddChecked | SubChecked | MulChecked | DivChecked => {
+        // Bare division: only floats (bigints must use /! or /?).
+        Div => {
+            if !is_float_type(operand_ty) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_ty),
+                });
+            }
+            lhs_ty
+        }
+
+        // Checked arithmetic: only fixed ints, plus division for bigints.
+        AddChecked | SubChecked | MulChecked => {
+            if !is_fixed_int_type(operand_ty) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_ty),
+                });
+            }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let lhs_datalit_ty = match lhs_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
@@ -861,8 +884,60 @@ fn synthesize_binop<'db>(
             TypeAndHeap::new(db, datalit::ast::Heap::Omitted, result_ty)
         }
 
-        // Optional arithmetic: Option<T>.
-        AddOptional | SubOptional | MulOptional | DivOptional => {
+        DivChecked => {
+            // Division: fixed ints or bigints.
+            if !is_fixed_int_type(operand_ty) && !is_bigint_type(operand_ty) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_ty),
+                });
+            }
+            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
+            let lhs_datalit_ty = match lhs_ty.ty(db) {
+                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
+                _ => {
+                    return Err(TypeError::InvalidOperandType {
+                        op: format!("{:?}", op),
+                        ty: type_to_string(db, lhs_ty.ty(db)),
+                    });
+                }
+            };
+            let result_inner = datalit::tycheck::TypeResult::new(db, lhs_datalit_ty);
+            let result_ty = Type::Datalit(datalit::tycheck::Type::Result(result_inner));
+            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, result_ty)
+        }
+
+        // Optional arithmetic: only fixed ints, plus division for bigints.
+        AddOptional | SubOptional | MulOptional => {
+            if !is_fixed_int_type(operand_ty) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_ty),
+                });
+            }
+            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
+            let lhs_datalit_ty = match lhs_ty.ty(db) {
+                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
+                _ => {
+                    return Err(TypeError::InvalidOperandType {
+                        op: format!("{:?}", op),
+                        ty: type_to_string(db, lhs_ty.ty(db)),
+                    });
+                }
+            };
+            let option_inner = datalit::tycheck::TypeOption::new(db, lhs_datalit_ty);
+            let option_ty = Type::Datalit(datalit::tycheck::Type::Option(option_inner));
+            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, option_ty)
+        }
+
+        DivOptional => {
+            // Division: fixed ints or bigints.
+            if !is_fixed_int_type(operand_ty) && !is_bigint_type(operand_ty) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_ty),
+                });
+            }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let lhs_datalit_ty = match lhs_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
@@ -911,11 +986,32 @@ fn synthesize_unaryop<'db>(
 
     // Determine result type based on operator.
     let result_ty = match op {
-        // Bare negation: returns same type as operand (for bigints).
-        UnaryOp::Neg => operand_ty,
+        // Bare negation: only floats and bigints.
+        UnaryOp::Neg => {
+            if !is_float_type(operand_type) && !is_bigint_type(operand_type) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_type),
+                });
+            }
+            operand_ty
+        }
 
-        // Optional negation: Option<T>.
+        // Optional negation: only fixed ints, and not unsigned.
         UnaryOp::NegOptional => {
+            if !is_fixed_int_type(operand_type) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_type),
+                });
+            }
+            // Disallow -? for unsigned ints (footgun).
+            if is_unsigned_int_type(operand_type) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_type),
+                });
+            }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let operand_datalit_ty = match operand_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, operand_ty.heap(db), dt.clone()),
@@ -931,8 +1027,14 @@ fn synthesize_unaryop<'db>(
             TypeAndHeap::new(db, datalit::ast::Heap::Omitted, option_ty)
         }
 
-        // Result negation: Result<T>.
+        // Result negation: only fixed ints.
         UnaryOp::NegResult => {
+            if !is_fixed_int_type(operand_type) {
+                return Err(TypeError::InvalidOperandType {
+                    op: format!("{:?}", op),
+                    ty: type_to_string(db, operand_type),
+                });
+            }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let operand_datalit_ty = match operand_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, operand_ty.heap(db), dt.clone()),
@@ -1099,6 +1201,58 @@ fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
         }
         Type::Function(_) => false,
         Type::Void => false,
+    }
+}
+
+fn is_float_type<'db>(ty: &Type<'db>) -> bool {
+    match ty {
+        Type::Datalit(datalit_ty) => {
+            matches!(datalit_ty, datalit::tycheck::Type::F32)
+        }
+        _ => false,
+    }
+}
+
+fn is_bigint_type<'db>(ty: &Type<'db>) -> bool {
+    match ty {
+        Type::Datalit(datalit_ty) => {
+            matches!(datalit_ty, datalit::tycheck::Type::Int)
+        }
+        _ => false,
+    }
+}
+
+fn is_fixed_int_type<'db>(ty: &Type<'db>) -> bool {
+    match ty {
+        Type::Datalit(datalit_ty) => {
+            matches!(
+                datalit_ty,
+                datalit::tycheck::Type::U8 |
+                datalit::tycheck::Type::I8 |
+                datalit::tycheck::Type::U16 |
+                datalit::tycheck::Type::I16 |
+                datalit::tycheck::Type::U32 |
+                datalit::tycheck::Type::I32 |
+                datalit::tycheck::Type::U64 |
+                datalit::tycheck::Type::I64
+            )
+        }
+        _ => false,
+    }
+}
+
+fn is_unsigned_int_type<'db>(ty: &Type<'db>) -> bool {
+    match ty {
+        Type::Datalit(datalit_ty) => {
+            matches!(
+                datalit_ty,
+                datalit::tycheck::Type::U8 |
+                datalit::tycheck::Type::U16 |
+                datalit::tycheck::Type::U32 |
+                datalit::tycheck::Type::U64
+            )
+        }
+        _ => false,
     }
 }
 
@@ -1533,7 +1687,7 @@ mod tests {
     #[test]
     fn test_tycheck_fun_params() {
         let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun"));
+        let source = bct::input::Source::new(&db, S("fun add(a: @int, b: @int): @int\n  ret a + b\nend fun"));
         let tycheck_result = compile_for_test(&db, source);
 
         // Should have no errors.
