@@ -915,6 +915,7 @@ impl<'db> Parser<'db> {
     }
 
     // Helper to parse a datalit expression by delegating to the datalit parser.
+    // fixme this is a disaster
     fn parse_datalit_expr(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
@@ -922,8 +923,16 @@ impl<'db> Parser<'db> {
         // Collect tokens until we hit a datafun operator or end of tokens.
         // Datalit expressions don't contain binary operators, so we stop at +, -, *, /, etc.
         // Exception: - can appear as part of a negative literal right after @ or # sigil.
+        // Exception: / can appear in the `: type / expr` pattern as a separator, not a binop.
         let mut datalit_tokens = Vec::new();
         let mut just_saw_heap_sigil = false;
+
+        // Check if this datalit starts with `:` (type hint pattern).
+        let starts_with_colon = matches!(
+            tokens.peek(),
+            Some(TreeToken::Token(t)) if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Colon))
+        );
+        let mut saw_slash_separator = false;
 
         // Collect tokens for the datalit expression, stopping at datafun operators.
         while let Some(token) = tokens.peek() {
@@ -938,11 +947,16 @@ impl<'db> Parser<'db> {
 
             // Check if this is a datafun binary operator.
             // Special case: - right after @ or # is part of a negative literal, not a binop.
+            // Special case: / in `: type / expr` pattern is a separator, not a binop.
             let is_binop = match token {
                 TreeToken::Token(t) => {
                     let sigil = t.kind(self.db);
                     // Minus after heap sigil is part of negative literal.
                     if just_saw_heap_sigil && matches!(sigil, TokenKind::Sigil(Sigil::Minus)) {
+                        false
+                    } else if starts_with_colon && !saw_slash_separator && matches!(sigil, TokenKind::Sigil(Sigil::SlashForward)) {
+                        // First / in `: type / expr` pattern is a separator, not a binop.
+                        saw_slash_separator = true;
                         false
                     } else {
                         matches!(

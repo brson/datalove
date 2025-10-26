@@ -1,0 +1,78 @@
+[
+  {
+    "input": ": u32 / @1",
+    "parse": {
+      "Command": {
+        "Expression": ": u32 / @1"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@1"
+      }
+    },
+    "environment": []
+  },
+  {
+    "input": ": i32 / @-5",
+    "parse": {
+      "Command": {
+        "Expression": ": i32 / @-5"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "i32",
+        "value": "@4294967291"
+      }
+    },
+    "environment": []
+  },
+  {
+    "input": ": u64 / @42",
+    "parse": {
+      "Command": {
+        "Expression": ": u64 / @42"
+      }
+    },
+    "eval": {
+      "Error": "execution error: RuntimeError(\"Unsupported type tag: U64\")"
+    },
+    "environment": []
+  },
+  {
+    "input": ": u32 / @10 + @20",
+    "parse": {
+      "Command": {
+        "Expression": ": u32 / @10 + @20"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@30"
+      }
+    },
+    "environment": []
+  },
+  {
+    "input": "@10 / @2",
+    "parse": {
+      "Command": {
+        "Expression": "@10 / @2"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@5"
+      }
+    },
+    "environment": []
+  }
+]
