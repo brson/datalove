@@ -3,7 +3,7 @@
 ## Progress Status
 
 - [x] Phase 1: Create C and Rust Modules - **COMPLETED**
-- [ ] Phase 2: Organize impl Module
+- [x] Phase 2: Organize impl Module - **COMPLETED**
 - [ ] Phase 3: Migrate External Callers
 - [ ] Phase 4: Finalize Privacy
 
@@ -17,14 +17,15 @@
   - `datalove-datafun`: uses `rt_local::RtLocal`, `clone::clone_value`
   - `datalove-rt-tests`: uses various internal impl functions (e.g., `btreemap::btreemap_clone_from_slice_impl`)
 
-## Current State (After Phase 1)
+## Current State (After Phase 2)
 
-- `lib.rs` now contains: module declarations, `pub mod c;`, `pub mod rust;`, and re-exports (~115 lines)
+- `lib.rs` now contains: module declarations, `pub mod c;`, `pub mod rust;`, `pub mod impls;`, and re-exports (~115 lines)
 - `src/c.rs` contains all C-ABI functions and types (~1200 lines)
 - `src/rust.rs` contains safe Rust wrapper API (~70 lines)
+- `src/impls.rs` contains re-exports of all internal modules (~20 lines)
 - Internal modules still public (for transition period)
-- External crates continue to use internal APIs directly (backward compatible via re-exports)
-- Ready for Phase 2: organizing the `impl` module
+- External crates can now access internals via `impls` module
+- Ready for Phase 3: migrating external callers to use `rust` module
 
 ## Target Architecture
 
@@ -79,16 +80,30 @@ Created safe wrapper types and functions:
 - All external crates continue to work without changes
 - Code organization improved significantly (lib.rs reduced by 92%)
 
-## Phase 2: Organize impl Module
+## Phase 2: Organize impl Module - ✅ COMPLETED
 
-### Step 4: Create impl visibility
+### Step 4: Create `src/impls.rs` - ✅ Done
 
-Choose approach:
-- Option A: Create `pub mod impl_` in lib.rs that re-exports internal modules
-- Option B: Use `#[doc(hidden)]` on internal modules to discourage direct use
-- Option C: Create `src/impl_/mod.rs` with submodules
+Created new module to organize internal implementations:
+- Created `src/impls.rs` with re-exports of all internal modules
+- Re-exports: `alloc`, `rt_local`, `clone`, `string`, `pretty`, `btreemap`, `set`, `list`, `tensor`, `destroy`
+- Added `pub mod impls;` declaration in lib.rs
+- File size: ~20 lines
+- Provides single entry point for accessing internal implementations
 
-Recommended: Option A for clarity - explicit `impl_` module
+### Phase 2 Test Results - ✅ All Passed
+
+- `cargo test -p datalove-rt --lib`: 87 tests passed
+- `cargo test -p datalove-rt-tests`: All tests passed (300+ tests)
+- `cargo build -p datalove-datalit -p datalove-cli -p datalove-datafun`: Success
+- `cargo test --all --lib`: Full workspace test suite passes (287 tests)
+
+### Phase 2 Achievements
+
+- Organized internal modules under `impls` namespace
+- Maintained full backward compatibility
+- All external crates continue to work without changes
+- Three-layer architecture now fully exposed: `impls`, `c`, and `rust` modules
 
 ## Phase 3: Migrate External Callers
 
@@ -104,7 +119,7 @@ Files to update:
   - Replace `rt_local::RtLocal` with `rust::Runtime`
   - Replace `clone::clone_value` with rust module equivalent
 - `crates/datalove-rt-tests/tests/*.rs`
-  - Consider: keep using internals (via `impl_` module) as it's test infrastructure
+  - Consider: keep using internals (via `impls` module) as it's test infrastructure
   - Or: migrate to rust module for more realistic testing
 
 ## Phase 4: Finalize Privacy
@@ -112,8 +127,8 @@ Files to update:
 ### Step 6: Make internal modules private
 
 - Change `pub mod` to `mod` for internal modules
-- Expose only via `impl_` module if needed for tests
-- Ensure only `c`, `rust`, and optionally `impl_` modules are public
+- Expose only via `impls` module if needed for tests
+- Ensure only `c`, `rust`, and optionally `impls` modules are public
 - Update documentation to guide users to `rust` module primarily
 
 ## Testing Strategy
@@ -133,7 +148,7 @@ Files to update:
    - Pro for internals: more direct testing of implementation
    - Pro for rust module: tests the actual public API
 
-2. Should the `impl_` module be public or use `pub(crate)`?
+2. Should the `impls` module be public or use `pub(crate)`?
    - If public: allows escape hatch for advanced users
    - If private: forces migration to safe API
 

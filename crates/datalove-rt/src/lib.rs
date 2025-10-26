@@ -41,6 +41,7 @@ pub use datalove_rtdt as rtdt;
 
 pub mod c;
 pub mod rust;
+pub mod impls;
 
 mod cmp;
 pub mod alloc;
