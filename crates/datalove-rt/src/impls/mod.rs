@@ -4,13 +4,13 @@
 //! during the transition period. Eventually, most external callers should
 //! migrate to the safe Rust API in the `rust` module.
 
-pub use crate::alloc;
-pub use crate::rt_local;
-pub use crate::clone;
-pub use crate::string;
-pub use crate::pretty;
-pub use crate::btreemap;
-pub use crate::set;
-pub use crate::list;
-pub use crate::tensor;
-pub use crate::destroy;
+pub mod alloc;
+pub mod rt_local;
+pub mod clone;
+pub mod string;
+pub mod pretty;
+pub mod btreemap;
+pub mod set;
+pub mod list;
+pub mod tensor;
+pub mod destroy;
