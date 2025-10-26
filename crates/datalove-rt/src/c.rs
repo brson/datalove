@@ -3,7 +3,7 @@
 //! All runtime functions with the `dtlv_rti_*` prefix are exposed through this module.
 
 use crate::rtdt;
-use crate::rt_local;
+use crate::impls::rt_local;
 
 /// A runtime handle. Needed for all calls.
 ///
@@ -114,7 +114,7 @@ pub unsafe extern "C" fn dtlv_rti_clone_local(
     value_out: *mut u8,
 ) -> RtStatus {
     unsafe {
-        crate::clone::clone_value(rt, value_in, tydesc_in, value_out)
+        crate::impls::clone::clone_value(rt, value_in, tydesc_in, value_out)
     }
 }
 
@@ -306,7 +306,7 @@ pub unsafe extern "C" fn dtlv_rti_any_destroy_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        crate::destroy::any_destroy_local(rt, value_in, tydesc)
+        crate::impls::destroy::any_destroy_local(rt, value_in, tydesc)
     }
 }
 
@@ -318,7 +318,7 @@ pub unsafe extern "C" fn dtlv_rti_string_create_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        crate::string::string_create_local(rt, value_out, tydesc)
+        crate::impls::string::string_create_local(rt, value_out, tydesc)
     }
 }
 
@@ -330,7 +330,7 @@ pub unsafe extern "C" fn dtlv_rti_string_destroy_local(
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        crate::string::string_destroy_local(rt, value_in, tydesc)
+        crate::impls::string::string_destroy_local(rt, value_in, tydesc)
     }
 }
 
@@ -343,7 +343,7 @@ pub unsafe extern "C" fn dtlv_rti_string_push_bytes_local(
     bytes_len: u32,
 ) -> RtStatus {
     unsafe {
-        crate::string::string_push_bytes_local(rt, string_value_mut, string_tydesc, bytes_ref, bytes_len)
+        crate::impls::string::string_push_bytes_local(rt, string_value_mut, string_tydesc, bytes_ref, bytes_len)
     }
 }
 
@@ -354,7 +354,7 @@ pub unsafe extern "C" fn dtlv_rti_string_clear_local(
     string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        crate::string::string_clear_local(rt, string_value_mut, string_tydesc)
+        crate::impls::string::string_clear_local(rt, string_value_mut, string_tydesc)
     }
 }
 
@@ -368,7 +368,7 @@ pub unsafe extern "C" fn dtlv_rti_pretty_print_local(
     string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        crate::pretty::pretty_print_local(rt, arg_value_ref, arg_tydesc_ref, string_value_mut, string_tydesc)
+        crate::impls::pretty::pretty_print_local(rt, arg_value_ref, arg_tydesc_ref, string_value_mut, string_tydesc)
     }
 }
 
@@ -387,7 +387,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_create_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
-        crate::btreemap::btreemap_create_impl(rt_ref, value_out, tydesc_ref)
+        crate::impls::btreemap::btreemap_create_impl(rt_ref, value_out, tydesc_ref)
     }
 }
 
@@ -411,7 +411,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clone_from_slice_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
-        crate::btreemap::btreemap_clone_from_slice_impl(
+        crate::impls::btreemap::btreemap_clone_from_slice_impl(
             rt_ref,
             btreemap_value_out,
             btreemap_tydesc_ref,
@@ -437,7 +437,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_destroy_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
-        crate::btreemap::btreemap_destroy_impl(rt_ref, value_in, tydesc_ref)
+        crate::impls::btreemap::btreemap_destroy_impl(rt_ref, value_in, tydesc_ref)
     }
 }
 
@@ -463,7 +463,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_insert_local(
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
         let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
         let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
-        crate::btreemap::btreemap_insert_impl(
+        crate::impls::btreemap::btreemap_insert_impl(
             rt_ref,
             btreemap_value_mut,
             btreemap_tydesc_ref,
@@ -491,7 +491,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_remove_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
         let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
-        crate::btreemap::btreemap_remove_impl(
+        crate::impls::btreemap::btreemap_remove_impl(
             rt_ref,
             btreemap_value_mut,
             btreemap_tydesc_ref,
@@ -524,7 +524,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get(
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
         let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
         let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
-        crate::btreemap::btreemap_get_impl(
+        crate::impls::btreemap::btreemap_get_impl(
             rt_ref,
             btreemap_value_mut,
             btreemap_tydesc_ref,
@@ -557,7 +557,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get_local(
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
         let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
         let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
-        crate::btreemap::btreemap_get_impl(
+        crate::impls::btreemap::btreemap_get_impl(
             rt_ref,
             btreemap_value_ref,
             btreemap_tydesc_ref,
@@ -581,7 +581,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::btreemap::btreemap_clear_impl(rt_ref, btreemap_value_mut, rtdt::TyDescRef::from_ptr(btreemap_tydesc))
+        crate::impls::btreemap::btreemap_clear_impl(rt_ref, btreemap_value_mut, rtdt::TyDescRef::from_ptr(btreemap_tydesc))
     }
 }
 
@@ -601,7 +601,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_create_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::set::btreeset_create_impl(rt_ref, value_out, tydesc)
+        crate::impls::set::btreeset_create_impl(rt_ref, value_out, tydesc)
     }
 }
 
@@ -617,7 +617,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_destroy_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::set::set_destroy_impl(rt_ref, btreeset_value_in, btreeset_tydesc)
+        crate::impls::set::set_destroy_impl(rt_ref, btreeset_value_in, btreeset_tydesc)
     }
 }
 
@@ -638,7 +638,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_insert_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::set::btreeset_insert_impl(
+        crate::impls::set::btreeset_insert_impl(
             rt_ref,
             btreeset_value_mut,
             btreeset_tydesc,
@@ -665,7 +665,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_remove_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::set::btreeset_remove_impl(
+        crate::impls::set::btreeset_remove_impl(
             rt_ref,
             btreeset_value_mut,
             btreeset_tydesc,
@@ -692,7 +692,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_contains_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::set::btreeset_contains_impl(
+        crate::impls::set::btreeset_contains_impl(
             rt_ref,
             btreeset_value_ref,
             btreeset_tydesc,
@@ -715,7 +715,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_clear_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::set::btreeset_clear_impl(rt_ref, btreeset_value_mut, btreeset_tydesc)
+        crate::impls::set::btreeset_clear_impl(rt_ref, btreeset_value_mut, btreeset_tydesc)
     }
 }
 
@@ -734,7 +734,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_clone_from_slice_local(
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::set::btreeset_clone_from_slice_impl(
+        crate::impls::set::btreeset_clone_from_slice_impl(
             rt_ref,
             btreeset_value_out,
             btreeset_tydesc,
@@ -762,7 +762,7 @@ pub unsafe extern "C" fn dtlv_rti_list_create_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
-        crate::list::list_create_impl(rt_ref, value_out, tydesc_ref)
+        crate::impls::list::list_create_impl(rt_ref, value_out, tydesc_ref)
     }
 }
 
@@ -784,7 +784,7 @@ pub unsafe extern "C" fn dtlv_rti_list_create_from_slice_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
-        crate::list::list_create_from_slice_impl(
+        crate::impls::list::list_create_from_slice_impl(
             rt_ref,
             slice_ptr_ref,
             slice_len,
@@ -808,7 +808,7 @@ pub unsafe extern "C" fn dtlv_rti_list_destroy_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
-        crate::list::list_destroy_impl(rt_ref, value_in, tydesc_ref)
+        crate::impls::list::list_destroy_impl(rt_ref, value_in, tydesc_ref)
     }
 }
 
@@ -825,7 +825,7 @@ pub unsafe extern "C" fn dtlv_rti_list_clear_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
-        crate::list::list_clear_impl(rt_ref, value_mut, tydesc_ref)
+        crate::impls::list::list_clear_impl(rt_ref, value_mut, tydesc_ref)
     }
 }
 
@@ -847,7 +847,7 @@ pub unsafe extern "C" fn dtlv_rti_list_get(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
-        crate::list::list_get_impl(
+        crate::impls::list::list_get_impl(
             rt_ref,
             list_value_ref,
             list_tydesc_ref,
@@ -876,7 +876,7 @@ pub unsafe extern "C" fn dtlv_rti_list_set_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
-        crate::list::list_set_impl(
+        crate::impls::list::list_set_impl(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
@@ -904,7 +904,7 @@ pub unsafe extern "C" fn dtlv_rti_list_push_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
-        crate::list::list_push_impl(
+        crate::impls::list::list_push_impl(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
@@ -931,7 +931,7 @@ pub unsafe extern "C" fn dtlv_rti_list_pop_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
-        crate::list::list_pop_impl(
+        crate::impls::list::list_pop_impl(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
@@ -959,7 +959,7 @@ pub unsafe extern "C" fn dtlv_rti_list_insert_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
-        crate::list::list_insert_impl(
+        crate::impls::list::list_insert_impl(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
@@ -988,7 +988,7 @@ pub unsafe extern "C" fn dtlv_rti_list_remove_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
-        crate::list::list_remove_impl(
+        crate::impls::list::list_remove_impl(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
@@ -1013,7 +1013,7 @@ pub unsafe extern "C" fn dtlv_rti_list_reserve_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
-        crate::list::list_reserve_impl(
+        crate::impls::list::list_reserve_impl(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
@@ -1035,7 +1035,7 @@ pub unsafe extern "C" fn dtlv_rti_list_shrink_to_fit_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
-        crate::list::list_shrink_to_fit_impl(
+        crate::impls::list::list_shrink_to_fit_impl(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
@@ -1061,7 +1061,7 @@ pub unsafe extern "C" fn dtlv_rti_list_extend_from_slice_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
-        crate::list::list_extend_from_slice_impl(
+        crate::impls::list::list_extend_from_slice_impl(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
@@ -1099,7 +1099,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_create_from_slice_local(
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
         let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
         let shape_tydesc_ref = rtdt::TyDescRef::from_ptr(shape_tydesc);
-        crate::tensor::tensor_create_from_slice_impl(
+        crate::impls::tensor::tensor_create_from_slice_impl(
             rt_ref,
             slice_ptr_ref,
             slice_len,
@@ -1126,7 +1126,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_destroy_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
-        crate::tensor::tensor_destroy_impl(rt_ref, tensor_value_in, tensor_tydesc_ref)
+        crate::impls::tensor::tensor_destroy_impl(rt_ref, tensor_value_in, tensor_tydesc_ref)
     }
 }
 
@@ -1146,7 +1146,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_get_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
-        crate::tensor::tensor_get_impl(
+        crate::impls::tensor::tensor_get_impl(
             rt_ref,
             tensor_value_ref,
             tensor_tydesc_ref,
@@ -1172,7 +1172,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_set_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
-        crate::tensor::tensor_set_impl(
+        crate::impls::tensor::tensor_set_impl(
             rt_ref,
             tensor_value_ref,
             tensor_tydesc_ref,
@@ -1198,7 +1198,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_transpose_local(
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
-        crate::tensor::tensor_transpose_impl(
+        crate::impls::tensor::tensor_transpose_impl(
             rt_ref,
             tensor_value_in,
             tensor_tydesc_ref,
@@ -1226,7 +1226,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_slice_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
         let result_tydesc_ref = rtdt::TyDescRef::from_ptr(result_tydesc);
-        crate::tensor::tensor_slice_impl(
+        crate::impls::tensor::tensor_slice_impl(
             rt_ref,
             tensor_value_in,
             tensor_tydesc_ref,
@@ -1258,7 +1258,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_reshape_local(
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
         let new_shape_tydesc_ref = rtdt::TyDescRef::from_ptr(new_shape_tydesc);
         let result_tydesc_ref = rtdt::TyDescRef::from_ptr(result_tydesc);
-        crate::tensor::tensor_reshape_impl(
+        crate::impls::tensor::tensor_reshape_impl(
             rt_ref,
             tensor_value_in,
             tensor_tydesc_ref,

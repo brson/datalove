@@ -2903,7 +2903,7 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
 
     // Create map from empty slice.
     let status = unsafe {
-        datalove_rt::btreemap::btreemap_clone_from_slice_impl(
+        datalove_rt::impls::btreemap::btreemap_clone_from_slice_impl(
             &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal),
             map_ptr,
             rtdt::TyDescRef::from_ptr(&*map_tydesc as *const rtdt::TyDesc),
@@ -2957,7 +2957,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
     ];
 
     let status = unsafe {
-        datalove_rt::btreemap::btreemap_clone_from_slice_impl(
+        datalove_rt::impls::btreemap::btreemap_clone_from_slice_impl(
             &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal),
             map_ptr,
             rtdt::TyDescRef::from_ptr(&*map_tydesc as *const rtdt::TyDesc),
@@ -3043,7 +3043,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
     ];
 
     let status = unsafe {
-        datalove_rt::btreemap::btreemap_clone_from_slice_impl(
+        datalove_rt::impls::btreemap::btreemap_clone_from_slice_impl(
             &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal),
             map_ptr,
             rtdt::TyDescRef::from_ptr(&*map_tydesc as *const rtdt::TyDesc),
@@ -3131,7 +3131,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
     ];
 
     let status = unsafe {
-        datalove_rt::btreemap::btreemap_clone_from_slice_impl(
+        datalove_rt::impls::btreemap::btreemap_clone_from_slice_impl(
             &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal),
             map_ptr,
             rtdt::TyDescRef::from_ptr(&*map_tydesc as *const rtdt::TyDesc),

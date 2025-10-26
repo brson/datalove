@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 use crate::rtdt;
-use crate::rt_local::RtLocal;
+use crate::impls::rt_local::RtLocal;
 use crate::c::{LocalRtHandle, RtStatus};
 
 /// Creates a new empty string.
@@ -173,7 +173,7 @@ pub unsafe fn string_clear_local(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rt_local;
+    use crate::impls::rt_local;
 
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {

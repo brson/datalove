@@ -111,7 +111,7 @@ impl Value {
 
     /// Allocate an Int (bigint) value.
     pub unsafe fn alloc_int(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -123,7 +123,7 @@ impl Value {
 
     /// Allocate a String value.
     pub unsafe fn alloc_string(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -142,7 +142,7 @@ impl Value {
 
     /// Allocate a Tuple value.
     pub unsafe fn alloc_tuple(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -154,7 +154,7 @@ impl Value {
 
     /// Allocate a Struct value.
     pub unsafe fn alloc_struct(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -166,7 +166,7 @@ impl Value {
 
     /// Allocate an Enum value.
     pub unsafe fn alloc_enum(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -178,7 +178,7 @@ impl Value {
 
     /// Allocate a List value.
     pub unsafe fn alloc_list(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -197,7 +197,7 @@ impl Value {
 
     /// Allocate a Map value.
     pub unsafe fn alloc_map(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -215,7 +215,7 @@ impl Value {
 
     /// Allocate a Set value.
     pub unsafe fn alloc_set(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -233,7 +233,7 @@ impl Value {
 
     /// Allocate an Option value.
     pub unsafe fn alloc_option(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -245,7 +245,7 @@ impl Value {
 
     /// Allocate a Result value.
     pub unsafe fn alloc_result(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc: *const rtdt::TyDesc,
     ) -> Self {
         let size = unsafe { (*tydesc).size };
@@ -335,7 +335,7 @@ impl Value {
     /// Returns a string representation in valid datalit syntax.
     pub fn pretty_print<'db>(
         &self,
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         tydesc_table: &mut crate::datalit::tydesc_table::TyDescTable<'db>,
     ) -> Result<String, crate::interp::InterpError> {
         unsafe {
@@ -431,7 +431,7 @@ impl Value {
     }
 
     /// Free this value using the runtime allocator.
-    pub unsafe fn free(&mut self, rt: &mut rt::rt_local::RtLocal) {
+    pub unsafe fn free(&mut self, rt: &mut rt::impls::rt_local::RtLocal) {
         match self {
             Value::Bool(_) | Value::U32(_) | Value::F32(_) => {
                 // Inline values don't need freeing.

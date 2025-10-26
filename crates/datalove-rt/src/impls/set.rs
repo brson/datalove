@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 use crate::rtdt::{self, TyDesc, Set, SetNode, SetNodeTag, SET_NODE_CAPACITY};
-use crate::rt_local::RtLocal;
+use crate::impls::rt_local::RtLocal;
 use crate::c::RtStatus;
 
 /// Reads the tag from a set node.
@@ -145,7 +145,7 @@ unsafe fn destroy_tree_recursive(
                 let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
                 for i in 0..len as usize {
                     let key_slot = keys_ptr.add(i * key_size);
-                    let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
+                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
                 }
 
                 // Recursively destroy children.
@@ -164,7 +164,7 @@ unsafe fn destroy_tree_recursive(
                 // Destroy all keys in the leaf node.
                 for i in 0..len as usize {
                     let key_slot = keys_ptr.add(i * key_size);
-                    let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
+                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
                 }
             }
         }
@@ -210,7 +210,7 @@ unsafe fn clone_tree_recursive(
                 for i in 0..len as usize {
                     let key_src = keys_ptr.add(i * key_size);
                     let key_dst = new_keys_ptr.add(i * key_size);
-                    let status = crate::clone::clone_value(rt_handle, key_src, key_tydesc, key_dst);
+                    let status = crate::impls::clone::clone_value(rt_handle, key_src, key_tydesc, key_dst);
                     if status != RtStatus::Ok {
                         free_node(rt, new_node, key_tydesc);
                         return std::ptr::null_mut();
@@ -254,7 +254,7 @@ unsafe fn clone_tree_recursive(
                 for i in 0..len as usize {
                     let key_src = keys_ptr.add(i * key_size);
                     let key_dst = new_keys_ptr.add(i * key_size);
-                    let status = crate::clone::clone_value(rt_handle, key_src, key_tydesc, key_dst);
+                    let status = crate::impls::clone::clone_value(rt_handle, key_src, key_tydesc, key_dst);
                     if status != RtStatus::Ok {
                         free_node(rt, new_leaf, key_tydesc);
                         return std::ptr::null_mut();
@@ -422,7 +422,7 @@ impl SplitInfo {
     unsafe fn destroy(mut self, rt: &mut RtLocal, element_tydesc: *const TyDesc) {
         unsafe {
             let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-            let _ = crate::destroy::any_destroy_local(
+            let _ = crate::impls::destroy::any_destroy_local(
                 rt_handle,
                 self.separator_key_buf.as_mut_ptr(),
                 element_tydesc,
@@ -467,7 +467,7 @@ unsafe fn leaf_insert_element(
                 crate::c::RtOrdering::Equal => {
                     // Element already exists, destroy the input and return.
                     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                    let _ = crate::destroy::any_destroy_local(rt_handle, element as *mut u8, element_tydesc);
+                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, element as *mut u8, element_tydesc);
                     return LeafInsertResult::AlreadyExists;
                 }
                 crate::c::RtOrdering::Greater => continue,
@@ -530,7 +530,7 @@ unsafe fn split_leaf(
         // Clone the separator key (first key of new_leaf).
         let mut separator_key_buf = vec![0u8; element_size];
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = crate::clone::clone_value(
+        let status = crate::impls::clone::clone_value(
             rt_handle,
             new_keys_ptr,
             element_tydesc,
@@ -677,7 +677,7 @@ unsafe fn insert_into_internal(
         // Clone the separator key into the node.
         let key_slot = keys_ptr.add(insert_pos * element_size);
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = crate::clone::clone_value(
+        let status = crate::impls::clone::clone_value(
             rt_handle,
             separator_key.as_ptr(),
             element_tydesc,
@@ -729,7 +729,7 @@ unsafe fn split_internal_node(
         // Clone the middle key as the separator to push up.
         let mut separator_key_buf = vec![0u8; element_size];
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = crate::clone::clone_value(
+        let status = crate::impls::clone::clone_value(
             rt_handle,
             keys_ptr.add(split_point * element_size),
             element_tydesc,
@@ -744,7 +744,7 @@ unsafe fn split_internal_node(
         }
 
         // Destroy the separator key in the old node since we've cloned it out.
-        let _ = crate::destroy::any_destroy_local(
+        let _ = crate::impls::destroy::any_destroy_local(
             rt_handle,
             keys_ptr.add(split_point * element_size),
             element_tydesc,
@@ -824,7 +824,7 @@ unsafe fn propagate_split_up(
 
             // Clone separator into new root.
             let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-            let status = crate::clone::clone_value(
+            let status = crate::impls::clone::clone_value(
                 rt_handle,
                 split_info.separator_key_buf.as_ptr(),
                 element_tydesc,
@@ -877,7 +877,7 @@ unsafe fn propagate_split_up(
                         let root_children_ptr = internal_child_ptrs_ptr(new_root, element_tydesc);
 
                         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                        let status = crate::clone::clone_value(
+                        let status = crate::impls::clone::clone_value(
                             rt_handle,
                             split_info.separator_key_buf.as_ptr(),
                             element_tydesc,
@@ -1029,7 +1029,7 @@ pub unsafe fn btreeset_clone_from_slice_impl(
 
             // Clone the element into a temporary buffer.
             let mut element_buf = vec![0u8; element_size];
-            let status = crate::clone::clone_value(
+            let status = crate::impls::clone::clone_value(
                 rt_handle,
                 element_ptr,
                 slice_element_tydesc,
@@ -1110,7 +1110,7 @@ pub unsafe fn btreeset_remove_impl(
                 crate::c::RtOrdering::Equal => {
                     // Found the element, destroy it.
                     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                    let _ = crate::destroy::any_destroy_local(rt_handle, node_key as *mut u8, set_element_tydesc);
+                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, node_key as *mut u8, set_element_tydesc);
 
                     // Shift remaining elements left.
                     if i < (len - 1) as usize {

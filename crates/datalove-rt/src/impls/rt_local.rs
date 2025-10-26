@@ -4,7 +4,7 @@
 //! including the allocator and any other runtime-specific state.
 
 use rmx::prelude::*;
-use crate::alloc::AllocLocal;
+use crate::impls::alloc::AllocLocal;
 
 /// Local runtime state.
 ///
@@ -24,7 +24,7 @@ impl RtLocal {
     }
 
     /// Create a new local runtime with a specific leak check mode.
-    pub fn with_leak_check_mode(mode: crate::alloc::LeakCheckMode) -> Box<RtLocal> {
+    pub fn with_leak_check_mode(mode: crate::impls::alloc::LeakCheckMode) -> Box<RtLocal> {
         Box::new(RtLocal {
             alloc: AllocLocal::new_raw_with_leak_check_mode(mode),
         })

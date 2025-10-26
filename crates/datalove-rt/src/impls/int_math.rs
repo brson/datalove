@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 use crate::rtdt;
-use crate::rt_local::RtLocal;
+use crate::impls::rt_local::RtLocal;
 use crate::c::{LocalRtHandle, RtStatus};
 
 /// Convert rtdt::Int to String for printing.

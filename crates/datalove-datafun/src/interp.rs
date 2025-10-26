@@ -68,7 +68,7 @@ pub struct InterpContext<'db> {
     pub db: &'db dyn crate::Db,
 
     /// Runtime allocator.
-    pub rt: Box<rt::rt_local::RtLocal>,
+    pub rt: Box<rt::impls::rt_local::RtLocal>,
 
     /// Type table.
     pub type_table: TypeTable,
@@ -98,7 +98,7 @@ impl<'db> InterpContext<'db> {
     pub fn new(db: &'db dyn crate::Db, type_table: TypeTable) -> Self {
         Self {
             db,
-            rt: rt::rt_local::RtLocal::new(),
+            rt: rt::impls::rt_local::RtLocal::new(),
             type_table,
             tydesc_table: crate::datalit::tydesc_table::TyDescTable::new(db),
             variables: HashMap::new(),
@@ -501,7 +501,7 @@ impl<'db> InterpContext<'db> {
     ///
     /// This clones the value at the given pointer into a new allocation.
     pub(crate) fn value_from_ptr(
-        rt: &mut rt::rt_local::RtLocal,
+        rt: &mut rt::impls::rt_local::RtLocal,
         ptr: *const u8,
         tydesc: *const rtdt::TyDesc
     ) -> Result<Value, InterpError> {
@@ -561,7 +561,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::Int => {
                 let mut new_value = unsafe { Value::alloc_int(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
@@ -578,7 +578,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::String => {
                 let mut new_value = unsafe { Value::alloc_string(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
@@ -595,7 +595,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::Tuple => {
                 let mut new_value = unsafe { Value::alloc_tuple(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
@@ -612,7 +612,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::Struct => {
                 let mut new_value = unsafe { Value::alloc_struct(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
@@ -629,7 +629,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::Enum => {
                 let mut new_value = unsafe { Value::alloc_enum(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
@@ -646,7 +646,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::List => {
                 let mut new_value = unsafe { Value::alloc_list(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
@@ -663,7 +663,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::Map => {
                 let mut new_value = unsafe { Value::alloc_map(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
@@ -680,7 +680,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::Set => {
                 let mut new_value = unsafe { Value::alloc_set(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
@@ -697,7 +697,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::Option => {
                 let mut new_value = unsafe { Value::alloc_option(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
@@ -714,7 +714,7 @@ impl<'db> InterpContext<'db> {
             rtdt::TyTag::Result => {
                 let mut new_value = unsafe { Value::alloc_result(rt, tydesc) };
                 let status = unsafe {
-                    rt::clone::clone_value(
+                    rt::impls::clone::clone_value(
                         rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,

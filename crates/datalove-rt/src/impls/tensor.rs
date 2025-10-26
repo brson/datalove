@@ -1,7 +1,7 @@
 //! Tensor operations.
 
 use rmx::prelude::*;
-use crate::{c::RtStatus, rt_local::RtLocal};
+use crate::{c::RtStatus, impls::rt_local::RtLocal};
 use crate::rtdt::TyDescRef;
 
 // ============================================================================
@@ -127,7 +127,7 @@ pub unsafe fn tensor_create_from_slice_impl(
 
         if rank == 0 || shape_data.is_null() {
             // Destroy the shape list before returning.
-            let _ = crate::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
             return RtStatus::Error;
         }
 
@@ -142,7 +142,7 @@ pub unsafe fn tensor_create_from_slice_impl(
 
         // Validate slice length matches total elements.
         if slice_len != total_elems {
-            let _ = crate::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
             return RtStatus::Error;
         }
 
@@ -152,7 +152,7 @@ pub unsafe fn tensor_create_from_slice_impl(
         // Allocate data buffer.
         let data_ptr = rt_ref.alloc.alloc(element_size, element_align, total_elems);
         if data_ptr.is_null() {
-            let _ = crate::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
             return RtStatus::Error;
         }
 
@@ -164,7 +164,7 @@ pub unsafe fn tensor_create_from_slice_impl(
         ) as *mut u32;
         if shape_array_ptr.is_null() {
             rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
-            let _ = crate::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
             return RtStatus::Error;
         }
 
@@ -182,7 +182,7 @@ pub unsafe fn tensor_create_from_slice_impl(
                 rank,
                 shape_array_ptr as *mut u8,
             );
-            let _ = crate::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
             return RtStatus::Error;
         }
 
@@ -192,7 +192,7 @@ pub unsafe fn tensor_create_from_slice_impl(
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data_ptr.add((i * element_size) as usize);
 
-            let status = crate::clone::clone_value(
+            let status = crate::impls::clone::clone_value(
                 rt_handle,
                 src_ptr,
                 element_tydesc_ref.as_ptr(),
@@ -203,7 +203,7 @@ pub unsafe fn tensor_create_from_slice_impl(
                 // Destroy elements that were successfully cloned.
                 for j in 0..i {
                     let elem_ptr = data_ptr.add((j * element_size) as usize);
-                    let _ = crate::destroy::any_destroy_local(
+                    let _ = crate::impls::destroy::any_destroy_local(
                         rt_handle,
                         elem_ptr,
                         element_tydesc_ref.as_ptr(),
@@ -222,7 +222,7 @@ pub unsafe fn tensor_create_from_slice_impl(
                     rank,
                     strides_array_ptr as *mut u8,
                 );
-                let _ = crate::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
+                let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
                 return status;
             }
         }
@@ -252,7 +252,7 @@ pub unsafe fn tensor_create_from_slice_impl(
         (*tensor_ptr).layout = layout_enum;
 
         // Destroy the moved-in shape list (we've copied its data).
-        let _ = crate::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
+        let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
 
         RtStatus::Ok
     }
@@ -310,7 +310,7 @@ pub unsafe fn tensor_get_impl(
 
         // Clone element to output buffer.
         let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = crate::clone::clone_value(
+        let status = crate::impls::clone::clone_value(
             rt_handle,
             element_ptr,
             element_ty.as_ptr(),
@@ -374,7 +374,7 @@ pub unsafe fn tensor_set_impl(
 
         // Destroy old value at this location.
         let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = crate::destroy::any_destroy_local(
+        let status = crate::impls::destroy::any_destroy_local(
             rt_handle,
             element_ptr,
             element_ty.as_ptr(),
@@ -384,7 +384,7 @@ pub unsafe fn tensor_set_impl(
         }
 
         // Clone new value into this location.
-        let status = crate::clone::clone_value(
+        let status = crate::impls::clone::clone_value(
             rt_handle,
             value_ptr,
             element_ty.as_ptr(),
@@ -565,7 +565,7 @@ pub unsafe fn tensor_destroy_impl(
 
             for i in 0..total_elems {
                 let element_ptr = ptr_base.add(i as usize * element_size);
-                let status = crate::destroy::any_destroy_local(
+                let status = crate::impls::destroy::any_destroy_local(
                     rt_handle,
                     element_ptr,
                     element_ty.as_ptr(),
@@ -846,14 +846,14 @@ pub unsafe fn tensor_reshape_impl(
 
         // Validate new rank.
         if new_rank == 0 || new_shape_data.is_null() {
-            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
         // Extract tensor fields.
         let rank = tensor_tydesc_ref.tensor_rank();
         if rank == 0 {
-            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
@@ -872,13 +872,13 @@ pub unsafe fn tensor_reshape_impl(
 
         // Validate offset_elems == 0 (can only reshape full tensor, not view).
         if offset_elems != 0 {
-            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
         // Validate tensor is contiguous.
         if !is_contiguous(shape, strides) {
-            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
@@ -896,7 +896,7 @@ pub unsafe fn tensor_reshape_impl(
 
         // Validate total elements match.
         if current_total != new_total {
-            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
@@ -915,7 +915,7 @@ pub unsafe fn tensor_reshape_impl(
         let strides_align = std::mem::align_of::<u32>() as u32;
         let new_strides_ptr = rt_ref.alloc.alloc(strides_size, strides_align, new_rank);
         if new_strides_ptr.is_null() {
-            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
@@ -932,7 +932,7 @@ pub unsafe fn tensor_reshape_impl(
         if new_shape_ptr.is_null() {
             // Free new_strides before returning.
             rt_ref.alloc.free(strides_size, strides_align, new_rank, new_strides_ptr);
-            let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+            let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
@@ -949,7 +949,7 @@ pub unsafe fn tensor_reshape_impl(
         rt_ref.alloc.free(shape_size, shape_align, rank, shape_ptr as *mut u8);
 
         // Destroy the new_shape List (including its data).
-        let _ = crate::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
+        let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
 
         // Construct output tensor.
         let payload_ptr = compute_result_payload_ptr(result_value_out, result_tydesc_ref);

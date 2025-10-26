@@ -1,6 +1,6 @@
 //! Deep cloning for runtime values.
 
-use crate::{c::{LocalRtHandle, RtStatus}, alloc, rtdt, rt_local};
+use crate::{c::{LocalRtHandle, RtStatus}, impls::{alloc, rt_local}, rtdt};
 
 /// Clone any type into the local heap.
 ///
@@ -231,7 +231,7 @@ unsafe fn clone_impl(
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
-                    crate::btreemap::btreemap_clone_tree(
+                    crate::impls::btreemap::btreemap_clone_tree(
                         rt_ref,
                         map_in.root,
                         key_ty,
@@ -263,7 +263,7 @@ unsafe fn clone_impl(
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
-                    crate::set::set_clone_tree(
+                    crate::impls::set::set_clone_tree(
                         rt_ref,
                         set_in.root,
                         element_ty.as_ptr(),

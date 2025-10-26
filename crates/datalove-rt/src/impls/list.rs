@@ -3,7 +3,7 @@
 //! Uses a simple growable array structure with element-based capacity.
 
 use rmx::prelude::*;
-use crate::rt_local::RtLocal;
+use crate::impls::rt_local::RtLocal;
 use crate::rtdt::{self, *};
 use crate::c::RtStatus;
 
@@ -77,7 +77,7 @@ pub unsafe fn list_create_from_slice_impl(
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data.add((i * element_size) as usize);
 
-            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr);
+            let status = crate::impls::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr);
             if status != RtStatus::Ok {
                 // Clean up partially created list.
                 (*list_ptr).size = i;
@@ -212,7 +212,7 @@ pub unsafe fn list_get_impl(
         let element_ptr = (data_ptr as *const u8).add(index as usize * element_size);
 
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = crate::clone::clone_value(
+        let status = crate::impls::clone::clone_value(
             rt_handle,
             element_ptr,
             element_tydesc,
@@ -259,7 +259,7 @@ pub unsafe fn list_set_impl(
         let element_ptr = data_ptr.add(index as usize * element_size);
 
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr());
+        let status = crate::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr());
         if status != RtStatus::Ok {
             return status;
         }
@@ -614,7 +614,7 @@ pub unsafe fn list_extend_from_slice_impl(
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data_ptr.add(((size + i) * element_size) as usize);
 
-            let status = crate::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr);
+            let status = crate::impls::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr);
             if status != RtStatus::Ok {
                 // Update size to reflect what was successfully added.
                 (*list_ptr).size = size + i;
@@ -723,7 +723,7 @@ unsafe fn destroy_elements(
 
         for i in start..end {
             let element_ptr = data_ptr.add((i as usize) * element_size);
-            let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr());
+            let status = crate::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr());
             if status != RtStatus::Ok {
                 return status;
             }
