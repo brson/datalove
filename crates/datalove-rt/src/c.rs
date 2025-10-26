@@ -133,7 +133,7 @@ pub unsafe extern "C" fn dtlv_rti_eq(
     // because we don't allocate - it's just part
     // of the ABI.
     unsafe {
-        crate::cmp::eq(value_a, tydesc_a, value_b, tydesc_b)
+        crate::impls::cmp::eq(value_a, tydesc_a, value_b, tydesc_b)
     }
 }
 
@@ -151,7 +151,7 @@ pub unsafe extern "C" fn dtlv_rti_eq_unique(
     tydesc_b: *const rtdt::TyDesc,
 ) -> RtEq {
     unsafe {
-        crate::cmp::eq_unique(value_a, tydesc_a, value_b, tydesc_b)
+        crate::impls::cmp::eq_unique(value_a, tydesc_a, value_b, tydesc_b)
     }
 }
 
@@ -168,7 +168,7 @@ pub unsafe extern "C" fn dtlv_rti_cmp(
     tydesc_b: *const rtdt::TyDesc,
 ) -> RtOrdering {
     unsafe {
-        crate::cmp::cmp(value_a, tydesc_a, value_b, tydesc_b)
+        crate::impls::cmp::cmp(value_a, tydesc_a, value_b, tydesc_b)
     }
 }
 
@@ -186,7 +186,7 @@ pub unsafe extern "C" fn dtlv_rti_cmp_total(
     tydesc_b: *const rtdt::TyDesc,
 ) -> RtOrdering {
     unsafe {
-        crate::cmp::cmp_total(value_a, tydesc_a, value_b, tydesc_b)
+        crate::impls::cmp::cmp_total(value_a, tydesc_a, value_b, tydesc_b)
     }
 }
 
@@ -211,7 +211,7 @@ pub unsafe extern "C" fn dtlv_rti_int_add(
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::int_math::int_add_impl(rt_ref, a_in, b_in, result_out)
+        crate::impls::int_math::int_add_impl(rt_ref, a_in, b_in, result_out)
     }
 }
 
@@ -232,7 +232,7 @@ pub unsafe extern "C" fn dtlv_rti_int_sub(
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::int_math::int_sub_impl(rt_ref, a_in, b_in, result_out)
+        crate::impls::int_math::int_sub_impl(rt_ref, a_in, b_in, result_out)
     }
 }
 
@@ -253,7 +253,7 @@ pub unsafe extern "C" fn dtlv_rti_int_mul(
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::int_math::int_mul_impl(rt_ref, a_in, b_in, result_out)
+        crate::impls::int_math::int_mul_impl(rt_ref, a_in, b_in, result_out)
     }
 }
 
@@ -272,7 +272,7 @@ pub unsafe extern "C" fn dtlv_rti_int_neg(
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::int_math::int_neg_impl(rt_ref, a_in, result_out)
+        crate::impls::int_math::int_neg_impl(rt_ref, a_in, result_out)
     }
 }
 
@@ -294,7 +294,7 @@ pub unsafe extern "C" fn dtlv_rti_int_div_checked(
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::int_math::int_div_checked_impl(rt_ref, a_in, b_in, result_out)
+        crate::impls::int_math::int_div_checked_impl(rt_ref, a_in, b_in, result_out)
     }
 }
 

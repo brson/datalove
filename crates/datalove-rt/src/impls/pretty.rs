@@ -244,7 +244,7 @@ unsafe fn pretty_int(
     unsafe {
         let int_ptr = value_ref as *const rtdt::Int;
         push_str(rt, string_mut, string_tydesc, b"@")?;
-        let s = crate::int_math::int_to_string_impl(int_ptr);
+        let s = super::int_math::int_to_string_impl(int_ptr);
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }

@@ -387,7 +387,7 @@ unsafe fn find_leaf_for_key(
                     let mut child_idx = 0;
                     for i in 0..len as usize {
                         let node_key = keys_ptr.add(i * key_size);
-                        let cmp_result = crate::cmp::cmp_total(
+                        let cmp_result = super::cmp::cmp_total(
                             key,
                             key_tydesc.as_ptr(),
                             node_key,
@@ -443,7 +443,7 @@ unsafe fn leaf_insert_or_update(
         let mut insert_pos = len as usize;
         for i in 0..len as usize {
             let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = crate::cmp::cmp_total(
+            let cmp_result = super::cmp::cmp_total(
                 key,
                 key_tydesc.as_ptr(),
                 node_key,
@@ -563,7 +563,7 @@ unsafe fn split_leaf(
         }
 
         // Determine which leaf should receive the new key.
-        let cmp_result = crate::cmp::cmp_total(key, key_tydesc.as_ptr(), separator_key_buf.as_ptr(), key_tydesc.as_ptr());
+        let cmp_result = super::cmp::cmp_total(key, key_tydesc.as_ptr(), separator_key_buf.as_ptr(), key_tydesc.as_ptr());
         let mut insert_result = match cmp_result {
             crate::c::RtOrdering::Less => {
                 // Key goes in left leaf.
@@ -620,7 +620,7 @@ unsafe fn insert_into_internal(
         let mut insert_pos = len as usize;
         for i in 0..len as usize {
             let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = crate::cmp::cmp_total(
+            let cmp_result = super::cmp::cmp_total(
                 separator_key.as_ptr(),
                 key_tydesc.as_ptr(),
                 node_key,
@@ -742,7 +742,7 @@ unsafe fn split_internal_node(
         write_node_len(new_node, keys_to_move as u32);
 
         // Now insert the pending key/child into the appropriate node.
-        let cmp_result = crate::cmp::cmp_total(
+        let cmp_result = super::cmp::cmp_total(
             pending_key.as_ptr(),
             key_tydesc.as_ptr(),
             separator_key_buf.as_ptr(),
@@ -900,7 +900,7 @@ unsafe fn find_leaf_with_path(
                     let mut child_idx = 0;
                     for i in 0..len as usize {
                         let node_key = keys_ptr.add(i * key_size);
-                        let cmp_result = crate::cmp::cmp_total(
+                        let cmp_result = super::cmp::cmp_total(
                             key,
                             key_tydesc.as_ptr(),
                             node_key,
@@ -1078,7 +1078,7 @@ pub unsafe fn btreemap_get_impl(
         // Search for the key in the leaf.
         for i in 0..len as usize {
             let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = crate::cmp::cmp_total(
+            let cmp_result = super::cmp::cmp_total(
                 key_ref,
                 key_tydesc.as_ptr(),
                 node_key,
@@ -1154,7 +1154,7 @@ unsafe fn leaf_remove(
         // Find the key in the leaf.
         for i in 0..len as usize {
             let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = crate::cmp::cmp_total(key, key_tydesc.as_ptr(), node_key, key_tydesc.as_ptr());
+            let cmp_result = super::cmp::cmp_total(key, key_tydesc.as_ptr(), node_key, key_tydesc.as_ptr());
 
             match cmp_result {
                 crate::c::RtOrdering::Equal => {
@@ -1702,7 +1702,7 @@ unsafe fn remove_recursive(
                 for i in 0..len as usize {
                     let node_key = keys_ptr.add(i * key_size);
                     let cmp_result =
-                        crate::cmp::cmp_total(key, key_tydesc.as_ptr(), node_key, key_tydesc.as_ptr());
+                        super::cmp::cmp_total(key, key_tydesc.as_ptr(), node_key, key_tydesc.as_ptr());
                     match cmp_result {
                         crate::c::RtOrdering::Less => break,
                         crate::c::RtOrdering::Equal => {

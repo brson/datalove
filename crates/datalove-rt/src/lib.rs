@@ -48,7 +48,6 @@ pub mod c;
 pub mod rust;
 pub mod impls;
 
-mod cmp;
 pub use impls::alloc;
 pub use impls::rt_local;
 pub use impls::clone;
@@ -59,4 +58,3 @@ pub use impls::set;
 pub use impls::list;
 pub use impls::tensor;
 pub use impls::destroy;
-mod int_math;

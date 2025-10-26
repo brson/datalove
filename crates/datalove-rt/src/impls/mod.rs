@@ -14,3 +14,5 @@ pub mod set;
 pub mod list;
 pub mod tensor;
 pub mod destroy;
+pub mod cmp;
+pub mod int_math;
