@@ -4,7 +4,7 @@ use rmx::prelude::*;
 
 use datalove_datalit::{Database, instantiate2};
 use datalove_datalit::tydesc_table::TyDescTable;
-use datalove_rt::rt_local::RtLocal;
+use datalove_rt::impls::rt_local::RtLocal;
 
 #[salsa::tracked]
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {

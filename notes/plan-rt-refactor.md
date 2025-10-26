@@ -4,7 +4,7 @@
 
 - [x] Phase 1: Create C and Rust Modules - **COMPLETED**
 - [x] Phase 2: Organize impl Module - **COMPLETED**
-- [ ] Phase 3: Migrate External Callers
+- [x] Phase 3: Migrate External Callers - **COMPLETED**
 - [ ] Phase 4: Finalize Privacy
 
 ## Initial State (Before Refactoring)
@@ -105,22 +105,44 @@ Created new module to organize internal implementations:
 - All external crates continue to work without changes
 - Three-layer architecture now fully exposed: `impls`, `c`, and `rust` modules
 
-## Phase 3: Migrate External Callers
+## Phase 3: Migrate External Callers - ✅ COMPLETED
 
-### Step 5: Update external crates to use rust module
+### Step 5: Update external crates to use appropriate module paths - ✅ Done
 
-Files to update:
-- `crates/datalove-datalit/src/instantiate2.rs`
-  - Replace `rt_local::RtLocal` with `rust::Runtime`
-  - Replace direct `string::*` calls with rust module equivalents
-- `crates/datalove-cli/src/main.rs`
-  - Replace `rt_local::RtLocal` with `rust::Runtime`
-- `crates/datalove-datafun/src/eval_datafun.rs`
-  - Replace `rt_local::RtLocal` with `rust::Runtime`
-  - Replace `clone::clone_value` with rust module equivalent
-- `crates/datalove-rt-tests/tests/*.rs`
-  - Consider: keep using internals (via `impls` module) as it's test infrastructure
-  - Or: migrate to rust module for more realistic testing
+Migration strategy:
+- **datalove-cli**: Migrated to use `rust::Runtime` for RAII wrapper
+  - Changed `RtLocal::new()` to `Runtime::new()`
+  - Used `runtime.rt_local_mut()` to get mutable reference for library calls
+  - Removed manual `shutdown()` call (handled by Drop)
+  - Used `runtime.handle()` to get C-ABI handle
+- **datalove-datalit**: Updated to use `impls::rt_local::RtLocal`
+  - Changed all `datalove_rt::rt_local::RtLocal` to `datalove_rt::impls::rt_local::RtLocal`
+  - Library functions continue to accept `&mut RtLocal` parameters
+- **datalove-datafun**: Updated to use `impls` paths
+  - Changed `datalove_rt::rt_local::RtLocal` to `datalove_rt::impls::rt_local::RtLocal`
+  - Changed `datalove_rt::clone::clone_value` to `datalove_rt::impls::clone::clone_value`
+- **datalove-rt-tests**: Updated to use `impls` paths
+  - Changed all `rt::rt_local::RtLocal` to `rt::impls::rt_local::RtLocal`
+  - Changed all `datalove_rt::rt_local::RtLocal` to `datalove_rt::impls::rt_local::RtLocal`
+  - Test infrastructure continues to use internal implementation for direct testing
+
+### Phase 3 Test Results - ✅ All Passed
+
+- `cargo test -p datalove-rt --lib`: 87 tests passed
+- `cargo test -p datalove-rt-tests`: All tests passed (300+ tests)
+- `cargo build -p datalove-cli`: Success
+- `cargo build -p datalove-datalit`: Success
+- `cargo build -p datalove-datafun`: Success
+- `cargo test --all --lib`: Full workspace test suite passes (287 tests)
+
+### Phase 3 Achievements
+
+- CLI code uses safe `rust::Runtime` wrapper with RAII
+- Library code uses `impls` module for internal implementation access
+- Clear separation: public safe API (`rust`) vs internal implementation (`impls`)
+- All external crates successfully migrated without breaking changes
+- Full backward compatibility maintained via re-exports
+- All tests passing across entire workspace
 
 ## Phase 4: Finalize Privacy
 

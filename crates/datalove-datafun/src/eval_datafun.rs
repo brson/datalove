@@ -1669,7 +1669,7 @@ fn create_result_err_with_string(
 /// This is used for inline types (Bool, U32, F32, etc.) that need to be
 /// stored in Error structures which expect heap pointers.
 unsafe fn alloc_scalar_value(
-    rt: &mut datalove_rt::rt_local::RtLocal,
+    rt: &mut datalove_rt::impls::rt_local::RtLocal,
     value: &Value,
     tydesc: *const datalove_rtdt::TyDesc,
 ) -> *const u8 {
@@ -1701,7 +1701,7 @@ unsafe fn alloc_scalar_value(
 
 /// Helper function to write a Value to a memory location.
 unsafe fn write_value_to_ptr(
-    rt: &mut datalove_rt::rt_local::RtLocal,
+    rt: &mut datalove_rt::impls::rt_local::RtLocal,
     value: Value,
     dest_ptr: *mut u8,
 ) -> Result<(), InterpError> {
@@ -1718,7 +1718,7 @@ unsafe fn write_value_to_ptr(
         Value::Int { ptr, tydesc } => {
             // Clone the Int value to the destination.
             let rt_handle = rt as *mut _ as datalove_rt::LocalRtHandle;
-            let status = unsafe { datalove_rt::clone::clone_value(
+            let status = unsafe { datalove_rt::impls::clone::clone_value(
                 rt_handle,
                 ptr as *const u8,
                 tydesc,
@@ -1732,7 +1732,7 @@ unsafe fn write_value_to_ptr(
         }
         Value::String { ptr, tydesc } => {
             let rt_handle = rt as *mut _ as datalove_rt::LocalRtHandle;
-            let status = unsafe { datalove_rt::clone::clone_value(
+            let status = unsafe { datalove_rt::impls::clone::clone_value(
                 rt_handle,
                 ptr as *const u8,
                 tydesc,

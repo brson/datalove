@@ -52,12 +52,11 @@ impl Default for Runtime {
 
 impl Drop for Runtime {
     fn drop(&mut self) {
-        if !self.handle.is_null() {
-            unsafe {
-                let status = crate::c::dtlv_rti_shutdown(self.handle);
-                debug_assert_eq!(status, RtStatus::Ok, "Runtime shutdown failed");
-            }
-            self.handle = std::ptr::null_mut();
+        assert!(!self.handle.is_null());
+        unsafe {
+            let status = crate::c::dtlv_rti_shutdown(self.handle);
+            debug_assert_eq!(status, RtStatus::Ok, "Runtime shutdown failed");
         }
+        self.handle = std::ptr::null_mut();
     }
 }

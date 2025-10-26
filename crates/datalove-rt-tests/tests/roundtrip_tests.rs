@@ -133,7 +133,7 @@ fn compile<'db>(
 
 fn compile_and_instantiate<'db>(
     db: &'db datalit::Database,
-    rt: &mut rt::rt_local::RtLocal,
+    rt: &mut rt::impls::rt_local::RtLocal,
     tydesc_table: &mut datalit::tydesc_table::TyDescTable<'db>,
     source_text: &str,
 ) -> Result<(datalit::instantiate2::InstantiatedValue, datalit::tycheck::TypecheckResult<'db>), String> {
@@ -176,7 +176,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Step 1: Parse, type check, and instantiate the original datalit.
     let db = datalit::Database::default();
-    let mut rt_inst = rt::rt_local::RtLocal::new();
+    let mut rt_inst = rt::impls::rt_local::RtLocal::new();
     let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(&db);
     let (inst1, tycheck1) = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &source_text)?;
 
@@ -208,7 +208,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     if heap1 != heap2 || !types_equal(&db, type1.ty(&db), type2.ty(&db)) {
         unsafe {
-            let rt_handle = &mut *rt_inst as *mut rt::rt_local::RtLocal as *mut u8;
+            let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
             rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
             rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
             rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
@@ -223,7 +223,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     if heap2 != heap3 || !types_equal(&db, type2.ty(&db), type3.ty(&db)) {
         unsafe {
-            let rt_handle = &mut *rt_inst as *mut rt::rt_local::RtLocal as *mut u8;
+            let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
             rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
             rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
             rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
@@ -239,7 +239,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Step 7: Check that both pretty-prints are identical.
     if pretty1 != pretty2 {
         unsafe {
-            let rt_handle = &mut *rt_inst as *mut rt::rt_local::RtLocal as *mut u8;
+            let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
             rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
             rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
             rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
@@ -254,7 +254,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Clean up instantiated values before shutdown.
     unsafe {
-        let rt_handle = &mut *rt_inst as *mut rt::rt_local::RtLocal as *mut u8;
+        let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
         rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
         rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
         rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);

@@ -226,11 +226,11 @@ impl LitOpCommand {
         }
 
         // Instantiate values.
-        let mut rt = datalove_rt::rt_local::RtLocal::new();
+        let mut rt = datalove_rt::rust::Runtime::new();
         let mut tydesc_table1 = datalit::tydesc_table::TyDescTable::new(&db);
-        let inst1 = datalit::instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table1, typechecked1)?;
+        let inst1 = datalit::instantiate2::instantiate_value(&db, unsafe { rt.rt_local_mut() }, &mut tydesc_table1, typechecked1)?;
         let mut tydesc_table2 = datalit::tydesc_table::TyDescTable::new(&db);
-        let inst2 = datalit::instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table2, typechecked2)?;
+        let inst2 = datalit::instantiate2::instantiate_value(&db, unsafe { rt.rt_local_mut() }, &mut tydesc_table2, typechecked2)?;
 
         // Execute the operation.
         match self.op.as_str() {
@@ -278,12 +278,12 @@ impl LitOpCommand {
 
         // Clean up instantiated values before shutdown.
         unsafe {
-            let rt_handle = &mut *rt as *mut datalove_rt::rt_local::RtLocal as *mut u8;
+            let rt_handle = rt.handle();
             datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
             datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
             datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
             datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
-            rt.shutdown();
+            // Runtime shutdown handled by Drop
         }
         Ok(())
     }
