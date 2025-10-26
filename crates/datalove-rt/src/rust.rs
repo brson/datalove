@@ -34,14 +34,6 @@ impl Runtime {
         unsafe { &mut *(self.handle as *mut RtLocal) }
     }
 
-    /// Get a shared reference to the underlying RtLocal.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that the handle is valid.
-    pub unsafe fn rt_local(&self) -> &RtLocal {
-        unsafe { &*(self.handle as *const RtLocal) }
-    }
 }
 
 impl Default for Runtime {
