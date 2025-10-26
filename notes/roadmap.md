@@ -5,11 +5,13 @@
 
 ## language
 
+- remove u32 bare math ops
 - move/clone semantics
 - error diagnostics
 
 ## testing
 
+- benchmarking
 - runtime value generator for proptesting
 - have exampletest apply test filter
 
@@ -30,6 +32,7 @@
 
 ## documentation
 
+- primer / walkthrough / tutorial
 - improve readme
 
 
