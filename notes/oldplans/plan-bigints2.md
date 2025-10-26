@@ -1,15 +1,21 @@
 # Plan: Convert int_math from ibig to Custom Implementation
 
-## Status: IN PROGRESS
+## Status: ✅ COMPLETED
 
 ## Progress
 - ✅ Phase 1: Negation (Trivial)
 - ✅ Phase 2: String Conversion (Moderate)
 - ✅ Phase 3: Addition (Moderate)
+- ✅ Phase 4: Subtraction (Moderate)
+- ✅ Phase 5: Multiplication (Complex)
+- ✅ Phase 6: Division (Most Complex)
+- ✅ Phase 7: Cleanup
 
-## Current State
-- `int_math.rs` uses `ibig` internally for all bigint operations
+## Final State
+- `int_math.rs` now uses custom limb-based implementation for all bigint operations
 - `rtdt::Int` stores bigints as u32 limbs (similar to GMP format)
+- ibig dependency removed from `crates/datalove-rt/Cargo.toml`
+- Conversion functions `rtdt_int_to_ibig` and `ibig_to_rtdt_int` removed
 - 6 operations: int_to_string, add, sub, mul, neg, div_checked
 - Testing: 6 integration tests (200-205) via datafun interpreter
 - All 142 tests currently passing
