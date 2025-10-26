@@ -209,10 +209,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     if heap1 != heap2 || !types_equal(&db, type1.ty(&db), type2.ty(&db)) {
         unsafe {
             let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
-            rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
-            rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
-            rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
-            rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
             rt_inst.shutdown();
         }
         return Err(format!(
@@ -224,10 +224,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     if heap2 != heap3 || !types_equal(&db, type2.ty(&db), type3.ty(&db)) {
         unsafe {
             let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
-            rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
-            rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
-            rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
-            rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
             rt_inst.shutdown();
         }
         return Err(format!(
@@ -240,10 +240,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     if pretty1 != pretty2 {
         unsafe {
             let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
-            rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
-            rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
-            rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
-            rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+            rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+            rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
             rt_inst.shutdown();
         }
         return Err(format!(
@@ -255,10 +255,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Clean up instantiated values before shutdown.
     unsafe {
         let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
-        rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
-        rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
-        rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
-        rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+        rt::c::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+        rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+        rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+        rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
         rt_inst.shutdown();
     }
     Ok(pretty1)

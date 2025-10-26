@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use crate::ast::*;
 use crate::interp::{InterpContext, InterpResult, InterpError};
 use crate::value::Value;
-use datalove_rt::{self as rt, LocalRtHandle, RtStatus};
+use datalove_rt::{self as rt, c::{LocalRtHandle, RtStatus}};
 
 /// Evaluate a datafun expression.
 pub fn eval_expr<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>) -> InterpResult {
@@ -178,11 +178,11 @@ fn eval_name<'db>(
             };
 
             // Get handle to runtime.
-            let rt_handle = Box::as_mut(&mut ctx.rt) as *mut _ as rt::LocalRtHandle;
+            let rt_handle = Box::as_mut(&mut ctx.rt) as *mut _ as rt::c::LocalRtHandle;
 
             // Clone the value.
             let status = unsafe {
-                rt::dtlv_rti_clone_local(
+                rt::c::dtlv_rti_clone_local(
                     rt_handle,
                     ptr,
                     tydesc,
@@ -190,7 +190,7 @@ fn eval_name<'db>(
                 )
             };
 
-            if status != rt::RtStatus::Ok {
+            if status != rt::c::RtStatus::Ok {
                 return Err(InterpError::RuntimeError(
                     format!("Failed to clone {:?} value", kind),
                 ));
@@ -287,7 +287,7 @@ fn eval_neg(ctx: &mut InterpContext<'_>, operand: Value) -> InterpResult {
             let result = unsafe { Value::alloc_int(&mut ctx.rt, tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::dtlv_rti_int_neg(
+                    rt::c::dtlv_rti_int_neg(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         ptr as *const u8,
                         tydesc,
@@ -411,7 +411,7 @@ fn eval_add(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
             let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::dtlv_rti_int_add(
+                    rt::c::dtlv_rti_int_add(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         a_ptr as *const u8,
                         a_tydesc,
@@ -449,7 +449,7 @@ fn eval_sub(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
             let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::dtlv_rti_int_sub(
+                    rt::c::dtlv_rti_int_sub(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         a_ptr as *const u8,
                         a_tydesc,
@@ -487,7 +487,7 @@ fn eval_mul(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
             let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::dtlv_rti_int_mul(
+                    rt::c::dtlv_rti_int_mul(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         a_ptr as *const u8,
                         a_tydesc,
@@ -794,7 +794,7 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
             let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
-                    rt::dtlv_rti_int_div_checked(
+                    rt::c::dtlv_rti_int_div_checked(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                         a_ptr as *const u8,
                         a_tydesc,
@@ -1624,17 +1624,17 @@ fn create_result_err_with_string(
         // alloc_string already initializes the String struct properly.
         let mut string_value = Value::alloc_string(&mut ctx.rt, string_tydesc);
 
-        let rt_handle = ctx.rt.as_mut() as *mut _ as datalove_rt::LocalRtHandle;
+        let rt_handle = ctx.rt.as_mut() as *mut _ as datalove_rt::c::LocalRtHandle;
 
         // Push the error message bytes into the string.
-        let status = datalove_rt::dtlv_rti_string_push_bytes_local(
+        let status = datalove_rt::c::dtlv_rti_string_push_bytes_local(
             rt_handle,
             string_value.as_mut_ptr(),
             string_tydesc,
             error_msg.as_ptr(),
             error_msg.len() as u32,
         );
-        if status != datalove_rt::RtStatus::Ok {
+        if status != datalove_rt::c::RtStatus::Ok {
             return Err(InterpError::RuntimeError(
                 "Failed to push error message to string".to_string(),
             ));
@@ -1717,28 +1717,28 @@ unsafe fn write_value_to_ptr(
         }
         Value::Int { ptr, tydesc } => {
             // Clone the Int value to the destination.
-            let rt_handle = rt as *mut _ as datalove_rt::LocalRtHandle;
+            let rt_handle = rt as *mut _ as datalove_rt::c::LocalRtHandle;
             let status = unsafe { datalove_rt::impls::clone::clone_value(
                 rt_handle,
                 ptr as *const u8,
                 tydesc,
                 dest_ptr,
             ) };
-            if status != datalove_rt::RtStatus::Ok {
+            if status != datalove_rt::c::RtStatus::Ok {
                 return Err(InterpError::RuntimeError(
                     "Failed to clone Int value".to_string(),
                 ));
             }
         }
         Value::String { ptr, tydesc } => {
-            let rt_handle = rt as *mut _ as datalove_rt::LocalRtHandle;
+            let rt_handle = rt as *mut _ as datalove_rt::c::LocalRtHandle;
             let status = unsafe { datalove_rt::impls::clone::clone_value(
                 rt_handle,
                 ptr as *const u8,
                 tydesc,
                 dest_ptr,
             ) };
-            if status != datalove_rt::RtStatus::Ok {
+            if status != datalove_rt::c::RtStatus::Ok {
                 return Err(InterpError::RuntimeError(
                     "Failed to clone String value".to_string(),
                 ));

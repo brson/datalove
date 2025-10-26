@@ -562,13 +562,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_int(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone Int value".to_string()
                     ));
@@ -579,13 +579,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_string(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone String value".to_string()
                     ));
@@ -596,13 +596,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_tuple(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone Tuple value".to_string()
                     ));
@@ -613,13 +613,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_struct(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone Struct value".to_string()
                     ));
@@ -630,13 +630,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_enum(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone Enum value".to_string()
                     ));
@@ -647,13 +647,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_list(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone List value".to_string()
                     ));
@@ -664,13 +664,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_map(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone Map value".to_string()
                     ));
@@ -681,13 +681,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_set(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone Set value".to_string()
                     ));
@@ -698,13 +698,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_option(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone Option value".to_string()
                     ));
@@ -715,13 +715,13 @@ impl<'db> InterpContext<'db> {
                 let mut new_value = unsafe { Value::alloc_result(rt, tydesc) };
                 let status = unsafe {
                     rt::clone::clone_value(
-                        rt as *mut _ as rt::LocalRtHandle,
+                        rt as *mut _ as rt::c::LocalRtHandle,
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
                     )
                 };
-                if status != rt::RtStatus::Ok {
+                if status != rt::c::RtStatus::Ok {
                     return Err(InterpError::RuntimeError(
                         "Failed to clone Result value".to_string()
                     ));

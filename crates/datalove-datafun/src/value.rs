@@ -340,20 +340,20 @@ impl Value {
     ) -> Result<String, crate::interp::InterpError> {
         unsafe {
             // Get runtime handle.
-            let rt_handle = rt as *mut _ as rt::LocalRtHandle;
+            let rt_handle = rt as *mut _ as rt::c::LocalRtHandle;
 
             // Get string type descriptor from table.
             let string_tydesc = tydesc_table.get_or_create(&crate::datalit::tycheck::Type::String);
 
             // Create output string.
             let mut output_string = std::mem::MaybeUninit::<rtdt::String>::uninit();
-            let status = rt::dtlv_rti_string_create_local(
+            let status = rt::c::dtlv_rti_string_create_local(
                 rt_handle,
                 output_string.as_mut_ptr() as *mut u8,
                 string_tydesc,
             );
 
-            if status != rt::RtStatus::Ok {
+            if status != rt::c::RtStatus::Ok {
                 return Err(crate::interp::InterpError::RuntimeError(
                     "Failed to create output string".to_string(),
                 ));
@@ -392,7 +392,7 @@ impl Value {
             };
 
             // Pretty-print value.
-            let status = rt::dtlv_rti_pretty_print_local(
+            let status = rt::c::dtlv_rti_pretty_print_local(
                 rt_handle,
                 value_ptr,
                 tydesc_ptr,
@@ -400,8 +400,8 @@ impl Value {
                 string_tydesc,
             );
 
-            if status != rt::RtStatus::Ok {
-                rt::dtlv_rti_string_destroy_local(
+            if status != rt::c::RtStatus::Ok {
+                rt::c::dtlv_rti_string_destroy_local(
                     rt_handle,
                     &mut output_string as *mut rtdt::String as *mut u8,
                     string_tydesc,
@@ -420,7 +420,7 @@ impl Value {
             };
 
             // Cleanup.
-            rt::dtlv_rti_string_destroy_local(
+            rt::c::dtlv_rti_string_destroy_local(
                 rt_handle,
                 &mut output_string as *mut rtdt::String as *mut u8,
                 string_tydesc,
@@ -446,9 +446,9 @@ impl Value {
             Value::String { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
                     // First, destroy the string's internal buffer.
-                    let rt_handle = rt as *mut _ as rt::LocalRtHandle;
+                    let rt_handle = rt as *mut _ as rt::c::LocalRtHandle;
                     unsafe {
-                        rt::dtlv_rti_string_destroy_local(
+                        rt::c::dtlv_rti_string_destroy_local(
                             rt_handle,
                             *ptr as *mut u8,
                             *tydesc,

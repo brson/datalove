@@ -28,7 +28,7 @@ pub fn pretty_print_runtime_value<'db>(
 ) -> Result<String, String> {
     unsafe {
         // Initialize runtime for pretty printing.
-        let rt_handle = datalove_rt::dtlv_rti_init();
+        let rt_handle = datalove_rt::c::dtlv_rti_init();
         if rt_handle.is_null() {
             return Err("Failed to initialize runtime".to_string());
         }
@@ -45,21 +45,21 @@ pub fn pretty_print_runtime_value<'db>(
 
         // Create output string.
         let mut output_string = std::mem::MaybeUninit::<datalove_rt::rtdt::String>::uninit();
-        let status = datalove_rt::dtlv_rti_string_create_local(
+        let status = datalove_rt::c::dtlv_rti_string_create_local(
             rt_handle,
             output_string.as_mut_ptr() as *mut u8,
             &string_tydesc,
         );
 
-        if status != datalove_rt::RtStatus::Ok {
-            datalove_rt::dtlv_rti_shutdown(rt_handle);
+        if status != datalove_rt::c::RtStatus::Ok {
+            datalove_rt::c::dtlv_rti_shutdown(rt_handle);
             return Err("Failed to create output string".to_string());
         }
 
         let mut output_string = output_string.assume_init();
 
         // Pretty-print value using runtime.
-        let status = datalove_rt::dtlv_rti_pretty_print_local(
+        let status = datalove_rt::c::dtlv_rti_pretty_print_local(
             rt_handle,
             value_ptr,
             tydesc_ptr,
@@ -67,13 +67,13 @@ pub fn pretty_print_runtime_value<'db>(
             &string_tydesc,
         );
 
-        if status != datalove_rt::RtStatus::Ok {
-            datalove_rt::dtlv_rti_string_destroy_local(
+        if status != datalove_rt::c::RtStatus::Ok {
+            datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt_handle,
                 &mut output_string as *mut datalove_rt::rtdt::String as *mut u8,
                 &string_tydesc,
             );
-            datalove_rt::dtlv_rti_shutdown(rt_handle);
+            datalove_rt::c::dtlv_rti_shutdown(rt_handle);
             return Err("Failed to pretty-print value".to_string());
         }
 
@@ -86,12 +86,12 @@ pub fn pretty_print_runtime_value<'db>(
         };
 
         // Cleanup runtime string.
-        datalove_rt::dtlv_rti_string_destroy_local(
+        datalove_rt::c::dtlv_rti_string_destroy_local(
             rt_handle,
             &mut output_string as *mut datalove_rt::rtdt::String as *mut u8,
             &string_tydesc,
         );
-        datalove_rt::dtlv_rti_shutdown(rt_handle);
+        datalove_rt::c::dtlv_rti_shutdown(rt_handle);
 
         // Build type hint string.
         let mut type_str = String::new();

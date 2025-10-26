@@ -5,7 +5,7 @@
 use rmx::prelude::*;
 use crate::rt_local;
 use crate::rtdt;
-use crate::{LocalRtHandle, RtStatus};
+use crate::c::{LocalRtHandle, RtStatus};
 
 /// Pretty-prints a runtime value into a string.
 ///

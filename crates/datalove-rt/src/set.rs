@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use crate::rtdt::{self, TyDesc, Set, SetNode, SetNodeTag, SET_NODE_CAPACITY};
 use crate::rt_local::RtLocal;
-use crate::RtStatus;
+use crate::c::RtStatus;
 
 /// Reads the tag from a set node.
 unsafe fn read_node_tag(node: *const SetNode) -> SetNodeTag {
@@ -142,7 +142,7 @@ unsafe fn destroy_tree_recursive(
                 // Destroy all keys in the internal node.
                 let keys_ptr = internal_keys_ptr(node, key_tydesc);
                 let key_size = (*key_tydesc).size as usize;
-                let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
                 for i in 0..len as usize {
                     let key_slot = keys_ptr.add(i * key_size);
                     let _ = crate::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc);
@@ -159,7 +159,7 @@ unsafe fn destroy_tree_recursive(
                 let len = read_node_len(node);
                 let keys_ptr = leaf_keys_ptr(node, key_tydesc);
                 let key_size = (*key_tydesc).size as usize;
-                let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
                 // Destroy all keys in the leaf node.
                 for i in 0..len as usize {
@@ -186,7 +186,7 @@ unsafe fn clone_tree_recursive(
         }
 
         let tag = read_node_tag(node);
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
         match tag {
             SetNodeTag::Internal => {
@@ -377,15 +377,15 @@ unsafe fn find_leaf_for_element(
                             element_tydesc,
                         );
                         match cmp_result {
-                            crate::RtOrdering::Less => break,
-                            crate::RtOrdering::Equal => {
+                            crate::c::RtOrdering::Less => break,
+                            crate::c::RtOrdering::Equal => {
                                 child_idx = i + 1;
                                 break;
                             }
-                            crate::RtOrdering::Greater => {
+                            crate::c::RtOrdering::Greater => {
                                 child_idx = i + 1;
                             }
-                            crate::RtOrdering::Error => break,
+                            crate::c::RtOrdering::Error => break,
                         }
                     }
 
@@ -421,7 +421,7 @@ impl SplitInfo {
     /// Destroy the separator key and clean up.
     unsafe fn destroy(mut self, rt: &mut RtLocal, element_tydesc: *const TyDesc) {
         unsafe {
-            let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+            let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
             let _ = crate::destroy::any_destroy_local(
                 rt_handle,
                 self.separator_key_buf.as_mut_ptr(),
@@ -460,18 +460,18 @@ unsafe fn leaf_insert_element(
                 element_tydesc,
             );
             match cmp_result {
-                crate::RtOrdering::Less => {
+                crate::c::RtOrdering::Less => {
                     insert_pos = i;
                     break;
                 }
-                crate::RtOrdering::Equal => {
+                crate::c::RtOrdering::Equal => {
                     // Element already exists, destroy the input and return.
-                    let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+                    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
                     let _ = crate::destroy::any_destroy_local(rt_handle, element as *mut u8, element_tydesc);
                     return LeafInsertResult::AlreadyExists;
                 }
-                crate::RtOrdering::Greater => continue,
-                crate::RtOrdering::Error => {
+                crate::c::RtOrdering::Greater => continue,
+                crate::c::RtOrdering::Error => {
                     insert_pos = i;
                     break;
                 }
@@ -529,7 +529,7 @@ unsafe fn split_leaf(
 
         // Clone the separator key (first key of new_leaf).
         let mut separator_key_buf = vec![0u8; element_size];
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::clone::clone_value(
             rt_handle,
             new_keys_ptr,
@@ -543,13 +543,13 @@ unsafe fn split_leaf(
         // Determine which leaf should receive the new element.
         let cmp_result = crate::cmp::cmp_total(element, element_tydesc, separator_key_buf.as_ptr(), element_tydesc);
         let insert_result = match cmp_result {
-            crate::RtOrdering::Less => {
+            crate::c::RtOrdering::Less => {
                 leaf_insert_element(rt, leaf, element, element_tydesc)
             }
-            crate::RtOrdering::Equal | crate::RtOrdering::Greater => {
+            crate::c::RtOrdering::Equal | crate::c::RtOrdering::Greater => {
                 leaf_insert_element(rt, new_leaf, element, element_tydesc)
             }
-            crate::RtOrdering::Error => {
+            crate::c::RtOrdering::Error => {
                 return Err(RtStatus::Error);
             }
         };
@@ -596,15 +596,15 @@ unsafe fn find_leaf_with_path(
                             element_tydesc,
                         );
                         match cmp_result {
-                            crate::RtOrdering::Less => break,
-                            crate::RtOrdering::Equal => {
+                            crate::c::RtOrdering::Less => break,
+                            crate::c::RtOrdering::Equal => {
                                 child_idx = i + 1;
                                 break;
                             }
-                            crate::RtOrdering::Greater => {
+                            crate::c::RtOrdering::Greater => {
                                 child_idx = i + 1;
                             }
-                            crate::RtOrdering::Error => break,
+                            crate::c::RtOrdering::Error => break,
                         }
                     }
 
@@ -646,16 +646,16 @@ unsafe fn insert_into_internal(
                 element_tydesc,
             );
             match cmp_result {
-                crate::RtOrdering::Less => {
+                crate::c::RtOrdering::Less => {
                     insert_pos = i;
                     break;
                 }
-                crate::RtOrdering::Equal => {
+                crate::c::RtOrdering::Equal => {
                     insert_pos = i;
                     break;
                 }
-                crate::RtOrdering::Greater => continue,
-                crate::RtOrdering::Error => {
+                crate::c::RtOrdering::Greater => continue,
+                crate::c::RtOrdering::Error => {
                     insert_pos = i;
                     break;
                 }
@@ -676,7 +676,7 @@ unsafe fn insert_into_internal(
 
         // Clone the separator key into the node.
         let key_slot = keys_ptr.add(insert_pos * element_size);
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::clone::clone_value(
             rt_handle,
             separator_key.as_ptr(),
@@ -728,7 +728,7 @@ unsafe fn split_internal_node(
 
         // Clone the middle key as the separator to push up.
         let mut separator_key_buf = vec![0u8; element_size];
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::clone::clone_value(
             rt_handle,
             keys_ptr.add(split_point * element_size),
@@ -780,7 +780,7 @@ unsafe fn split_internal_node(
         );
 
         let insert_result = match cmp_result {
-            crate::RtOrdering::Less => {
+            crate::c::RtOrdering::Less => {
                 insert_into_internal(rt, node, pending_key, pending_child, element_tydesc)
             }
             _ => {
@@ -823,7 +823,7 @@ unsafe fn propagate_split_up(
             let element_size = (*element_tydesc).size as usize;
 
             // Clone separator into new root.
-            let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+            let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
             let status = crate::clone::clone_value(
                 rt_handle,
                 split_info.separator_key_buf.as_ptr(),
@@ -876,7 +876,7 @@ unsafe fn propagate_split_up(
                         let root_keys_ptr = internal_keys_ptr(new_root, element_tydesc);
                         let root_children_ptr = internal_child_ptrs_ptr(new_root, element_tydesc);
 
-                        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+                        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
                         let status = crate::clone::clone_value(
                             rt_handle,
                             split_info.separator_key_buf.as_ptr(),
@@ -1021,7 +1021,7 @@ pub unsafe fn btreeset_clone_from_slice_impl(
         let set_element_tydesc = set_element_ty.as_ptr();
 
         let element_size = (*slice_element_tydesc).size as usize;
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
         // Iterate through each element in the slice.
         for i in 0..slice_ptr_len {
@@ -1107,9 +1107,9 @@ pub unsafe fn btreeset_remove_impl(
             );
 
             match cmp_result {
-                crate::RtOrdering::Equal => {
+                crate::c::RtOrdering::Equal => {
                     // Found the element, destroy it.
-                    let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+                    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
                     let _ = crate::destroy::any_destroy_local(rt_handle, node_key as *mut u8, set_element_tydesc);
 
                     // Shift remaining elements left.
@@ -1132,8 +1132,8 @@ pub unsafe fn btreeset_remove_impl(
                     *bool_out = 1;
                     return RtStatus::Ok;
                 }
-                crate::RtOrdering::Greater => continue,
-                crate::RtOrdering::Less | crate::RtOrdering::Error => break,
+                crate::c::RtOrdering::Greater => continue,
+                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => break,
             }
         }
 
@@ -1188,16 +1188,16 @@ pub unsafe fn btreeset_contains_impl(
             );
 
             match cmp_result {
-                crate::RtOrdering::Equal => {
+                crate::c::RtOrdering::Equal => {
                     // Element found!
                     *bool_out = 1;
                     return RtStatus::Ok;
                 }
-                crate::RtOrdering::Greater => {
+                crate::c::RtOrdering::Greater => {
                     // Continue searching.
                     continue;
                 }
-                crate::RtOrdering::Less | crate::RtOrdering::Error => {
+                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => {
                     // Element not found.
                     break;
                 }

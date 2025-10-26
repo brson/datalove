@@ -59,14 +59,14 @@ fn create_tensor_u32_tydesc(rank: u32) -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>)
 
 /// Helper to create a List<u32> from a slice using the runtime.
 unsafe fn create_runtime_u32_list(
-    rt: datalove_rt::LocalRtHandle,
+    rt: datalove_rt::c::LocalRtHandle,
     values: &[u32],
     list_tydesc: *const rtdt::TyDesc,
     element_tydesc: *const rtdt::TyDesc,
 ) -> rtdt::List {
     unsafe {
         let mut list = std::mem::MaybeUninit::<rtdt::List>::uninit();
-        datalove_rt::dtlv_rti_list_create_local(
+        datalove_rt::c::dtlv_rti_list_create_local(
             rt,
             list.as_mut_ptr() as *mut u8,
             list_tydesc,
@@ -75,7 +75,7 @@ unsafe fn create_runtime_u32_list(
 
         for &value in values {
             let mut v = value;
-            datalove_rt::dtlv_rti_list_push_local(
+            datalove_rt::c::dtlv_rti_list_push_local(
                 rt,
                 &mut list as *mut rtdt::List as *mut u8,
                 list_tydesc,
@@ -95,7 +95,7 @@ unsafe fn create_runtime_u32_list(
 /// Test creating a 1D tensor from slice.
 #[test]
 fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(1);
@@ -120,7 +120,7 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -132,7 +132,7 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify tensor fields.
     assert!(!tensor.ptr_base.is_null());
@@ -158,13 +158,13 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify tensor is cleared.
     assert!(tensor.ptr_base.is_null());
@@ -173,8 +173,8 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
     assert!(tensor.shape.is_null());
     assert!(tensor.strides.is_null());
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -182,7 +182,7 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
 /// Test creating a 2D tensor with row-major layout.
 #[test]
 fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -206,7 +206,7 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -218,7 +218,7 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify tensor fields.
     assert!(!tensor.ptr_base.is_null());
@@ -242,16 +242,16 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -259,7 +259,7 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
 /// Test creating a 2D tensor with column-major layout.
 #[test]
 fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -283,7 +283,7 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -295,7 +295,7 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify tensor fields.
     assert!(!tensor.ptr_base.is_null());
@@ -313,16 +313,16 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -330,7 +330,7 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
 /// Test creating a 3D tensor.
 #[test]
 fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(3);
@@ -354,7 +354,7 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -366,7 +366,7 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify tensor fields.
     assert!(!tensor.ptr_base.is_null());
@@ -390,16 +390,16 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -411,7 +411,7 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
 /// Test creating tensor with mismatched slice length returns error.
 #[test]
 fn test_tensor_create_mismatched_length() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -436,7 +436,7 @@ fn test_tensor_create_mismatched_length() -> AnyResult<()> {
 
     // This should fail because slice_len (5) != shape product (6).
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -448,13 +448,13 @@ fn test_tensor_create_mismatched_length() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Tensor should remain uninitialized.
     assert!(tensor.ptr_base.is_null());
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -462,7 +462,7 @@ fn test_tensor_create_mismatched_length() -> AnyResult<()> {
 /// Test creating tensor with null pointers returns error.
 #[test]
 fn test_tensor_create_null_pointers() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(1);
@@ -485,7 +485,7 @@ fn test_tensor_create_null_pointers() -> AnyResult<()> {
 
     // Test with null tensor_value_out.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -497,11 +497,11 @@ fn test_tensor_create_null_pointers() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Test with null slice_ptr_ref.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             ptr::null(),
             3,
@@ -513,19 +513,19 @@ fn test_tensor_create_null_pointers() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Clean up shape list.
     unsafe {
-        datalove_rt::dtlv_rti_list_destroy_local(
+        datalove_rt::c::dtlv_rti_list_destroy_local(
             rt,
             &mut shape_list as *mut rtdt::List as *mut u8,
             &*list_tydesc as *const rtdt::TyDesc,
         );
     }
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -533,22 +533,22 @@ fn test_tensor_create_null_pointers() -> AnyResult<()> {
 /// Test destroying tensor with null pointer returns error.
 #[test]
 fn test_tensor_destroy_null_pointer() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, _element_tydesc) = create_tensor_u32_tydesc(2);
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             ptr::null_mut(),
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -560,7 +560,7 @@ fn test_tensor_destroy_null_pointer() -> AnyResult<()> {
 /// Test creating and destroying multiple tensors.
 #[test]
 fn test_multiple_tensors() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(1);
@@ -587,7 +587,7 @@ fn test_multiple_tensors() -> AnyResult<()> {
         };
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+            datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
                 rt,
                 slice_data.as_ptr() as *const u8,
                 slice_data.len() as u32,
@@ -599,7 +599,7 @@ fn test_multiple_tensors() -> AnyResult<()> {
                 &*tensor_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         assert!(!tensor.ptr_base.is_null());
 
         tensors.push(tensor);
@@ -617,18 +617,18 @@ fn test_multiple_tensors() -> AnyResult<()> {
     // Destroy all tensors.
     for tensor in &mut tensors {
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_destroy_local(
+            datalove_rt::c::dtlv_rti_tensor_destroy_local(
                 rt,
                 tensor as *mut rtdt::Tensor as *mut u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         assert!(tensor.ptr_base.is_null());
     }
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -640,7 +640,7 @@ fn test_multiple_tensors() -> AnyResult<()> {
 /// Test getting elements from a 1D tensor.
 #[test]
 fn test_tensor_get_1d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(1);
@@ -662,7 +662,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -674,7 +674,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Get each element and verify.
     for i in 0..5 {
@@ -682,7 +682,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
         let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_get_local(
+            datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -690,34 +690,34 @@ fn test_tensor_get_1d() -> AnyResult<()> {
                 element_value.as_mut_ptr() as *mut u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, slice_data[i as usize]);
 
         // Destroy the cloned element.
         let status = unsafe {
-            datalove_rt::dtlv_rti_any_destroy_local(
+            datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
                 &*element_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -725,7 +725,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
 /// Test getting elements from a 2D tensor.
 #[test]
 fn test_tensor_get_2d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -749,7 +749,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -761,7 +761,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Test specific elements.
     let test_cases = [
@@ -777,7 +777,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
         let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_get_local(
+            datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -785,34 +785,34 @@ fn test_tensor_get_2d() -> AnyResult<()> {
                 element_value.as_mut_ptr() as *mut u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected);
 
         // Destroy the cloned element.
         let status = unsafe {
-            datalove_rt::dtlv_rti_any_destroy_local(
+            datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
                 &*element_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -820,7 +820,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
 /// Test getting elements from a 3D tensor.
 #[test]
 fn test_tensor_get_3d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(3);
@@ -842,7 +842,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -854,7 +854,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Test some specific elements.
     // Shape is [2, 2, 3], strides are [6, 3, 1].
@@ -871,7 +871,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
         let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_get_local(
+            datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -879,34 +879,34 @@ fn test_tensor_get_3d() -> AnyResult<()> {
                 element_value.as_mut_ptr() as *mut u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected);
 
         // Destroy the cloned element.
         let status = unsafe {
-            datalove_rt::dtlv_rti_any_destroy_local(
+            datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
                 &*element_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -914,7 +914,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
 /// Test out of bounds access.
 #[test]
 fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -936,7 +936,7 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -948,7 +948,7 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Test out of bounds accesses.
     let invalid_indices = [
@@ -961,7 +961,7 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
         let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_get_local(
+            datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -969,21 +969,21 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
                 element_value.as_mut_ptr() as *mut u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Error);
+        assert_eq!(status, datalove_rt::c::RtStatus::Error);
     }
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -991,7 +991,7 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
 /// Test tensor_get with null pointers.
 #[test]
 fn test_tensor_get_null_pointers() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(1);
@@ -1013,7 +1013,7 @@ fn test_tensor_get_null_pointers() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1025,14 +1025,14 @@ fn test_tensor_get_null_pointers() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let indices = [0];
     let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
     // Null tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_get_local(
+        datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
             std::ptr::null(),
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1040,11 +1040,11 @@ fn test_tensor_get_null_pointers() -> AnyResult<()> {
             element_value.as_mut_ptr() as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Null indices.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_get_local(
+        datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1052,11 +1052,11 @@ fn test_tensor_get_null_pointers() -> AnyResult<()> {
             element_value.as_mut_ptr() as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Null output pointer.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_get_local(
+        datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1064,20 +1064,20 @@ fn test_tensor_get_null_pointers() -> AnyResult<()> {
             std::ptr::null_mut(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1085,7 +1085,7 @@ fn test_tensor_get_null_pointers() -> AnyResult<()> {
 /// Test tensor_get with column-major layout.
 #[test]
 fn test_tensor_get_col_major() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -1110,7 +1110,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1122,7 +1122,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify strides are [1, 2] for column-major.
     let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
@@ -1144,7 +1144,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
         let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_get_local(
+            datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1152,34 +1152,34 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
                 element_value.as_mut_ptr() as *mut u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected);
 
         // Destroy the cloned element.
         let status = unsafe {
-            datalove_rt::dtlv_rti_any_destroy_local(
+            datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
                 &*element_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1191,7 +1191,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
 /// Test setting elements in a 1D tensor.
 #[test]
 fn test_tensor_set_1d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(1);
@@ -1213,7 +1213,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1225,7 +1225,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Set each element to a new value.
     for i in 0..5 {
@@ -1233,7 +1233,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
         let new_value = 100 + i * 10;
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_set_local(
+            datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1241,7 +1241,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
                 &new_value as *const u32 as *const u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Verify all elements were updated.
@@ -1250,7 +1250,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
         let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_get_local(
+            datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1258,34 +1258,34 @@ fn test_tensor_set_1d() -> AnyResult<()> {
                 element_value.as_mut_ptr() as *mut u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, 100 + i * 10);
 
         // Destroy the cloned element.
         let status = unsafe {
-            datalove_rt::dtlv_rti_any_destroy_local(
+            datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
                 &*element_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1293,7 +1293,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
 /// Test setting elements in a 2D tensor with row-major layout.
 #[test]
 fn test_tensor_set_2d_row_major() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -1317,7 +1317,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1329,7 +1329,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Set specific elements.
     let updates = [
@@ -1340,7 +1340,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
 
     for (indices, new_value) in updates {
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_set_local(
+            datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1348,7 +1348,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
                 &new_value as *const u32 as *const u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Verify updates.
@@ -1365,7 +1365,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
         let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_get_local(
+            datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1373,34 +1373,34 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
                 element_value.as_mut_ptr() as *mut u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected_value);
 
         // Destroy the cloned element.
         let status = unsafe {
-            datalove_rt::dtlv_rti_any_destroy_local(
+            datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
                 &*element_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1408,7 +1408,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
 /// Test setting elements in a 2D tensor with column-major layout.
 #[test]
 fn test_tensor_set_2d_col_major() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -1430,7 +1430,7 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1442,14 +1442,14 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Set some elements.
     let new_value = 999u32;
     let indices = [1, 2];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_set_local(
+        datalove_rt::c::dtlv_rti_tensor_set_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1457,12 +1457,12 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
             &new_value as *const u32 as *const u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify the update.
     let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_get_local(
+        datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1470,33 +1470,33 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
             element_value.as_mut_ptr() as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let mut value = unsafe { element_value.assume_init() };
     assert_eq!(value, 999);
 
     // Destroy the cloned element.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             &mut value as *mut u32 as *mut u8,
             &*element_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1504,7 +1504,7 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
 /// Test setting elements in a 3D tensor.
 #[test]
 fn test_tensor_set_3d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(3);
@@ -1526,7 +1526,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1538,7 +1538,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Set some elements.
     let updates = [
@@ -1549,7 +1549,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
 
     for (indices, new_value) in updates {
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_set_local(
+            datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1557,7 +1557,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
                 &new_value as *const u32 as *const u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Verify updates.
@@ -1565,7 +1565,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
         let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_get_local(
+            datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &tensor as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1573,34 +1573,34 @@ fn test_tensor_set_3d() -> AnyResult<()> {
                 element_value.as_mut_ptr() as *mut u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected_value);
 
         // Destroy the cloned element.
         let status = unsafe {
-            datalove_rt::dtlv_rti_any_destroy_local(
+            datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
                 &*element_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1608,7 +1608,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
 /// Test tensor_set with out of bounds indices.
 #[test]
 fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -1630,7 +1630,7 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1642,7 +1642,7 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Test out of bounds accesses.
     let invalid_indices = [
@@ -1654,7 +1654,7 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
     let new_value = 999u32;
     for indices in invalid_indices {
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_set_local(
+            datalove_rt::c::dtlv_rti_tensor_set_local(
                 rt,
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1662,21 +1662,21 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
                 &new_value as *const u32 as *const u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Error);
+        assert_eq!(status, datalove_rt::c::RtStatus::Error);
     }
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1684,7 +1684,7 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
 /// Test tensor_set with null pointers.
 #[test]
 fn test_tensor_set_null_pointers() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(1);
@@ -1706,7 +1706,7 @@ fn test_tensor_set_null_pointers() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1718,14 +1718,14 @@ fn test_tensor_set_null_pointers() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let indices = [0];
     let new_value = 999u32;
 
     // Null tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_set_local(
+        datalove_rt::c::dtlv_rti_tensor_set_local(
             rt,
             std::ptr::null_mut(),
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1733,11 +1733,11 @@ fn test_tensor_set_null_pointers() -> AnyResult<()> {
             &new_value as *const u32 as *const u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Null indices.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_set_local(
+        datalove_rt::c::dtlv_rti_tensor_set_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1745,11 +1745,11 @@ fn test_tensor_set_null_pointers() -> AnyResult<()> {
             &new_value as *const u32 as *const u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Null value pointer.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_set_local(
+        datalove_rt::c::dtlv_rti_tensor_set_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1757,20 +1757,20 @@ fn test_tensor_set_null_pointers() -> AnyResult<()> {
             std::ptr::null(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1782,7 +1782,7 @@ fn test_tensor_set_null_pointers() -> AnyResult<()> {
 /// Test basic 2D transpose with row-major layout.
 #[test]
 fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -1806,7 +1806,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1818,7 +1818,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Transpose [1, 0] to get 3x2 tensor:
     // [[10, 40],
@@ -1835,7 +1835,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_transpose_local(
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1843,7 +1843,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
             &mut transposed as *mut rtdt::Tensor as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify input tensor is cleared (ownership transferred).
     assert!(tensor.ptr_base.is_null());
@@ -1874,7 +1874,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
     for (indices, expected) in test_cases {
         let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
         let status = unsafe {
-            datalove_rt::dtlv_rti_tensor_get_local(
+            datalove_rt::c::dtlv_rti_tensor_get_local(
                 rt,
                 &transposed as *const rtdt::Tensor as *const u8,
                 &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1882,34 +1882,34 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
                 element_value.as_mut_ptr() as *mut u8,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let mut value = unsafe { element_value.assume_init() };
         assert_eq!(value, expected);
 
         // Destroy the cloned element.
         let status = unsafe {
-            datalove_rt::dtlv_rti_any_destroy_local(
+            datalove_rt::c::dtlv_rti_any_destroy_local(
                 rt,
                 &mut value as *mut u32 as *mut u8,
                 &*element_tydesc as *const rtdt::TyDesc,
             )
         };
-        assert_eq!(status, datalove_rt::RtStatus::Ok);
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut transposed as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1917,7 +1917,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
 /// Test 2D transpose with column-major layout.
 #[test]
 fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -1940,7 +1940,7 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -1952,7 +1952,7 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Transpose.
     let perm = [1u32, 0];
@@ -1966,7 +1966,7 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_transpose_local(
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -1974,7 +1974,7 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
             &mut transposed as *mut rtdt::Tensor as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify transposed shape is [3, 2].
     let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 2) };
@@ -1989,16 +1989,16 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut transposed as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2006,7 +2006,7 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
 /// Test 3D transpose with permutation [2, 0, 1].
 #[test]
 fn test_tensor_transpose_3d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(3);
@@ -2028,7 +2028,7 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2040,7 +2040,7 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Transpose with permutation [2, 0, 1] to get 4x2x3 tensor.
     let perm = [2u32, 0, 1];
@@ -2054,7 +2054,7 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_transpose_local(
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2062,7 +2062,7 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
             &mut transposed as *mut rtdt::Tensor as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify transposed shape is [4, 2, 3].
     let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 3) };
@@ -2074,16 +2074,16 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut transposed as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2091,7 +2091,7 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
 /// Test identity permutation (no-op transpose).
 #[test]
 fn test_tensor_transpose_identity() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -2113,7 +2113,7 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2125,7 +2125,7 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Identity permutation [0, 1].
     let perm = [0u32, 1];
@@ -2139,7 +2139,7 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_transpose_local(
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2147,7 +2147,7 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
             &mut transposed as *mut rtdt::Tensor as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify shape is unchanged [2, 3].
     let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 2) };
@@ -2162,16 +2162,16 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut transposed as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2179,7 +2179,7 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
 /// Test transpose with invalid permutation (out of bounds).
 #[test]
 fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -2201,7 +2201,7 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2213,7 +2213,7 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Invalid permutation with out-of-bounds index.
     let perm = [0u32, 2];  // 2 is out of bounds for rank 2.
@@ -2227,7 +2227,7 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_transpose_local(
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2235,23 +2235,23 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
             &mut transposed as *mut rtdt::Tensor as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Original tensor should still be valid.
     assert!(!tensor.ptr_base.is_null());
 
     // Clean up original tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2259,7 +2259,7 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
 /// Test transpose with invalid permutation (duplicate indices).
 #[test]
 fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -2281,7 +2281,7 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2293,7 +2293,7 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Invalid permutation with duplicate index.
     let perm = [0u32, 0];
@@ -2307,7 +2307,7 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_transpose_local(
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2315,20 +2315,20 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
             &mut transposed as *mut rtdt::Tensor as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2336,7 +2336,7 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
 /// Test transpose with null pointers.
 #[test]
 fn test_tensor_transpose_null_pointers() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -2358,7 +2358,7 @@ fn test_tensor_transpose_null_pointers() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2370,7 +2370,7 @@ fn test_tensor_transpose_null_pointers() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let perm = [1u32, 0];
     let mut transposed = rtdt::Tensor {
@@ -2384,7 +2384,7 @@ fn test_tensor_transpose_null_pointers() -> AnyResult<()> {
 
     // Null input tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_transpose_local(
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             ptr::null_mut(),
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2392,11 +2392,11 @@ fn test_tensor_transpose_null_pointers() -> AnyResult<()> {
             &mut transposed as *mut rtdt::Tensor as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Null permutation.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_transpose_local(
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2404,11 +2404,11 @@ fn test_tensor_transpose_null_pointers() -> AnyResult<()> {
             &mut transposed as *mut rtdt::Tensor as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Null output tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_transpose_local(
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2416,20 +2416,20 @@ fn test_tensor_transpose_null_pointers() -> AnyResult<()> {
             ptr::null_mut(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Error);
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Clean up.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2437,7 +2437,7 @@ fn test_tensor_transpose_null_pointers() -> AnyResult<()> {
 /// Test that tensor_get clones elements and caller destroys them.
 #[test]
 fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(1);
@@ -2459,7 +2459,7 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2471,14 +2471,14 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Get element at index 1 (value = 20).
     let indices = [1];
     let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_get_local(
+        datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2486,7 +2486,7 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
             element_value.as_mut_ptr() as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify the cloned value.
     let mut value = unsafe { element_value.assume_init() };
@@ -2494,20 +2494,20 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
 
     // Caller is responsible for destroying the cloned element.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             &mut value as *mut u32 as *mut u8,
             &*element_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Get another element to demonstrate the pattern multiple times.
     let indices = [2];
     let mut element_value = std::mem::MaybeUninit::<u32>::uninit();
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_get_local(
+        datalove_rt::c::dtlv_rti_tensor_get_local(
             rt,
             &tensor as *const rtdt::Tensor as *const u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2515,33 +2515,33 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
             element_value.as_mut_ptr() as *mut u8,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let mut value = unsafe { element_value.assume_init() };
     assert_eq!(value, 30);
 
     // Again, caller destroys the cloned element.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             &mut value as *mut u32 as *mut u8,
             &*element_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy tensor.
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2592,7 +2592,7 @@ fn create_result_tensor_u32_tydesc(rank: u32) -> (Box<rtdt::TyDesc>, Box<rtdt::T
 /// Test slicing a 2D tensor to get a subregion.
 #[test]
 fn test_tensor_slice_2d_valid() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -2614,7 +2614,7 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2626,7 +2626,7 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Slice [1:3, 2:5] to get a 2x3 subregion.
     let ranges = vec![
@@ -2641,7 +2641,7 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
     let mut result_buffer = vec![0u8; result_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2650,7 +2650,7 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
             &*result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check result tag is Ok.
     let result_ptr = result_buffer.as_ptr() as *const rtdt::Result;
@@ -2685,16 +2685,16 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
     // Destroy sliced tensor.
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2702,7 +2702,7 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
 /// Test slicing with full range (identity operation).
 #[test]
 fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -2723,7 +2723,7 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2735,7 +2735,7 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Slice with full range [0:2, 0:3].
     let ranges = vec![
@@ -2748,7 +2748,7 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
     let mut result_buffer = vec![0u8; result_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2757,7 +2757,7 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
             &*result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check result is Ok.
     let result_ptr = result_buffer.as_ptr() as *const rtdt::Result;
@@ -2780,16 +2780,16 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
     // Cleanup.
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2797,7 +2797,7 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
 /// Test slicing to a single element.
 #[test]
 fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -2818,7 +2818,7 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2830,7 +2830,7 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Slice to single element [1:2, 2:3].
     let ranges = vec![
@@ -2843,7 +2843,7 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
     let mut result_buffer = vec![0u8; result_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2852,7 +2852,7 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
             &*result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let result_ptr = result_buffer.as_ptr() as *const rtdt::Result;
     assert_eq!(unsafe { (*result_ptr).tag }, rtdt::ResultTag::Ok);
@@ -2873,16 +2873,16 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
     // Cleanup.
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2890,7 +2890,7 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
 /// Test slicing with invalid range (start >= end).
 #[test]
 fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -2911,7 +2911,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -2923,7 +2923,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Invalid range: start >= end.
     let ranges = vec![
@@ -2936,7 +2936,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
     let mut result_buffer = vec![0u8; result_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -2945,7 +2945,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
             &*result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check result tag is Err.
     let result_ptr = result_buffer.as_ptr() as *const rtdt::Result;
@@ -2968,16 +2968,16 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
     // Destroy the tensor from the error.
     let mut error_tensor_copy = unsafe { ptr::read(error_tensor) };
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -2985,7 +2985,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
 /// Test slicing with out of bounds range (end > dimension).
 #[test]
 fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -3006,7 +3006,7 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -3018,7 +3018,7 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Out of bounds: end > dimension size.
     let ranges = vec![
@@ -3031,7 +3031,7 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
     let mut result_buffer = vec![0u8; result_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -3040,7 +3040,7 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
             &*result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify result is Err.
     let result_ptr = result_buffer.as_ptr() as *const rtdt::Result;
@@ -3055,16 +3055,16 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
     let mut error_tensor = unsafe { ptr::read(error_tensor_ptr) };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -3072,7 +3072,7 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
 /// Test slicing a 3D tensor.
 #[test]
 fn test_tensor_slice_3d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(3);
@@ -3094,7 +3094,7 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -3106,7 +3106,7 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Slice [0:2, 1:3, 1:3] to get a 2x2x2 subregion.
     let ranges = vec![
@@ -3120,7 +3120,7 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
     let mut result_buffer = vec![0u8; result_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -3129,7 +3129,7 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
             &*result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let result_ptr = result_buffer.as_ptr() as *const rtdt::Result;
     assert_eq!(unsafe { (*result_ptr).tag }, rtdt::ResultTag::Ok);
@@ -3154,16 +3154,16 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
     // Cleanup.
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -3174,7 +3174,7 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
 
 #[test]
 fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc_2d, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -3197,7 +3197,7 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -3209,7 +3209,7 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
             &*tensor_tydesc_2d as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Create new shape [3, 4, 5] (also 60 elements).
     let mut new_shape_list = unsafe {
@@ -3222,7 +3222,7 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
     let mut result_buffer = vec![0u8; result_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_reshape_local(
+        datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc_2d as *const rtdt::TyDesc,
@@ -3232,7 +3232,7 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
             &*result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check result tag is Ok.
     let result_ptr = result_buffer.as_ptr() as *const rtdt::Result;
@@ -3264,23 +3264,23 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
     // Clean up.
     let mut reshaped_tensor_copy = unsafe { ptr::read(reshaped_tensor) };
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut reshaped_tensor_copy as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc_3d as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
 
 #[test]
 fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -3302,7 +3302,7 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -3314,7 +3314,7 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Try to reshape to [7, 9] (63 elements, mismatch).
     let mut new_shape_list = unsafe {
@@ -3326,7 +3326,7 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
     let mut result_buffer = vec![0u8; result_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_reshape_local(
+        datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -3336,7 +3336,7 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
             &*result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Result should be Err.
     let result_ptr = result_buffer.as_ptr() as *const rtdt::Result;
@@ -3358,23 +3358,23 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
     // Clean up.
     let mut error_tensor_copy = unsafe { ptr::read(error_tensor) };
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
 
 #[test]
 fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
@@ -3396,7 +3396,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
     };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_create_from_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
@@ -3408,7 +3408,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Slice the tensor to make it non-contiguous.
     let ranges = vec![
@@ -3421,7 +3421,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
     let mut slice_result_buffer = vec![0u8; slice_result_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_slice_local(
+        datalove_rt::c::dtlv_rti_tensor_slice_local(
             rt,
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -3430,7 +3430,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
             &*slice_result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let slice_result_ptr = slice_result_buffer.as_ptr() as *const rtdt::Result;
     let slice_tag = unsafe { (*slice_result_ptr).tag };
@@ -3456,7 +3456,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_reshape_local(
+        datalove_rt::c::dtlv_rti_tensor_reshape_local(
             rt,
             &mut sliced_tensor_copy as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
@@ -3466,7 +3466,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
             &*reshape_result_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Result should be Err (non-contiguous).
     let reshape_result_ptr = reshape_result_buffer.as_ptr() as *const rtdt::Result;
@@ -3481,16 +3481,16 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
     let mut error_tensor_copy = unsafe { ptr::read(error_tensor_ptr) };
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_tensor_destroy_local(
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
             rt,
             &mut error_tensor_copy as *mut rtdt::Tensor as *mut u8,
             &*tensor_tydesc as *const rtdt::TyDesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }

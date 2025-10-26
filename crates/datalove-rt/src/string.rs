@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use crate::rtdt;
 use crate::rt_local::RtLocal;
-use crate::{LocalRtHandle, RtStatus};
+use crate::c::{LocalRtHandle, RtStatus};
 
 /// Creates a new empty string.
 ///

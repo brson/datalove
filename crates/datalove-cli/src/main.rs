@@ -237,7 +237,7 @@ impl LitOpCommand {
             "eq" => {
                 // Call dtlv_rti_eq.
                 let result = unsafe {
-                    datalove_rt::dtlv_rti_eq(
+                    datalove_rt::c::dtlv_rti_eq(
                         std::ptr::null_mut(), // runtime handle not needed
                         inst1.ptr,
                         inst1.tydesc,
@@ -247,15 +247,15 @@ impl LitOpCommand {
                 };
 
                 match result {
-                    datalove_rt::RtEq::Equals => println!("true"),
-                    datalove_rt::RtEq::NotEquals => println!("false"),
-                    datalove_rt::RtEq::Error => bail!("Type mismatch in equality comparison"),
+                    datalove_rt::c::RtEq::Equals => println!("true"),
+                    datalove_rt::c::RtEq::NotEquals => println!("false"),
+                    datalove_rt::c::RtEq::Error => bail!("Type mismatch in equality comparison"),
                 }
             }
             "cmp" => {
                 // Call dtlv_rti_cmp_total.
                 let result = unsafe {
-                    datalove_rt::dtlv_rti_cmp_total(
+                    datalove_rt::c::dtlv_rti_cmp_total(
                         std::ptr::null_mut(), // runtime handle not needed
                         inst1.ptr,
                         inst1.tydesc,
@@ -265,10 +265,10 @@ impl LitOpCommand {
                 };
 
                 match result {
-                    datalove_rt::RtOrdering::Less => println!("less"),
-                    datalove_rt::RtOrdering::Equal => println!("equal"),
-                    datalove_rt::RtOrdering::Greater => println!("greater"),
-                    datalove_rt::RtOrdering::Error => bail!("Type mismatch in comparison"),
+                    datalove_rt::c::RtOrdering::Less => println!("less"),
+                    datalove_rt::c::RtOrdering::Equal => println!("equal"),
+                    datalove_rt::c::RtOrdering::Greater => println!("greater"),
+                    datalove_rt::c::RtOrdering::Error => bail!("Type mismatch in comparison"),
                 }
             }
             _ => {
@@ -279,10 +279,10 @@ impl LitOpCommand {
         // Clean up instantiated values before shutdown.
         unsafe {
             let rt_handle = rt.handle();
-            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
-            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
-            datalove_rt::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
-            datalove_rt::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
             // Runtime shutdown handled by Drop
         }
         Ok(())

@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use crate::rtdt;
 use crate::rt_local::RtLocal;
-use crate::{LocalRtHandle, RtStatus};
+use crate::c::{LocalRtHandle, RtStatus};
 
 /// Convert rtdt::Int to String for printing.
 pub(crate) unsafe fn int_to_string_impl(int_ptr: *const rtdt::Int) -> String {

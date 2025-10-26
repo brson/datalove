@@ -383,14 +383,14 @@ fn instantiate_string(
         let string_ptr = dest_ptr as *mut rtdt::String;
 
         // Create empty string using runtime helper.
-        let rt_handle = rt as *mut _ as datalove_rt::LocalRtHandle;
+        let rt_handle = rt as *mut _ as datalove_rt::c::LocalRtHandle;
         let status = datalove_rt::string::string_create_local(
             rt_handle,
             string_ptr as *mut u8,
             string_tydesc,
         );
 
-        if status != datalove_rt::RtStatus::Ok {
+        if status != datalove_rt::c::RtStatus::Ok {
             bail!("Failed to create string");
         }
 
@@ -404,7 +404,7 @@ fn instantiate_string(
                 value_str.len() as u32,
             );
 
-            if status != datalove_rt::RtStatus::Ok {
+            if status != datalove_rt::c::RtStatus::Ok {
                 bail!("Failed to push string bytes");
             }
         }
@@ -940,12 +940,12 @@ mod tests {
 
     /// RAII guard for RtLocal to prevent memory leaks on panic.
     struct RtGuard {
-        handle: datalove_rt::LocalRtHandle,
+        handle: datalove_rt::c::LocalRtHandle,
     }
 
     impl RtGuard {
         fn new(rt: Box<datalove_rt::impls::rt_local::RtLocal>) -> Self {
-            let handle = Box::into_raw(rt) as datalove_rt::LocalRtHandle;
+            let handle = Box::into_raw(rt) as datalove_rt::c::LocalRtHandle;
             Self { handle }
         }
 
@@ -953,7 +953,7 @@ mod tests {
             unsafe { &mut *(self.handle as *mut datalove_rt::impls::rt_local::RtLocal) }
         }
 
-        fn handle(&self) -> datalove_rt::LocalRtHandle {
+        fn handle(&self) -> datalove_rt::c::LocalRtHandle {
             self.handle
         }
     }
@@ -969,12 +969,12 @@ mod tests {
 
     /// RAII guard for InstantiatedValue to ensure proper cleanup.
     struct InstGuard {
-        rt_handle: datalove_rt::LocalRtHandle,
+        rt_handle: datalove_rt::c::LocalRtHandle,
         inst: InstantiatedValue,
     }
 
     impl InstGuard {
-        fn new(rt_handle: datalove_rt::LocalRtHandle, inst: InstantiatedValue) -> Self {
+        fn new(rt_handle: datalove_rt::c::LocalRtHandle, inst: InstantiatedValue) -> Self {
             Self { rt_handle, inst }
         }
 
@@ -986,12 +986,12 @@ mod tests {
     impl Drop for InstGuard {
         fn drop(&mut self) {
             unsafe {
-                datalove_rt::dtlv_rti_any_destroy_local(
+                datalove_rt::c::dtlv_rti_any_destroy_local(
                     self.rt_handle,
                     self.inst.ptr as *mut u8,
                     self.inst.tydesc,
                 );
-                datalove_rt::dtlv_rti_mem_free_local(
+                datalove_rt::c::dtlv_rti_mem_free_local(
                     self.rt_handle,
                     self.inst.tydesc,
                     1,

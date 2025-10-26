@@ -5,7 +5,7 @@
 use rmx::prelude::*;
 use crate::rt_local::RtLocal;
 use crate::rtdt::{self, *};
-use crate::RtStatus;
+use crate::c::RtStatus;
 
 // ============================================================================
 // Core List Operations
@@ -72,7 +72,7 @@ pub unsafe fn list_create_from_slice_impl(
         (*list_ptr).capacity = slice_len;
 
         // Clone each element from the slice.
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         for i in 0..slice_len {
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data.add((i * element_size) as usize);
@@ -211,7 +211,7 @@ pub unsafe fn list_get_impl(
         let element_size = element_ty.size() as usize;
         let element_ptr = (data_ptr as *const u8).add(index as usize * element_size);
 
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::clone::clone_value(
             rt_handle,
             element_ptr,
@@ -258,7 +258,7 @@ pub unsafe fn list_set_impl(
         let element_size = element_tydesc.size() as usize;
         let element_ptr = data_ptr.add(index as usize * element_size);
 
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr());
         if status != RtStatus::Ok {
             return status;
@@ -609,7 +609,7 @@ pub unsafe fn list_extend_from_slice_impl(
         let element_size = element_tydesc.size();
 
         // Clone each element from the slice.
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         for i in 0..slice_len {
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data_ptr.add(((size + i) * element_size) as usize);
@@ -719,7 +719,7 @@ unsafe fn destroy_elements(
 ) -> RtStatus {
     unsafe {
         let element_size = element_tydesc.size() as usize;
-        let rt_handle = rt as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
         for i in start..end {
             let element_ptr = data_ptr.add((i as usize) * element_size);

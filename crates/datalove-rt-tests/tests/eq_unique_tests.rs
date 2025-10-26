@@ -32,7 +32,7 @@ fn test_eq_unique_f32_equals() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -41,7 +41,7 @@ fn test_eq_unique_f32_equals() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
     Ok(())
 }
 
@@ -57,7 +57,7 @@ fn test_eq_unique_u32_equals() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -66,7 +66,7 @@ fn test_eq_unique_u32_equals() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
     Ok(())
 }
 
@@ -82,7 +82,7 @@ fn test_eq_unique_tuple_equals() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -91,7 +91,7 @@ fn test_eq_unique_tuple_equals() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
     Ok(())
 }
 
@@ -107,7 +107,7 @@ fn test_eq_unique_tuple_not_equals() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -116,7 +116,7 @@ fn test_eq_unique_tuple_not_equals() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
     Ok(())
 }
 
@@ -134,7 +134,7 @@ fn test_eq_unique_map_empty_equals() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -143,7 +143,7 @@ fn test_eq_unique_map_empty_equals() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
     Ok(())
 }
 
@@ -159,7 +159,7 @@ fn test_eq_unique_map_equals_same_contents() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -168,7 +168,7 @@ fn test_eq_unique_map_equals_same_contents() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
     Ok(())
 }
 
@@ -184,7 +184,7 @@ fn test_eq_unique_map_not_equals_different_keys() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -193,7 +193,7 @@ fn test_eq_unique_map_not_equals_different_keys() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
     Ok(())
 }
 
@@ -209,7 +209,7 @@ fn test_eq_unique_map_not_equals_different_values() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -218,7 +218,7 @@ fn test_eq_unique_map_not_equals_different_values() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
     Ok(())
 }
 
@@ -234,7 +234,7 @@ fn test_eq_unique_map_not_equals_different_sizes() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -243,7 +243,7 @@ fn test_eq_unique_map_not_equals_different_sizes() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
     Ok(())
 }
 
@@ -261,7 +261,7 @@ fn test_eq_unique_set_empty_equals() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -270,7 +270,7 @@ fn test_eq_unique_set_empty_equals() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
     Ok(())
 }
 
@@ -286,7 +286,7 @@ fn test_eq_unique_set_equals_same_contents() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -295,7 +295,7 @@ fn test_eq_unique_set_equals_same_contents() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::Equals));
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
     Ok(())
 }
 
@@ -311,7 +311,7 @@ fn test_eq_unique_set_not_equals_different_elements() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -320,7 +320,7 @@ fn test_eq_unique_set_not_equals_different_elements() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
     Ok(())
 }
 
@@ -336,7 +336,7 @@ fn test_eq_unique_set_not_equals_different_sizes() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -345,6 +345,6 @@ fn test_eq_unique_set_not_equals_different_sizes() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtEq::NotEquals));
+    assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
     Ok(())
 }

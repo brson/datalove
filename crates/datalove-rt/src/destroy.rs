@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 use crate::{rt_local, rtdt};
-use crate::{LocalRtHandle, RtStatus};
+use crate::c::{LocalRtHandle, RtStatus};
 
 /// Destroys any type of value, freeing allocations recursively.
 pub unsafe fn any_destroy_local(

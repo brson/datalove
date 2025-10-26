@@ -32,7 +32,7 @@ fn test_cmp_total_f32_less() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -41,7 +41,7 @@ fn test_cmp_total_f32_less() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
 
@@ -57,7 +57,7 @@ fn test_cmp_total_f32_equal() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -66,7 +66,7 @@ fn test_cmp_total_f32_equal() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Equal));
     Ok(())
 }
 
@@ -82,7 +82,7 @@ fn test_cmp_total_f32_greater() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -91,7 +91,7 @@ fn test_cmp_total_f32_greater() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Greater));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Greater));
     Ok(())
 }
 
@@ -107,7 +107,7 @@ fn test_cmp_total_tuple_less() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -116,7 +116,7 @@ fn test_cmp_total_tuple_less() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
 
@@ -132,7 +132,7 @@ fn test_cmp_total_tuple_equal() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -141,7 +141,7 @@ fn test_cmp_total_tuple_equal() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Equal));
     Ok(())
 }
 
@@ -159,7 +159,7 @@ fn test_cmp_total_map_empty_equal() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -168,7 +168,7 @@ fn test_cmp_total_map_empty_equal() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Equal));
     Ok(())
 }
 
@@ -184,7 +184,7 @@ fn test_cmp_total_map_equal() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -193,7 +193,7 @@ fn test_cmp_total_map_equal() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Equal));
     Ok(())
 }
 
@@ -209,7 +209,7 @@ fn test_cmp_total_map_empty_vs_nonempty() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -218,7 +218,7 @@ fn test_cmp_total_map_empty_vs_nonempty() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
 
@@ -234,7 +234,7 @@ fn test_cmp_total_map_less_by_key() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -243,7 +243,7 @@ fn test_cmp_total_map_less_by_key() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
 
@@ -259,7 +259,7 @@ fn test_cmp_total_map_less_by_value() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -268,7 +268,7 @@ fn test_cmp_total_map_less_by_value() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
 
@@ -284,7 +284,7 @@ fn test_cmp_total_map_less_by_length() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -293,7 +293,7 @@ fn test_cmp_total_map_less_by_length() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
 
@@ -309,7 +309,7 @@ fn test_cmp_total_map_greater_by_key() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -318,7 +318,7 @@ fn test_cmp_total_map_greater_by_key() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Greater));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Greater));
     Ok(())
 }
 
@@ -336,7 +336,7 @@ fn test_cmp_total_set_empty_equal() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -345,7 +345,7 @@ fn test_cmp_total_set_empty_equal() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Equal));
     Ok(())
 }
 
@@ -361,7 +361,7 @@ fn test_cmp_total_set_equal() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -370,7 +370,7 @@ fn test_cmp_total_set_equal() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Equal));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Equal));
     Ok(())
 }
 
@@ -386,7 +386,7 @@ fn test_cmp_total_set_empty_vs_nonempty() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -395,7 +395,7 @@ fn test_cmp_total_set_empty_vs_nonempty() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
 
@@ -411,7 +411,7 @@ fn test_cmp_total_set_less_by_element() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -420,7 +420,7 @@ fn test_cmp_total_set_less_by_element() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
 
@@ -436,7 +436,7 @@ fn test_cmp_total_set_less_by_length() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -445,7 +445,7 @@ fn test_cmp_total_set_less_by_length() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Less));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
 
@@ -461,7 +461,7 @@ fn test_cmp_total_set_greater_by_element() -> AnyResult<()> {
     let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
-        datalove_rt::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total(
             std::ptr::null_mut(),
             inst_a.ptr,
             inst_a.tydesc,
@@ -470,6 +470,6 @@ fn test_cmp_total_set_greater_by_element() -> AnyResult<()> {
         )
     };
 
-    assert!(matches!(result, datalove_rt::RtOrdering::Greater));
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Greater));
     Ok(())
 }

@@ -29,38 +29,38 @@ fn test_destroy_int_small() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the int to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Int>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned int.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify int is cleared.
     let int_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Int) };
     assert!(int_val.data.is_null());
     assert_eq!(int_val.capacity, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -76,38 +76,38 @@ fn test_destroy_int_large() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the int to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Int>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned int.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify int is cleared.
     let int_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Int) };
     assert!(int_val.data.is_null());
     assert_eq!(int_val.capacity, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -122,30 +122,30 @@ fn test_destroy_list_empty() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::List>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned list.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify list is cleared.
     let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::List) };
@@ -153,8 +153,8 @@ fn test_destroy_list_empty() -> AnyResult<()> {
     assert_eq!(list_val.size, 0);
     assert_eq!(list_val.capacity, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -169,30 +169,30 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::List>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned list.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify list is cleared.
     let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::List) };
@@ -200,8 +200,8 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
     assert_eq!(list_val.size, 0);
     assert_eq!(list_val.capacity, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -216,30 +216,30 @@ fn test_destroy_list_strings() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::List>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned list.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify list is cleared.
     let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::List) };
@@ -247,8 +247,8 @@ fn test_destroy_list_strings() -> AnyResult<()> {
     assert_eq!(list_val.size, 0);
     assert_eq!(list_val.capacity, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -263,30 +263,30 @@ fn test_destroy_list_nested() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::List>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned list.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify list is cleared.
     let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::List) };
@@ -294,8 +294,8 @@ fn test_destroy_list_nested() -> AnyResult<()> {
     assert_eq!(list_val.size, 0);
     assert_eq!(list_val.capacity, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -311,34 +311,34 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let tydesc_size = unsafe { (*inst.tydesc).size as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -354,34 +354,34 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let tydesc_size = unsafe { (*inst.tydesc).size as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -397,34 +397,34 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let tydesc_size = unsafe { (*inst.tydesc).size as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -440,34 +440,34 @@ fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let tydesc_size = unsafe { (*inst.tydesc).size as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -483,38 +483,38 @@ fn test_destroy_set_empty() -> AnyResult<()> {
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Set) };
     assert!(set_val.root.is_null());
     assert_eq!(set_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -532,38 +532,38 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Set) };
     assert!(set_val.root.is_null());
     assert_eq!(set_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -581,38 +581,38 @@ fn test_destroy_set_strings() -> AnyResult<()> {
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Set) };
     assert!(set_val.root.is_null());
     assert_eq!(set_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -630,38 +630,38 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Set) };
     assert!(set_val.root.is_null());
     assert_eq!(set_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -680,38 +680,38 @@ fn test_destroy_set_large() -> AnyResult<()> {
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Set) };
     assert!(set_val.root.is_null());
     assert_eq!(set_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -727,34 +727,34 @@ fn test_destroy_option_none() -> AnyResult<()> {
 
     // Destroy the option.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let tydesc_size = unsafe { (*inst.tydesc).size as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -771,34 +771,34 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
 
     // Destroy the option.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let tydesc_size = unsafe { (*inst.tydesc).size as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -815,34 +815,34 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
 
     // Destroy the result.
     // Clone to get a runtime-allocated copy.
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let tydesc_size = unsafe { (*inst.tydesc).size as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Destroy the cloned value.
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -858,36 +858,36 @@ fn test_destroy_map_empty() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
     assert!(map_val.root.is_null());
     assert_eq!(map_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -901,36 +901,36 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
     assert!(map_val.root.is_null());
     assert_eq!(map_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -944,36 +944,36 @@ fn test_destroy_map_strings() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
     assert!(map_val.root.is_null());
     assert_eq!(map_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -987,36 +987,36 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
     assert!(map_val.root.is_null());
     assert_eq!(map_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1030,36 +1030,36 @@ fn test_destroy_map_nested() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
     assert!(map_val.root.is_null());
     assert_eq!(map_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }
@@ -1082,36 +1082,36 @@ fn test_destroy_map_large() -> AnyResult<()> {
     let mut tydesc_table = TyDescTable::new(&db);
     let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
 
-    let rt = datalove_rt::dtlv_rti_init();
+    let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
     let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_clone_local(
+        datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
             inst.tydesc,
             cloned_buffer.as_mut_ptr(),
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let status = unsafe {
-        datalove_rt::dtlv_rti_any_destroy_local(
+        datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
             inst.tydesc,
         )
     };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rt::rtdt::Map) };
     assert!(map_val.root.is_null());
     assert_eq!(map_val.len, 0);
 
-    let status = unsafe { datalove_rt::dtlv_rti_shutdown(rt) };
-    assert_eq!(status, datalove_rt::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     Ok(())
 }

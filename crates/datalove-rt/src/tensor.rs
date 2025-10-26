@@ -1,7 +1,7 @@
 //! Tensor operations.
 
 use rmx::prelude::*;
-use crate::{RtStatus, rt_local::RtLocal};
+use crate::{c::RtStatus, rt_local::RtLocal};
 use crate::rtdt::TyDescRef;
 
 // ============================================================================
@@ -187,7 +187,7 @@ pub unsafe fn tensor_create_from_slice_impl(
         }
 
         // Clone elements from slice to data buffer.
-        let rt_handle = rt_ref as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         for i in 0..total_elems {
             let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
             let dest_ptr = data_ptr.add((i * element_size) as usize);
@@ -309,7 +309,7 @@ pub unsafe fn tensor_get_impl(
         let element_ptr = ptr_base.add(linear_offset as usize * element_size);
 
         // Clone element to output buffer.
-        let rt_handle = rt_ref as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::clone::clone_value(
             rt_handle,
             element_ptr,
@@ -373,7 +373,7 @@ pub unsafe fn tensor_set_impl(
         let element_ptr = ptr_base.add(linear_offset as usize * element_size);
 
         // Destroy old value at this location.
-        let rt_handle = rt_ref as *mut RtLocal as crate::LocalRtHandle;
+        let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::destroy::any_destroy_local(
             rt_handle,
             element_ptr,
@@ -561,7 +561,7 @@ pub unsafe fn tensor_destroy_impl(
         // Destroy all elements in the data buffer.
         if !ptr_base.is_null() && total_elems > 0 {
             let element_size = element_ty.size() as usize;
-            let rt_handle = rt_ref as *mut RtLocal as crate::LocalRtHandle;
+            let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
 
             for i in 0..total_elems {
                 let element_ptr = ptr_base.add(i as usize * element_size);

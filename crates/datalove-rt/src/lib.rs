@@ -1,5 +1,10 @@
 //! Datalove runtime.
 //!
+//! The `c` module contains the C runtime API.
+//! The `rust` module wraps it with safer Rusty accessors.
+//! The `impls` module contains the runtime implementation.
+//! It is private and should not be accessed outside the crate.
+//!
 //! - "rt" calls are called by the language and have a restricted ABI.
 //! - "rti" calls are emitted only by the compiler and have whatever ABI is needed.
 //!
@@ -55,61 +60,3 @@ pub mod list;
 pub mod tensor;
 pub mod destroy;
 mod int_math;
-
-// Re-export public C-ABI types and functions for backward compatibility.
-pub use c::{LocalRtHandle, RtStatus, RtEq, RtOrdering};
-pub use c::dtlv_rti_init;
-pub use c::dtlv_rti_shutdown;
-pub use c::dtlv_rti_mem_alloc_local;
-pub use c::dtlv_rti_mem_free_local;
-pub use c::dtlv_rti_clone_local;
-pub use c::dtlv_rti_eq;
-pub use c::dtlv_rti_eq_unique;
-pub use c::dtlv_rti_cmp;
-pub use c::dtlv_rti_cmp_total;
-pub use c::dtlv_rti_int_add;
-pub use c::dtlv_rti_int_sub;
-pub use c::dtlv_rti_int_mul;
-pub use c::dtlv_rti_int_neg;
-pub use c::dtlv_rti_int_div_checked;
-pub use c::dtlv_rti_any_destroy_local;
-pub use c::dtlv_rti_string_create_local;
-pub use c::dtlv_rti_string_destroy_local;
-pub use c::dtlv_rti_string_push_bytes_local;
-pub use c::dtlv_rti_string_clear_local;
-pub use c::dtlv_rti_pretty_print_local;
-pub use c::dtlv_rti_btreemap_create_local;
-pub use c::dtlv_rti_btreemap_clone_from_slice_local;
-pub use c::dtlv_rti_btreemap_destroy_local;
-pub use c::dtlv_rti_btreemap_insert_local;
-pub use c::dtlv_rti_btreemap_remove_local;
-pub use c::dtlv_rti_btreemap_get;
-pub use c::dtlv_rti_btreemap_get_local;
-pub use c::dtlv_rti_btreemap_clear_local;
-pub use c::dtlv_rti_btreeset_create_local;
-pub use c::dtlv_rti_btreeset_destroy_local;
-pub use c::dtlv_rti_btreeset_insert_local;
-pub use c::dtlv_rti_btreeset_remove_local;
-pub use c::dtlv_rti_btreeset_contains_local;
-pub use c::dtlv_rti_btreeset_clear_local;
-pub use c::dtlv_rti_btreeset_clone_from_slice_local;
-pub use c::dtlv_rti_list_create_local;
-pub use c::dtlv_rti_list_create_from_slice_local;
-pub use c::dtlv_rti_list_destroy_local;
-pub use c::dtlv_rti_list_clear_local;
-pub use c::dtlv_rti_list_get;
-pub use c::dtlv_rti_list_set_local;
-pub use c::dtlv_rti_list_push_local;
-pub use c::dtlv_rti_list_pop_local;
-pub use c::dtlv_rti_list_insert_local;
-pub use c::dtlv_rti_list_remove_local;
-pub use c::dtlv_rti_list_reserve_local;
-pub use c::dtlv_rti_list_shrink_to_fit_local;
-pub use c::dtlv_rti_list_extend_from_slice_local;
-pub use c::dtlv_rti_tensor_create_from_slice_local;
-pub use c::dtlv_rti_tensor_destroy_local;
-pub use c::dtlv_rti_tensor_get_local;
-pub use c::dtlv_rti_tensor_set_local;
-pub use c::dtlv_rti_tensor_transpose_local;
-pub use c::dtlv_rti_tensor_slice_local;
-pub use c::dtlv_rti_tensor_reshape_local;
