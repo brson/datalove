@@ -323,6 +323,41 @@ Floats don't support early-return math.
 If we decide to let funs panic we'll also add panicking variations.
 
 
+### Numeric widening
+
+Fixed ints automatically widen, up to bigints:
+
+```
+let a: u8 = 1
+let b: u16 = a
+let c: int = b
+```
+
+Same for signed fixed ints:
+
+```
+let a: i8 = 1
+let b: i16 = a
+let c: int = b
+```
+
+Unsigned and signed ints never automatically coerce to each other.
+
+Widening also apllies to bare / unchecked math, which
+widens to `int`:
+
+```
+// this checks to `int` because the `*` binop,
+// forcing the literals to be int
+let a = 1 * 2
+// locals also get coercions
+let b: u32 = 1
+// another `int`
+let c = b * b
+```
+
+
+
 ### † Pure functions + mutable-reference argument modes
 
 Datalove at first does not look pure functional because
