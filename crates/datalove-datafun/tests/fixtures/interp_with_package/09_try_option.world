@@ -1,0 +1,19 @@
+----------
+module sys/std/option
+----------
+
+fun unwrap_with_try(val: ?u32): ?u32
+  let x: u32 = val?
+  ret x + @10
+end fun
+
+----------
+script
+----------
+
+require module sys/std/option
+
+import option.unwrap_with_try
+
+let some_input: ?u32 = @42
+let output = unwrap_with_try(some_input)

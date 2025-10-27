@@ -1,0 +1,21 @@
+----------
+module sys/std/math
+----------
+
+fun factorial(n: u32): u32
+  if n .< @2
+    ret @1
+  else
+    ret n * factorial(n - @1)
+  end if
+end fun
+
+----------
+script
+----------
+
+require module sys/std/math
+
+import math.factorial
+
+let output = factorial(@5)
