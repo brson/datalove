@@ -26,7 +26,7 @@ fn test_destroy_int_small() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the int to get a runtime-allocated copy.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -73,7 +73,7 @@ fn test_destroy_int_large() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the int to get a runtime-allocated copy.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -119,7 +119,7 @@ fn test_destroy_list_empty() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -166,7 +166,7 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -213,7 +213,7 @@ fn test_destroy_list_strings() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -260,7 +260,7 @@ fn test_destroy_list_nested() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the list to get a runtime-allocated copy.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -307,7 +307,7 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
@@ -350,7 +350,7 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
@@ -393,7 +393,7 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
@@ -436,7 +436,7 @@ fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the enum.
     // Clone to get a runtime-allocated copy.
@@ -479,7 +479,7 @@ fn test_destroy_set_empty() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -528,7 +528,7 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -577,7 +577,7 @@ fn test_destroy_set_strings() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -626,7 +626,7 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -676,7 +676,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the set.
     // Clone to get a runtime-allocated copy.
@@ -723,7 +723,7 @@ fn test_destroy_option_none() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the option.
     // Clone to get a runtime-allocated copy.
@@ -767,7 +767,7 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the option.
     // Clone to get a runtime-allocated copy.
@@ -811,7 +811,7 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Destroy the result.
     // Clone to get a runtime-allocated copy.
@@ -856,7 +856,7 @@ fn test_destroy_map_empty() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
@@ -899,7 +899,7 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
@@ -942,7 +942,7 @@ fn test_destroy_map_strings() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
@@ -985,7 +985,7 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
@@ -1028,7 +1028,7 @@ fn test_destroy_map_nested() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
@@ -1080,7 +1080,7 @@ fn test_destroy_map_large() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());

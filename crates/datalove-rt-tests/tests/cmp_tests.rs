@@ -27,8 +27,8 @@ fn test_cmp_bool_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -52,8 +52,8 @@ fn test_cmp_bool_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -77,8 +77,8 @@ fn test_cmp_u32_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -102,8 +102,8 @@ fn test_cmp_u32_greater() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -127,8 +127,8 @@ fn test_cmp_u32_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -152,8 +152,8 @@ fn test_cmp_f32_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -177,8 +177,8 @@ fn test_cmp_f32_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -202,8 +202,8 @@ fn test_cmp_string_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -227,8 +227,8 @@ fn test_cmp_string_greater() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -252,8 +252,8 @@ fn test_cmp_string_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -277,8 +277,8 @@ fn test_cmp_int_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -302,8 +302,8 @@ fn test_cmp_int_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -327,8 +327,8 @@ fn test_cmp_tuple_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -352,8 +352,8 @@ fn test_cmp_tuple_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -377,8 +377,8 @@ fn test_cmp_tuple_greater() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -402,8 +402,8 @@ fn test_cmp_struct_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -427,8 +427,8 @@ fn test_cmp_struct_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -452,8 +452,8 @@ fn test_cmp_list_less_by_element() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -477,8 +477,8 @@ fn test_cmp_list_less_by_length() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -502,8 +502,8 @@ fn test_cmp_list_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -527,8 +527,8 @@ fn test_cmp_enum_less_by_discriminant() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -552,8 +552,8 @@ fn test_cmp_enum_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -577,8 +577,8 @@ fn test_cmp_enum_with_payload_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -602,8 +602,8 @@ fn test_cmp_option_none_vs_none() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -627,8 +627,8 @@ fn test_cmp_option_none_less_than_some() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -652,8 +652,8 @@ fn test_cmp_option_some_greater_than_none() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -677,8 +677,8 @@ fn test_cmp_option_some_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -702,8 +702,8 @@ fn test_cmp_option_some_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -728,8 +728,8 @@ fn test_cmp_result_err_less_than_ok() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -754,8 +754,8 @@ fn test_cmp_result_ok_greater_than_err() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -780,8 +780,8 @@ fn test_cmp_result_ok_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -806,8 +806,8 @@ fn test_cmp_result_ok_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -832,8 +832,8 @@ fn test_cmp_result_err_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -858,8 +858,8 @@ fn test_cmp_result_err_less() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -883,8 +883,8 @@ fn test_cmp_type_mismatch() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -908,8 +908,8 @@ fn test_cmp_map_empty_vs_empty() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -933,8 +933,8 @@ fn test_cmp_map_empty_vs_nonempty() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -958,8 +958,8 @@ fn test_cmp_map_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -983,8 +983,8 @@ fn test_cmp_map_less_by_key() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1008,8 +1008,8 @@ fn test_cmp_map_less_by_value() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1033,8 +1033,8 @@ fn test_cmp_map_less_by_length() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1058,8 +1058,8 @@ fn test_cmp_map_greater_by_key() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1083,8 +1083,8 @@ fn test_cmp_set_empty_vs_empty() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1108,8 +1108,8 @@ fn test_cmp_set_empty_vs_nonempty() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1133,8 +1133,8 @@ fn test_cmp_set_equal() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1158,8 +1158,8 @@ fn test_cmp_set_less_by_element() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1183,8 +1183,8 @@ fn test_cmp_set_less_by_length() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1208,8 +1208,8 @@ fn test_cmp_set_greater_by_element() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(
@@ -1233,8 +1233,8 @@ fn test_cmp_set_with_strings() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked_b)?;
+    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_cmp(

@@ -25,15 +25,6 @@ impl Runtime {
         self.handle
     }
 
-    /// Get a mutable reference to the underlying RtLocal.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that the handle is valid and that no other references exist.
-    pub unsafe fn rt_local_mut(&mut self) -> &mut RtLocal {
-        unsafe { &mut *(self.handle as *mut RtLocal) }
-    }
-
 }
 
 impl Default for Runtime {

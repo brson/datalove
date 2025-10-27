@@ -171,7 +171,7 @@ pub fn eval_datalit<'db>(
     // Use instantiate2 to create the runtime value.
     let inst = datalit::instantiate2::instantiate_value(
         ctx.db,
-        &mut ctx.rt,
+        &mut *ctx.rt as *mut _ as datalove_rt::c::LocalRtHandle,
         &mut ctx.tydesc_table,
         typechecked,
     ).map_err(|e| InterpError::RuntimeError(

@@ -47,7 +47,7 @@ pub struct InstantiatedValue {
 /// The caller provides a LocalRt and is responsible for cleanup.
 pub fn instantiate_value<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     tydesc_table: &mut TyDescTable<'db>,
     typechecked: TypecheckResult<'db>,
 ) -> AnyResult<InstantiatedValue> {
@@ -70,14 +70,14 @@ pub fn instantiate_value<'db>(
 /// Allocates memory and returns the pointer.
 fn instantiate_expr<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     expr: ExprFull<'db>,
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
 ) -> AnyResult<*const u8> {
     let tydesc = tydesc_table.get_or_create(ty);
     let dest_ptr = unsafe {
-        rt.alloc.alloc((*tydesc).size, (*tydesc).align, 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, (*tydesc).size, (*tydesc).align, 1)
     };
     instantiate_expr_into(db, rt, expr, ty, tydesc_table, dest_ptr)?;
     Ok(dest_ptr)
@@ -88,7 +88,7 @@ fn instantiate_expr<'db>(
 /// dest_ptr must be valid and properly aligned.
 fn instantiate_expr_into<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     expr: ExprFull<'db>,
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
@@ -217,7 +217,7 @@ fn instantiate_expr_into<'db>(
 // Scalar type instantiation
 // ============================================================================
 
-fn instantiate_bool(_rt: &mut datalove_rt::impls::rt_local::RtLocal, value: bool, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_bool(_rt: datalove_rt::c::LocalRtHandle, value: bool, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     unsafe {
         *dest_ptr = if value { 1 } else { 0 };
@@ -225,7 +225,7 @@ fn instantiate_bool(_rt: &mut datalove_rt::impls::rt_local::RtLocal, value: bool
     }
 }
 
-fn instantiate_u8(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value(db).as_str(db);
     let value: u8 = value_str.parse()?;
@@ -235,7 +235,7 @@ fn instantiate_u8(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crat
     }
 }
 
-fn instantiate_i8(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value(db).as_str(db);
     let value: i8 = value_str.parse()?;
@@ -245,7 +245,7 @@ fn instantiate_i8(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crat
     }
 }
 
-fn instantiate_u16(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value(db).as_str(db);
     let value: u16 = value_str.parse()?;
@@ -255,7 +255,7 @@ fn instantiate_u16(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn cra
     }
 }
 
-fn instantiate_i16(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value(db).as_str(db);
     let value: i16 = value_str.parse()?;
@@ -265,7 +265,7 @@ fn instantiate_i16(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn cra
     }
 }
 
-fn instantiate_u32(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value(db).as_str(db);
     let value: u32 = value_str.parse()?;
@@ -275,7 +275,7 @@ fn instantiate_u32(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn cra
     }
 }
 
-fn instantiate_i32(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value(db).as_str(db);
     let value: i32 = value_str.parse()?;
@@ -285,7 +285,7 @@ fn instantiate_i32(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn cra
     }
 }
 
-fn instantiate_u64(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value(db).as_str(db);
     let value: u64 = value_str.parse()?;
@@ -295,7 +295,7 @@ fn instantiate_u64(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn cra
     }
 }
 
-fn instantiate_i64(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value(db).as_str(db);
     let value: i64 = value_str.parse()?;
@@ -305,7 +305,7 @@ fn instantiate_i64(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn cra
     }
 }
 
-fn instantiate_f32(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, float_expr: ExprFloat, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float_expr: ExprFloat, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = float_expr.value(db).as_str(db);
     let value: f32 = value_str.parse()?;
@@ -315,7 +315,7 @@ fn instantiate_f32(_rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn cra
     }
 }
 
-fn instantiate_bigint(rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value(db).as_str(db);
     let value: i128 = value_str.parse()?;
@@ -337,7 +337,7 @@ fn instantiate_bigint(rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn c
     unsafe {
         // Allocate limbs array via runtime using size=4, align=4, count=len.
         let limbs_ptr = if !limbs.is_empty() {
-            let ptr = rt.alloc.alloc(4, 4, limbs.len() as u32) as *mut u32;
+            let ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, 4, 4, limbs.len() as u32) as *mut u32;
             for (i, &limb) in limbs.iter().enumerate() {
                 *ptr.add(i) = limb;
             }
@@ -364,7 +364,7 @@ fn instantiate_bigint(rt: &mut datalove_rt::impls::rt_local::RtLocal, db: &dyn c
 // ============================================================================
 
 fn instantiate_string(
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     db: &dyn crate::Db,
     string_expr: ExprString,
     string_tydesc: *const rtdt::TyDesc,
@@ -419,7 +419,7 @@ fn instantiate_string(
 
 fn instantiate_tuple<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     elements: &[ExprFull<'db>],
     field_types: &[TypeAndHeap<'db>],
     tydesc_table: &mut TyDescTable<'db>,
@@ -440,7 +440,7 @@ fn instantiate_tuple<'db>(
 
 fn instantiate_struct<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     expr_fields: &[ExprStructField<'db>],
     type_fields: &[TypeNamedField<'db>],
     tydesc_table: &mut TyDescTable<'db>,
@@ -495,7 +495,7 @@ fn instantiate_struct<'db>(
 
 fn instantiate_enum<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     variant_name: bct::text::InternedText<'db>,
     payload_expr: Option<ExprFull<'db>>,
     type_variants: &[TypeEnumVariant<'db>],
@@ -528,7 +528,7 @@ fn instantiate_enum<'db>(
 
 fn instantiate_list<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     elements: &[ExprFull<'db>],
     element_type: TypeAndHeap<'db>,
     tydesc_table: &mut TyDescTable<'db>,
@@ -544,7 +544,7 @@ fn instantiate_list<'db>(
     unsafe {
         // Allocate list data using size=element_size, align=element_align, count=len.
         let data_ptr = if !elements.is_empty() {
-            let array_ptr = rt.alloc.alloc(element_size, element_align, elements.len() as u32);
+            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, element_size, element_align, elements.len() as u32);
 
             for (i, elem) in elements.iter().enumerate() {
                 let elem_dest = array_ptr.add(i * element_size as usize);
@@ -566,7 +566,7 @@ fn instantiate_list<'db>(
 
 fn instantiate_option<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     is_some: bool,
     payload_expr: Option<ExprFull<'db>>,
     inner_type: TypeAndHeap<'db>,
@@ -592,7 +592,7 @@ fn instantiate_option<'db>(
 
 fn instantiate_result<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     is_ok: bool,
     ok_payload_expr: Option<ExprFull<'db>>,
     err_payload_expr: Option<ExprFull<'db>>,
@@ -642,7 +642,7 @@ fn instantiate_result<'db>(
 
 fn instantiate_data<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     inner_expr: ExprFull<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _data_tydesc: *const rtdt::TyDesc,
@@ -673,7 +673,7 @@ fn instantiate_data<'db>(
 
 fn instantiate_error<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     inner_expr: ExprFull<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _error_tydesc: *const rtdt::TyDesc,
@@ -708,7 +708,7 @@ fn instantiate_error<'db>(
 
 fn instantiate_map<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     entries: &[ExprMapEntry<'db>],
     key_type: TypeAndHeap<'db>,
     value_type: TypeAndHeap<'db>,
@@ -742,7 +742,7 @@ fn instantiate_map<'db>(
 
     // Allocate leaf node.
     let leaf_node = unsafe {
-        rt.alloc.alloc(leaf_layout.size, leaf_layout.align, 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, leaf_layout.size, leaf_layout.align, 1)
     };
 
     // Initialize node header: tag = Leaf (2), len = entries.len().
@@ -791,7 +791,7 @@ fn instantiate_map<'db>(
 
 fn instantiate_set<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     elements: &[ExprFull<'db>],
     element_type: TypeAndHeap<'db>,
     tydesc_table: &mut TyDescTable<'db>,
@@ -823,7 +823,7 @@ fn instantiate_set<'db>(
 
     // Allocate leaf node.
     let leaf_node = unsafe {
-        rt.alloc.alloc(leaf_layout.size, leaf_layout.align, 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, leaf_layout.size, leaf_layout.align, 1)
     };
 
     // Initialize node header (SetNode struct).
@@ -855,7 +855,7 @@ fn instantiate_set<'db>(
 
 fn instantiate_tensor<'db>(
     db: &'db dyn crate::Db,
-    rt: &mut datalove_rt::impls::rt_local::RtLocal,
+    rt: datalove_rt::c::LocalRtHandle,
     shape: &[u32],
     elements: &[ExprFull<'db>],
     element_type: TypeAndHeap<'db>,
@@ -875,7 +875,7 @@ fn instantiate_tensor<'db>(
     unsafe {
         // Allocate tensor data array.
         let data_ptr = if total_elems > 0 {
-            let array_ptr = rt.alloc.alloc(element_size, element_align, total_elems as u32);
+            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, element_size, element_align, total_elems as u32);
 
             for (i, elem) in elements.iter().enumerate() {
                 let elem_dest = array_ptr.add(i * element_size as usize);
@@ -888,7 +888,7 @@ fn instantiate_tensor<'db>(
 
         // Allocate shape array.
         let shape_ptr = if rank > 0 {
-            let shape_array = rt.alloc.alloc(std::mem::size_of::<u32>() as u32, std::mem::align_of::<u32>() as u32, rank as u32) as *mut u32;
+            let shape_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, std::mem::size_of::<u32>() as u32, std::mem::align_of::<u32>() as u32, rank as u32) as *mut u32;
             for (i, &dim) in shape.iter().enumerate() {
                 *shape_array.add(i) = dim;
             }
@@ -899,7 +899,7 @@ fn instantiate_tensor<'db>(
 
         // Allocate and compute strides array.
         let strides_ptr = if rank > 0 {
-            let strides_array = rt.alloc.alloc(std::mem::size_of::<u32>() as u32, std::mem::align_of::<u32>() as u32, rank as u32) as *mut u32;
+            let strides_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, std::mem::size_of::<u32>() as u32, std::mem::align_of::<u32>() as u32, rank as u32) as *mut u32;
 
             // Compute strides for row-major layout.
             // RowMajor: strides[i] = product of dims[i+1..rank].
@@ -947,10 +947,6 @@ mod tests {
         fn new(rt: Box<datalove_rt::impls::rt_local::RtLocal>) -> Self {
             let handle = Box::into_raw(rt) as datalove_rt::c::LocalRtHandle;
             Self { handle }
-        }
-
-        fn as_mut(&mut self) -> &mut datalove_rt::impls::rt_local::RtLocal {
-            unsafe { &mut *(self.handle as *mut datalove_rt::impls::rt_local::RtLocal) }
         }
 
         fn handle(&self) -> datalove_rt::c::LocalRtHandle {
@@ -1018,7 +1014,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1038,7 +1034,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1058,7 +1054,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1078,7 +1074,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1098,7 +1094,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1122,7 +1118,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1145,7 +1141,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1173,7 +1169,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1197,7 +1193,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1221,7 +1217,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1256,7 +1252,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1280,7 +1276,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1309,7 +1305,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1338,7 +1334,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1361,7 +1357,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1382,7 +1378,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1407,7 +1403,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1441,7 +1437,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1475,7 +1471,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1503,7 +1499,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1532,7 +1528,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1560,7 +1556,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1588,7 +1584,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1609,7 +1605,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1651,7 +1647,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1693,7 +1689,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1733,7 +1729,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1759,7 +1755,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1793,7 +1789,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1819,7 +1815,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1853,7 +1849,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1877,7 +1873,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1906,7 +1902,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1937,7 +1933,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1961,7 +1957,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -1987,7 +1983,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2025,7 +2021,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2052,7 +2048,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2073,7 +2069,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2116,7 +2112,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2141,7 +2137,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2175,7 +2171,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2202,7 +2198,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2238,7 +2234,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2274,7 +2270,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2310,7 +2306,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2346,7 +2342,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2380,7 +2376,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 
@@ -2404,7 +2400,7 @@ mod tests {
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
             guard.handle(),
-            instantiate_value(&db, guard.as_mut(), &mut tydesc_table, typechecked)?
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
         );
         let inst = inst_guard.value();
 

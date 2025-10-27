@@ -228,9 +228,9 @@ impl LitOpCommand {
         // Instantiate values.
         let mut rt = datalove_rt::rust::Runtime::new();
         let mut tydesc_table1 = datalit::tydesc_table::TyDescTable::new(&db);
-        let inst1 = datalit::instantiate2::instantiate_value(&db, unsafe { rt.rt_local_mut() }, &mut tydesc_table1, typechecked1)?;
+        let inst1 = datalit::instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table1, typechecked1)?;
         let mut tydesc_table2 = datalit::tydesc_table::TyDescTable::new(&db);
-        let inst2 = datalit::instantiate2::instantiate_value(&db, unsafe { rt.rt_local_mut() }, &mut tydesc_table2, typechecked2)?;
+        let inst2 = datalit::instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table2, typechecked2)?;
 
         // Execute the operation.
         match self.op.as_str() {

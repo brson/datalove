@@ -26,7 +26,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the map.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -72,7 +72,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the map.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -120,7 +120,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the map.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -168,7 +168,7 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the map.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -214,7 +214,7 @@ fn test_clone_empty_set() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -260,7 +260,7 @@ fn test_clone_set_single_element() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -308,7 +308,7 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -356,7 +356,7 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::c::dtlv_rti_init();
@@ -404,7 +404,7 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst = instantiate2::instantiate_value(&db, &mut rt, &mut tydesc_table, typechecked)?;
+    let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)?;
 
     // Clone the set.
     let rt = datalove_rt::c::dtlv_rti_init();

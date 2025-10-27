@@ -80,6 +80,24 @@ pub unsafe extern "C" fn dtlv_rti_mem_alloc_local(
     }
 }
 
+/// Raw memory allocation without requiring a type descriptor.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_mem_alloc_raw_local(
+    rt: LocalRtHandle,
+    size: u32,
+    align: u32,
+    count: u32,
+) -> *mut u8 {
+    if rt.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        rt_ref.alloc.alloc(size, align, count)
+    }
+}
+
 /// Low-level allocator access.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dtlv_rti_mem_free_local(

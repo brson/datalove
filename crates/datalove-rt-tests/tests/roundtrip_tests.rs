@@ -151,7 +151,7 @@ fn compile_and_instantiate<'db>(
         return Err(format!("Type check errors: {} error(s)", errors.len()));
     }
 
-    let inst_value = datalit::instantiate2::instantiate_value(db, rt, tydesc_table, typechecked)
+    let inst_value = datalit::instantiate2::instantiate_value(db, rt as *mut _ as rt::c::LocalRtHandle, tydesc_table, typechecked)
         .map_err(|e| format!("Instantiation error: {}", e))?;
 
     Ok((inst_value, typechecked))
