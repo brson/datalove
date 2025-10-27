@@ -1287,3 +1287,22 @@ pub unsafe extern "C" fn dtlv_rti_tensor_reshape_local(
         )
     }
 }
+
+/// Compare two bigints: a cmp b.
+/// Returns: -1 if a < b, 0 if a == b, 1 if a > b.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dtlv_rti_int_cmp(
+    _rt: LocalRtHandle,
+    a_ref: *const u8,
+    _a_tydesc: *const rtdt::TyDesc,
+    b_ref: *const u8,
+    _b_tydesc: *const rtdt::TyDesc,
+) -> i32 {
+    if a_ref.is_null() || b_ref.is_null() {
+        return 0;  // Default to equal on error.
+    }
+
+    unsafe {
+        crate::impls::int_math::int_cmp_impl(a_ref, b_ref)
+    }
+}

@@ -1,9 +1,9 @@
-fun factorial(n: @u32): @u32
-  if n .< @2
-    ret @1
+fun factorial(n: @int): @int
+  if n .< : @int / @2
+    ret : @int / @1
   else
-    ret n * factorial(n - @1)
+    ret n * factorial(n - : @int / @1)
   end if
 end fun
 
-let output = factorial(@5)
+let output = factorial(: @int / @5)

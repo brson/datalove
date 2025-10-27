@@ -1,12 +1,12 @@
-fun add(a: @u32, b: @u32): @u32
+fun add(a: @int, b: @int): @int
   ret a + b
 end fun
 
-fun multiply(a: @u32, b: @u32): @u32
+fun multiply(a: @int, b: @int): @int
   ret a * b
 end fun
 
-fun compute(x: @u32): @u32
+fun compute(x: @int): @int
   let sum = add(x, @5)
   ret multiply(sum, @2)
 end fun

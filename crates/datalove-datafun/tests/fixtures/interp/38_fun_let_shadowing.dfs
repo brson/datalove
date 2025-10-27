@@ -1,7 +1,7 @@
-fun shadow(x: @u32): @u32
-  let x = x + @1
-  let x = x * @2
+fun shadow(x: @int): @int
+  let x = x + : @int / @1
+  let x = x * : @int / @2
   ret x
 end fun
 
-let output = shadow(@5)
+let output = shadow(: @int / @5)

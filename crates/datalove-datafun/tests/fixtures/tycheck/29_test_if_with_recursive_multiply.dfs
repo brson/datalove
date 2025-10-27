@@ -1,4 +1,4 @@
-fun test(n: @u32): @u32
+fun test(n: @int): @int
   if n <= @1
     ret @1
   else

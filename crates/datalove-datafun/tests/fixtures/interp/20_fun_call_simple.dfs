@@ -1,5 +1,5 @@
-fun double(x: @u32): @u32
+fun double(x: @int): @int
   ret x + x
 end fun
 
-let output = double(@21)
+let output = double(: @int / @21)

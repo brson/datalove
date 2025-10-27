@@ -1,11 +1,11 @@
-fun fib(n: @u32): @u32
-  if n <= @1
-    ret @1
+fun fib(n: @int): @int
+  if n <= : @int / @1
+    ret : @int / @1
   else
-    let a = fib(n - @1)
-    let b = fib(n - @2)
+    let a = fib(n - : @int / @1)
+    let b = fib(n - : @int / @2)
     ret a + b
   end if
 end fun
 
-let output = fib(@6)
+let output = fib(: @int / @6)

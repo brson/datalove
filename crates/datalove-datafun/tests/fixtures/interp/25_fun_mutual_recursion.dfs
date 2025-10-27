@@ -1,17 +1,17 @@
-fun is_even(n: @u32): @u32
-  if n == @0
-    ret @1
+fun is_even(n: @int): @int
+  if n == : @int / @0
+    ret : @int / @1
   else
-    ret is_odd(n - @1)
+    ret is_odd(n - : @int / @1)
   end if
 end fun
 
-fun is_odd(n: @u32): @u32
-  if n == @0
-    ret @0
+fun is_odd(n: @int): @int
+  if n == : @int / @0
+    ret : @int / @0
   else
-    ret is_even(n - @1)
+    ret is_even(n - : @int / @1)
   end if
 end fun
 
-let output = is_even(@4)
+let output = is_even(: @int / @4)

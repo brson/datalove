@@ -1,7 +1,7 @@
-fun test(): @?u32
-  let x: @u32 = @10
-  let y: @u32 = x + @5
-  let z: @?u32 = y
+fun test(): @?int
+  let x: @int = @10
+  let y: @int = x + : @int / @5
+  let z: @?int = y
   ret z
 end fun
 

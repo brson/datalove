@@ -1,4 +1,4 @@
-fun add(a: @u32, b: @u32): @u32
+fun add(a: @int, b: @int): @int
   ret a + b
 end fun
 

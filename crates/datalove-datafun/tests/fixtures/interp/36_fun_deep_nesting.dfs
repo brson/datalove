@@ -1,9 +1,9 @@
-fun complex(a: @u32, b: @u32): @u32
+fun complex(a: @int, b: @int): @int
   let sum = a + b
-  if sum .> @10
-    let x = sum - @10
-    if x .> @5
-      let y = x * @2
+  if sum .> : @int / @10
+    let x = sum - : @int / @10
+    if x .> : @int / @5
+      let y = x * : @int / @2
       ret y
     else
       ret x
@@ -13,4 +13,4 @@ fun complex(a: @u32, b: @u32): @u32
   end if
 end fun
 
-let output = complex(@7, @8)
+let output = complex(: @int / @7, : @int / @8)

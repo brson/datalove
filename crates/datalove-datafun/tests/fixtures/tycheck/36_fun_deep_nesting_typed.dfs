@@ -1,4 +1,4 @@
-fun complex(a: @u32, b: @u32): @u32
+fun complex(a: @int, b: @int): @int
   let sum = a + b
   if sum .> @10
     let x = sum - @10

@@ -1,8 +1,8 @@
-fun double(x: @u32): @u32
+fun double(x: @int): @int
   ret x + x
 end fun
 
-fun add_double(a: @u32, b: @u32): @u32
+fun add_double(a: @int, b: @int): @int
   ret double(a) + double(b)
 end fun
 

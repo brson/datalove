@@ -899,10 +899,22 @@ fn eval_div_optional(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, _inner
 }
 
 /// Evaluate less than.
-fn eval_lt(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_lt(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => Ok(Value::from_bool(a < b)),
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a < b)),
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            let cmp_result = unsafe {
+                rt::c::dtlv_rti_int_cmp(
+                    Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                    a_ptr as *const u8,
+                    a_tydesc,
+                    b_ptr as *const u8,
+                    b_tydesc,
+                )
+            };
+            Ok(Value::from_bool(cmp_result < 0))
+        }
         _ => Err(InterpError::TypeError(
             "Unsupported types for comparison".to_string(),
         )),
@@ -910,10 +922,22 @@ fn eval_lt(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
 }
 
 /// Evaluate greater than.
-fn eval_gt(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_gt(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => Ok(Value::from_bool(a > b)),
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a > b)),
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            let cmp_result = unsafe {
+                rt::c::dtlv_rti_int_cmp(
+                    Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                    a_ptr as *const u8,
+                    a_tydesc,
+                    b_ptr as *const u8,
+                    b_tydesc,
+                )
+            };
+            Ok(Value::from_bool(cmp_result > 0))
+        }
         _ => Err(InterpError::TypeError(
             "Unsupported types for comparison".to_string(),
         )),
@@ -921,10 +945,22 @@ fn eval_gt(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
 }
 
 /// Evaluate less than or equal.
-fn eval_le(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_le(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => Ok(Value::from_bool(a <= b)),
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a <= b)),
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            let cmp_result = unsafe {
+                rt::c::dtlv_rti_int_cmp(
+                    Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                    a_ptr as *const u8,
+                    a_tydesc,
+                    b_ptr as *const u8,
+                    b_tydesc,
+                )
+            };
+            Ok(Value::from_bool(cmp_result <= 0))
+        }
         _ => Err(InterpError::TypeError(
             "Unsupported types for comparison".to_string(),
         )),
@@ -932,10 +968,22 @@ fn eval_le(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
 }
 
 /// Evaluate greater than or equal.
-fn eval_ge(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_ge(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
     match (lhs, rhs) {
         (Value::U32(a), Value::U32(b)) => Ok(Value::from_bool(a >= b)),
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a >= b)),
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            let cmp_result = unsafe {
+                rt::c::dtlv_rti_int_cmp(
+                    Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                    a_ptr as *const u8,
+                    a_tydesc,
+                    b_ptr as *const u8,
+                    b_tydesc,
+                )
+            };
+            Ok(Value::from_bool(cmp_result >= 0))
+        }
         _ => Err(InterpError::TypeError(
             "Unsupported types for comparison".to_string(),
         )),
@@ -943,11 +991,23 @@ fn eval_ge(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
 }
 
 /// Evaluate equality.
-fn eval_eq(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_eq(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
     match (lhs, rhs) {
         (Value::Bool(a), Value::Bool(b)) => Ok(Value::from_bool(a == b)),
         (Value::U32(a), Value::U32(b)) => Ok(Value::from_bool(a == b)),
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a == b)),
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            let cmp_result = unsafe {
+                rt::c::dtlv_rti_int_cmp(
+                    Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                    a_ptr as *const u8,
+                    a_tydesc,
+                    b_ptr as *const u8,
+                    b_tydesc,
+                )
+            };
+            Ok(Value::from_bool(cmp_result == 0))
+        }
         _ => Err(InterpError::TypeError(
             "Unsupported types for equality".to_string(),
         )),
@@ -955,11 +1015,23 @@ fn eval_eq(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
 }
 
 /// Evaluate inequality.
-fn eval_ne(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
+fn eval_ne(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
     match (lhs, rhs) {
         (Value::Bool(a), Value::Bool(b)) => Ok(Value::from_bool(a != b)),
         (Value::U32(a), Value::U32(b)) => Ok(Value::from_bool(a != b)),
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a != b)),
+        (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
+            let cmp_result = unsafe {
+                rt::c::dtlv_rti_int_cmp(
+                    Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
+                    a_ptr as *const u8,
+                    a_tydesc,
+                    b_ptr as *const u8,
+                    b_tydesc,
+                )
+            };
+            Ok(Value::from_bool(cmp_result != 0))
+        }
         _ => Err(InterpError::TypeError(
             "Unsupported types for inequality".to_string(),
         )),

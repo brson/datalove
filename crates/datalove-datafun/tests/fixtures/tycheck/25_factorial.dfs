@@ -1,4 +1,4 @@
-fun factorial(n: @u32): @u32
+fun factorial(n: @int): @int
   if n <= @1
     ret @1
   else

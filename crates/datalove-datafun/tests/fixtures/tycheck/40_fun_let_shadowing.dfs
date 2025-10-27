@@ -1,4 +1,4 @@
-fun shadow(x: @u32): @u32
+fun shadow(x: @int): @int
   let x = x + @1
   let x = x * @2
   ret x

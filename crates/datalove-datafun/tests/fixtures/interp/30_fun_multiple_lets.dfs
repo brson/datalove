@@ -1,8 +1,8 @@
-fun compute(a: @u32, b: @u32): @u32
+fun compute(a: @int, b: @int): @int
   let x = a + b
-  let y = x * @2
-  let z = y - @1
+  let y = x * : @int / @2
+  let z = y - : @int / @1
   ret z
 end fun
 
-let output = compute(@3, @4)
+let output = compute(: @int / @3, : @int / @4)

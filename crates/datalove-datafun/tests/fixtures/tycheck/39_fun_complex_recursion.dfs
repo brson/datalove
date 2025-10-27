@@ -1,4 +1,4 @@
-fun fib(n: @u32): @u32
+fun fib(n: @int): @int
   if n <= @1
     ret @1
   else
