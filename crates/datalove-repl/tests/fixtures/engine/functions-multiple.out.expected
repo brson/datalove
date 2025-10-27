@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -79,7 +79,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): InvalidOperandType { op: \"Mul\", ty: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -91,7 +91,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },

@@ -1402,6 +1402,9 @@ fn check<'db>(
             let synthesized = synthesize(ctx, ty_without_hint)?;
             if types_equivalent(db, synthesized.ty(db), expected_type) {
                 Ok(())
+            } else if can_widen_to(synthesized.ty(db), expected_type) {
+                // Allow numeric widening.
+                Ok(())
             } else {
                 // T032: General type mismatch (subsumption fallback).
                 if let Some((text, span)) = ctx.get_span(expr) {
@@ -1698,6 +1701,32 @@ fn types_and_heaps_equivalent<'db>(
     t2: &TypeAndHeap<'db>,
 ) -> bool {
     heaps_compatible(t1.heap(db), t2.heap(db)) && types_equivalent(db, t1.ty(db), t2.ty(db))
+}
+
+/// Check if a type can widen to another type.
+///
+/// Supports numeric widening chains:
+/// - u8 → u16 → u32 → u64 → int
+/// - i8 → i16 → i32 → i64 → int
+///
+/// No cross-widening between unsigned and signed types.
+pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
+    match (from, to) {
+        // Unsigned widening chain.
+        (Type::U8, Type::U16 | Type::U32 | Type::U64 | Type::Int) => true,
+        (Type::U16, Type::U32 | Type::U64 | Type::Int) => true,
+        (Type::U32, Type::U64 | Type::Int) => true,
+        (Type::U64, Type::Int) => true,
+
+        // Signed widening chain.
+        (Type::I8, Type::I16 | Type::I32 | Type::I64 | Type::Int) => true,
+        (Type::I16, Type::I32 | Type::I64 | Type::Int) => true,
+        (Type::I32, Type::I64 | Type::Int) => true,
+        (Type::I64, Type::Int) => true,
+
+        // No widening for other types.
+        _ => false,
+    }
 }
 
 /// Convert a heap to a string for error messages.

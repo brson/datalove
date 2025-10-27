@@ -839,15 +839,24 @@ fn synthesize_binop<'db>(
     // Determine result type based on operator.
     use BinOp::*;
     let result_ty = match op {
-        // Basic arithmetic: only floats and bigints.
+        // Basic arithmetic: floats, bigints, and fixed ints (which widen to int).
         Add | Sub | Mul => {
-            if !is_float_type(operand_ty) && !is_bigint_type(operand_ty) {
+            if is_float_type(operand_ty) {
+                // Floats return float.
+                lhs_ty
+            } else if is_bigint_type(operand_ty) {
+                // Bigints return bigint.
+                lhs_ty
+            } else if is_fixed_int_type(operand_ty) {
+                // Fixed ints widen to int.
+                let int_ty = Type::Datalit(datalit::tycheck::Type::Int);
+                TypeAndHeap::new(db, datalit::ast::Heap::Omitted, int_ty)
+            } else {
                 return Err(TypeError::InvalidOperandType {
                     op: format!("{:?}", op),
                     ty: type_to_string(db, operand_ty),
                 });
             }
-            lhs_ty
         }
 
         // Bare division: only floats (bigints must use /! or /?).
@@ -1317,7 +1326,14 @@ fn check_expr<'db>(
                 return Ok(());
             }
 
-            // If exact match fails, check for automatic coercion to Option/Result.
+            // If exact match fails, try numeric widening.
+            if let (Type::Datalit(synth_ty), Type::Datalit(expect_ty)) = (synthesized.ty(db), expected.ty(db)) {
+                if datalit::tycheck::can_widen_to(synth_ty, expect_ty) {
+                    return Ok(());
+                }
+            }
+
+            // If widening fails, check for automatic coercion to Option/Result.
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
                     // Allow coercion from T to Option<T>.

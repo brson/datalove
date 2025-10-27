@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): InvalidOperandType { op: \"Sub\", ty: \"u32\" }"
+      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },

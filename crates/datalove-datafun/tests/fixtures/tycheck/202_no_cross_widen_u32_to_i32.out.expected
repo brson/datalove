@@ -1,0 +1,16 @@
+{
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "i32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "u32"
+    }
+  ]
+}

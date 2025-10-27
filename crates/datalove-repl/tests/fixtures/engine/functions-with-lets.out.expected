@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }, UnresolvedName(\"a\"), UnresolvedName(\"b\")"
+      "Error": "type error(s): TypeMismatch { expected: \"int\", actual: \"u32\" }, UnresolvedName(\"b\")"
     },
     "environment": []
   },
@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): InvalidOperandType { op: \"Sub\", ty: \"u32\" }, InvalidOperandType { op: \"Sub\", ty: \"u32\" }, UnresolvedName(\"a\")"
+      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }, TypeMismatch { expected: \"u32\", actual: \"int\" }, UnresolvedName(\"a\")"
     },
     "environment": []
   },
@@ -55,7 +55,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }, UnresolvedName(\"y\"), UnresolvedName(\"y\")"
+      "Error": "type error(s): TypeMismatch { expected: \"int\", actual: \"u32\" }, TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },

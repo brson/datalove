@@ -768,6 +768,69 @@ Anonymous composite types can be synthesized when all their components can be sy
 
 For collections (lists, sets, maps), all elements/keys/values must have the same type. The first element determines the expected type for the rest. Empty collections cannot be synthesized (they need type context).
 
+## Numeric Widening
+
+Datalove supports automatic numeric widening for fixed-size integer types.
+
+### Widening Chains
+
+Unsigned integers can widen along this chain:
+```
+u8 → u16 → u32 → u64 → int
+```
+
+Signed integers can widen along this chain:
+```
+i8 → i16 → i32 → i64 → int
+```
+
+**No cross-widening**: Unsigned types cannot widen to signed types and vice versa.
+
+Examples:
+```datalove
+let a: @u8 = @10
+let b: @u16 = a         // OK: u8 widens to u16
+let c: @u32 = b         // OK: u16 widens to u32
+let d: @int = c         // OK: u32 widens to int
+
+let e: @i32 = c         // ERROR: u32 cannot widen to i32 (cross-widening)
+```
+
+### Bare Math Operator Widening
+
+In Datafun, bare arithmetic operators (`+`, `-`, `*`) on fixed-size integers automatically widen the result to `int`:
+
+```datalove
+let a: @u32 = @10
+let b: @u32 = @20
+let c = a * b           // c has type @int (widened)
+```
+
+This behavior differs from checked operators (`+!`, `-!`, etc.) which return `Result<T>` and optional operators (`+?`, `-?`, etc.) which return `Option<T>`.
+
+### Widening Rules
+
+**Rule: Widen-Assign**
+```
+e ⇒ T1
+can_widen_to(T1, T2)
+────────────────────
+e ⇐ T2
+```
+
+Widening is attempted after exact type matching fails but before Option/Result coercion.
+
+**Rule: Widen-BinOp**
+```
+e1 ⇒ T where T is fixed int type
+e2 ⇒ T where T is fixed int type
+op ∈ {+, -, *}
+────────────────────────────────
+e1 op e2 ⇒ @int
+```
+
+Bare arithmetic on fixed integers widens to `int`.
+
 ## Implementation Notes
 
 ### Bidirectional algorithm structure
@@ -803,9 +866,8 @@ Typechecker produces clear errors:
 
 Features to consider adding later:
 
-1. **More numeric types**: `@i8`, `@i16`, `@i32`, `@i64`, `@u8`, `@u16`, `@u64`, `@f64`
-2. **Numeric widening**: Automatic coercion from smaller to larger types
-3. **Type variables and generics**: User-defined generic types
-4. **Type aliases**: `type Point = {x: @f32, y: @f32}`
-5. **Refinement types**: `@u32{x | x > 0}` (positive integers)
-6. **Gradual typing**: Mix of static and dynamic checking
+1. **More numeric types**: `@f64`
+2. **Type variables and generics**: User-defined generic types
+3. **Type aliases**: `type Point = {x: @f32, y: @f32}`
+4. **Refinement types**: `@u32{x | x > 0}` (positive integers)
+5. **Gradual typing**: Mix of static and dynamic checking
