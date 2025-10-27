@@ -1,9 +1,9 @@
 fun complex(a: @int, b: @int): @int
   let sum = a + b
-  if sum .> @10
-    let x = sum - @10
-    if x .> @5
-      let y = x * @2
+  if sum .> : @int / @10
+    let x = sum - : @int / @10
+    if x .> : @int / @5
+      let y = x * : @int / @2
       ret y
     else
       ret x

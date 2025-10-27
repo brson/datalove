@@ -7,10 +7,10 @@
       "params": [
         {
           "name": "val",
-          "type": "@u32"
+          "type": "@int"
         }
       ],
-      "return_type": "?u32"
+      "return_type": "?int"
     },
     {
       "kind": "function",
@@ -18,16 +18,16 @@
       "params": [
         {
           "name": "val",
-          "type": "@u32"
+          "type": "@int"
         }
       ],
-      "return_type": "!u32"
+      "return_type": "!int"
     },
     {
       "kind": "function",
       "name": "test_chain",
       "params": [],
-      "return_type": "?u32"
+      "return_type": "?int"
     }
   ]
 }

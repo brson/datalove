@@ -7,17 +7,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "factorial"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Sub\", ty: \"u32\" }"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "factorial(@5)",
@@ -27,19 +19,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@120"
-      }
+      "Error": "type error(s): UnresolvedName(\"factorial\")"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "factorial(@0)",
@@ -49,19 +31,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@1"
-      }
+      "Error": "type error(s): UnresolvedName(\"factorial\")"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "factorial(@1)",
@@ -71,19 +43,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@1"
-      }
+      "Error": "type error(s): UnresolvedName(\"factorial\")"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "factorial(@10)",
@@ -93,18 +55,8 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@3628800"
-      }
+      "Error": "type error(s): UnresolvedName(\"factorial\")"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   }
 ]

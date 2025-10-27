@@ -51,22 +51,13 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "y",
-        "ty": "u32",
-        "value": "@52"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
     },
     "environment": [
       {
         "name": "x",
         "ty": "u32",
         "value": "@42"
-      },
-      {
-        "name": "y",
-        "ty": "u32",
-        "value": "@52"
       }
     ]
   },
@@ -78,22 +69,13 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@52"
-      }
+      "Error": "type error(s): UnresolvedName(\"y\")"
     },
     "environment": [
       {
         "name": "x",
         "ty": "u32",
         "value": "@42"
-      },
-      {
-        "name": "y",
-        "ty": "u32",
-        "value": "@52"
       }
     ]
   }

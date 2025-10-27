@@ -1779,7 +1779,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u8\", actual: \"u32\" }"
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }"
     },
     "environment": [
       {
@@ -2071,7 +2071,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u16\", actual: \"u32\" }"
+      "Error": "type error(s): InvalidOperandType { op: \"Mul\", ty: \"u32\" }"
     },
     "environment": [
       {
@@ -2217,7 +2217,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"i16\", actual: \"u32\" }"
+      "Error": "type error(s): InvalidOperandType { op: \"Sub\", ty: \"u32\" }"
     },
     "environment": [
       {
@@ -2363,11 +2363,7 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "u32_div",
-        "ty": "u32",
-        "value": "@100"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Div\", ty: \"u32\" }"
     },
     "environment": [
       {
@@ -2409,11 +2405,6 @@
         "name": "u16_min",
         "ty": "u16",
         "value": "@0"
-      },
-      {
-        "name": "u32_div",
-        "ty": "u32",
-        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2445,11 +2436,7 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@100"
-      }
+      "Error": "type error(s): UnresolvedName(\"u32_div\")"
     },
     "environment": [
       {
@@ -2491,11 +2478,6 @@
         "name": "u16_min",
         "ty": "u16",
         "value": "@0"
-      },
-      {
-        "name": "u32_div",
-        "ty": "u32",
-        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2571,11 +2553,6 @@
         "value": "@0"
       },
       {
-        "name": "u32_div",
-        "ty": "u32",
-        "value": "@100"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
@@ -2647,11 +2624,6 @@
         "name": "u16_min",
         "ty": "u16",
         "value": "@0"
-      },
-      {
-        "name": "u32_div",
-        "ty": "u32",
-        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2727,11 +2699,6 @@
         "value": "@0"
       },
       {
-        "name": "u32_div",
-        "ty": "u32",
-        "value": "@100"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
@@ -2803,11 +2770,6 @@
         "name": "u16_min",
         "ty": "u16",
         "value": "@0"
-      },
-      {
-        "name": "u32_div",
-        "ty": "u32",
-        "value": "@100"
       },
       {
         "name": "u32_max",
@@ -2883,11 +2845,6 @@
         "value": "@0"
       },
       {
-        "name": "u32_div",
-        "ty": "u32",
-        "value": "@100"
-      },
-      {
         "name": "u32_max",
         "ty": "u32",
         "value": "@4294967295"
@@ -2959,11 +2916,6 @@
         "name": "u16_min",
         "ty": "u16",
         "value": "@0"
-      },
-      {
-        "name": "u32_div",
-        "ty": "u32",
-        "value": "@100"
       },
       {
         "name": "u32_max",

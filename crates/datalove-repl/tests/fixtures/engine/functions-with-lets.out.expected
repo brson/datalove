@@ -7,17 +7,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "compute"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }, UnresolvedName(\"a\"), UnresolvedName(\"b\")"
     },
-    "environment": [
-      {
-        "name": "compute",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "compute(@5)",
@@ -27,29 +19,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@11"
-      }
+      "Error": "type error(s): UnresolvedName(\"compute\")"
     },
-    "environment": [
-      {
-        "name": "a",
-        "ty": "unknown",
-        "value": "@6"
-      },
-      {
-        "name": "b",
-        "ty": "unknown",
-        "value": "@12"
-      },
-      {
-        "name": "compute",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "fun fib(n: @u32): @u32\n  if n <= @1\n    ret @1\n  else\n    let a = fib(n - @1)\n    let b = fib(n - @2)\n    ret a + b\n  end if\nend fun",
@@ -59,32 +31,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "fib"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Sub\", ty: \"u32\" }, InvalidOperandType { op: \"Sub\", ty: \"u32\" }, UnresolvedName(\"a\")"
     },
-    "environment": [
-      {
-        "name": "a",
-        "ty": "unknown",
-        "value": "@6"
-      },
-      {
-        "name": "b",
-        "ty": "unknown",
-        "value": "@12"
-      },
-      {
-        "name": "compute",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "fib",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "fib(@6)",
@@ -94,34 +43,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@4"
-      }
+      "Error": "type error(s): UnresolvedName(\"fib\")"
     },
-    "environment": [
-      {
-        "name": "a",
-        "ty": "unknown",
-        "value": "@1"
-      },
-      {
-        "name": "b",
-        "ty": "unknown",
-        "value": "@3"
-      },
-      {
-        "name": "compute",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "fib",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "fun shadow(x: @u32): @u32\n  let y = x + @1\n  let y = y * @2\n  ret y\nend fun",
@@ -131,37 +55,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "shadow"
-      }
+      "Error": "type error(s): InvalidOperandType { op: \"Add\", ty: \"u32\" }, UnresolvedName(\"y\"), UnresolvedName(\"y\")"
     },
-    "environment": [
-      {
-        "name": "a",
-        "ty": "unknown",
-        "value": "@1"
-      },
-      {
-        "name": "b",
-        "ty": "unknown",
-        "value": "@3"
-      },
-      {
-        "name": "compute",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "fib",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "shadow",
-        "ty": "function",
-        "value": ""
-      }
-    ]
+    "environment": []
   },
   {
     "input": "shadow(@5)",
@@ -171,43 +67,8 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
-        "value": "@12"
-      }
+      "Error": "type error(s): UnresolvedName(\"shadow\")"
     },
-    "environment": [
-      {
-        "name": "a",
-        "ty": "unknown",
-        "value": "@1"
-      },
-      {
-        "name": "b",
-        "ty": "unknown",
-        "value": "@3"
-      },
-      {
-        "name": "compute",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "fib",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "shadow",
-        "ty": "function",
-        "value": ""
-      },
-      {
-        "name": "y",
-        "ty": "unknown",
-        "value": "@12"
-      }
-    ]
+    "environment": []
   }
 ]

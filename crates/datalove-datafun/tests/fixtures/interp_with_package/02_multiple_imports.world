@@ -1,12 +1,12 @@
 ----------
-module sys/std/u32
+module sys/std/int
 ----------
 
-fun add(x: @u32, y: @u32): @u32
+fun add(x: @int, y: @int): @int
   ret x + y
 end fun
 
-fun double(x: @u32): @u32
+fun double(x: @int): @int
   ret x + x
 end fun
 
@@ -14,10 +14,10 @@ end fun
 script
 ----------
 
-require module sys/std/u32
+require module sys/std/int
 
-import u32.add
-import u32.double
+import int.add
+import int.double
 
-let x = add(@5, @10)
+let x = add(: @int / @5, : @int / @10)
 let output = double(x)

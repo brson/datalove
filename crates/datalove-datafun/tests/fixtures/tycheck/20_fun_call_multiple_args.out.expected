@@ -7,19 +7,19 @@
       "params": [
         {
           "name": "a",
-          "type": "@u32"
+          "type": "@int"
         },
         {
           "name": "b",
-          "type": "@u32"
+          "type": "@int"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "@int"
     },
     {
       "kind": "variable",
       "name": "result",
-      "type": "u32"
+      "type": "int"
     }
   ]
 }

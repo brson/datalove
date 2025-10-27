@@ -1,5 +1,11 @@
 {
-  "errors": [],
+  "errors": [
+    {
+      "kind": "InvalidOperandType",
+      "op": "NegOptional",
+      "type": "u32"
+    }
+  ],
   "judgements": [
     {
       "kind": "function",

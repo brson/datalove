@@ -7,10 +7,10 @@
       "params": [
         {
           "name": "n",
-          "type": "@u32"
+          "type": "@int"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "@int"
     }
   ]
 }

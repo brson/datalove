@@ -1,7 +1,7 @@
 fun test(n: @int): @int
-  if n <= @1
-    ret @1
+  if n <= : @int / @1
+    ret : @int / @1
   else
-    ret n * test(n - @1)
+    ret n * test(n - : @int / @1)
   end if
 end fun

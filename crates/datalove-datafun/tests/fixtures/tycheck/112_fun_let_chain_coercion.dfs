@@ -9,8 +9,8 @@ fun test_result(val: @int): @!int
 end fun
 
 fun test_chain(): @?int
-  let x: @int = @10
-  let y: @int = x + @5
+  let x: @int = : @int / @10
+  let y: @int = x + : @int / @5
   let z: @?int = y
   ret z
 end fun
