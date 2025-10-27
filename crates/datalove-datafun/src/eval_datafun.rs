@@ -1790,7 +1790,7 @@ unsafe fn write_value_to_ptr(
         Value::Int { ptr, tydesc } => {
             // Clone the Int value to the destination.
             let rt_handle = rt as *mut _ as datalove_rt::c::LocalRtHandle;
-            let status = unsafe { datalove_rt::impls::clone::clone_value(
+            let status = unsafe { datalove_rt::c::dtlv_rti_clone_local(
                 rt_handle,
                 ptr as *const u8,
                 tydesc,
@@ -1804,7 +1804,7 @@ unsafe fn write_value_to_ptr(
         }
         Value::String { ptr, tydesc } => {
             let rt_handle = rt as *mut _ as datalove_rt::c::LocalRtHandle;
-            let status = unsafe { datalove_rt::impls::clone::clone_value(
+            let status = unsafe { datalove_rt::c::dtlv_rti_clone_local(
                 rt_handle,
                 ptr as *const u8,
                 tydesc,
