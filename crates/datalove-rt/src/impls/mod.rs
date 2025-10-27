@@ -7,7 +7,7 @@
 pub(crate) mod alloc;
 pub mod rt_local;
 pub mod clone;
-pub mod string;
+pub(crate) mod string;
 pub(crate) mod pretty;
 pub mod btreemap;
 pub(crate) mod set;

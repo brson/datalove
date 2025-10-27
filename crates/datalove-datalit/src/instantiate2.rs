@@ -384,7 +384,7 @@ fn instantiate_string(
 
         // Create empty string using runtime helper.
         let rt_handle = rt as *mut _ as datalove_rt::c::LocalRtHandle;
-        let status = datalove_rt::impls::string::string_create_local(
+        let status = datalove_rt::c::dtlv_rti_string_create_local(
             rt_handle,
             string_ptr as *mut u8,
             string_tydesc,
@@ -396,7 +396,7 @@ fn instantiate_string(
 
         // Push the string data if non-empty.
         if !value_str.is_empty() {
-            let status = datalove_rt::impls::string::string_push_bytes_local(
+            let status = datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt_handle,
                 string_ptr as *mut u8,
                 string_tydesc,
