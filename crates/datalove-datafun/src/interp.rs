@@ -60,9 +60,39 @@ pub enum InterpError {
 /// Maximum call stack depth to prevent stack overflow.
 pub const MAX_CALL_DEPTH: usize = 1000;
 
+/// Stack frame for function calls.
+///
+/// Contains all per-function state that needs to be saved/restored across calls.
+pub struct StackFrame<'db> {
+    /// Variable bindings (name -> value).
+    pub variables: HashMap<InternedText<'db>, Value>,
+
+    /// Function definitions (name -> definition).
+    pub functions: HashMap<InternedText<'db>, StmtFun<'db>>,
+
+    /// Module function definitions (module_alias -> (function_name -> definition)).
+    /// Used for resolving import statements.
+    pub module_functions: HashMap<InternedText<'db>, HashMap<InternedText<'db>, StmtFun<'db>>>,
+
+    /// Expected return type for the current function (for automatic coercion).
+    pub expected_return_type: Option<crate::datalit::tycheck::TypeAndHeap<'db>>,
+}
+
+impl<'db> StackFrame<'db> {
+    /// Create a new empty stack frame.
+    fn new() -> Self {
+        Self {
+            variables: HashMap::new(),
+            functions: HashMap::new(),
+            module_functions: HashMap::new(),
+            expected_return_type: None,
+        }
+    }
+}
+
 /// Interpreter context.
 ///
-/// Holds the runtime allocator and variable/function bindings.
+/// Holds the runtime allocator and call stack.
 pub struct InterpContext<'db> {
     /// Salsa database.
     pub db: &'db dyn crate::Db,
@@ -76,37 +106,84 @@ pub struct InterpContext<'db> {
     /// Type descriptor table for instantiate2.
     pub tydesc_table: crate::datalit::tydesc_table::TyDescTable<'db>,
 
-    /// Variable bindings (name -> value).
-    pub variables: HashMap<InternedText<'db>, Value>,
-
-    /// Function definitions (name -> definition).
-    pub functions: HashMap<InternedText<'db>, StmtFun<'db>>,
-
-    /// Module function definitions (module_alias -> (function_name -> definition)).
-    /// Used for resolving import statements.
-    module_functions: HashMap<InternedText<'db>, HashMap<InternedText<'db>, StmtFun<'db>>>,
-
-    /// Current call stack depth (for recursion protection).
-    pub call_depth: usize,
-
-    /// Expected return type for the current function (for automatic coercion).
-    pub expected_return_type: Option<crate::datalit::tycheck::TypeAndHeap<'db>>,
+    /// Call stack (frames for each function call).
+    call_stack: Vec<StackFrame<'db>>,
 }
 
 impl<'db> InterpContext<'db> {
     /// Create a new interpreter context.
     pub fn new(db: &'db dyn crate::Db, type_table: TypeTable) -> Self {
-        Self {
+        let mut ctx = Self {
             db,
             rt: rt::impls::rt_local::RtLocal::new(),
             type_table,
             tydesc_table: crate::datalit::tydesc_table::TyDescTable::new(db),
-            variables: HashMap::new(),
-            functions: HashMap::new(),
-            module_functions: HashMap::new(),
-            call_depth: 0,
-            expected_return_type: None,
-        }
+            call_stack: Vec::new(),
+        };
+
+        // Push initial frame for top-level script execution.
+        ctx.call_stack.push(StackFrame::new());
+        ctx
+    }
+
+    /// Get current call depth.
+    pub fn call_depth(&self) -> usize {
+        self.call_stack.len()
+    }
+
+    /// Get mutable reference to current frame.
+    fn current_frame_mut(&mut self) -> &mut StackFrame<'db> {
+        self.call_stack.last_mut().expect("call stack should never be empty")
+    }
+
+    /// Get reference to current frame.
+    fn current_frame(&self) -> &StackFrame<'db> {
+        self.call_stack.last().expect("call stack should never be empty")
+    }
+
+    /// Push a new stack frame.
+    pub(crate) fn push_frame(&mut self, frame: StackFrame<'db>) {
+        self.call_stack.push(frame);
+    }
+
+    /// Pop the current stack frame.
+    pub(crate) fn pop_frame(&mut self) -> StackFrame<'db> {
+        self.call_stack.pop().expect("attempted to pop from empty call stack")
+    }
+
+    /// Clone the current frame's functions map.
+    pub(crate) fn clone_current_functions(&self) -> HashMap<InternedText<'db>, StmtFun<'db>> {
+        self.current_frame().functions.clone()
+    }
+
+    /// Clone the current frame's module_functions map.
+    pub(crate) fn clone_current_module_functions(&self) -> HashMap<InternedText<'db>, HashMap<InternedText<'db>, StmtFun<'db>>> {
+        self.current_frame().module_functions.clone()
+    }
+
+    /// Look up a function in the current frame.
+    pub(crate) fn lookup_function(&self, name: InternedText<'db>) -> Option<StmtFun<'db>> {
+        self.current_frame().functions.get(&name).copied()
+    }
+
+    /// Get reference to current frame's functions map (for REPL).
+    pub fn functions(&self) -> &HashMap<InternedText<'db>, StmtFun<'db>> {
+        &self.current_frame().functions
+    }
+
+    /// Get mutable reference to current frame's functions map (for REPL).
+    pub fn functions_mut(&mut self) -> &mut HashMap<InternedText<'db>, StmtFun<'db>> {
+        &mut self.current_frame_mut().functions
+    }
+
+    /// Get reference to current frame's variables map (for REPL).
+    pub fn variables(&self) -> &HashMap<InternedText<'db>, Value> {
+        &self.current_frame().variables
+    }
+
+    /// Get mutable reference to current frame's variables map (for REPL).
+    pub fn variables_mut(&mut self) -> &mut HashMap<InternedText<'db>, Value> {
+        &mut self.current_frame_mut().variables
     }
 
     /// Create interpreter context with package world support.
@@ -139,7 +216,7 @@ impl<'db> InterpContext<'db> {
                 }
             }
 
-            ctx.module_functions.insert(module_alias, module_funcs);
+            ctx.current_frame_mut().module_functions.insert(module_alias, module_funcs);
         }
 
         ctx
@@ -151,7 +228,7 @@ impl<'db> InterpContext<'db> {
         for statement in script.statements(self.db) {
             if let Statement::Fun(fun) = statement {
                 let name = fun.name(self.db);
-                self.functions.insert(name, *fun);
+                self.current_frame_mut().functions.insert(name, *fun);
             }
         }
 
@@ -177,7 +254,7 @@ impl<'db> InterpContext<'db> {
                     });
 
                 let value = crate::eval_datafun::eval_expr_with_expected(self, value_expr, expected_type)?;
-                self.variables.insert(name, value);
+                self.current_frame_mut().variables.insert(name, value);
 
                 Ok(())
             }
@@ -189,7 +266,7 @@ impl<'db> InterpContext<'db> {
 
             Statement::Ret(stmt) => {
                 // Evaluate the return value with expected type for automatic coercion.
-                let expected = self.expected_return_type;
+                let expected = self.current_frame().expected_return_type;
                 let value = crate::eval_datafun::eval_expr_with_expected(self, stmt.value(self.db), expected)?;
                 Err(InterpError::Return(value))
             }
@@ -204,22 +281,26 @@ impl<'db> InterpContext<'db> {
                 let module_name = stmt.module_name(self.db);
                 let item_name = stmt.item_name(self.db);
 
-                // Look up the module in module_functions.
-                if let Some(module_funcs) = self.module_functions.get(&module_name) {
-                    // Look up the function in the module.
-                    if let Some(func) = module_funcs.get(&item_name) {
-                        // Add the function to the local function table.
-                        self.functions.insert(item_name, *func);
-                        Ok(())
-                    } else {
+                // Look up the module and function (need to copy before mutating).
+                let func_opt = self.current_frame().module_functions
+                    .get(&module_name)
+                    .and_then(|module_funcs| module_funcs.get(&item_name).copied());
+
+                if let Some(func) = func_opt {
+                    // Add the function to the local function table.
+                    self.current_frame_mut().functions.insert(item_name, func);
+                    Ok(())
+                } else {
+                    // Check if module exists for better error message.
+                    if self.current_frame().module_functions.contains_key(&module_name) {
                         Err(InterpError::UnresolvedName(
                             format!("{}.{}", module_name.as_str(self.db), item_name.as_str(self.db))
                         ))
+                    } else {
+                        Err(InterpError::UnresolvedName(
+                            format!("module {} (not required)", module_name.as_str(self.db))
+                        ))
                     }
-                } else {
-                    Err(InterpError::UnresolvedName(
-                        format!("module {} (not required)", module_name.as_str(self.db))
-                    ))
                 }
             }
 
@@ -338,7 +419,7 @@ impl<'db> InterpContext<'db> {
 
                         // Bind the payload if there's a then_binding.
                         if let Some(binding_name) = then_binding {
-                            self.variables.insert(binding_name, payload_value);
+                            self.current_frame_mut().variables.insert(binding_name, payload_value);
                         }
 
                         // Execute then branch.
@@ -348,7 +429,7 @@ impl<'db> InterpContext<'db> {
 
                         // Remove the binding.
                         if let Some(binding_name) = then_binding {
-                            if let Some(mut old_value) = self.variables.remove(&binding_name) {
+                            if let Some(mut old_value) = self.current_frame_mut().variables.remove(&binding_name) {
                                 unsafe { old_value.free(&mut self.rt); }
                             }
                         }
@@ -398,7 +479,7 @@ impl<'db> InterpContext<'db> {
 
                         // Bind the payload if there's a then_binding.
                         if let Some(binding_name) = then_binding {
-                            self.variables.insert(binding_name, payload_value);
+                            self.current_frame_mut().variables.insert(binding_name, payload_value);
                         }
 
                         // Execute then branch.
@@ -408,7 +489,7 @@ impl<'db> InterpContext<'db> {
 
                         // Remove the binding.
                         if let Some(binding_name) = then_binding {
-                            if let Some(mut old_value) = self.variables.remove(&binding_name) {
+                            if let Some(mut old_value) = self.current_frame_mut().variables.remove(&binding_name) {
                                 unsafe { old_value.free(&mut self.rt); }
                             }
                         }
@@ -468,7 +549,7 @@ impl<'db> InterpContext<'db> {
 
                             // Bind the error if there's an else_binding.
                             if let Some(binding_name) = else_binding {
-                                self.variables.insert(binding_name, error_value);
+                                self.current_frame_mut().variables.insert(binding_name, error_value);
                             }
 
                             // Execute else branch.
@@ -478,7 +559,7 @@ impl<'db> InterpContext<'db> {
 
                             // Remove the binding.
                             if let Some(binding_name) = else_binding {
-                                if let Some(mut old_value) = self.variables.remove(&binding_name) {
+                                if let Some(mut old_value) = self.current_frame_mut().variables.remove(&binding_name) {
                                     unsafe { old_value.free(&mut self.rt); }
                                 }
                             }
@@ -738,7 +819,7 @@ impl<'db> InterpContext<'db> {
 
     /// Look up a variable.
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Result<&Value, InterpError> {
-        self.variables
+        self.current_frame().variables
             .get(&name)
             .ok_or_else(|| InterpError::UnresolvedName(name.as_str(self.db).to_string()))
     }
@@ -746,12 +827,15 @@ impl<'db> InterpContext<'db> {
     /// Pretty-print a variable's value.
     pub fn pretty_print_variable(&mut self, name: InternedText<'db>) -> Result<String, InterpError> {
         // Look up the variable first to check it exists.
-        if !self.variables.contains_key(&name) {
+        if !self.current_frame().variables.contains_key(&name) {
             return Err(InterpError::UnresolvedName(name.as_str(self.db).to_string()));
         }
 
-        // Get the value (need to work around borrow checker).
-        let value = self.variables.get(&name).unwrap();
+        // Get a raw pointer to the value to avoid borrowing issues.
+        let value_ptr = self.current_frame().variables.get(&name).unwrap() as *const Value;
+
+        // Now we can call pretty_print without holding a borrow to current_frame().
+        let value = unsafe { &*value_ptr };
         value.pretty_print(&mut self.rt, &mut self.tydesc_table)
     }
 
@@ -766,10 +850,12 @@ impl<'db> InterpContext<'db> {
 
 impl<'db> Drop for InterpContext<'db> {
     fn drop(&mut self) {
-        // Free all values in the context.
-        for (_, mut value) in self.variables.drain() {
-            unsafe {
-                value.free(&mut self.rt);
+        // Free all values in all stack frames.
+        for frame in &mut self.call_stack {
+            for (_, mut value) in frame.variables.drain() {
+                unsafe {
+                    value.free(&mut self.rt);
+                }
             }
         }
     }

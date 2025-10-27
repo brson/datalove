@@ -1,6 +1,7 @@
 //! Evaluators for datafun expressions.
 
 use rmx::prelude::*;
+use std::collections::HashMap;
 use crate::ast::*;
 use crate::interp::{InterpContext, InterpResult, InterpError};
 use crate::value::Value;
@@ -1157,21 +1158,18 @@ fn eval_function_call<'db>(
     let args = call.args(ctx.db);
 
     // Check stack depth to prevent overflow.
-    if ctx.call_depth >= crate::interp::MAX_CALL_DEPTH {
+    if ctx.call_depth() >= crate::interp::MAX_CALL_DEPTH {
         return Err(InterpError::StackOverflow);
     }
 
-    // Increment call depth.
-    ctx.call_depth += 1;
-
-    // Look up the function definition (need to copy since we'll borrow ctx mutably later).
-    let func = *ctx.functions.get(&name)
+    // Look up the function definition from current frame.
+    let func = ctx.lookup_function(name)
         .ok_or_else(|| InterpError::UnresolvedName(name.as_str(ctx.db).to_string()))?;
 
     let params = func.params(ctx.db);
     let body = func.body(ctx.db);
 
-    // Evaluate arguments with expected parameter types.
+    // Evaluate arguments with expected parameter types (in the current frame).
     let mut arg_values = Vec::new();
     for (i, arg) in args.iter().enumerate() {
         // Get the expected type from the parameter if available.
@@ -1186,33 +1184,34 @@ fn eval_function_call<'db>(
         arg_values.push(value);
     }
 
-    // Save parameter names that we're about to shadow.
-    let mut shadowed_vars: Vec<(bct::text::InternedText<'db>, Option<Value>)> = Vec::new();
-    for param in params {
-        let param_name = param.name(ctx.db);
-        let old_value = ctx.variables.remove(&param_name);
-        shadowed_vars.push((param_name, old_value));
-    }
-
-    // Bind parameters to argument values.
-    for (param, arg_value) in params.iter().zip(arg_values.into_iter()) {
-        ctx.variables.insert(param.name(ctx.db), arg_value);
-    }
-
-    // Execute function body.
-    let mut result = Err(InterpError::RuntimeError(
-        "Function did not return a value".to_string(),
-    ));
+    // Create new stack frame for function call.
+    // Copy functions and module_functions from current frame to maintain visibility.
+    let mut new_frame = crate::interp::StackFrame {
+        variables: HashMap::new(),
+        functions: ctx.clone_current_functions(),
+        module_functions: ctx.clone_current_module_functions(),
+        expected_return_type: None,
+    };
 
     // Get the function's return type for handling early returns and automatic coercion.
     let return_type_hint = func.return_type(ctx.db);
     let return_type = return_type_hint.and_then(|type_hint| {
         crate::eval_datalit::convert_type_hint_tracked(ctx.db, type_hint)
     });
+    new_frame.expected_return_type = return_type;
 
-    // Set expected return type for automatic coercion in return statements.
-    let old_return_type = ctx.expected_return_type;
-    ctx.expected_return_type = return_type;
+    // Bind parameters to argument values in the new frame.
+    for (param, arg_value) in params.iter().zip(arg_values.into_iter()) {
+        new_frame.variables.insert(param.name(ctx.db), arg_value);
+    }
+
+    // Push the new frame.
+    ctx.push_frame(new_frame);
+
+    // Execute function body.
+    let mut result = Err(InterpError::RuntimeError(
+        "Function did not return a value".to_string(),
+    ));
 
     for stmt in body {
         match ctx.exec_stmt(stmt) {
@@ -1322,31 +1321,13 @@ fn eval_function_call<'db>(
         }
     }
 
-    // Restore the previous return type.
-    ctx.expected_return_type = old_return_type;
-
-    // Restore shadowed variables.
-    // First, free the parameter values.
-    for (param_name, _) in &shadowed_vars {
-        if let Some(mut param_value) = ctx.variables.remove(param_name) {
-            unsafe {
-                param_value.free(&mut ctx.rt);
-            }
+    // Pop the frame and free all its variables.
+    let mut frame = ctx.pop_frame();
+    for (_, mut value) in frame.variables.drain() {
+        unsafe {
+            value.free(&mut ctx.rt);
         }
     }
-
-    // Then restore old values.
-    for (param_name, old_value) in shadowed_vars {
-        if let Some(old_val) = old_value {
-            ctx.variables.insert(param_name, old_val);
-        }
-    }
-
-    // Restore expected return type.
-    ctx.expected_return_type = old_return_type;
-
-    // Decrement call depth before returning.
-    ctx.call_depth -= 1;
 
     result
 }

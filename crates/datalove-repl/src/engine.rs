@@ -299,7 +299,7 @@ impl<'db> Engine<'db> {
         for statement in unit_statements {
             if let datafun::ast::Statement::Fun(fun) = statement {
                 let name = fun.name(db);
-                ctx.functions.insert(name, *fun);
+                ctx.functions_mut().insert(name, *fun);
             }
         }
 
@@ -404,7 +404,7 @@ impl<'db> Engine<'db> {
             .unwrap_or_else(|e| format!("error: {:?}", e));
 
         // Remove the temporary variable from the context.
-        if let Some(mut value) = ctx.variables.remove(&name) {
+        if let Some(mut value) = ctx.variables_mut().remove(&name) {
             unsafe {
                 value.free(&mut ctx.rt);
             }
@@ -430,7 +430,7 @@ impl<'db> Engine<'db> {
         let parsed_script = parse_full_script(db, script);
 
         // Add functions.
-        for (name, _fun) in &ctx.functions {
+        for (name, _fun) in ctx.functions() {
             bindings.push((
                 name.as_str(db).to_string(),
                 "function".to_string(),
@@ -439,7 +439,7 @@ impl<'db> Engine<'db> {
         }
 
         // Collect variable names first to avoid borrow checker issues.
-        let var_names: Vec<_> = ctx.variables.keys().copied().collect();
+        let var_names: Vec<_> = ctx.variables().keys().copied().collect();
 
         // Add variables with types and values.
         for name in var_names {
