@@ -773,6 +773,44 @@ fn check<'db>(
             check(ctx, expr, res.inner_type(db))
         }
 
+        // Rule: Check-TypedInt - respect type hints on integer literals.
+        // This must come before the bare integer patterns to ensure type hints are honored.
+        // Only handles direct integer type hints, not Option/Result wrapped ones.
+        (Expr::Int(_), _) if expr.type_hint(db).is_some() && is_direct_integer_type_hint(&expr.type_hint(db).unwrap().type_hint(db)) => {
+            // Get the type from the hint and verify the literal value fits.
+            let type_hint_and_heap = expr.type_hint(db).unwrap();
+            let hinted_type = convert_type_hint(db, type_hint_and_heap)?;
+            let hinted_type_inner = hinted_type.ty(db);
+
+            // First check against the hinted type to ensure the literal is valid.
+            let expr_without_hint = ExprFull::new(db, None, *expr_and_heap);
+            check(ctx, expr_without_hint, hinted_type)?;
+
+            // Now check if the hinted type matches or can widen to the expected type.
+            if types_equivalent(db, hinted_type_inner, expected_type) {
+                Ok(())
+            } else if can_widen_to(hinted_type_inner, expected_type) {
+                // Allow widening from hinted type to expected type.
+                Ok(())
+            } else {
+                // T040: Type mismatch - cannot widen from hinted type.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    let msg = format!("mismatched types");
+                    DiagnosticBuilder::error(db, &msg)
+                        .code("T040")
+                        .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                            type_to_string(db, expected_type),
+                            type_to_string(db, hinted_type_inner)))
+                        .note("type hints on integer literals are respected; widening is only allowed within the same signedness (unsigned→unsigned or signed→signed)")
+                        .emit_type();
+                }
+                Err(TypeError::TypeMismatch {
+                    expected: type_to_string(db, expected_type),
+                    actual: type_to_string(db, hinted_type_inner),
+                })
+            }
+        }
+
         // Rule: Check-Subsume - try synthesis first.
         // IMPORTANT: Synthesize from the inner expression without type hint to avoid infinite recursion.
         (Expr::True | Expr::False | Expr::String(_), _) => {
@@ -1701,6 +1739,15 @@ fn types_and_heaps_equivalent<'db>(
     t2: &TypeAndHeap<'db>,
 ) -> bool {
     heaps_compatible(t1.heap(db), t2.heap(db)) && types_equivalent(db, t1.ty(db), t2.ty(db))
+}
+
+/// Check if a type hint is a direct integer type (not wrapped in Option/Result).
+fn is_direct_integer_type_hint<'db>(type_hint: &TypeHint<'db>) -> bool {
+    matches!(
+        type_hint,
+        TypeHint::U8 | TypeHint::I8 | TypeHint::U16 | TypeHint::I16 |
+        TypeHint::U32 | TypeHint::I32 | TypeHint::U64 | TypeHint::I64 | TypeHint::Int
+    )
 }
 
 /// Check if a type can widen to another type.

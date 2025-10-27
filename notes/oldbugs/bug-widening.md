@@ -1,8 +1,10 @@
-# Bug: Integer Type Hints Not Respected in Check Mode
+# FIXED: Integer Type Hints Not Respected in Check Mode
 
 ## Summary
 
-When checking an integer literal with an explicit type hint against an expected type, datalit's type checker ignores the type hint and only checks whether the raw literal value fits in the expected type's range. This breaks numeric widening tests for cross-widening rejection.
+[FIXED in crates/datalove-datalit/src/tycheck.rs:776-811]
+
+When checking an integer literal with an explicit type hint against an expected type, datalit's type checker was ignoring the type hint and only checking whether the raw literal value fits in the expected type's range. This broke numeric widening tests for cross-widening rejection.
 
 ## Discovered While
 
@@ -84,6 +86,25 @@ This is a broader refactoring beyond the scope of just adding widening support.
 - `crates/datalove-datalit/src/tycheck.rs:801-937` - Integer literal check patterns
 - `crates/datalove-datalit/src/tycheck.rs:1398-1426` - Subsumption fallback with widening
 
-## Test File Removed
+## Fix Implementation
 
-`crates/datalove-datalit/tests/fixtures/tycheck/63_no_cross_widen_u32_to_i32.*` - Removed because it passed when it should have failed, giving false confidence.
+Added a new check case in the `check()` function (lines 776-811) that handles integer literals with direct type hints before the bare integer literal patterns.
+
+### Key Changes
+
+1. Added `is_direct_integer_type_hint()` helper function to distinguish direct integer type hints (U8, I8, U16, etc.) from wrapped ones (Option, Result).
+
+2. New match arm in `check()` that:
+   - Detects integer literals with direct integer type hints
+   - Converts the type hint to a Type
+   - Validates the literal value fits in the hinted type
+   - Checks if the hinted type can widen to the expected type using `can_widen_to()`
+   - Emits proper type errors for invalid widening (e.g., cross-widening)
+
+3. The new case only handles direct integer type hints, allowing Option/Result wrapped hints to fall through to their respective implicit wrapping cases.
+
+### Test Coverage
+
+Test file restored: `crates/datalove-datalit/tests/fixtures/tycheck/63_no_cross_widen_u32_to_i32.*`
+
+Now correctly fails as expected, verifying that cross-widening from u32 to i32 is properly rejected with error code T040.
