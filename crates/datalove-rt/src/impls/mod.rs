@@ -9,7 +9,7 @@ pub mod rt_local;
 pub mod clone;
 pub(crate) mod string;
 pub(crate) mod pretty;
-pub mod btreemap;
+pub(crate) mod btreemap;
 pub(crate) mod set;
 pub(crate) mod list;
 pub(crate) mod tensor;

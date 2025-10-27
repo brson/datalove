@@ -2903,10 +2903,10 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
 
     // Create map from empty slice.
     let status = unsafe {
-        datalove_rt::impls::btreemap::btreemap_clone_from_slice_impl(
-            &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal),
+        datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
+            rt,
             map_ptr,
-            rtdt::TyDescRef::from_ptr(&*map_tydesc as *const rtdt::TyDesc),
+            &*map_tydesc as *const rtdt::TyDesc,
             ptr::null(),
             0,
             &*tuple_tydesc as *const rtdt::TyDesc,
@@ -2957,10 +2957,10 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
     ];
 
     let status = unsafe {
-        datalove_rt::impls::btreemap::btreemap_clone_from_slice_impl(
-            &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal),
+        datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
+            rt,
             map_ptr,
-            rtdt::TyDescRef::from_ptr(&*map_tydesc as *const rtdt::TyDesc),
+            &*map_tydesc as *const rtdt::TyDesc,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
             &*tuple_tydesc as *const rtdt::TyDesc,
@@ -3043,10 +3043,10 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
     ];
 
     let status = unsafe {
-        datalove_rt::impls::btreemap::btreemap_clone_from_slice_impl(
-            &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal),
+        datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
+            rt,
             map_ptr,
-            rtdt::TyDescRef::from_ptr(&*map_tydesc as *const rtdt::TyDesc),
+            &*map_tydesc as *const rtdt::TyDesc,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
             &*tuple_tydesc as *const rtdt::TyDesc,
@@ -3131,10 +3131,10 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
     ];
 
     let status = unsafe {
-        datalove_rt::impls::btreemap::btreemap_clone_from_slice_impl(
-            &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal),
+        datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
+            rt,
             map_ptr,
-            rtdt::TyDescRef::from_ptr(&*map_tydesc as *const rtdt::TyDesc),
+            &*map_tydesc as *const rtdt::TyDesc,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
             &*tuple_tydesc as *const rtdt::TyDesc,
