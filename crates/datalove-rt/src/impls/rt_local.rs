@@ -37,3 +37,16 @@ impl RtLocal {
         }
     }
 }
+
+// fixme leaks
+/*impl Drop for RtLocal {
+    fn drop(&mut self) {
+        unsafe {
+            let alloc = std::mem::replace(
+                &mut self.alloc,
+                AllocLocal::new_raw_with_leak_check_mode(crate::impls::alloc::LeakCheckMode::Ignore)
+            );
+            alloc.shutdown();
+        }
+    }
+}*/
