@@ -801,52 +801,52 @@ fn eval_mul_checked(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value,
 }
 
 /// Evaluate checked division.
-fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+fn eval_div_checked(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
     use datalove_rtdt as rtdt;
 
-    match (lhs, rhs) {
+    let result = match (&lhs, &rhs) {
         (Value::U32(a), Value::U32(b)) => {
             // All expression types should be populated in the type table.
             let tytag = unsafe { (*inner_tydesc).type_tag };
             match tytag {
                 rtdt::TyTag::U8 => {
                     let result_tydesc = make_result_tydesc_u8(ctx);
-                    match (a as u8).checked_div(b as u8) {
+                    match (*a as u8).checked_div(*b as u8) {
                         Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
                         None => create_result_divzero_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::I8 => {
                     let result_tydesc = make_result_tydesc_i8(ctx);
-                    match ((a as i32) as i8).checked_div((b as i32) as i8) {
+                    match ((*a as i32) as i8).checked_div((*b as i32) as i8) {
                         Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
                         None => create_result_divzero_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::U16 => {
                     let result_tydesc = make_result_tydesc_u16(ctx);
-                    match (a as u16).checked_div(b as u16) {
+                    match (*a as u16).checked_div(*b as u16) {
                         Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
                         None => create_result_divzero_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::I16 => {
                     let result_tydesc = make_result_tydesc_i16(ctx);
-                    match ((a as i32) as i16).checked_div((b as i32) as i16) {
+                    match ((*a as i32) as i16).checked_div((*b as i32) as i16) {
                         Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
                         None => create_result_divzero_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::I32 => {
                     let result_tydesc = make_result_tydesc_i32(ctx);
-                    match (a as i32).checked_div(b as i32) {
+                    match (*a as i32).checked_div(*b as i32) {
                         Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
                         None => create_result_divzero_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::U32 => {
                     let result_tydesc = make_result_tydesc_u32(ctx);
-                    match a.checked_div(b) {
+                    match a.checked_div(*b) {
                         Some(result) => create_result_ok(ctx, Value::U32(result), result_tydesc),
                         None => create_result_divzero_err(ctx, result_tydesc),
                     }
@@ -858,15 +858,15 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
             let result_result_tydesc = make_result_tydesc_int(ctx);
 
             // Allocate result Int.
-            let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
+            let mut result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
                     rt::c::dtlv_rti_int_div_checked(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
-                        a_ptr as *const u8,
-                        a_tydesc,
-                        b_ptr as *const u8,
-                        b_tydesc,
+                        *a_ptr as *const u8,
+                        *a_tydesc,
+                        *b_ptr as *const u8,
+                        *b_tydesc,
                         result_ptr as *mut u8,
                         result_tydesc,
                     )
@@ -875,6 +875,8 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
                     create_result_ok(ctx, result, result_result_tydesc)
                 } else {
                     // RT function returns Error for division by zero.
+                    // Free the allocated result before returning error.
+                    unsafe { result.free(&mut ctx.rt); }
                     create_result_divzero_err(ctx, result_result_tydesc)
                 }
             } else {
@@ -882,7 +884,15 @@ fn eval_div_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
             }
         }
         _ => Err(InterpError::TypeError("Unsupported types for checked division".to_string())),
+    };
+
+    // Free consumed operands.
+    unsafe {
+        lhs.free(&mut ctx.rt);
+        rhs.free(&mut ctx.rt);
     }
+
+    result
 }
 
 /// Evaluate optional addition.
