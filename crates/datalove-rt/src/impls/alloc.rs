@@ -24,6 +24,8 @@ pub enum LeakCheckMode {
     Warn,
     /// Panic on detected leaks.
     Panic,
+    /// Panic on detected leaks with backtraces.
+    PanicWithBacktrace,
 }
 
 impl LeakCheckMode {
@@ -32,6 +34,7 @@ impl LeakCheckMode {
         match std::env::var("DATALOVE_LEAK_CHECK").as_deref() {
             Ok("warn") => LeakCheckMode::Warn,
             Ok("panic") => LeakCheckMode::Panic,
+            Ok("panic-backtrace") => LeakCheckMode::PanicWithBacktrace,
             Ok("ignore") => LeakCheckMode::Ignore,
             _ => LeakCheckMode::Panic,
         }
@@ -58,6 +61,14 @@ mod unix_impl {
         size: usize,
     }
 
+    /// Information about an allocation for leak detection.
+    struct AllocationInfo {
+        size: u32,
+        align: u32,
+        count: u32,
+        backtrace: Option<backtrace::Backtrace>,
+    }
+
     /// Local allocator state for the Unix platform.
     pub struct AllocLocal {
         /// Free lists for each size class.
@@ -66,8 +77,8 @@ mod unix_impl {
         small_pages: Vec<Page>,
         /// Large allocations (each is its own mmap).
         large_pages: Vec<Page>,
-        /// Active allocations for leak detection: ptr -> (size, align, count).
-        active_allocations: HashMap<*mut u8, (u32, u32, u32)>,
+        /// Active allocations for leak detection.
+        active_allocations: HashMap<*mut u8, AllocationInfo>,
         /// Leak detection mode.
         leak_check_mode: LeakCheckMode,
     }
@@ -111,7 +122,18 @@ mod unix_impl {
 
                 // Track allocation for leak detection.
                 if !ptr.is_null() {
-                    self.active_allocations.insert(ptr, (size, align as u32, count));
+                    let backtrace = if self.leak_check_mode == LeakCheckMode::PanicWithBacktrace {
+                        Some(backtrace::Backtrace::new())
+                    } else {
+                        None
+                    };
+
+                    self.active_allocations.insert(ptr, AllocationInfo {
+                        size,
+                        align: align as u32,
+                        count,
+                        backtrace,
+                    });
                 }
 
                 ptr
@@ -130,17 +152,17 @@ mod unix_impl {
             let align = align.max(std::mem::align_of::<*mut u8>() as u32) as usize;
 
             // Remove from tracking and optionally validate.
-            if let Some((tracked_size, tracked_align, tracked_count)) = self.active_allocations.remove(&ptr) {
+            if let Some(info) = self.active_allocations.remove(&ptr) {
                 // Validate parameters match (in warn/panic modes).
                 if self.leak_check_mode != LeakCheckMode::Ignore {
-                    if tracked_size != size || tracked_align != align as u32 || tracked_count != count {
+                    if info.size != size || info.align != align as u32 || info.count != count {
                         let msg = format!(
                             "free() parameter mismatch: ptr={:p}, expected (size={}, align={}, count={}), got (size={}, align={}, count={})",
-                            ptr, tracked_size, tracked_align, tracked_count, size, align, count
+                            ptr, info.size, info.align, info.count, size, align, count
                         );
                         match self.leak_check_mode {
                             LeakCheckMode::Warn => eprintln!("WARNING: {}", msg),
-                            LeakCheckMode::Panic => panic!("{}", msg),
+                            LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => panic!("{}", msg),
                             LeakCheckMode::Ignore => {}
                         }
                     }
@@ -150,7 +172,7 @@ mod unix_impl {
                 let msg = format!("free() called on untracked pointer: {:p}", ptr);
                 match self.leak_check_mode {
                     LeakCheckMode::Warn => eprintln!("WARNING: {}", msg),
-                    LeakCheckMode::Panic => panic!("{}", msg),
+                    LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => panic!("{}", msg),
                     LeakCheckMode::Ignore => {}
                 }
             }
@@ -293,7 +315,7 @@ mod unix_impl {
                 let leaked_count = self.active_allocations.len();
                 let leaked_bytes: usize = self.active_allocations
                     .values()
-                    .map(|(size, _align, count)| (*size as usize) * (*count as usize))
+                    .map(|info| (info.size as usize) * (info.count as usize))
                     .sum();
 
                 let report = format!(
@@ -306,12 +328,16 @@ mod unix_impl {
                 );
 
                 let mut details = String::new();
-                for (ptr, (size, align, count)) in self.active_allocations.iter().take(10) {
-                    let bytes = (*size as usize) * (*count as usize);
+                for (ptr, info) in self.active_allocations.iter().take(10) {
+                    let bytes = (info.size as usize) * (info.count as usize);
                     details.push_str(&format!(
                         "\n  {:p} : size={}, align={}, count={} ({} bytes)",
-                        ptr, size, align, count, bytes
+                        ptr, info.size, info.align, info.count, bytes
                     ));
+
+                    if let Some(ref bt) = info.backtrace {
+                        details.push_str(&format!("\n    Backtrace:\n{:?}", bt));
+                    }
                 }
 
                 if self.active_allocations.len() > 10 {
@@ -346,7 +372,7 @@ mod unix_impl {
                     LeakCheckMode::Warn => {
                         eprintln!("{}", full_report);
                     }
-                    LeakCheckMode::Panic => {
+                    LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => {
                         panic!("{}", full_report);
                     }
                     LeakCheckMode::Ignore => {}
@@ -498,7 +524,7 @@ mod wasm_impl {
                     LeakCheckMode::Warn => {
                         eprintln!("{}", full_report);
                     }
-                    LeakCheckMode::Panic => {
+                    LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => {
                         panic!("{}", full_report);
                     }
                     LeakCheckMode::Ignore => {}
@@ -1056,6 +1082,35 @@ mod tests {
                 let msg = e.downcast_ref::<String>().unwrap();
                 assert!(msg.contains("Total leaked bytes: 300"));
                 assert!(msg.contains("Leaked allocations: 3"));
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "DATALOVE RUNTIME LEAK DETECTED")]
+    fn test_leak_detection_panic_with_backtrace_mode() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::PanicWithBacktrace);
+        unsafe {
+            let _leak = rt.alloc(128, 8, 1);
+            rt.shutdown(); // Should panic with backtrace.
+        }
+    }
+
+    #[test]
+    fn test_leak_detection_panic_with_backtrace_includes_backtrace() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::PanicWithBacktrace);
+        unsafe {
+            let _leak = rt.alloc(128, 8, 1);
+
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                rt.shutdown();
+            }));
+
+            assert!(result.is_err());
+            if let Err(e) = result {
+                let msg = e.downcast_ref::<String>().unwrap();
+                assert!(msg.contains("DATALOVE RUNTIME LEAK DETECTED"));
+                assert!(msg.contains("Backtrace:"));
             }
         }
     }
