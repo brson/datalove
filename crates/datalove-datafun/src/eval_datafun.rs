@@ -1227,7 +1227,7 @@ fn eval_try_result<'db>(
     use datalove_rtdt as rtdt;
 
     let operand = try_op.operand(ctx.db);
-    let operand_value = eval_expr(ctx, operand)?;
+    let mut operand_value = eval_expr(ctx, operand)?;
 
     // The operand must be a Result value.
     let (ptr, tydesc) = match operand_value {
@@ -1262,6 +1262,9 @@ fn eval_try_result<'db>(
             // Create a Value for the error (clones it).
             let error_value = InterpContext::value_from_ptr(&mut ctx.rt, error_value_ptr, error_tydesc)?;
 
+            // TODO: Free the Result value - but this causes issues with Error payloads.
+            // The Error contains a pointer that needs special handling.
+
             Err(InterpError::ReturnError(error_value))
         }
         rtdt::ResultTag::Ok => {
@@ -1273,7 +1276,12 @@ fn eval_try_result<'db>(
             let ok_tydesc = unsafe { (*tydesc).type_info.result.ok_tydesc };
 
             // Create a Value for the payload (clones it).
-            InterpContext::value_from_ptr(&mut ctx.rt, payload_ptr, ok_tydesc)
+            let result = InterpContext::value_from_ptr(&mut ctx.rt, payload_ptr, ok_tydesc)?;
+
+            // Free the Result value now that we've extracted the Ok payload.
+            unsafe { operand_value.free(&mut ctx.rt); }
+
+            Ok(result)
         }
     }
 }
