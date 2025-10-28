@@ -29,11 +29,18 @@ impl RtLocal {
             alloc: AllocLocal::new_raw_with_leak_check_mode(mode),
         })
     }
+}
 
-    /// Shutdown the runtime.
-    pub unsafe fn shutdown(self: Box<Self>) {
+impl Drop for RtLocal {
+    fn drop(&mut self) {
+        // Move alloc out and consume it in shutdown.
+        // We need to replace it with a dummy value since shutdown consumes self.
         unsafe {
-            self.alloc.shutdown();
+            let alloc = std::mem::replace(
+                &mut self.alloc,
+                AllocLocal::new_raw_with_leak_check_mode(crate::impls::alloc::LeakCheckMode::Ignore)
+            );
+            alloc.shutdown();
         }
     }
 }

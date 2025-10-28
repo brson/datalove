@@ -684,7 +684,7 @@ mod tests {
             );
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -722,7 +722,7 @@ mod tests {
             );
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -760,7 +760,7 @@ mod tests {
             );
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -814,7 +814,7 @@ mod tests {
             );
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -867,7 +867,7 @@ mod tests {
             );
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 }

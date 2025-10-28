@@ -55,7 +55,8 @@ pub unsafe extern "C" fn dtlv_rti_shutdown(
 
     unsafe {
         let rt = Box::from_raw(rt as *mut rt_local::RtLocal);
-        rt.shutdown();
+        // Drop will call shutdown automatically.
+        drop(rt);
     }
 
     RtStatus::Ok

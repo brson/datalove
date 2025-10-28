@@ -377,7 +377,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -416,7 +416,7 @@ mod tests {
             assert_eq!(string.capacity, 0);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -505,7 +505,7 @@ mod tests {
             drop(Vec::from_raw_parts(fields_ptr as *mut rtdt::TyInfoTupleField, 2, 2));
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -552,7 +552,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -583,7 +583,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -612,7 +612,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -658,7 +658,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -682,7 +682,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -714,7 +714,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -744,7 +744,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -791,7 +791,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 }

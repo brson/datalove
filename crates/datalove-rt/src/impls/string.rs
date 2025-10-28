@@ -208,7 +208,7 @@ mod tests {
             assert_eq!(string.capacity, 0);
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -251,7 +251,7 @@ mod tests {
             );
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -305,7 +305,7 @@ mod tests {
             );
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -352,7 +352,7 @@ mod tests {
             );
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -391,7 +391,7 @@ mod tests {
             assert_eq!(string.capacity, 0);
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -428,7 +428,7 @@ mod tests {
             );
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 
@@ -465,7 +465,7 @@ mod tests {
             assert_eq!(status, RtStatus::Error);
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
-            rt.shutdown();
+            drop(rt); // Drop calls shutdown
         }
     }
 }
