@@ -213,7 +213,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
             rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
             rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
-            // Drop will call shutdown automatically.
+            rt_inst.shutdown();
         }
         return Err(format!(
             "Types differ between original and first pretty-print:\nOriginal: {}\nFirst:    {}",
@@ -228,7 +228,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
             rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
             rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
-            // Drop will call shutdown automatically.
+            rt_inst.shutdown();
         }
         return Err(format!(
             "Types differ between first and second pretty-print:\nFirst:  {}\nSecond: {}",
@@ -244,7 +244,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
             rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
             rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
-            // Drop will call shutdown automatically.
+            rt_inst.shutdown();
         }
         return Err(format!(
             "Pretty-prints differ:\nFirst:  {}\nSecond: {}",
@@ -259,7 +259,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
         rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
         rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
-        // Drop will call shutdown automatically.
+        rt_inst.shutdown();
     }
     Ok(pretty1)
 }

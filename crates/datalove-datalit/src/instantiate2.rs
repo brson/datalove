@@ -958,8 +958,7 @@ mod tests {
         fn drop(&mut self) {
             unsafe {
                 let rt = Box::from_raw(self.handle as *mut datalove_rt::impls::rt_local::RtLocal);
-                // Drop calls shutdown automatically.
-                drop(rt);
+                rt.shutdown();
             }
         }
     }
