@@ -1088,7 +1088,7 @@ fn eval_try_option<'db>(
     use datalove_rtdt as rtdt;
 
     let operand = try_op.operand(ctx.db);
-    let operand_value = eval_expr(ctx, operand)?;
+    let mut operand_value = eval_expr(ctx, operand)?;
 
     // The operand must be an Option value.
     let (ptr, tydesc) = match operand_value {
@@ -1108,7 +1108,7 @@ fn eval_try_option<'db>(
         rtdt::OptionTag::None
     };
 
-    match option_tag {
+    let result = match option_tag {
         rtdt::OptionTag::None => {
             // Early return with None.
             Err(InterpError::ReturnNone)
@@ -1124,7 +1124,12 @@ fn eval_try_option<'db>(
             // Create a Value for the payload (clones it).
             InterpContext::value_from_ptr(&mut ctx.rt, payload_ptr, inner_tydesc)
         }
-    }
+    };
+
+    // Free the operand value.
+    unsafe { operand_value.free(&mut ctx.rt); }
+
+    result
 }
 
 /// Evaluate a try-result operator (!).

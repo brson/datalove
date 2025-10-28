@@ -431,7 +431,12 @@ impl Value {
     }
 
     /// Free this value using the runtime allocator.
+    ///
+    /// This properly destroys the value's contents using the runtime destroy function,
+    /// then frees the allocation.
     pub unsafe fn free(&mut self, rt: &mut rt::impls::rt_local::RtLocal) {
+        let rt_handle = rt as *mut _ as rt::c::LocalRtHandle;
+
         match self {
             Value::Bool(_) | Value::U32(_) | Value::F32(_) => {
                 // Inline values don't need freeing.
@@ -440,24 +445,19 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr as *mut u8, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
             Value::String { ptr, tydesc } => {
                 if !ptr.is_null() && !tydesc.is_null() {
-                    // First, destroy the string's internal buffer.
-                    let rt_handle = rt as *mut _ as rt::c::LocalRtHandle;
-                    unsafe {
-                        rt::c::dtlv_rti_string_destroy_local(
-                            rt_handle,
-                            *ptr as *mut u8,
-                            *tydesc,
-                        );
-                    }
-
-                    // Then free the String struct itself.
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr as *mut u8, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
@@ -465,6 +465,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr as *mut u8, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
@@ -472,6 +475,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr as *mut u8, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
@@ -479,6 +485,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr as *mut u8, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
@@ -486,6 +495,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr as *mut u8, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
@@ -493,6 +505,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr as *mut u8, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr as *mut u8) };
                 }
             }
@@ -500,6 +515,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
@@ -507,6 +525,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
@@ -514,6 +535,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
@@ -521,6 +545,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
@@ -528,6 +555,9 @@ impl Value {
                 if !ptr.is_null() && !tydesc.is_null() {
                     let size = unsafe { (**tydesc).size };
                     let align = unsafe { (**tydesc).align };
+                    unsafe {
+                        rt::c::dtlv_rti_any_destroy_local(rt_handle, *ptr, *tydesc);
+                    }
                     unsafe { rt.alloc.free(size, align, 1, *ptr) };
                 }
             }
