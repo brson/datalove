@@ -573,10 +573,10 @@ fn eval_div(_ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Int
 }
 
 /// Evaluate checked addition.
-fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+fn eval_add_checked(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
     use datalove_rtdt as rtdt;
 
-    match (lhs, rhs) {
+    let result = match (&lhs, &rhs) {
         (Value::U32(a), Value::U32(b)) => {
             // All expression types should be populated in the type table.
             let tytag = unsafe { (*inner_tydesc).type_tag };
@@ -584,8 +584,8 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
             match tytag {
                 rtdt::TyTag::U8 => {
                     let result_tydesc = make_result_tydesc_u8(ctx);
-                    let a = a as u8;
-                    let b = b as u8;
+                    let a = *a as u8;
+                    let b = *b as u8;
                     match a.checked_add(b) {
                         Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
@@ -593,8 +593,8 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
                 }
                 rtdt::TyTag::I8 => {
                     let result_tydesc = make_result_tydesc_i8(ctx);
-                    let a = (a as i32) as i8;
-                    let b = (b as i32) as i8;
+                    let a = (*a as i32) as i8;
+                    let b = (*b as i32) as i8;
                     match a.checked_add(b) {
                         Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
@@ -602,8 +602,8 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
                 }
                 rtdt::TyTag::U16 => {
                     let result_tydesc = make_result_tydesc_u16(ctx);
-                    let a = a as u16;
-                    let b = b as u16;
+                    let a = *a as u16;
+                    let b = *b as u16;
                     match a.checked_add(b) {
                         Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
@@ -611,8 +611,8 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
                 }
                 rtdt::TyTag::I16 => {
                     let result_tydesc = make_result_tydesc_i16(ctx);
-                    let a = (a as i32) as i16;
-                    let b = (b as i32) as i16;
+                    let a = (*a as i32) as i16;
+                    let b = (*b as i32) as i16;
                     match a.checked_add(b) {
                         Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
@@ -620,8 +620,8 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
                 }
                 rtdt::TyTag::I32 => {
                     let result_tydesc = make_result_tydesc_i32(ctx);
-                    let a = a as i32;
-                    let b = b as i32;
+                    let a = *a as i32;
+                    let b = *b as i32;
                     match a.checked_add(b) {
                         Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
@@ -629,7 +629,7 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
                 }
                 rtdt::TyTag::U32 => {
                     let result_tydesc = make_result_tydesc_u32(ctx);
-                    match a.checked_add(b) {
+                    match a.checked_add(*b) {
                         Some(result) => create_result_ok(ctx, Value::U32(result), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
                     }
@@ -642,7 +642,15 @@ fn eval_add_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
         _ => Err(InterpError::TypeError(
             "Unsupported types for checked addition".to_string(),
         )),
+    };
+
+    // Free consumed operands.
+    unsafe {
+        lhs.free(&mut ctx.rt);
+        rhs.free(&mut ctx.rt);
     }
+
+    result
 }
 
 /// Evaluate checked subtraction.
