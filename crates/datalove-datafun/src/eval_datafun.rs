@@ -735,52 +735,52 @@ fn eval_sub_checked(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value,
 }
 
 /// Evaluate checked multiplication.
-fn eval_mul_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
+fn eval_mul_checked(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value, inner_tydesc: *const datalove_rtdt::TyDesc) -> InterpResult {
     use datalove_rtdt as rtdt;
 
-    match (lhs, rhs) {
+    let result = match (&lhs, &rhs) {
         (Value::U32(a), Value::U32(b)) => {
             // All expression types should be populated in the type table.
             let tytag = unsafe { (*inner_tydesc).type_tag };
             match tytag {
                 rtdt::TyTag::U8 => {
                     let result_tydesc = make_result_tydesc_u8(ctx);
-                    match (a as u8).checked_mul(b as u8) {
+                    match (*a as u8).checked_mul(*b as u8) {
                         Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::I8 => {
                     let result_tydesc = make_result_tydesc_i8(ctx);
-                    match ((a as i32) as i8).checked_mul((b as i32) as i8) {
+                    match ((*a as i32) as i8).checked_mul((*b as i32) as i8) {
                         Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::U16 => {
                     let result_tydesc = make_result_tydesc_u16(ctx);
-                    match (a as u16).checked_mul(b as u16) {
+                    match (*a as u16).checked_mul(*b as u16) {
                         Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::I16 => {
                     let result_tydesc = make_result_tydesc_i16(ctx);
-                    match ((a as i32) as i16).checked_mul((b as i32) as i16) {
+                    match ((*a as i32) as i16).checked_mul((*b as i32) as i16) {
                         Some(result) => create_result_ok(ctx, Value::U32((result as i32) as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::I32 => {
                     let result_tydesc = make_result_tydesc_i32(ctx);
-                    match (a as i32).checked_mul(b as i32) {
+                    match (*a as i32).checked_mul(*b as i32) {
                         Some(result) => create_result_ok(ctx, Value::U32(result as u32), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
                     }
                 }
                 rtdt::TyTag::U32 => {
                     let result_tydesc = make_result_tydesc_u32(ctx);
-                    match a.checked_mul(b) {
+                    match a.checked_mul(*b) {
                         Some(result) => create_result_ok(ctx, Value::U32(result), result_tydesc),
                         None => create_result_overflow_err(ctx, result_tydesc),
                     }
@@ -789,7 +789,15 @@ fn eval_mul_checked(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value, inner_t
             }
         }
         _ => Err(InterpError::TypeError("Unsupported types for checked multiplication".to_string())),
+    };
+
+    // Free consumed operands.
+    unsafe {
+        lhs.free(&mut ctx.rt);
+        rhs.free(&mut ctx.rt);
     }
+
+    result
 }
 
 /// Evaluate checked division.
