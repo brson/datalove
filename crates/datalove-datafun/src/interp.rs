@@ -373,11 +373,14 @@ impl<'db> InterpContext<'db> {
         use rtdt::ResultTag;
 
         // Evaluate the condition to get the Option/Result value.
-        let condition_value = crate::eval_datafun::eval_expr(self, condition)?;
+        let mut condition_value = crate::eval_datafun::eval_expr(self, condition)?;
 
         // Get the type descriptor from the value itself.
         let condition_tydesc = condition_value.tydesc();
         if condition_tydesc.is_null() {
+            unsafe {
+                condition_value.free(&mut self.rt);
+            }
             return Err(InterpError::TypeError(
                 format!("Cannot determine type of condition value: {:?}", condition_value)
             ));
@@ -392,6 +395,9 @@ impl<'db> InterpContext<'db> {
                 let option_ptr = match condition_value {
                     Value::Option { ptr, .. } => ptr,
                     _ => {
+                        unsafe {
+                            condition_value.free(&mut self.rt);
+                        }
                         return Err(InterpError::TypeError(
                             "Expected Option value for if-destructuring".to_string()
                         ));
@@ -405,7 +411,7 @@ impl<'db> InterpContext<'db> {
                     OptionTag::None
                 };
 
-                match option_tag {
+                let result = match option_tag {
                     OptionTag::Some => {
                         // Extract payload and execute then branch.
                         let layout = unsafe { rtdt::layout::compute_option_layout(condition_tydesc) };
@@ -415,7 +421,13 @@ impl<'db> InterpContext<'db> {
                         let inner_tydesc = unsafe { (*condition_tydesc).type_info.option.inner_tydesc };
 
                         // Create a Value for the payload.
-                        let payload_value = Self::value_from_ptr(&mut self.rt, payload_ptr, inner_tydesc)?;
+                        let payload_value = match Self::value_from_ptr(&mut self.rt, payload_ptr, inner_tydesc) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                unsafe { condition_value.free(&mut self.rt); }
+                                return Err(e);
+                            }
+                        };
 
                         // Bind the payload if there's a then_binding.
                         if let Some(binding_name) = then_binding {
@@ -423,8 +435,12 @@ impl<'db> InterpContext<'db> {
                         }
 
                         // Execute then branch.
+                        let mut result = Ok(());
                         for stmt in then_body {
-                            self.exec_stmt(stmt)?;
+                            if let Err(e) = self.exec_stmt(stmt) {
+                                result = Err(e);
+                                break;
+                            }
                         }
 
                         // Remove the binding.
@@ -433,18 +449,32 @@ impl<'db> InterpContext<'db> {
                                 unsafe { old_value.free(&mut self.rt); }
                             }
                         }
+
+                        result
                     }
                     OptionTag::None => {
                         // Execute else branch if it exists.
                         if let Some(else_stmts) = else_body {
+                            let mut result = Ok(());
                             for stmt in else_stmts {
-                                self.exec_stmt(stmt)?;
+                                if let Err(e) = self.exec_stmt(stmt) {
+                                    result = Err(e);
+                                    break;
+                                }
                             }
+                            result
+                        } else {
+                            Ok(())
                         }
                     }
+                };
+
+                // Free the condition_value before returning.
+                unsafe {
+                    condition_value.free(&mut self.rt);
                 }
 
-                Ok(())
+                result
             }
 
             rtdt::TyTag::Result => {
@@ -452,6 +482,9 @@ impl<'db> InterpContext<'db> {
                 let result_ptr = match condition_value {
                     Value::Result { ptr, .. } => ptr,
                     _ => {
+                        unsafe {
+                            condition_value.free(&mut self.rt);
+                        }
                         return Err(InterpError::TypeError(
                             "Expected Result value for if-destructuring".to_string()
                         ));
@@ -465,7 +498,7 @@ impl<'db> InterpContext<'db> {
                     ResultTag::Err
                 };
 
-                match result_tag {
+                let result = match result_tag {
                     ResultTag::Ok => {
                         // Extract Ok payload and execute then branch.
                         let layout = unsafe { rtdt::layout::compute_result_layout(condition_tydesc) };
@@ -475,7 +508,13 @@ impl<'db> InterpContext<'db> {
                         let ok_tydesc = unsafe { (*condition_tydesc).type_info.result.ok_tydesc };
 
                         // Create a Value for the payload.
-                        let payload_value = Self::value_from_ptr(&mut self.rt, payload_ptr, ok_tydesc)?;
+                        let payload_value = match Self::value_from_ptr(&mut self.rt, payload_ptr, ok_tydesc) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                unsafe { condition_value.free(&mut self.rt); }
+                                return Err(e);
+                            }
+                        };
 
                         // Bind the payload if there's a then_binding.
                         if let Some(binding_name) = then_binding {
@@ -483,8 +522,12 @@ impl<'db> InterpContext<'db> {
                         }
 
                         // Execute then branch.
+                        let mut result = Ok(());
                         for stmt in then_body {
-                            self.exec_stmt(stmt)?;
+                            if let Err(e) = self.exec_stmt(stmt) {
+                                result = Err(e);
+                                break;
+                            }
                         }
 
                         // Remove the binding.
@@ -493,6 +536,8 @@ impl<'db> InterpContext<'db> {
                                 unsafe { old_value.free(&mut self.rt); }
                             }
                         }
+
+                        result
                     }
                     ResultTag::Err => {
                         // Extract Err payload and execute else branch.
@@ -521,6 +566,7 @@ impl<'db> InterpContext<'db> {
                             };
 
                             if new_error_ptr.is_null() {
+                                unsafe { condition_value.free(&mut self.rt); }
                                 return Err(InterpError::RuntimeError(
                                     "Failed to allocate Error in destructuring".to_string()
                                 ));
@@ -553,8 +599,12 @@ impl<'db> InterpContext<'db> {
                             }
 
                             // Execute else branch.
+                            let mut result = Ok(());
                             for stmt in else_stmts {
-                                self.exec_stmt(stmt)?;
+                                if let Err(e) = self.exec_stmt(stmt) {
+                                    result = Err(e);
+                                    break;
+                                }
                             }
 
                             // Remove the binding.
@@ -563,14 +613,27 @@ impl<'db> InterpContext<'db> {
                                     unsafe { old_value.free(&mut self.rt); }
                                 }
                             }
+
+                            result
+                        } else {
+                            Ok(())
                         }
                     }
+                };
+
+                // Free the condition_value before returning.
+                unsafe {
+                    condition_value.free(&mut self.rt);
                 }
 
-                Ok(())
+                result
             }
 
             _ => {
+                // Free the condition_value before returning error.
+                unsafe {
+                    condition_value.free(&mut self.rt);
+                }
                 Err(InterpError::TypeError(
                     format!("If-destructuring requires Option or Result type, got {:?}", type_tag)
                 ))

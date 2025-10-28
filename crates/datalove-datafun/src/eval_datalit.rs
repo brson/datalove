@@ -33,7 +33,13 @@ fn typecheck_datalit<'db>(
 }
 
 /// Convert an InstantiatedValue from instantiate2 to the interpreter's Value enum.
-fn instantiated_to_value(inst: datalit::instantiate2::InstantiatedValue) -> InterpResult {
+///
+/// For primitive types that are copied into the Value enum, the original
+/// allocation is destroyed. For reference types, ownership is transferred.
+fn instantiated_to_value(
+    inst: datalit::instantiate2::InstantiatedValue,
+    rt: datalove_rt::c::LocalRtHandle,
+) -> InterpResult {
     use rtdt::TyTag;
 
     let type_tag = unsafe { (*inst.tydesc).type_tag };
@@ -41,34 +47,66 @@ fn instantiated_to_value(inst: datalit::instantiate2::InstantiatedValue) -> Inte
     match type_tag {
         TyTag::Bool => {
             let value = unsafe { *(inst.ptr as *const bool) };
+            // Free the wrapper allocation since we copied the value.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+            }
             Ok(Value::Bool(value))
         }
         TyTag::U8 => {
             let value = unsafe { *(inst.ptr as *const u8) };
+            // Free the wrapper allocation since we copied the value.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+            }
             Ok(Value::U32(value as u32))
         }
         TyTag::I8 => {
             let value = unsafe { *(inst.ptr as *const i8) };
+            // Free the wrapper allocation since we copied the value.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+            }
             Ok(Value::U32((value as i32) as u32))
         }
         TyTag::U16 => {
             let value = unsafe { *(inst.ptr as *const u16) };
+            // Free the wrapper allocation since we copied the value.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+            }
             Ok(Value::U32(value as u32))
         }
         TyTag::I16 => {
             let value = unsafe { *(inst.ptr as *const i16) };
+            // Free the wrapper allocation since we copied the value.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+            }
             Ok(Value::U32((value as i32) as u32))
         }
         TyTag::U32 => {
             let value = unsafe { *(inst.ptr as *const u32) };
+            // Free the wrapper allocation since we copied the value.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+            }
             Ok(Value::U32(value))
         }
         TyTag::I32 => {
             let value = unsafe { *(inst.ptr as *const i32) };
+            // Free the wrapper allocation since we copied the value.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+            }
             Ok(Value::U32(value as u32))
         }
         TyTag::F32 => {
             let value = unsafe { *(inst.ptr as *const f32) };
+            // Free the wrapper allocation since we copied the value.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+            }
             Ok(Value::F32(value))
         }
         TyTag::Int => {
@@ -169,9 +207,10 @@ pub fn eval_datalit<'db>(
     }
 
     // Use instantiate2 to create the runtime value.
+    let rt_handle = &mut *ctx.rt as *mut _ as datalove_rt::c::LocalRtHandle;
     let inst = datalit::instantiate2::instantiate_value(
         ctx.db,
-        &mut *ctx.rt as *mut _ as datalove_rt::c::LocalRtHandle,
+        rt_handle,
         &mut ctx.tydesc_table,
         typechecked,
     ).map_err(|e| InterpError::RuntimeError(
@@ -179,6 +218,6 @@ pub fn eval_datalit<'db>(
     ))?;
 
     // Convert InstantiatedValue to Value enum.
-    instantiated_to_value(inst)
+    instantiated_to_value(inst, rt_handle)
 }
 
