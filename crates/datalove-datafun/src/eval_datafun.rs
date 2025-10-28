@@ -416,7 +416,7 @@ fn eval_add(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inte
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_f32(a + b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             // Allocate result Int.
-            let result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
+            let mut result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
                     rt::c::dtlv_rti_int_add(
@@ -432,6 +432,7 @@ fn eval_add(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inte
                 if status == RtStatus::Ok {
                     Ok(result)
                 } else {
+                    unsafe { result.free(&mut ctx.rt); }
                     Err(InterpError::RuntimeError("Int addition failed".to_string()))
                 }
             } else {
@@ -462,7 +463,7 @@ fn eval_sub(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inte
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_f32(a - b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             // Allocate result Int.
-            let result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
+            let mut result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
                     rt::c::dtlv_rti_int_sub(
@@ -478,6 +479,7 @@ fn eval_sub(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inte
                 if status == RtStatus::Ok {
                     Ok(result)
                 } else {
+                    unsafe { result.free(&mut ctx.rt); }
                     Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
                 }
             } else {
@@ -508,7 +510,7 @@ fn eval_mul(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inte
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_f32(a * b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             // Allocate result Int.
-            let result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
+            let mut result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
                     rt::c::dtlv_rti_int_mul(
@@ -524,6 +526,7 @@ fn eval_mul(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inte
                 if status == RtStatus::Ok {
                     Ok(result)
                 } else {
+                    unsafe { result.free(&mut ctx.rt); }
                     Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
                 }
             } else {

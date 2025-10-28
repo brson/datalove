@@ -275,7 +275,12 @@ pub(crate) unsafe fn int_sub_impl(
         };
 
         // Compute a + (-b).
-        int_add_impl(rt, a_in, &neg_b as *const rtdt::Int as *const u8, result_out)
+        let result = int_add_impl(rt, a_in, &neg_b as *const rtdt::Int as *const u8, result_out);
+
+        // Free temporary allocation.
+        rt.alloc.free(4, 4, b_abs_size as u32, neg_b_limbs_ptr as *mut u8);
+
+        result
     }
 }
 
