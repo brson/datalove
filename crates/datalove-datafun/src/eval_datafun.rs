@@ -281,17 +281,17 @@ fn eval_unaryop<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>, unaryop: 
 }
 
 /// Evaluate bare negation (for bigints).
-fn eval_neg(ctx: &mut InterpContext<'_>, operand: Value) -> InterpResult {
-    match operand {
+fn eval_neg(ctx: &mut InterpContext<'_>, mut operand: Value) -> InterpResult {
+    let result = match &operand {
         Value::Int { ptr, tydesc } => {
             // Allocate result Int.
-            let result = unsafe { Value::alloc_int(&mut ctx.rt, tydesc) };
+            let result = unsafe { Value::alloc_int(&mut ctx.rt, *tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
                     rt::c::dtlv_rti_int_neg(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
-                        ptr as *const u8,
-                        tydesc,
+                        *ptr as *const u8,
+                        *tydesc,
                         result_ptr as *mut u8,
                         result_tydesc,
                     )
@@ -308,7 +308,14 @@ fn eval_neg(ctx: &mut InterpContext<'_>, operand: Value) -> InterpResult {
         _ => Err(InterpError::TypeError(
             "Unsupported type for bare negation".to_string(),
         )),
+    };
+
+    // Free consumed operand.
+    unsafe {
+        operand.free(&mut ctx.rt);
     }
+
+    result
 }
 
 /// Evaluate optional negation.
@@ -400,24 +407,24 @@ fn eval_neg_result(ctx: &mut InterpContext<'_>, operand: Value, operand_tydesc: 
 }
 
 /// Evaluate addition.
-fn eval_add(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
-    match (lhs, rhs) {
+fn eval_add(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> InterpResult {
+    let result = match (&lhs, &rhs) {
         (Value::U32(a), Value::U32(b)) => {
             // Wrapping addition.
-            Ok(Value::from_u32(a.wrapping_add(b)))
+            Ok(Value::from_u32(a.wrapping_add(*b)))
         }
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_f32(a + b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             // Allocate result Int.
-            let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
+            let result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
                     rt::c::dtlv_rti_int_add(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
-                        a_ptr as *const u8,
-                        a_tydesc,
-                        b_ptr as *const u8,
-                        b_tydesc,
+                        *a_ptr as *const u8,
+                        *a_tydesc,
+                        *b_ptr as *const u8,
+                        *b_tydesc,
                         result_ptr as *mut u8,
                         result_tydesc,
                     )
@@ -434,28 +441,36 @@ fn eval_add(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
         _ => Err(InterpError::TypeError(
             "Unsupported types for addition".to_string(),
         )),
+    };
+
+    // Free consumed operands.
+    unsafe {
+        lhs.free(&mut ctx.rt);
+        rhs.free(&mut ctx.rt);
     }
+
+    result
 }
 
 /// Evaluate subtraction.
-fn eval_sub(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
-    match (lhs, rhs) {
+fn eval_sub(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> InterpResult {
+    let result = match (&lhs, &rhs) {
         (Value::U32(a), Value::U32(b)) => {
             // Wrapping subtraction.
-            Ok(Value::from_u32(a.wrapping_sub(b)))
+            Ok(Value::from_u32(a.wrapping_sub(*b)))
         }
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_f32(a - b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             // Allocate result Int.
-            let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
+            let result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
                     rt::c::dtlv_rti_int_sub(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
-                        a_ptr as *const u8,
-                        a_tydesc,
-                        b_ptr as *const u8,
-                        b_tydesc,
+                        *a_ptr as *const u8,
+                        *a_tydesc,
+                        *b_ptr as *const u8,
+                        *b_tydesc,
                         result_ptr as *mut u8,
                         result_tydesc,
                     )
@@ -472,28 +487,36 @@ fn eval_sub(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
         _ => Err(InterpError::TypeError(
             "Unsupported types for subtraction".to_string(),
         )),
+    };
+
+    // Free consumed operands.
+    unsafe {
+        lhs.free(&mut ctx.rt);
+        rhs.free(&mut ctx.rt);
     }
+
+    result
 }
 
 /// Evaluate multiplication.
-fn eval_mul(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
-    match (lhs, rhs) {
+fn eval_mul(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> InterpResult {
+    let result = match (&lhs, &rhs) {
         (Value::U32(a), Value::U32(b)) => {
             // Wrapping multiplication.
-            Ok(Value::from_u32(a.wrapping_mul(b)))
+            Ok(Value::from_u32(a.wrapping_mul(*b)))
         }
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_f32(a * b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             // Allocate result Int.
-            let result = unsafe { Value::alloc_int(&mut ctx.rt, a_tydesc) };
+            let result = unsafe { Value::alloc_int(&mut ctx.rt, *a_tydesc) };
             if let Value::Int { ptr: result_ptr, tydesc: result_tydesc } = result {
                 let status = unsafe {
                     rt::c::dtlv_rti_int_mul(
                         Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
-                        a_ptr as *const u8,
-                        a_tydesc,
-                        b_ptr as *const u8,
-                        b_tydesc,
+                        *a_ptr as *const u8,
+                        *a_tydesc,
+                        *b_ptr as *const u8,
+                        *b_tydesc,
                         result_ptr as *mut u8,
                         result_tydesc,
                     )
@@ -510,14 +533,22 @@ fn eval_mul(ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult
         _ => Err(InterpError::TypeError(
             "Unsupported types for multiplication".to_string(),
         )),
+    };
+
+    // Free consumed operands.
+    unsafe {
+        lhs.free(&mut ctx.rt);
+        rhs.free(&mut ctx.rt);
     }
+
+    result
 }
 
 /// Evaluate division.
-fn eval_div(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResult {
-    match (lhs, rhs) {
+fn eval_div(_ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> InterpResult {
+    let result = match (&lhs, &rhs) {
         (Value::U32(a), Value::U32(b)) => {
-            if b == 0 {
+            if *b == 0 {
                 Err(InterpError::DivisionByZero)
             } else {
                 Ok(Value::from_u32(a / b))
@@ -527,7 +558,15 @@ fn eval_div(_ctx: &mut InterpContext<'_>, lhs: Value, rhs: Value) -> InterpResul
         _ => Err(InterpError::TypeError(
             "Unsupported types for division".to_string(),
         )),
+    };
+
+    // Free consumed operands.
+    unsafe {
+        lhs.free(&mut _ctx.rt);
+        rhs.free(&mut _ctx.rt);
     }
+
+    result
 }
 
 /// Evaluate checked addition.
