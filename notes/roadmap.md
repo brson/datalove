@@ -5,7 +5,7 @@
 
 ## language
 
-- remove u32 bare math ops
+- rewrite interpreter with no leaks
 - move/clone semantics
 - error diagnostics
 
