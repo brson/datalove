@@ -8,6 +8,7 @@ pub mod script;
 pub mod parser;
 pub mod resolution;
 pub mod tycheck;
+pub mod function_analysis;
 
 // Interpreter modules.
 pub mod type_table;

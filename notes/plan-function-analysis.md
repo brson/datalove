@@ -1,4 +1,4 @@
-# Frame Analysis Plan
+# Function Analysis Plan
 
 ## Overview
 
@@ -278,7 +278,7 @@ pub struct ControlFlowEdge {
 ## Implementation Order
 
 ### Milestone 1: Basic Infrastructure
-- [ ] Create analysis module structure (`crates/datalove-datafun/src/frame_analysis/`)
+- [ ] Create analysis module structure (`crates/datalove-datafun/src/function_analysis/`)
 - [ ] Define core data structures (slot info, frame layout)
 - [ ] Implement slot allocation for parameters and locals
 - [ ] Implement type size/align computation
