@@ -56,10 +56,14 @@ pub struct SlotInfo<'db> {
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum SlotKind {
-    Parameter,
-    Local,
-    Temporary,
+    Reference,   // All parameters (In/Out/Ref/Mut) - pointer to caller's data
+    Local,       // Let bindings - actual storage in callee's frame
+    Temporary,   // Expression temporaries - actual storage in callee's frame
 }
+
+// Note: Reference slots are always pointer-sized (8 bytes on 64-bit platforms),
+// but the `ty` field in SlotInfo still holds the *referenced* type, not pointer-to-type.
+// This allows move analysis to understand what type is being accessed through the reference.
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct SlotId(u32);
@@ -209,10 +213,14 @@ pub struct ControlFlowEdge {
 
 2. **Type Size Computation**
    - For each slot's `TypeAndHeap<'db>`, compute size and alignment
+   - Reference slots are always pointer-sized (8 bytes on 64-bit)
+   - Local and Temporary slots use actual type size
    - Handle recursive types, tuples, structs, etc.
 
 3. **Frame Layout Computation**
    - Pack slots with proper alignment
+   - Reference slots aligned to pointer alignment
+   - Local and Temporary slots aligned to their type's alignment
    - Compute total frame size
 
 ### Phase 2: Control Flow Analysis
@@ -237,12 +245,14 @@ pub struct ControlFlowEdge {
    - Compute live ranges for each slot
    - Identify birth points (writes)
    - Identify death points (last reads)
+   - Reference slots live for entire function duration
 
 8. **Move Analysis**
    - Identify all move operations:
-     - Function calls (arguments moved)
+     - Function calls with `In` mode: move through reference
      - Function returns (value moved)
      - Let bindings (RHS moved to slot)
+   - Distinguish moves through references vs direct moves
    - Mark last-use points
    - No clones should exist at this stage
 
@@ -255,8 +265,9 @@ pub struct ControlFlowEdge {
 
 10. **Drop Point Insertion**
     - For each slot, determine where it must be dropped:
-      - End of scope (if not moved)
-      - Before early returns
+      - Reference slots: never dropped (caller owns the data)
+      - Local/Temporary slots at end of scope (if not moved)
+      - Local/Temporary slots before early returns
       - Never (if moved or never initialized)
     - Generate drop instructions
 
@@ -370,32 +381,46 @@ let x = f(g(a), h(b))
 ```
 Gets temporaries: `t1` for `g(a)`, `t2` for `h(b)`, then both moved to `f`.
 
-### 2. Parameter Modes
+### 2. Parameter Modes and Calling Convention
 
-**Decision**: Different handling based on ownership semantics.
+**Decision**: All parameters are passed by reference using Reference slots.
 
-**`In` (by-value)**: Standard move semantics
-- Caller moves value to callee
-- Callee owns and must consume or drop
-- Frame layout: callee has slot for parameter
+For simplicity and uniformity, all parameter modes use the same physical representation:
+a pointer-sized Reference slot in the callee's frame that points to data in the caller's frame.
+
+**Frame layout**: All parameters get `SlotKind::Reference` slots (pointer-sized).
+
+**Calling convention**: Caller evaluates arguments and passes pointers to the callee.
+
+**Parameter mode semantics**:
+
+**`In` (by-value)**: Move semantics via reference
+- Caller evaluates argument into a slot/temporary
+- Callee receives pointer to that location
+- Callee "moves" the value by reading through the reference
+- After move, caller must not use the value (move analysis enforces)
+- Drop responsibility transfers to callee
 
 **`Out` (by-mut-ptr)**: Caller allocates, callee initializes
-- Caller allocates slot and passes pointer
+- Caller allocates uninitialized slot and passes pointer
 - Callee must initialize before returning
-- Callee does not drop (caller owns)
-- Frame layout: slot in caller's frame, pointer passed
+- Caller owns the value (callee does not drop)
 - Analysis: treat like additional return value
+- After call, caller has initialized value in its frame
 
 **`Ref` (by-ref)**: Temporary immutable borrow
-- No move occurs, caller retains ownership
+- Caller passes pointer to existing initialized value
+- Callee can read but not move
+- Caller retains ownership (callee does not drop)
 - Value must remain live during call
-- Cannot move borrowed value while call is active
-- Frame layout: no new slot, pass pointer to existing slot
+- Borrow checker ensures no moves while borrowed
 
 **`Mut` (by-mut-ref)**: Temporary mutable borrow
-- No move occurs, caller retains ownership
-- Callee can modify but not move
-- Frame layout: no new slot, pass pointer to existing slot
+- Caller passes pointer to existing initialized value
+- Callee can read and modify but not move
+- Caller retains ownership (callee does not drop)
+- Value must remain live during call
+- Borrow checker ensures exclusive access
 
 ### 3. Error Handling
 
