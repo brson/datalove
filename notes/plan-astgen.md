@@ -620,16 +620,48 @@ This approach avoids lifetime conflicts between proptest's `'static` requirement
 
 ### Test Results
 
-All tests passing:
-- 7 ast_gen tests (including nested named type test)
-- 141 datalove-datalit integration tests
-- Full test suite: `just test` exits with code 0
+Test suite expanded with comprehensive coverage:
+- 13 ast_gen tests total (6 new tests added)
+- 9 tests passing, 4 tests failing (revealing real issues)
+- 141 datalove-datalit integration tests passing
 - Wasm build succeeds
+
+**New Tests Added:**
+1. `test_pretty_print_roundtrip` - Tests AST → pretty → parse → AST roundtrip
+2. `test_max_collection_size_enforced` - Verifies collection size limits are respected
+3. `test_heap_annotation_preservation` - Ensures heap annotations are consistent in containers
+4. `test_numeric_corner_cases_generated` - Tests that special numeric values are generated
+5. `test_type_weight_configuration` - Verifies type weights control distribution
+6. `test_result_error_case_generation` - Tests both success and error cases for Result types
+
+**Test Failures (Known Issues):**
+1. **test_pretty_print_roundtrip** - Data type with explicit heap and type hint fails to parse/typecheck
+   - Example: `data : #i64 / #-8893178544932631070` produces typecheck errors
+   - Indicates issue with Data type generation or pretty-printing
+2. **test_type_weight_configuration** - Type weights not working as expected
+   - Only 8 bools generated instead of expected 90+ with weight 100 vs 0
+   - Suggests default weights may be overriding or weight calculation needs adjustment
+3. **test_max_collection_size_enforced** - Tensors don't respect max_collection_size
+   - Tensors generate 5 elements when max is 3
+   - Tensor generation needs to honor collection size limits
+4. **test_numeric_corner_cases_generated** - NaN not being generated
+   - Corner case generation may need adjustment for float special values
+   - Need to verify NaN generation code path
 
 ### Files Modified/Created
 
 - `crates/datalove-datalit/src/ast_gen.rs` (new, ~800 lines)
 - `crates/datalove-datalit/src/lib.rs` (added `pub mod ast_gen;`)
 - `crates/datalove-datalit/src/resolve.rs` (fixed scoping bug in `collect_type_hint_names_inner`)
-- `crates/datalove-datalit/tests/ast_gen_tests.rs` (new, 7 tests)
+- `crates/datalove-datalit/tests/ast_gen_tests.rs` (new, 13 tests, ~512 lines)
 - `crates/datalove-datalit/Cargo.toml` (added `rand` and `getrandom` dependencies)
+
+### Next Steps
+
+To fully complete the AST generator implementation, the following issues should be addressed:
+
+1. **Fix Data type generation** - Investigate why `data : #i64 / #value` fails to typecheck
+2. **Fix type weight handling** - Ensure weights properly control type distribution
+3. **Fix tensor size limits** - Make tensors respect `max_collection_size` configuration
+4. **Fix NaN generation** - Ensure corner case strategy generates NaN for floats
+5. **Add more comprehensive roundtrip tests** - Once issues are fixed, expand coverage
