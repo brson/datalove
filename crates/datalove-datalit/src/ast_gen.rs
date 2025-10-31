@@ -788,9 +788,23 @@ fn gen_f32_expr<'db, R: Rng>(
 
 /// Generate a string expression.
 fn gen_string_expr<'db, R: Rng>(db: &'db dyn salsa::Database, rng: &mut R) -> Expr<'db> {
-    let strings = vec!["", "a", "test", "hello", "data", "value"];
+    let strings = vec!["", "a", "test", "hello", "data", "value", "with\"quote", "newline\nhere"];
     let s = strings[rng.gen_range(0..strings.len())];
-    Expr::String(ExprString::new(db, InternedText::new(db, s)))
+    // String literals in the AST include the surrounding quotes and escaped content.
+    let mut escaped = String::new();
+    escaped.push('"');
+    for ch in s.chars() {
+        match ch {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped.push('"');
+    Expr::String(ExprString::new(db, InternedText::new(db, escaped.S())))
 }
 
 /// Generate an ExprFull matching the given type hint with a specific heap.

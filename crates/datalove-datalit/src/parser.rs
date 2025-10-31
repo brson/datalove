@@ -593,8 +593,12 @@ impl<'db> DynParser<'db> {
             ast::Heap::Global
         } else {
             // No heap sigil - check if it's a bare literal (allowed for inference).
-            match self.peek() {
-                Some(TreeToken::Token(token)) => {
+            // Check for negative numbers first (minus sign followed by digits).
+            if self.peek_sigil(Sigil::Minus) {
+                ast::Heap::Omitted
+            } else {
+                match self.peek() {
+                    Some(TreeToken::Token(token)) => {
                     match token.kind(self.db) {
                         TokenKind::String => {
                             // Bare string literal - use Omitted heap.
@@ -605,8 +609,11 @@ impl<'db> DynParser<'db> {
                                 if word.chars().all(|c| c.is_ascii_digit()) {
                                     // Bare number literal - use Omitted heap.
                                     ast::Heap::Omitted
+                                } else if matches!(word, "data" | "error" | "tensor" | "tuple" | "struct" | "enum" | "map" | "set" | "true" | "false" | "none") {
+                                    // Keywords are allowed without heap sigils.
+                                    ast::Heap::Omitted
                                 } else {
-                                    // Not a number - this is an error.
+                                    // Not a number or keyword - this is an error.
                                     let (text, span) = self.current_text_span();
                                     let message = InternedText::new(self.db, "expected heap sigil @ or # before expression".S());
 
@@ -665,6 +672,7 @@ impl<'db> DynParser<'db> {
 
                     let error_node = ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message));
                     return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                }
                 }
             }
         };

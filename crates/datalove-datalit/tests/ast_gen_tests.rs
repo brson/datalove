@@ -137,6 +137,19 @@ fn test_pretty_print_roundtrip() {
 
         assert!(!has_errors_orig,
             "Original expression has typecheck errors for seed {}", seed);
+        if has_errors_parsed {
+            eprintln!("\nSeed {}: {}", seed, pretty_clone);
+            eprintln!("Error count: {}", typechecked_parsed.errors(&db).len());
+            eprintln!("Original typechecked OK: {}", !has_errors_orig);
+
+            // Check if parse matches
+            let orig_pretty = datalove_datalit::pretty::pretty_print(&db, expr_full);
+            let reparsed_pretty = datalove_datalit::pretty::pretty_print(&db, parsed);
+            eprintln!("Original pretty: {}", orig_pretty);
+            eprintln!("Reparsed pretty: {}", reparsed_pretty);
+            eprintln!("Pretty-prints match: {}", orig_pretty == reparsed_pretty);
+
+        }
         assert!(!has_errors_parsed,
             "Parsed expression has typecheck errors for seed {}:\n{}\n", seed, pretty_clone);
     }
@@ -390,14 +403,33 @@ fn test_type_weight_configuration() {
     let config = AstGenConfig {
         type_weights: TypeWeights {
             bool_type: 100,
+            u8_type: 0,
+            i8_type: 0,
+            u16_type: 0,
+            i16_type: 0,
             u32_type: 0,
             i32_type: 0,
+            u64_type: 0,
+            i64_type: 0,
             f32_type: 0,
+            int_type: 0,
             string_type: 0,
             list_type: 0,
-            ..Default::default()
+            map_type: 0,
+            set_type: 0,
+            option_type: 0,
+            result_type: 0,
+            tensor_type: 0,
+            anon_tuple_type: 0,
+            named_tuple_type: 0,
+            anon_struct_type: 0,
+            named_struct_type: 0,
+            anon_enum_type: 0,
+            named_enum_type: 0,
+            data_type: 0,
+            error_type: 0,
         },
-        max_depth: 0,
+        max_depth: 1,
         ..Default::default()
     };
 
