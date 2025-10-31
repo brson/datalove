@@ -10,6 +10,7 @@ pub mod tycheck;
 pub mod tydesc_table;
 pub mod instantiate2;
 pub mod pretty;
+pub mod ast_gen;
 
 pub use datalove_rtdt as rtdt;
 
