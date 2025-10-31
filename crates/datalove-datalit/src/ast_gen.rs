@@ -607,7 +607,9 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .map(|_| rng.gen_range(1..=config.tensor_config.max_dim_size))
                 .collect();
             let total_elements: usize = shape.iter().map(|&d| d as usize).product();
-            let elements: Vec<_> = (0..total_elements)
+            // Respect max_collection_size for tensor elements.
+            let capped_elements = total_elements.min(config.max_collection_size);
+            let elements: Vec<_> = (0..capped_elements)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
             Expr::Tensor(ExprTensor::new(db, shape, elements))
