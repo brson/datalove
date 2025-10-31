@@ -42,13 +42,24 @@ impl<'db> FrameLayout<'db> {
         db: &'db dyn crate::Db,
         slots: Vec<(SlotId, Option<InternedText<'db>>, SlotKind, crate::tycheck::TypeAndHeap<'db>)>,
     ) -> Self {
+        use std::mem::{size_of, align_of};
+
         let mut offset = 0u32;
         let mut max_align = 1u32;
         let mut slot_infos = Vec::new();
 
         for (slot_id, name, kind, ty) in slots {
-            // Compute size and alignment for this slot's type.
-            let layout = compute_datafun_type_layout(db, ty);
+            // Compute size and alignment for this slot.
+            // Reference slots are always pointer-sized, regardless of the referenced type.
+            // Local and Temporary slots use the actual type size.
+            let layout = if kind == SlotKind::Reference {
+                TypeLayout {
+                    size: size_of::<usize>() as u32,
+                    align: align_of::<usize>() as u32,
+                }
+            } else {
+                compute_datafun_type_layout(db, ty)
+            };
 
             // Align offset to this slot's alignment requirement.
             offset = align_up(offset, layout.align);

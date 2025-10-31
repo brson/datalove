@@ -53,8 +53,16 @@ pub struct BlockId(pub u32);
 /// Kind of slot in the frame.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
 pub enum SlotKind {
-    Parameter,
+    /// All parameters (In/Out/Ref/Mut) - pointer to caller's data.
+    /// Always pointer-sized (8 bytes on 64-bit), but the `ty` field in SlotInfo
+    /// holds the *referenced* type, not pointer-to-type.
+    /// Live for entire function duration, never dropped (caller owns the data).
+    Reference,
+    /// Let bindings - actual storage in callee's frame.
+    /// Uses actual type size/alignment. Dropped at end of scope if not moved.
     Local,
+    /// Expression temporaries - actual storage in callee's frame.
+    /// Uses actual type size/alignment. Dropped at end of scope if not moved.
     Temporary,
 }
 

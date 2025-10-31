@@ -289,11 +289,11 @@ pub struct ControlFlowEdge {
 ## Implementation Order
 
 ### Milestone 1: Basic Infrastructure
-- [ ] Create analysis module structure (`crates/datalove-datafun/src/function_analysis/`)
-- [ ] Define core data structures (slot info, frame layout)
-- [ ] Implement slot allocation for parameters and locals
-- [ ] Implement type size/align computation
-- [ ] Implement frame packing algorithm
+- [x] Create analysis module structure (`crates/datalove-datafun/src/function_analysis/`)
+- [x] Define core data structures (slot info, frame layout)
+- [x] Implement slot allocation for parameters and locals
+- [x] Implement type size/align computation
+- [x] Implement frame packing algorithm with Reference slot handling
 
 ### Milestone 2: Control Flow
 - [ ] Build basic CFG from function body

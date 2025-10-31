@@ -43,9 +43,10 @@ impl<'db> SlotAllocation<'db> {
     pub fn analyze_function(db: &'db dyn crate::Db, func: StmtFun<'db>) -> Self {
         let mut alloc = Self::new();
 
-        // Allocate slots for parameters.
+        // Allocate reference slots for all parameters.
+        // All parameters (In/Out/Ref/Mut) are passed by reference.
         for param in func.params(db) {
-            alloc.alloc_slot(Some(param.name(db)), SlotKind::Parameter);
+            alloc.alloc_slot(Some(param.name(db)), SlotKind::Reference);
         }
 
         // Allocate slots for body statements.
