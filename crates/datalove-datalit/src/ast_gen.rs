@@ -116,14 +116,14 @@ impl Default for TypeWeights {
             map_type: 3,
             set_type: 3,
             option_type: 4,
-            result_type: 0,  // Disabled - needs investigation of correct Result semantics.
+            result_type: 3,
             tensor_type: 2,
             anon_tuple_type: 4,
-            named_tuple_type: 0,  // Disabled by default - requires resolution environment.
+            named_tuple_type: 2,
             anon_struct_type: 3,
-            named_struct_type: 0,  // Disabled by default - requires resolution environment.
+            named_struct_type: 2,
             anon_enum_type: 2,
-            named_enum_type: 0,  // Disabled by default - requires resolution environment.
+            named_enum_type: 1,
             data_type: 2,
             error_type: 2,
         }
@@ -585,9 +585,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let inner_type = inner_type_and_heap.type_hint(db);
             let inner_heap = inner_type_and_heap.heap(db);
             if rng.gen_bool(0.5) {
-                let value = gen_expr_full_with_heap(db, rng, inner_type, inner_heap, config, depth + 1);
-                Expr::Data(ExprData::new(db, value))
+                // Success case: just generate the inner value directly
+                gen_expr_matching_type(db, rng, inner_type, config, depth + 1)
             } else {
+                // Error case: generate error with a message
                 let error_msg = gen_string_expr(db, rng);
                 let error_expr_full = ExprFull::new(
                     db,

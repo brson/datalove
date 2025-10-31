@@ -197,9 +197,8 @@ fn collect_type_hint_names_inner<'db>(
             scope.insert(name, id, type_hint_and_heap);
 
             // Recursively collect from fields.
-            let mut child_scope = scope.push_child();
             for field in t.fields(db) {
-                collect_type_hint_names(db, field, &mut child_scope, next_id);
+                collect_type_hint_names(db, field, scope, next_id);
             }
         }
         TypeHint::NamedStruct(s) => {
@@ -209,10 +208,9 @@ fn collect_type_hint_names_inner<'db>(
             scope.insert(name, id, type_hint_and_heap);
 
             // Recursively collect from fields.
-            let mut child_scope = scope.push_child();
             for field in s.fields(db) {
                 let field_type = field.type_hint(db);
-                collect_type_hint_names(db, field_type, &mut child_scope, next_id);
+                collect_type_hint_names(db, field_type, scope, next_id);
             }
         }
         TypeHint::NamedEnum(e) => {
@@ -222,31 +220,27 @@ fn collect_type_hint_names_inner<'db>(
             scope.insert(name, id, type_hint_and_heap);
 
             // Recursively collect from variants.
-            let mut child_scope = scope.push_child();
             for variant in e.variants(db) {
                 if let Some(payload) = variant.payload(db) {
-                    collect_type_hint_names(db, payload, &mut child_scope, next_id);
+                    collect_type_hint_names(db, payload, scope, next_id);
                 }
             }
         }
         TypeHint::AnonTuple(t) => {
-            let mut child_scope = scope.push_child();
             for field in t.fields(db) {
-                collect_type_hint_names(db, field, &mut child_scope, next_id);
+                collect_type_hint_names(db, field, scope, next_id);
             }
         }
         TypeHint::AnonStruct(s) => {
-            let mut child_scope = scope.push_child();
             for field in s.fields(db) {
                 let field_type = field.type_hint(db);
-                collect_type_hint_names(db, field_type, &mut child_scope, next_id);
+                collect_type_hint_names(db, field_type, scope, next_id);
             }
         }
         TypeHint::AnonEnum(e) => {
-            let mut child_scope = scope.push_child();
             for variant in e.variants(db) {
                 if let Some(payload) = variant.payload(db) {
-                    collect_type_hint_names(db, payload, &mut child_scope, next_id);
+                    collect_type_hint_names(db, payload, scope, next_id);
                 }
             }
         }
