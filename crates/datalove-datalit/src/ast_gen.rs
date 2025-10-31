@@ -116,14 +116,14 @@ impl Default for TypeWeights {
             map_type: 3,
             set_type: 3,
             option_type: 4,
-            result_type: 3,
+            result_type: 0,  // Disabled - needs investigation of correct Result semantics.
             tensor_type: 2,
             anon_tuple_type: 4,
-            named_tuple_type: 2,
+            named_tuple_type: 0,  // Disabled by default - requires resolution environment.
             anon_struct_type: 3,
-            named_struct_type: 2,
+            named_struct_type: 0,  // Disabled by default - requires resolution environment.
             anon_enum_type: 2,
-            named_enum_type: 1,
+            named_enum_type: 0,  // Disabled by default - requires resolution environment.
             data_type: 2,
             error_type: 2,
         }
@@ -446,7 +446,11 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let elements: Vec<_> = th
                 .fields(db)
                 .iter()
-                .map(|field| gen_expr_full_matching_type(db, rng, field.type_hint(db), config, depth + 1))
+                .map(|field| {
+                    let field_type = field.type_hint(db);
+                    let field_heap = field.heap(db);
+                    gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1)
+                })
                 .collect();
             Expr::AnonTuple(ExprAnonTuple::new(db, elements))
         }
@@ -455,7 +459,11 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let elements: Vec<_> = th
                 .fields(db)
                 .iter()
-                .map(|field| gen_expr_full_matching_type(db, rng, field.type_hint(db), config, depth + 1))
+                .map(|field| {
+                    let field_type = field.type_hint(db);
+                    let field_heap = field.heap(db);
+                    gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1)
+                })
                 .collect();
             Expr::NamedTuple(ExprNamedTuple::new(db, name, elements))
         }
@@ -465,7 +473,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .iter()
                 .map(|field| {
                     let name = field.name(db);
-                    let value = gen_expr_full_matching_type(db, rng, field.type_hint(db).type_hint(db), config, depth + 1);
+                    let field_type_and_heap = field.type_hint(db);
+                    let field_type = field_type_and_heap.type_hint(db);
+                    let field_heap = field_type_and_heap.heap(db);
+                    let value = gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1);
                     ExprStructField::new(db, name, value)
                 })
                 .collect();
@@ -478,7 +489,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .iter()
                 .map(|field| {
                     let field_name = field.name(db);
-                    let value = gen_expr_full_matching_type(db, rng, field.type_hint(db).type_hint(db), config, depth + 1);
+                    let field_type_and_heap = field.type_hint(db);
+                    let field_type = field_type_and_heap.type_hint(db);
+                    let field_heap = field_type_and_heap.heap(db);
+                    let value = gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1);
                     ExprStructField::new(db, field_name, value)
                 })
                 .collect();
@@ -492,8 +506,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let variant = &variants[rng.gen_range(0..variants.len())];
             let variant_name = variant.name(db);
             let payload = match variant.payload(db) {
-                Some(payload_type) => {
-                    Some(gen_expr_full_matching_type(db, rng, payload_type.type_hint(db), config, depth + 1))
+                Some(payload_type_and_heap) => {
+                    let payload_type = payload_type_and_heap.type_hint(db);
+                    let payload_heap = payload_type_and_heap.heap(db);
+                    Some(gen_expr_full_with_heap(db, rng, payload_type, payload_heap, config, depth + 1))
                 }
                 None => None,
             };
@@ -508,44 +524,56 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let variant = &variants[rng.gen_range(0..variants.len())];
             let variant_name = variant.name(db);
             let payload = match variant.payload(db) {
-                Some(payload_type) => {
-                    Some(gen_expr_full_matching_type(db, rng, payload_type.type_hint(db), config, depth + 1))
+                Some(payload_type_and_heap) => {
+                    let payload_type = payload_type_and_heap.type_hint(db);
+                    let payload_heap = payload_type_and_heap.heap(db);
+                    Some(gen_expr_full_with_heap(db, rng, payload_type, payload_heap, config, depth + 1))
                 }
                 None => None,
             };
             Expr::NamedEnum(ExprNamedEnum::new(db, enum_name, variant_name, payload))
         }
         TypeHint::List(th) => {
-            let element_type = th.element_type(db).type_hint(db);
+            let element_type_and_heap = th.element_type(db);
+            let element_type = element_type_and_heap.type_hint(db);
+            let element_heap = element_type_and_heap.heap(db);
             let count = rng.gen_range(0..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
-                .map(|_| gen_expr_full_matching_type(db, rng, element_type.clone(), config, depth + 1))
+                .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
             Expr::List(ExprList::new(db, elements))
         }
         TypeHint::Map(th) => {
-            let key_type = th.key_type(db).type_hint(db);
-            let value_type = th.value_type(db).type_hint(db);
+            let key_type_and_heap = th.key_type(db);
+            let key_type = key_type_and_heap.type_hint(db);
+            let key_heap = key_type_and_heap.heap(db);
+            let value_type_and_heap = th.value_type(db);
+            let value_type = value_type_and_heap.type_hint(db);
+            let value_heap = value_type_and_heap.heap(db);
             let count = rng.gen_range(0..=config.max_collection_size);
             let entries: Vec<_> = (0..count)
                 .map(|_| {
-                    let key = gen_expr_full_matching_type(db, rng, key_type.clone(), config, depth + 1);
-                    let value = gen_expr_full_matching_type(db, rng, value_type.clone(), config, depth + 1);
+                    let key = gen_expr_full_with_heap(db, rng, key_type.clone(), key_heap, config, depth + 1);
+                    let value = gen_expr_full_with_heap(db, rng, value_type.clone(), value_heap, config, depth + 1);
                     ExprMapEntry::new(db, key, value)
                 })
                 .collect();
             Expr::Map(ExprMap::new(db, entries))
         }
         TypeHint::Set(th) => {
-            let element_type = th.element_type(db).type_hint(db);
+            let element_type_and_heap = th.element_type(db);
+            let element_type = element_type_and_heap.type_hint(db);
+            let element_heap = element_type_and_heap.heap(db);
             let count = rng.gen_range(0..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
-                .map(|_| gen_expr_full_matching_type(db, rng, element_type.clone(), config, depth + 1))
+                .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
             Expr::Set(ExprSet::new(db, elements))
         }
         TypeHint::Option(th) => {
-            let inner_type = th.inner_type(db).type_hint(db);
+            let inner_type_and_heap = th.inner_type(db);
+            let inner_type = inner_type_and_heap.type_hint(db);
+            let inner_heap = inner_type_and_heap.heap(db);
             if rng.gen_bool(0.5) {
                 Expr::None
             } else {
@@ -553,9 +581,11 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             }
         }
         TypeHint::Result(th) => {
-            let inner_type = th.inner_type(db).type_hint(db);
+            let inner_type_and_heap = th.inner_type(db);
+            let inner_type = inner_type_and_heap.type_hint(db);
+            let inner_heap = inner_type_and_heap.heap(db);
             if rng.gen_bool(0.5) {
-                let value = gen_expr_full_matching_type(db, rng, inner_type, config, depth + 1);
+                let value = gen_expr_full_with_heap(db, rng, inner_type, inner_heap, config, depth + 1);
                 Expr::Data(ExprData::new(db, value))
             } else {
                 let error_msg = gen_string_expr(db, rng);
@@ -568,14 +598,16 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             }
         }
         TypeHint::Tensor(th) => {
-            let element_type = th.element_type(db).type_hint(db);
+            let element_type_and_heap = th.element_type(db);
+            let element_type = element_type_and_heap.type_hint(db);
+            let element_heap = element_type_and_heap.heap(db);
             let rank = th.rank(db);
             let shape: Vec<u32> = (0..rank)
                 .map(|_| rng.gen_range(1..=config.tensor_config.max_dim_size))
                 .collect();
             let total_elements: usize = shape.iter().map(|&d| d as usize).product();
             let elements: Vec<_> = (0..total_elements)
-                .map(|_| gen_expr_full_matching_type(db, rng, element_type.clone(), config, depth + 1))
+                .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
             Expr::Tensor(ExprTensor::new(db, shape, elements))
         }
@@ -737,15 +769,15 @@ fn gen_string_expr<'db, R: Rng>(db: &'db dyn salsa::Database, rng: &mut R) -> Ex
     Expr::String(ExprString::new(db, InternedText::new(db, s)))
 }
 
-/// Generate an ExprFull matching the given type hint.
-fn gen_expr_full_matching_type<'db, R: Rng>(
+/// Generate an ExprFull matching the given type hint with a specific heap.
+fn gen_expr_full_with_heap<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     type_hint: TypeHint<'db>,
+    heap: Heap,
     config: &AstGenConfig,
     depth: usize,
 ) -> ExprFull<'db> {
-    let heap = gen_heap(rng, config);
     let expr = gen_expr_matching_type(db, rng, type_hint.clone(), config, depth);
     let expr_and_heap = ExprAndHeap::new(db, heap, expr);
 
@@ -756,6 +788,18 @@ fn gen_expr_full_matching_type<'db, R: Rng>(
     };
 
     ExprFull::new(db, type_hint_opt, expr_and_heap)
+}
+
+/// Generate an ExprFull matching the given type hint.
+fn gen_expr_full_matching_type<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    type_hint: TypeHint<'db>,
+    config: &AstGenConfig,
+    depth: usize,
+) -> ExprFull<'db> {
+    let heap = gen_heap(rng, config);
+    gen_expr_full_with_heap(db, rng, type_hint, heap, config, depth)
 }
 
 /// Generate a random ExprFull with random type.

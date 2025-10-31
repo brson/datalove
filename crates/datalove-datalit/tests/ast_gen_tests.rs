@@ -56,3 +56,23 @@ fn test_random_strategy() {
         let _expr = gen_expr_full_seeded(&db, seed, config.clone());
     }
 }
+
+#[test]
+fn test_generated_exprs_typecheck() {
+    let db = Database::default();
+    let config = AstGenConfig::default();
+
+    for seed in 0..100 {
+        let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
+
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr_full, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr_full, resolved);
+
+        let has_errors = !typechecked.errors(&db).is_empty();
+        let has_type = typechecked.root_type(&db).is_some();
+
+        assert!(!has_errors && has_type,
+            "Generated expression failed typecheck for seed {}: has_type={}, has_errors={}",
+            seed, has_type, has_errors);
+    }
+}
