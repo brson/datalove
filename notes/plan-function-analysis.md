@@ -296,10 +296,10 @@ pub struct ControlFlowEdge {
 - [x] Implement frame packing algorithm with Reference slot handling
 
 ### Milestone 2: Control Flow
-- [ ] Build basic CFG from function body
-- [ ] Handle if-statements (branches)
-- [ ] Handle return statements
-- [ ] Handle try operators (early returns)
+- [x] Build basic CFG from function body
+- [x] Handle if-statements (branches)
+- [x] Handle return statements
+- [x] Handle try operators (early returns)
 
 ### Milestone 3: Linear Analysis
 - [ ] Implement initialization analysis

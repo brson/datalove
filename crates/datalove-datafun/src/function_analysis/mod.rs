@@ -10,6 +10,7 @@ use rmx::prelude::*;
 use bct::text::InternedText;
 use crate::ast::StmtFun;
 
+mod cfg;
 mod layout;
 mod liveness;
 mod moves;
@@ -17,6 +18,7 @@ mod drops;
 mod slot_allocation;
 mod type_sizing;
 
+pub use cfg::*;
 pub use layout::*;
 pub use liveness::*;
 pub use moves::*;
@@ -32,6 +34,7 @@ pub struct FunctionAnalysis<'db> {
     pub live_ranges: LiveRanges<'db>,
     pub move_info: MoveInfo<'db>,
     pub drop_points: DropPoints<'db>,
+    pub control_flow: ControlFlowGraph<'db>,
 }
 
 /// Unique identifier for a slot in the frame.
