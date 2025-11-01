@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 use std::collections::HashMap;
-use super::{SlotId, ProgramPoint, InitState, BlockId, StmtId, SlotKind};
+use super::{SlotId, ProgramPoint, InitState, BlockId, StmtId, SlotKind, Position};
 use super::cfg::ControlFlowGraph;
 use super::slot_allocation::AllocatedSlot;
 use crate::ast::{Statement, StmtFun};
@@ -255,6 +255,196 @@ fn find_slot_by_name<'db>(
         .map(|slot| slot.slot_id)
 }
 
+/// Compute live ranges for all slots in a function.
+///
+/// This analyzes the CFG to determine birth (write) and death (last read) points
+/// for each slot.
+#[salsa::tracked]
+pub fn compute_live_ranges<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    cfg: ControlFlowGraph<'db>,
+    slots: &'db [AllocatedSlot<'db>],
+    init: InitializationAnalysis<'db>,
+) -> LiveRanges<'db> {
+    use std::collections::HashMap;
+
+    let blocks = cfg.blocks(db);
+    let all_stmts = flatten_statements(db, func.body(db));
+
+    // Track birth and death points for each slot.
+    let mut birth_points: HashMap<SlotId, ProgramPoint> = HashMap::new();
+    let mut last_use_points: HashMap<SlotId, ProgramPoint> = HashMap::new();
+
+    // Reference slots (parameters) are born at function entry.
+    if !blocks.is_empty() && !all_stmts.is_empty() {
+        let entry_point = ProgramPoint {
+            stmt_id: StmtId(0),
+            position: Position::Before,
+        };
+
+        for slot in slots {
+            if slot.kind == SlotKind::Reference {
+                birth_points.insert(slot.slot_id, entry_point);
+            }
+        }
+    }
+
+    // Walk through all blocks and statements to find birth and death points.
+    for block in blocks {
+        for &stmt_id in &block.statements {
+            let stmt_idx = stmt_id.0 as usize;
+            if stmt_idx >= all_stmts.len() {
+                continue;
+            }
+
+            let stmt = all_stmts[stmt_idx];
+
+            // Find birth points (where slots are written).
+            match *stmt {
+                Statement::Let(let_stmt) => {
+                    // The let binding writes to a slot.
+                    if let Some(slot_id) = find_slot_by_name(slots, let_stmt.name(db)) {
+                        birth_points.insert(slot_id, ProgramPoint {
+                            stmt_id,
+                            position: Position::After,
+                        });
+                    }
+
+                    // The RHS expression reads from slots.
+                    collect_reads(db, let_stmt.value(db), stmt_id, slots, &mut last_use_points);
+                }
+                Statement::Ret(ret_stmt) => {
+                    // Return reads from slots.
+                    collect_reads(db, ret_stmt.value(db), stmt_id, slots, &mut last_use_points);
+                }
+                Statement::If(if_stmt) => {
+                    // Condition reads from slots.
+                    collect_reads(db, if_stmt.condition(db), stmt_id, slots, &mut last_use_points);
+
+                    // If-bindings are birth points.
+                    if let Some(then_name) = if_stmt.then_binding(db) {
+                        if let Some(slot_id) = find_slot_by_name(slots, then_name) {
+                            birth_points.insert(slot_id, ProgramPoint {
+                                stmt_id,
+                                position: Position::After,
+                            });
+                        }
+                    }
+                    if let Some(else_name) = if_stmt.else_binding(db) {
+                        if let Some(slot_id) = find_slot_by_name(slots, else_name) {
+                            birth_points.insert(slot_id, ProgramPoint {
+                                stmt_id,
+                                position: Position::After,
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Reference slots (parameters) are live for entire function duration.
+    // They die at function exit, regardless of their last use, because the caller
+    // owns the data and the reference must remain valid throughout the call.
+    if !blocks.is_empty() && !all_stmts.is_empty() {
+        let last_stmt_id = StmtId((all_stmts.len() - 1) as u32);
+        let exit_point = ProgramPoint {
+            stmt_id: last_stmt_id,
+            position: Position::After,
+        };
+
+        for slot in slots {
+            if slot.kind == SlotKind::Reference {
+                // Override any earlier use points - parameters are live until function exit.
+                last_use_points.insert(slot.slot_id, exit_point);
+            }
+        }
+    }
+
+    // Build live ranges from birth and death points.
+    let mut ranges = Vec::new();
+
+    for slot in slots {
+        let slot_id = slot.slot_id;
+
+        // Get initialization state from first block if available.
+        let init_state = if !blocks.is_empty() {
+            init.get_exit_state(db, blocks[0].block_id, slot_id)
+                .unwrap_or(InitState::Never)
+        } else {
+            if slot.kind == SlotKind::Reference {
+                InitState::Always
+            } else {
+                InitState::Never
+            }
+        };
+
+        // If we have both birth and death, create a live range.
+        if let (Some(&birth), Some(&death)) = (birth_points.get(&slot_id), last_use_points.get(&slot_id)) {
+            let range = LiveRange::new(db, slot_id, birth, death, init_state);
+            ranges.push(range);
+        }
+    }
+
+    LiveRanges::new(db, ranges)
+}
+
+/// Collect all reads from an expression.
+fn collect_reads<'db>(
+    db: &'db dyn crate::Db,
+    expr: crate::ast::ExprFun<'db>,
+    stmt_id: StmtId,
+    slots: &[AllocatedSlot<'db>],
+    last_use_points: &mut HashMap<SlotId, ProgramPoint>,
+) {
+    use crate::ast::ExprFunKind;
+
+    match expr.expr(db) {
+        ExprFunKind::Name(name) => {
+            // This is a read of a named slot.
+            if let Some(slot_id) = find_slot_by_name(slots, name) {
+                let use_point = ProgramPoint {
+                    stmt_id,
+                    position: Position::Before,
+                };
+                // Always update to latest use (this becomes the last use).
+                last_use_points.insert(slot_id, use_point);
+            }
+        }
+        ExprFunKind::BinOp(binop) => {
+            // Both sides of binary op are reads.
+            collect_reads(db, binop.lhs(db), stmt_id, slots, last_use_points);
+            collect_reads(db, binop.rhs(db), stmt_id, slots, last_use_points);
+        }
+        ExprFunKind::UnaryOp(unop) => {
+            collect_reads(db, unop.operand(db), stmt_id, slots, last_use_points);
+        }
+        ExprFunKind::FunctionCall(call) => {
+            // All arguments are reads.
+            for arg in call.args(db) {
+                collect_reads(db, *arg, stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::Tuple(tuple) => {
+            // All tuple elements are reads.
+            for elem in tuple.elements(db) {
+                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::TryOption(try_opt) => {
+            collect_reads(db, try_opt.operand(db), stmt_id, slots, last_use_points);
+        }
+        ExprFunKind::TryResult(try_res) => {
+            collect_reads(db, try_res.operand(db), stmt_id, slots, last_use_points);
+        }
+        ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
+            // Literals don't read from slots.
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +674,161 @@ end fun
         // x is Sometimes after outer if (only initialized on one path).
         let final_block = blocks.last().unwrap();
         assert_eq!(init.get_entry_state(db, final_block.block_id, x_slot), Some(InitState::Sometimes));
+    }
+
+    #[test]
+    fn test_liveness_simple_linear() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32)
+    let y = x
+    ret y
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+
+        // x is a Reference slot (parameter).
+        let x_range = live_ranges.get_range(db, allocation.slots[0].slot_id).unwrap();
+        assert_eq!(x_range.slot_id(db), allocation.slots[0].slot_id);
+        assert_eq!(x_range.birth(db).position, Position::Before);
+        assert_eq!(x_range.death(db).position, Position::After);
+        assert_eq!(x_range.is_initialized(db), InitState::Always);
+
+        // y is a Local slot.
+        let y_range = live_ranges.get_range(db, allocation.slots[1].slot_id).unwrap();
+        assert_eq!(y_range.slot_id(db), allocation.slots[1].slot_id);
+        // Birth is after the let statement.
+        assert_eq!(y_range.birth(db).position, Position::After);
+        // Death is before the ret statement (where y is read).
+        assert_eq!(y_range.death(db).position, Position::Before);
+    }
+
+    #[test]
+    fn test_liveness_multiple_uses() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: In u32)
+    let b = a
+    let c = b
+    let d = c
+    ret d
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+
+        // b is read once (in let c = b).
+        let b_range = live_ranges.get_range(db, allocation.slots[1].slot_id).unwrap();
+        assert_eq!(b_range.birth(db).stmt_id, StmtId(0));  // let b = a
+        assert_eq!(b_range.death(db).stmt_id, StmtId(1));  // let c = b
+
+        // c is read once (in let d = c).
+        let c_range = live_ranges.get_range(db, allocation.slots[2].slot_id).unwrap();
+        assert_eq!(c_range.birth(db).stmt_id, StmtId(1));  // let c = b
+        assert_eq!(c_range.death(db).stmt_id, StmtId(2));  // let d = c
+
+        // d is read once (in ret d).
+        let d_range = live_ranges.get_range(db, allocation.slots[3].slot_id).unwrap();
+        assert_eq!(d_range.birth(db).stmt_id, StmtId(2));  // let d = c
+        assert_eq!(d_range.death(db).stmt_id, StmtId(3));  // ret d
+    }
+
+    #[test]
+    fn test_liveness_binary_op() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: In u32, b: In u32)
+    let c = a +! b
+    ret c
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+
+        // a and b are Reference slots (parameters), so they're live for entire function.
+        let a_range = live_ranges.get_range(db, allocation.slots[0].slot_id).unwrap();
+        let b_range = live_ranges.get_range(db, allocation.slots[1].slot_id).unwrap();
+
+        // Both are born at function entry.
+        assert_eq!(a_range.birth(db).position, Position::Before);
+        assert_eq!(b_range.birth(db).position, Position::Before);
+
+        // Both die at function exit (Reference slots are live for entire function).
+        assert_eq!(a_range.death(db).position, Position::After);
+        assert_eq!(b_range.death(db).position, Position::After);
+
+        // c is a Local slot, born when written, dies when read.
+        let c_range = live_ranges.get_range(db, allocation.slots[2].slot_id).unwrap();
+        assert_eq!(c_range.birth(db).stmt_id, StmtId(0));  // let c = ...
+        assert_eq!(c_range.death(db).stmt_id, StmtId(1));  // ret c
+    }
+
+    #[test]
+    fn test_liveness_tuple() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: In u32, b: In u32)
+    let c = (a, b)
+    ret c
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+
+        // a and b are Reference slots (parameters), live for entire function.
+        let a_range = live_ranges.get_range(db, allocation.slots[0].slot_id).unwrap();
+        let b_range = live_ranges.get_range(db, allocation.slots[1].slot_id).unwrap();
+
+        // Both die at function exit (Reference slots are live for entire function).
+        assert_eq!(a_range.death(db).position, Position::After);
+        assert_eq!(b_range.death(db).position, Position::After);
+    }
+
+    #[test]
+    fn test_liveness_parameter_spans_function() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32)
+    let a = @1
+    let b = @2
+    ret x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+
+        // x is a parameter, born at entry, dies at exit.
+        let x_range = live_ranges.get_range(db, allocation.slots[0].slot_id).unwrap();
+        assert_eq!(x_range.birth(db).stmt_id, StmtId(0));
+        assert_eq!(x_range.birth(db).position, Position::Before);
+
+        // Last use is in ret x, which is statement 2.
+        assert_eq!(x_range.death(db).stmt_id, StmtId(2));
     }
 }

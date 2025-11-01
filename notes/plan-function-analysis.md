@@ -309,7 +309,12 @@ pub struct ControlFlowEdge {
   - Handle Reference slots (always initialized), Local/Temporary slots
   - Merge states at join points (Always+Always→Always, else→Sometimes)
   - 6 comprehensive tests covering linear, conditional, nested cases
-- [ ] Implement liveness analysis (birth/death points)
+- [x] Implement liveness analysis (birth/death points)
+  - Computes birth points (where slots are written)
+  - Computes death points (last reads for Local/Temporary, function exit for Reference)
+  - Reference slots live for entire function duration
+  - Tracks reads through expressions (Name, BinOp, UnaryOp, FunctionCall, Tuple, Try)
+  - 5 comprehensive tests covering parameters, locals, binary ops, tuples, multiple uses
 - [ ] Implement move tracking
 - [ ] Implement last-use detection
 
