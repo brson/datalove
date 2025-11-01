@@ -315,7 +315,12 @@ pub struct ControlFlowEdge {
   - Reference slots live for entire function duration
   - Tracks reads through expressions (Name, BinOp, UnaryOp, FunctionCall, Tuple, Try)
   - 5 comprehensive tests covering parameters, locals, binary ops, tuples, multiple uses
-- [ ] Implement move tracking
+- [x] Implement move tracking
+  - Function registry for resolving function calls to definitions
+  - Detects moves in: let bindings (Assignment), return statements (FunctionReturn), function calls with In parameters (FunctionCall)
+  - Distinguishes In (move) vs Ref/Mut/Out (borrow) parameter modes
+  - Recursively tracks moves through complex expressions (tuples, binary ops, function calls)
+  - 6 comprehensive tests: let binding, return, In parameter, Ref parameter (no move), nested calls, tuple construction
 - [ ] Implement last-use detection
 
 ### Milestone 4: Drop Points

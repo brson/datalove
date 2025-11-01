@@ -1,7 +1,11 @@
 //! Move tracking for linear type system.
 
 use rmx::prelude::*;
-use super::{SlotId, ExprId};
+use bct::text::InternedText;
+use std::collections::HashMap;
+use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind, ParamMode};
+use super::{SlotId, ExprId, StmtId, LiveRanges, ProgramPoint};
+use super::slot_allocation::AllocatedSlot;
 
 /// Move information for all operations.
 #[salsa::tracked]
@@ -40,5 +44,524 @@ impl<'db> MoveInfo<'db> {
     /// Check if an expression is a last use of a slot.
     pub fn is_last_use(self, db: &'db dyn crate::Db, slot_id: SlotId, expr_id: ExprId) -> bool {
         self.last_uses(db).contains(&(slot_id, expr_id))
+    }
+}
+
+/// Function registry for resolving function calls to their definitions.
+struct FunctionRegistry<'db> {
+    functions: HashMap<InternedText<'db>, StmtFun<'db>>,
+}
+
+impl<'db> FunctionRegistry<'db> {
+    /// Build a function registry from a list of statements.
+    fn build(db: &'db dyn crate::Db, statements: &[Statement<'db>]) -> Self {
+        let mut functions = HashMap::new();
+
+        for stmt in statements {
+            if let Statement::Fun(fun) = stmt {
+                functions.insert(fun.name(db), *fun);
+            }
+        }
+
+        FunctionRegistry { functions }
+    }
+
+    /// Look up a function by name.
+    fn lookup(&self, name: InternedText<'db>) -> Option<StmtFun<'db>> {
+        self.functions.get(&name).copied()
+    }
+}
+
+/// Compute move information for a function.
+#[salsa::tracked]
+pub fn compute_move_info<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    slots: &'db [AllocatedSlot<'db>],
+    live_ranges: LiveRanges<'db>,
+) -> MoveInfo<'db> {
+    let mut moves = Vec::new();
+    let mut last_uses = Vec::new();
+
+    // Build function registry from function body for resolving calls.
+    let registry = FunctionRegistry::build(db, func.body(db));
+
+    // Counter for assigning ExprIds.
+    let mut expr_counter = 0u32;
+
+    // Walk through function body to identify moves.
+    walk_statements(
+        db,
+        func.body(db),
+        &registry,
+        slots,
+        &mut moves,
+        &mut expr_counter,
+    );
+
+    // TODO: Identify last uses using liveness analysis.
+    // For now, we'll leave this empty and implement it in a follow-up.
+
+    MoveInfo::new(db, moves, last_uses)
+}
+
+/// Walk statements to collect move operations.
+fn walk_statements<'db>(
+    db: &'db dyn crate::Db,
+    statements: &[Statement<'db>],
+    registry: &FunctionRegistry<'db>,
+    slots: &[AllocatedSlot<'db>],
+    moves: &mut Vec<MoveOp<'db>>,
+    expr_counter: &mut u32,
+) {
+    for stmt in statements {
+        match stmt {
+            Statement::Let(let_stmt) => {
+                // Let binding: RHS is moved to LHS slot.
+                let value_expr = let_stmt.value(db);
+                let name = let_stmt.name(db);
+
+                // Find the slot for this let binding.
+                if let Some(slot_id) = find_slot_by_name(slots, name) {
+                    // Collect all moves from the RHS expression.
+                    collect_moves_from_expr(
+                        db,
+                        value_expr,
+                        slot_id,
+                        MoveKind::Assignment,
+                        registry,
+                        slots,
+                        moves,
+                        expr_counter,
+                    );
+                }
+            }
+            Statement::Ret(ret_stmt) => {
+                // Return statement: returned value is moved to caller.
+                let value_expr = ret_stmt.value(db);
+                let expr_id = ExprId(*expr_counter);
+                *expr_counter += 1;
+
+                // Collect moves from the return expression.
+                collect_moves_from_expr_for_return(
+                    db,
+                    value_expr,
+                    expr_id,
+                    registry,
+                    slots,
+                    moves,
+                    expr_counter,
+                );
+            }
+            Statement::If(if_stmt) => {
+                // Process then and else branches.
+                walk_statements(db, if_stmt.then_body(db), registry, slots, moves, expr_counter);
+                if let Some(else_body) = if_stmt.else_body(db) {
+                    walk_statements(db, else_body, registry, slots, moves, expr_counter);
+                }
+            }
+            Statement::Fun(_) | Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
+                // No moves in these statements.
+            }
+        }
+    }
+}
+
+/// Collect moves from an expression (for let bindings).
+fn collect_moves_from_expr<'db>(
+    db: &'db dyn crate::Db,
+    expr: ExprFun<'db>,
+    target_slot: SlotId,
+    move_kind: MoveKind,
+    registry: &FunctionRegistry<'db>,
+    slots: &[AllocatedSlot<'db>],
+    moves: &mut Vec<MoveOp<'db>>,
+    expr_counter: &mut u32,
+) {
+    let expr_id = ExprId(*expr_counter);
+    *expr_counter += 1;
+
+    match expr.expr(db) {
+        ExprFunKind::Name(name) => {
+            // Name expression: this is a move of the named slot.
+            if let Some(source_slot) = find_slot_by_name(slots, name) {
+                moves.push(MoveOp::new(db, expr_id, source_slot, move_kind));
+            }
+        }
+        ExprFunKind::FunctionCall(call) => {
+            // Function call: arguments might be moved depending on parameter modes.
+            process_function_call(db, call, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::Tuple(tuple) => {
+            // Tuple: each element might be moved.
+            for element in tuple.elements(db) {
+                collect_moves_from_expr(
+                    db,
+                    *element,
+                    target_slot,
+                    move_kind,
+                    registry,
+                    slots,
+                    moves,
+                    expr_counter,
+                );
+            }
+        }
+        ExprFunKind::BinOp(binop) => {
+            // Binary operation: both operands might be moved.
+            collect_moves_from_expr(db, binop.lhs(db), target_slot, move_kind, registry, slots, moves, expr_counter);
+            collect_moves_from_expr(db, binop.rhs(db), target_slot, move_kind, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::UnaryOp(unary) => {
+            // Unary operation: operand might be moved.
+            collect_moves_from_expr(db, unary.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::TryOption(try_op) => {
+            // Try option: operand might be moved.
+            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::TryResult(try_op) => {
+            // Try result: operand might be moved.
+            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
+            // No moves in literals or parse errors.
+        }
+    }
+}
+
+/// Collect moves from an expression for return statements.
+fn collect_moves_from_expr_for_return<'db>(
+    db: &'db dyn crate::Db,
+    expr: ExprFun<'db>,
+    return_expr_id: ExprId,
+    registry: &FunctionRegistry<'db>,
+    slots: &[AllocatedSlot<'db>],
+    moves: &mut Vec<MoveOp<'db>>,
+    expr_counter: &mut u32,
+) {
+    match expr.expr(db) {
+        ExprFunKind::Name(name) => {
+            // Name expression: this is a move of the named slot for return.
+            if let Some(slot) = find_slot_by_name(slots, name) {
+                moves.push(MoveOp::new(db, return_expr_id, slot, MoveKind::FunctionReturn));
+            }
+        }
+        ExprFunKind::FunctionCall(call) => {
+            // Function call: the result is moved to return, but also process arguments.
+            process_function_call(db, call, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::Tuple(tuple) => {
+            // Tuple: each element might be moved.
+            for element in tuple.elements(db) {
+                collect_moves_from_expr_for_return(
+                    db,
+                    *element,
+                    return_expr_id,
+                    registry,
+                    slots,
+                    moves,
+                    expr_counter,
+                );
+            }
+        }
+        ExprFunKind::BinOp(binop) => {
+            // Binary operation: both operands might be moved.
+            collect_moves_from_expr_for_return(db, binop.lhs(db), return_expr_id, registry, slots, moves, expr_counter);
+            collect_moves_from_expr_for_return(db, binop.rhs(db), return_expr_id, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::UnaryOp(unary) => {
+            // Unary operation: operand might be moved.
+            collect_moves_from_expr_for_return(db, unary.operand(db), return_expr_id, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::TryOption(try_op) => {
+            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::TryResult(try_op) => {
+            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, registry, slots, moves, expr_counter);
+        }
+        ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
+            // No moves in literals or parse errors.
+        }
+    }
+}
+
+/// Process a function call to identify moves in arguments.
+fn process_function_call<'db>(
+    db: &'db dyn crate::Db,
+    call: crate::ast::ExprFunctionCall<'db>,
+    registry: &FunctionRegistry<'db>,
+    slots: &[AllocatedSlot<'db>],
+    moves: &mut Vec<MoveOp<'db>>,
+    expr_counter: &mut u32,
+) {
+    let name = call.name(db);
+    let args = call.args(db);
+
+    // Resolve the function to get parameter modes.
+    if let Some(callee) = registry.lookup(name) {
+        let params = callee.params(db);
+
+        // Process each argument with its corresponding parameter mode.
+        for (i, arg) in args.iter().enumerate() {
+            if let Some(param) = params.get(i) {
+                let expr_id = ExprId(*expr_counter);
+                *expr_counter += 1;
+
+                // If parameter mode is In, this is a move.
+                if param.mode(db) == ParamMode::In {
+                    // Check if the argument is a name (direct move).
+                    if let ExprFunKind::Name(arg_name) = arg.expr(db) {
+                        if let Some(slot_id) = find_slot_by_name(slots, arg_name) {
+                            moves.push(MoveOp::new(db, expr_id, slot_id, MoveKind::FunctionCall));
+                        }
+                    } else {
+                        // For complex expressions, recursively collect moves.
+                        // The target_slot is not meaningful here, use a dummy value.
+                        collect_moves_from_expr(
+                            db,
+                            *arg,
+                            SlotId(0), // Dummy
+                            MoveKind::FunctionCall,
+                            registry,
+                            slots,
+                            moves,
+                            expr_counter,
+                        );
+                    }
+                } else {
+                    // For Ref/Mut/Out parameters, no move occurs.
+                    // But we still need to recursively process the argument for nested calls.
+                    // Actually, for now we won't track borrows, so skip.
+                }
+            }
+        }
+    }
+}
+
+/// Find a slot by name.
+fn find_slot_by_name<'db>(slots: &[AllocatedSlot<'db>], name: InternedText<'db>) -> Option<SlotId> {
+    slots.iter()
+        .find(|s| s.name == Some(name))
+        .map(|s| s.slot_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::*;
+    use crate::function_analysis::slot_allocation::SlotAllocation;
+    use crate::function_analysis::cfg::build_cfg;
+    use crate::function_analysis::liveness::{compute_live_ranges, analyze_initialization};
+    use bct::input::Source;
+    use bct::text::InternedText;
+
+    fn parse_function<'db>(db: &'db dyn crate::Db, source_code: &str) -> StmtFun<'db> {
+        let source = Source::new(db, S(source_code));
+        let script = crate::parser::parse_for_test(db, source);
+        let statements = script.statements(db);
+
+        // Find the first function statement.
+        for stmt in statements {
+            if let crate::ast::Statement::Fun(fun) = stmt {
+                return *fun;
+            }
+        }
+
+        panic!("No function found in source code");
+    }
+
+    #[test]
+    fn test_move_simple_let_binding() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32)
+    let y = x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // Verify we have one move: x -> y (Assignment).
+        let moves = move_info.moves(db);
+        assert_eq!(moves.len(), 1);
+
+        let move_op = moves[0];
+        assert_eq!(move_op.move_kind(db), MoveKind::Assignment);
+
+        // The moved slot should be x.
+        let x_name = InternedText::new(db, "x");
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        assert_eq!(move_op.slot_id(db), x_slot.slot_id);
+    }
+
+    #[test]
+    fn test_move_return_statement() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32): u32
+    ret x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // Verify we have one move: x returned (FunctionReturn).
+        let moves = move_info.moves(db);
+        assert_eq!(moves.len(), 1);
+
+        let move_op = moves[0];
+        assert_eq!(move_op.move_kind(db), MoveKind::FunctionReturn);
+
+        let x_name = InternedText::new(db, "x");
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        assert_eq!(move_op.slot_id(db), x_slot.slot_id);
+    }
+
+    #[test]
+    fn test_move_function_call_in_parameter() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32): u32
+    fun helper(a: In u32): u32
+        ret a
+    end fun
+    ret helper(x)
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // Verify we have one move: x moved to helper (FunctionCall).
+        let moves = move_info.moves(db);
+        assert_eq!(moves.len(), 1);
+
+        let move_op = moves[0];
+        assert_eq!(move_op.move_kind(db), MoveKind::FunctionCall);
+
+        let x_name = InternedText::new(db, "x");
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        assert_eq!(move_op.slot_id(db), x_slot.slot_id);
+    }
+
+    #[test]
+    fn test_move_function_call_ref_parameter() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: u32): u32
+    fun helper(ref a: u32): u32
+        ret @0
+    end fun
+    ret helper(x)
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // Verify we have NO moves because parameter is Ref, not In.
+        let moves = move_info.moves(db);
+        assert_eq!(moves.len(), 0);
+    }
+
+    #[test]
+    fn test_move_nested_function_calls() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32, y: In u32): u32
+    fun helper(a: In u32): u32
+        ret a
+    end fun
+    let z = helper(x)
+    ret helper(y)
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // Verify we have two moves: x and y to helper calls.
+        let moves = move_info.moves(db);
+        assert_eq!(moves.len(), 2);
+
+        // Both should be FunctionCall moves.
+        assert_eq!(moves[0].move_kind(db), MoveKind::FunctionCall);
+        assert_eq!(moves[1].move_kind(db), MoveKind::FunctionCall);
+
+        // Find slots for x and y.
+        let x_name = InternedText::new(db, "x");
+        let y_name = InternedText::new(db, "y");
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        let y_slot = allocation.slots.iter().find(|s| s.name == Some(y_name)).unwrap();
+
+        // Collect moved slot IDs.
+        let moved_slots: Vec<SlotId> = moves.iter().map(|m| m.slot_id(db)).collect();
+
+        // Both x and y should be moved.
+        assert!(moved_slots.contains(&x_slot.slot_id));
+        assert!(moved_slots.contains(&y_slot.slot_id));
+    }
+
+    #[test]
+    fn test_move_tuple_construction() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32, y: In u32)
+    let z = (x, y)
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // Verify we have two moves: x and y into the tuple (Assignment).
+        let moves = move_info.moves(db);
+        assert_eq!(moves.len(), 2);
+
+        // Both should be Assignment moves.
+        assert_eq!(moves[0].move_kind(db), MoveKind::Assignment);
+        assert_eq!(moves[1].move_kind(db), MoveKind::Assignment);
+
+        let x_name = InternedText::new(db, "x");
+        let y_name = InternedText::new(db, "y");
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        let y_slot = allocation.slots.iter().find(|s| s.name == Some(y_name)).unwrap();
+
+        let moved_slots: Vec<SlotId> = moves.iter().map(|m| m.slot_id(db)).collect();
+        assert!(moved_slots.contains(&x_slot.slot_id));
+        assert!(moved_slots.contains(&y_slot.slot_id));
     }
 }
