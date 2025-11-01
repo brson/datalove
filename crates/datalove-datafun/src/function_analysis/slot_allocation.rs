@@ -15,7 +15,7 @@ pub struct SlotAllocation<'db> {
 }
 
 /// A slot that has been allocated.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct AllocatedSlot<'db> {
     pub slot_id: SlotId,
     pub name: Option<InternedText<'db>>,

@@ -300,10 +300,16 @@ pub struct ControlFlowEdge {
 - [x] Handle if-statements (branches)
 - [x] Handle return statements
 - [x] Handle try operators (early returns)
+- [x] Fix CFG builder bug (duplicate blocks with self-loops in if-statements)
 
 ### Milestone 3: Linear Analysis
-- [ ] Implement initialization analysis
-- [ ] Implement liveness analysis
+- [x] Implement initialization analysis
+  - Fixed-point iteration across CFG blocks
+  - Track Always/Sometimes/Never initialization states
+  - Handle Reference slots (always initialized), Local/Temporary slots
+  - Merge states at join points (Always+Always→Always, else→Sometimes)
+  - 6 comprehensive tests covering linear, conditional, nested cases
+- [ ] Implement liveness analysis (birth/death points)
 - [ ] Implement move tracking
 - [ ] Implement last-use detection
 

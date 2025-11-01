@@ -61,7 +61,7 @@ pub fn build_cfg<'db>(
     let entry_block = builder.alloc_block_id();
 
     // Build CFG from function body.
-    builder.build_statements(db, func.body(db), entry_block);
+    let (_exit_block, _created) = builder.build_statements(db, func.body(db), entry_block);
 
     ControlFlowGraph::new(db, builder.blocks, builder.edges)
 }
@@ -102,13 +102,15 @@ impl CfgBuilder {
     }
 
     /// Build CFG for a list of statements, starting at the given block.
-    /// Returns the block ID where control flow exits (or None if all paths diverge).
+    /// Returns (exit_block_id, block_was_created).
+    /// - exit_block_id: block where control flow exits (None if all paths diverge)
+    /// - block_was_created: true if a block with exit_block_id was already created
     fn build_statements<'db>(
         &mut self,
         db: &'db dyn crate::Db,
         stmts: &[Statement<'db>],
         start_block: BlockId,
-    ) -> Option<BlockId> {
+    ) -> (Option<BlockId>, bool) {
         let mut current_block = start_block;
         let mut current_stmts = Vec::new();
 
@@ -168,7 +170,7 @@ impl CfgBuilder {
                     });
 
                     // No continuation after return.
-                    return None;
+                    return (None, true);
                 }
 
                 Statement::If(if_stmt) => {
@@ -196,28 +198,47 @@ impl CfgBuilder {
                     self.add_edge(current_block, else_block);
 
                     // Build then branch.
-                    let then_exit = self.build_statements(db, if_stmt.then_body(db), then_block);
+                    let (then_exit, then_created) = self.build_statements(db, if_stmt.then_body(db), then_block);
                     if let Some(then_exit_block) = then_exit {
-                        // Then branch doesn't return - add edge to join block.
+                        // Then branch doesn't return - connect to join block.
                         self.add_edge(then_exit_block, join_block);
-                        self.add_block(BasicBlock {
-                            block_id: then_exit_block,
-                            statements: Vec::new(),
-                            terminator: Terminator::Goto(join_block),
-                        });
+                        if !then_created {
+                            // Block wasn't created yet, create it now.
+                            self.add_block(BasicBlock {
+                                block_id: then_exit_block,
+                                statements: Vec::new(),
+                                terminator: Terminator::Goto(join_block),
+                            });
+                        } else {
+                            // Block was created but has wrong terminator (Return).
+                            // We need to fix the terminator to Goto(join_block).
+                            // Find and update the block.
+                            if let Some(block) = self.blocks.iter_mut().find(|b| b.block_id == then_exit_block) {
+                                block.terminator = Terminator::Goto(join_block);
+                            }
+                        }
                     }
 
                     // Build else branch (if present).
                     if let Some(else_body) = if_stmt.else_body(db) {
-                        let else_exit = self.build_statements(db, else_body, else_block);
+                        let (else_exit, else_created) = self.build_statements(db, else_body, else_block);
                         if let Some(else_exit_block) = else_exit {
-                            // Else branch doesn't return - add edge to join block.
+                            // Else branch doesn't return - connect to join block.
                             self.add_edge(else_exit_block, join_block);
-                            self.add_block(BasicBlock {
-                                block_id: else_exit_block,
-                                statements: Vec::new(),
-                                terminator: Terminator::Goto(join_block),
-                            });
+                            if !else_created {
+                                // Block wasn't created yet, create it now.
+                                self.add_block(BasicBlock {
+                                    block_id: else_exit_block,
+                                    statements: Vec::new(),
+                                    terminator: Terminator::Goto(join_block),
+                                });
+                            } else {
+                                // Block was created but has wrong terminator (Return).
+                                // Fix the terminator to Goto(join_block).
+                                if let Some(block) = self.blocks.iter_mut().find(|b| b.block_id == else_exit_block) {
+                                    block.terminator = Terminator::Goto(join_block);
+                                }
+                            }
                         }
                     } else {
                         // No else branch - fall through to join block.
@@ -251,9 +272,11 @@ impl CfgBuilder {
                 statements: current_stmts,
                 terminator: Terminator::Return, // Implicit return at end
             });
+            (Some(current_block), true)
+        } else {
+            // No remaining statements - return current block but indicate no block was created.
+            (Some(current_block), false)
         }
-
-        Some(current_block)
     }
 
     /// Check if an expression may return early (contains ? or !).
