@@ -345,7 +345,11 @@ pub struct ControlFlowEdge {
   - 5 comprehensive tests: simple local, parameters, not-moved local, conditionals, multiple locals
 
 ### Milestone 5: Integration
-- [ ] Create Salsa tracked query for function analysis
+- [x] Create Salsa tracked query for function analysis
+  - Created `analyze_function` Salsa tracked query that orchestrates all analysis phases
+  - Converted `SlotAllocation` and `AllocatedSlot` to Salsa tracked structs
+  - Implemented type extraction from TypecheckResult for frame layout
+  - All existing tests pass (26 tests across CFG, liveness, moves, drops)
 - [ ] Integrate with existing typechecker
 - [ ] Update interpreter to use frame layout
 - [ ] Add tests

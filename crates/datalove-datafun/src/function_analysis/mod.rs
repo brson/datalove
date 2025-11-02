@@ -90,3 +90,165 @@ pub enum InitState {
     Sometimes,   // conditionally initialized (if-branches)
     Never,       // never initialized on this path
 }
+
+/// Main entry point for function analysis.
+///
+/// Orchestrates all analysis passes and produces a complete FunctionAnalysis result.
+#[salsa::tracked]
+pub fn analyze_function<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    tycheck_result: crate::tycheck::TypecheckResult<'db>,
+) -> FunctionAnalysis<'db> {
+    // Phase 1: Build CFG.
+    let control_flow = cfg::build_cfg(db, func);
+
+    // Phase 2: Allocate slots.
+    let slot_allocation = slot_allocation::allocate_slots(db, func);
+    let slots = slot_allocation.slots(db);
+
+    // Phase 3: Initialization analysis.
+    let init_analysis = liveness::analyze_initialization(db, func, control_flow, slots);
+
+    // Phase 4: Live ranges.
+    let live_ranges = liveness::compute_live_ranges(db, func, control_flow, slots, init_analysis);
+
+    // Phase 5: Move tracking.
+    let move_info = moves::compute_move_info(db, func, slots, live_ranges);
+
+    // Phase 6: Drop points.
+    let drop_points = drops::compute_drop_points(db, func, control_flow, slots, init_analysis, move_info);
+
+    // Phase 7: Frame layout with types.
+    let frame_layout = build_frame_layout(db, func, slots, tycheck_result);
+
+    FunctionAnalysis::new(
+        db,
+        func,
+        frame_layout,
+        live_ranges,
+        move_info,
+        drop_points,
+        control_flow,
+    )
+}
+
+/// Build frame layout by extracting types for slots.
+fn build_frame_layout<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    slots: &[slot_allocation::AllocatedSlot<'db>],
+    tycheck_result: crate::tycheck::TypecheckResult<'db>,
+) -> FrameLayout<'db> {
+    use salsa::plumbing::AsId;
+    use crate::ast::{Statement, ExprFun};
+
+    let expr_types = tycheck_result.expr_types(db);
+
+    // Build a map from slot names to their types.
+    let mut slots_with_types = Vec::new();
+
+    for slot in slots {
+        let ty = match slot.kind(db) {
+            SlotKind::Reference => {
+                // Parameter - get type from parameter type hint.
+                get_param_type(db, func, slot.name(db))
+            }
+            SlotKind::Local => {
+                // Let binding - get type from RHS expression.
+                get_local_type(db, func, slot.name(db), expr_types)
+            }
+            SlotKind::Temporary => {
+                // Temporary - would need expression tracking, use placeholder for now.
+                // TODO: Track temporary expressions and their types.
+                create_placeholder_type(db)
+            }
+        };
+
+        slots_with_types.push((slot.slot_id(db), slot.name(db), slot.kind(db), ty));
+    }
+
+    FrameLayout::compute_layout(db, slots_with_types)
+}
+
+/// Get type for a parameter slot.
+fn get_param_type<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    param_name: Option<InternedText<'db>>,
+) -> crate::tycheck::TypeAndHeap<'db> {
+    if let Some(name) = param_name {
+        for param in func.params(db) {
+            if param.name(db) == name {
+                // Convert type hint to type.
+                let type_hint = param.type_hint(db);
+                return convert_type_hint_to_type(db, type_hint);
+            }
+        }
+    }
+    // Fallback to placeholder if param not found.
+    create_placeholder_type(db)
+}
+
+/// Get type for a local (let binding) slot.
+fn get_local_type<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    local_name: Option<InternedText<'db>>,
+    expr_types: &[Option<crate::tycheck::TypeAndHeap<'db>>],
+) -> crate::tycheck::TypeAndHeap<'db> {
+    use salsa::plumbing::AsId;
+    use crate::ast::{Statement, ExprFun};
+
+    if let Some(name) = local_name {
+        // Find the let statement with this name.
+        for stmt in func.body(db) {
+            if let Statement::Let(let_stmt) = stmt {
+                if let_stmt.name(db) == name {
+                    // Get the RHS expression and its type.
+                    let value_expr = let_stmt.value(db);
+                    let expr_id = value_expr.as_id();
+                    let index = expr_id.index() as usize;
+
+                    if let Some(Some(ty)) = expr_types.get(index) {
+                        return *ty;
+                    }
+                }
+            }
+        }
+    }
+    // Fallback to placeholder if local not found or no type.
+    create_placeholder_type(db)
+}
+
+/// Convert a type hint to a TypeAndHeap.
+fn convert_type_hint_to_type<'db>(
+    db: &'db dyn crate::Db,
+    type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
+) -> crate::tycheck::TypeAndHeap<'db> {
+    use crate::tycheck::{Type, TypeAndHeap};
+    use crate::datalit;
+
+    // Convert the type hint using datalit's conversion.
+    let datalit_ty = datalit::tycheck::convert_type_hint(db, type_hint)
+        .unwrap_or_else(|_| {
+            // Fallback to bool if conversion fails.
+            datalit::tycheck::TypeAndHeap::new(db, datalit::ast::Heap::Local, datalit::tycheck::Type::Bool)
+        });
+
+    TypeAndHeap::new(db, datalit_ty.heap(db), Type::Datalit(datalit_ty.ty(db).clone()))
+}
+
+/// Create a placeholder type (bool on local heap) for slots without type info.
+fn create_placeholder_type<'db>(
+    db: &'db dyn crate::Db,
+) -> crate::tycheck::TypeAndHeap<'db> {
+    use crate::tycheck::{Type, TypeAndHeap};
+    use crate::datalit;
+
+    TypeAndHeap::new(
+        db,
+        datalit::ast::Heap::Local,
+        Type::Datalit(datalit::tycheck::Type::Bool)
+    )
+}

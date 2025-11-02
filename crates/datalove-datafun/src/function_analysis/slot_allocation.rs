@@ -6,25 +6,32 @@ use crate::ast::{Statement, StmtLet, StmtFun, StmtRet, StmtIf, ExprFun, ExprFunK
 use super::{SlotId, SlotKind};
 
 /// Result of slot allocation.
-#[derive(Clone, Debug)]
+#[salsa::tracked]
 pub struct SlotAllocation<'db> {
     /// All allocated slots.
+    #[returns(ref)]
     pub slots: Vec<AllocatedSlot<'db>>,
+}
+
+/// Internal builder for slot allocation.
+struct SlotAllocationBuilder {
+    /// All allocated slots.
+    slots: Vec<(SlotId, Option<String>, SlotKind)>,
     /// Next slot ID to allocate.
     next_slot_id: u32,
 }
 
 /// A slot that has been allocated.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[salsa::tracked]
 pub struct AllocatedSlot<'db> {
     pub slot_id: SlotId,
     pub name: Option<InternedText<'db>>,
     pub kind: SlotKind,
 }
 
-impl<'db> SlotAllocation<'db> {
+impl SlotAllocationBuilder {
     /// Create a new empty allocation.
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             slots: Vec::new(),
             next_slot_id: 0,
@@ -32,42 +39,27 @@ impl<'db> SlotAllocation<'db> {
     }
 
     /// Allocate a new slot.
-    fn alloc_slot(&mut self, name: Option<InternedText<'db>>, kind: SlotKind) -> SlotId {
+    fn alloc_slot(&mut self, name: Option<String>, kind: SlotKind) -> SlotId {
         let slot_id = SlotId(self.next_slot_id);
         self.next_slot_id += 1;
-        self.slots.push(AllocatedSlot { slot_id, name, kind });
+        self.slots.push((slot_id, name, kind));
         slot_id
     }
 
-    /// Analyze a function and allocate all slots.
-    pub fn analyze_function(db: &'db dyn crate::Db, func: StmtFun<'db>) -> Self {
-        let mut alloc = Self::new();
-
-        // Allocate reference slots for all parameters.
-        // All parameters (In/Out/Ref/Mut) are passed by reference.
-        for param in func.params(db) {
-            alloc.alloc_slot(Some(param.name(db)), SlotKind::Reference);
-        }
-
-        // Allocate slots for body statements.
-        alloc.analyze_statements(db, func.body(db));
-
-        alloc
-    }
-
     /// Analyze a list of statements.
-    fn analyze_statements(&mut self, db: &'db dyn crate::Db, stmts: &[Statement<'db>]) {
+    fn analyze_statements<'db>(&mut self, db: &'db dyn crate::Db, stmts: &[Statement<'db>]) {
         for stmt in stmts {
             self.analyze_statement(db, stmt);
         }
     }
 
     /// Analyze a single statement.
-    fn analyze_statement(&mut self, db: &'db dyn crate::Db, stmt: &Statement<'db>) {
+    fn analyze_statement<'db>(&mut self, db: &'db dyn crate::Db, stmt: &Statement<'db>) {
         match stmt {
             Statement::Let(let_stmt) => {
                 // Allocate slot for the let binding.
-                self.alloc_slot(Some(let_stmt.name(db)), SlotKind::Local);
+                let name_str = let_stmt.name(db).text(db).to_string();
+                self.alloc_slot(Some(name_str), SlotKind::Local);
                 // Analyze the value expression.
                 self.analyze_expr(db, let_stmt.value(db));
             }
@@ -82,13 +74,15 @@ impl<'db> SlotAllocation<'db> {
 
                 // Allocate slot for then binding if present.
                 if let Some(name) = if_stmt.then_binding(db) {
-                    self.alloc_slot(Some(name), SlotKind::Local);
+                    let name_str = name.text(db).to_string();
+                    self.alloc_slot(Some(name_str), SlotKind::Local);
                 }
                 self.analyze_statements(db, if_stmt.then_body(db));
 
                 // Allocate slot for else binding if present.
                 if let Some(name) = if_stmt.else_binding(db) {
-                    self.alloc_slot(Some(name), SlotKind::Local);
+                    let name_str = name.text(db).to_string();
+                    self.alloc_slot(Some(name_str), SlotKind::Local);
                 }
                 if let Some(else_body) = if_stmt.else_body(db) {
                     self.analyze_statements(db, else_body);
@@ -101,7 +95,7 @@ impl<'db> SlotAllocation<'db> {
     }
 
     /// Analyze an expression and allocate temporaries.
-    fn analyze_expr(&mut self, db: &'db dyn crate::Db, expr: ExprFun<'db>) {
+    fn analyze_expr<'db>(&mut self, db: &'db dyn crate::Db, expr: ExprFun<'db>) {
         match expr.expr(db) {
             ExprFunKind::Datalit(_) => {
                 // Literals might need temporaries, but for now we'll handle them later.
@@ -149,4 +143,31 @@ impl<'db> SlotAllocation<'db> {
             }
         }
     }
+}
+
+/// Analyze a function and allocate all slots.
+#[salsa::tracked]
+pub fn allocate_slots<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+) -> SlotAllocation<'db> {
+    let mut builder = SlotAllocationBuilder::new();
+
+    // Allocate reference slots for all parameters.
+    // All parameters (In/Out/Ref/Mut) are passed by reference.
+    for param in func.params(db) {
+        let name_str = param.name(db).text(db).to_string();
+        builder.alloc_slot(Some(name_str), SlotKind::Reference);
+    }
+
+    // Allocate slots for body statements.
+    builder.analyze_statements(db, func.body(db));
+
+    // Convert builder slots to AllocatedSlot Salsa structs.
+    let slots = builder.slots.into_iter().map(|(slot_id, name, kind)| {
+        let interned_name = name.map(|n| InternedText::new(db, n));
+        AllocatedSlot::new(db, slot_id, interned_name, kind)
+    }).collect();
+
+    SlotAllocation::new(db, slots)
 }

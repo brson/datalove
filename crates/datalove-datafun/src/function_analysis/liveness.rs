@@ -111,7 +111,7 @@ pub fn analyze_initialization<'db>(
     let initial_state: Vec<InitState> = slots
         .iter()
         .map(|slot| {
-            if slot.kind == SlotKind::Reference {
+            if slot.kind(db) == SlotKind::Reference {
                 InitState::Always
             } else {
                 InitState::Never
@@ -200,7 +200,7 @@ fn compute_block_exit_state<'db>(
         match *all_stmts[stmt_idx] {
             Statement::Let(let_stmt) => {
                 // Find the slot for this let binding.
-                if let Some(slot) = find_slot_by_name(slots, let_stmt.name(db)) {
+                if let Some(slot) = find_slot_by_name(db, slots, let_stmt.name(db)) {
                     state[slot.0 as usize] = InitState::Always;
                 }
             }
@@ -209,12 +209,12 @@ fn compute_block_exit_state<'db>(
                 // This is handled by the CFG - different blocks for then/else.
                 // Here we just mark if-bindings as potentially initialized.
                 if let Some(then_name) = if_stmt.then_binding(db) {
-                    if let Some(slot) = find_slot_by_name(slots, then_name) {
+                    if let Some(slot) = find_slot_by_name(db, slots, then_name) {
                         state[slot.0 as usize] = InitState::Sometimes;
                     }
                 }
                 if let Some(else_name) = if_stmt.else_binding(db) {
-                    if let Some(slot) = find_slot_by_name(slots, else_name) {
+                    if let Some(slot) = find_slot_by_name(db, slots, else_name) {
                         state[slot.0 as usize] = InitState::Sometimes;
                     }
                 }
@@ -246,13 +246,14 @@ fn flatten_statements<'db>(db: &'db dyn crate::Db, stmts: &'db [Statement<'db>])
 
 /// Find a slot by its name.
 fn find_slot_by_name<'db>(
+    db: &'db dyn crate::Db,
     slots: &[AllocatedSlot<'db>],
     name: bct::text::InternedText<'db>,
 ) -> Option<SlotId> {
     slots
         .iter()
-        .find(|slot| slot.name == Some(name))
-        .map(|slot| slot.slot_id)
+        .find(|slot| slot.name(db) == Some(name))
+        .map(|slot| slot.slot_id(db))
 }
 
 /// Compute live ranges for all slots in a function.
@@ -284,8 +285,8 @@ pub fn compute_live_ranges<'db>(
         };
 
         for slot in slots {
-            if slot.kind == SlotKind::Reference {
-                birth_points.insert(slot.slot_id, entry_point);
+            if slot.kind(db) == SlotKind::Reference {
+                birth_points.insert(slot.slot_id(db), entry_point);
             }
         }
     }
@@ -304,7 +305,7 @@ pub fn compute_live_ranges<'db>(
             match *stmt {
                 Statement::Let(let_stmt) => {
                     // The let binding writes to a slot.
-                    if let Some(slot_id) = find_slot_by_name(slots, let_stmt.name(db)) {
+                    if let Some(slot_id) = find_slot_by_name(db, slots, let_stmt.name(db)) {
                         birth_points.insert(slot_id, ProgramPoint {
                             stmt_id,
                             position: Position::After,
@@ -324,7 +325,7 @@ pub fn compute_live_ranges<'db>(
 
                     // If-bindings are birth points.
                     if let Some(then_name) = if_stmt.then_binding(db) {
-                        if let Some(slot_id) = find_slot_by_name(slots, then_name) {
+                        if let Some(slot_id) = find_slot_by_name(db, slots, then_name) {
                             birth_points.insert(slot_id, ProgramPoint {
                                 stmt_id,
                                 position: Position::After,
@@ -332,7 +333,7 @@ pub fn compute_live_ranges<'db>(
                         }
                     }
                     if let Some(else_name) = if_stmt.else_binding(db) {
-                        if let Some(slot_id) = find_slot_by_name(slots, else_name) {
+                        if let Some(slot_id) = find_slot_by_name(db, slots, else_name) {
                             birth_points.insert(slot_id, ProgramPoint {
                                 stmt_id,
                                 position: Position::After,
@@ -356,9 +357,9 @@ pub fn compute_live_ranges<'db>(
         };
 
         for slot in slots {
-            if slot.kind == SlotKind::Reference {
+            if slot.kind(db) == SlotKind::Reference {
                 // Override any earlier use points - parameters are live until function exit.
-                last_use_points.insert(slot.slot_id, exit_point);
+                last_use_points.insert(slot.slot_id(db), exit_point);
             }
         }
     }
@@ -367,14 +368,14 @@ pub fn compute_live_ranges<'db>(
     let mut ranges = Vec::new();
 
     for slot in slots {
-        let slot_id = slot.slot_id;
+        let slot_id = slot.slot_id(db);
 
         // Get initialization state from first block if available.
         let init_state = if !blocks.is_empty() {
             init.get_exit_state(db, blocks[0].block_id, slot_id)
                 .unwrap_or(InitState::Never)
         } else {
-            if slot.kind == SlotKind::Reference {
+            if slot.kind(db) == SlotKind::Reference {
                 InitState::Always
             } else {
                 InitState::Never
@@ -404,7 +405,7 @@ fn collect_reads<'db>(
     match expr.expr(db) {
         ExprFunKind::Name(name) => {
             // This is a read of a named slot.
-            if let Some(slot_id) = find_slot_by_name(slots, name) {
+            if let Some(slot_id) = find_slot_by_name(db, slots, name) {
                 let use_point = ProgramPoint {
                     stmt_id,
                     position: Position::Before,
@@ -450,6 +451,7 @@ mod tests {
     use super::*;
     use bct::input::Source;
     use crate::function_analysis::cfg::build_cfg;
+    use crate::function_analysis::slot_allocation::allocate_slots;
     use crate::function_analysis::slot_allocation::SlotAllocation;
 
     fn parse_function<'db>(db: &'db dyn crate::Db, source_code: &str) -> StmtFun<'db> {
@@ -479,14 +481,14 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
         // x is a Reference slot (parameter) - Always initialized.
         // y is a Local slot - becomes Always after let statement.
-        let x_slot = allocation.slots[0].slot_id;
-        let y_slot = allocation.slots[1].slot_id;
+        let x_slot = slot_alloc.slots(db)[0].slot_id(db);
+        let y_slot = slot_alloc.slots(db)[1].slot_id(db);
 
         let entry_block = cfg.blocks(db)[0].block_id;
 
@@ -513,11 +515,11 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
-        let x_slot = allocation.slots[1].slot_id;
+        let x_slot = slot_alloc.slots(db)[1].slot_id(db);
         let blocks = cfg.blocks(db);
 
         // Entry block: x is Never.
@@ -540,12 +542,12 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
-        let x_slot = allocation.slots[1].slot_id;  // x from then-branch
-        let y_slot = allocation.slots[2].slot_id;  // y from else-branch
+        let x_slot = slot_alloc.slots(db)[1].slot_id(db);  // x from then-branch
+        let y_slot = slot_alloc.slots(db)[2].slot_id(db);  // y from else-branch
 
         let blocks = cfg.blocks(db);
 
@@ -585,12 +587,12 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
-        let x_slot = allocation.slots[1].slot_id;  // x from then-branch
-        let y_slot = allocation.slots[2].slot_id;  // y from else-branch
+        let x_slot = slot_alloc.slots(db)[1].slot_id(db);  // x from then-branch
+        let y_slot = slot_alloc.slots(db)[2].slot_id(db);  // y from else-branch
         let blocks = cfg.blocks(db);
 
         // Entry: both x and y slots are Never.
@@ -617,14 +619,14 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
-        let a_slot = allocation.slots[0].slot_id;
-        let b_slot = allocation.slots[1].slot_id;
-        let c_slot = allocation.slots[2].slot_id;
-        let d_slot = allocation.slots[3].slot_id;
+        let a_slot = slot_alloc.slots(db)[0].slot_id(db);
+        let b_slot = slot_alloc.slots(db)[1].slot_id(db);
+        let c_slot = slot_alloc.slots(db)[2].slot_id(db);
+        let d_slot = slot_alloc.slots(db)[3].slot_id(db);
 
         let entry_block = cfg.blocks(db)[0].block_id;
 
@@ -657,12 +659,12 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
         // x is only initialized in the innermost then-branch.
-        let x_slot = allocation.slots[2].slot_id;
+        let x_slot = slot_alloc.slots(db)[2].slot_id(db);
 
         // Find the innermost then block.
         let blocks = cfg.blocks(db);
@@ -688,21 +690,21 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
 
         // x is a Reference slot (parameter).
-        let x_range = live_ranges.get_range(db, allocation.slots[0].slot_id).unwrap();
-        assert_eq!(x_range.slot_id(db), allocation.slots[0].slot_id);
+        let x_range = live_ranges.get_range(db, slot_alloc.slots(db)[0].slot_id(db)).unwrap();
+        assert_eq!(x_range.slot_id(db), slot_alloc.slots(db)[0].slot_id(db));
         assert_eq!(x_range.birth(db).position, Position::Before);
         assert_eq!(x_range.death(db).position, Position::After);
         assert_eq!(x_range.is_initialized(db), InitState::Always);
 
         // y is a Local slot.
-        let y_range = live_ranges.get_range(db, allocation.slots[1].slot_id).unwrap();
-        assert_eq!(y_range.slot_id(db), allocation.slots[1].slot_id);
+        let y_range = live_ranges.get_range(db, slot_alloc.slots(db)[1].slot_id(db)).unwrap();
+        assert_eq!(y_range.slot_id(db), slot_alloc.slots(db)[1].slot_id(db));
         // Birth is after the let statement.
         assert_eq!(y_range.birth(db).position, Position::After);
         // Death is before the ret statement (where y is read).
@@ -723,23 +725,23 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
 
         // b is read once (in let c = b).
-        let b_range = live_ranges.get_range(db, allocation.slots[1].slot_id).unwrap();
+        let b_range = live_ranges.get_range(db, slot_alloc.slots(db)[1].slot_id(db)).unwrap();
         assert_eq!(b_range.birth(db).stmt_id, StmtId(0));  // let b = a
         assert_eq!(b_range.death(db).stmt_id, StmtId(1));  // let c = b
 
         // c is read once (in let d = c).
-        let c_range = live_ranges.get_range(db, allocation.slots[2].slot_id).unwrap();
+        let c_range = live_ranges.get_range(db, slot_alloc.slots(db)[2].slot_id(db)).unwrap();
         assert_eq!(c_range.birth(db).stmt_id, StmtId(1));  // let c = b
         assert_eq!(c_range.death(db).stmt_id, StmtId(2));  // let d = c
 
         // d is read once (in ret d).
-        let d_range = live_ranges.get_range(db, allocation.slots[3].slot_id).unwrap();
+        let d_range = live_ranges.get_range(db, slot_alloc.slots(db)[3].slot_id(db)).unwrap();
         assert_eq!(d_range.birth(db).stmt_id, StmtId(2));  // let d = c
         assert_eq!(d_range.death(db).stmt_id, StmtId(3));  // ret d
     }
@@ -756,14 +758,14 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
 
         // a and b are Reference slots (parameters), so they're live for entire function.
-        let a_range = live_ranges.get_range(db, allocation.slots[0].slot_id).unwrap();
-        let b_range = live_ranges.get_range(db, allocation.slots[1].slot_id).unwrap();
+        let a_range = live_ranges.get_range(db, slot_alloc.slots(db)[0].slot_id(db)).unwrap();
+        let b_range = live_ranges.get_range(db, slot_alloc.slots(db)[1].slot_id(db)).unwrap();
 
         // Both are born at function entry.
         assert_eq!(a_range.birth(db).position, Position::Before);
@@ -774,7 +776,7 @@ end fun
         assert_eq!(b_range.death(db).position, Position::After);
 
         // c is a Local slot, born when written, dies when read.
-        let c_range = live_ranges.get_range(db, allocation.slots[2].slot_id).unwrap();
+        let c_range = live_ranges.get_range(db, slot_alloc.slots(db)[2].slot_id(db)).unwrap();
         assert_eq!(c_range.birth(db).stmt_id, StmtId(0));  // let c = ...
         assert_eq!(c_range.death(db).stmt_id, StmtId(1));  // ret c
     }
@@ -791,14 +793,14 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
 
         // a and b are Reference slots (parameters), live for entire function.
-        let a_range = live_ranges.get_range(db, allocation.slots[0].slot_id).unwrap();
-        let b_range = live_ranges.get_range(db, allocation.slots[1].slot_id).unwrap();
+        let a_range = live_ranges.get_range(db, slot_alloc.slots(db)[0].slot_id(db)).unwrap();
+        let b_range = live_ranges.get_range(db, slot_alloc.slots(db)[1].slot_id(db)).unwrap();
 
         // Both die at function exit (Reference slots are live for entire function).
         assert_eq!(a_range.death(db).position, Position::After);
@@ -818,13 +820,13 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
 
         // x is a parameter, born at entry, dies at exit.
-        let x_range = live_ranges.get_range(db, allocation.slots[0].slot_id).unwrap();
+        let x_range = live_ranges.get_range(db, slot_alloc.slots(db)[0].slot_id(db)).unwrap();
         assert_eq!(x_range.birth(db).stmt_id, StmtId(0));
         assert_eq!(x_range.birth(db).position, Position::Before);
 

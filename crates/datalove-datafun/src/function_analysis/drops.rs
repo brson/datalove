@@ -73,10 +73,10 @@ pub fn compute_drop_points<'db>(
 
                 // For each slot, check if it's initialized at this exit and needs dropping.
                 for slot in slots {
-                    let slot_id = slot.slot_id;
+                    let slot_id = slot.slot_id(db);
 
                     // Reference slots are never dropped (caller owns the data).
-                    if slot.kind == SlotKind::Reference {
+                    if slot.kind(db) == SlotKind::Reference {
                         continue;
                     }
 
@@ -129,6 +129,7 @@ mod tests {
     use crate::ast::*;
     use crate::function_analysis::slot_allocation::SlotAllocation;
     use crate::function_analysis::cfg::build_cfg;
+    use crate::function_analysis::slot_allocation::allocate_slots;
     use crate::function_analysis::liveness::{compute_live_ranges, analyze_initialization};
     use crate::function_analysis::moves::compute_move_info;
     use bct::input::Source;
@@ -161,20 +162,20 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &allocation.slots, init, move_info);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
 
         // x is moved to the return, so it should NOT have a drop point.
         let drops = drop_points.drops(db);
         let x_name = InternedText::new(db, "x");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
 
         let x_drops: Vec<_> = drops.iter()
-            .filter(|d| d.slot_id(db) == x_slot.slot_id)
+            .filter(|d| d.slot_id(db) == x_slot.slot_id(db))
             .collect();
 
         // x is moved by the return, so no drop.
@@ -192,22 +193,22 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &allocation.slots, init, move_info);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
 
         // Parameters (Reference slots) should never be dropped.
         let drops = drop_points.drops(db);
         let x_name = InternedText::new(db, "x");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
 
-        assert_eq!(x_slot.kind, SlotKind::Reference);
+        assert_eq!(x_slot.kind(db), SlotKind::Reference);
 
         let x_drops: Vec<_> = drops.iter()
-            .filter(|d| d.slot_id(db) == x_slot.slot_id)
+            .filter(|d| d.slot_id(db) == x_slot.slot_id(db))
             .collect();
 
         assert_eq!(x_drops.len(), 0, "parameters (Reference slots) should never be dropped");
@@ -226,20 +227,20 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &allocation.slots, init, move_info);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
 
         // x is moved, y is not moved, so y should be dropped.
         let drops = drop_points.drops(db);
         let y_name = InternedText::new(db, "y");
-        let y_slot = allocation.slots.iter().find(|s| s.name == Some(y_name)).unwrap();
+        let y_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(y_name)).unwrap();
 
         let y_drops: Vec<_> = drops.iter()
-            .filter(|d| d.slot_id(db) == y_slot.slot_id)
+            .filter(|d| d.slot_id(db) == y_slot.slot_id(db))
             .collect();
 
         assert_eq!(y_drops.len(), 1, "y should have exactly one drop point");
@@ -263,12 +264,12 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &allocation.slots, init, move_info);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
 
         // Both x and y are moved (x in then branch, y in else branch).
         // Current implementation tracks moves globally, so both are marked as moved.
@@ -293,26 +294,26 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &allocation.slots, init, move_info);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
 
         // a is moved, b and c are not moved, so b and c should be dropped.
         let drops = drop_points.drops(db);
 
         let b_name = InternedText::new(db, "b");
         let c_name = InternedText::new(db, "c");
-        let b_slot = allocation.slots.iter().find(|s| s.name == Some(b_name)).unwrap();
-        let c_slot = allocation.slots.iter().find(|s| s.name == Some(c_name)).unwrap();
+        let b_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(b_name)).unwrap();
+        let c_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(c_name)).unwrap();
 
         let b_drops: Vec<_> = drops.iter()
-            .filter(|d| d.slot_id(db) == b_slot.slot_id)
+            .filter(|d| d.slot_id(db) == b_slot.slot_id(db))
             .collect();
         let c_drops: Vec<_> = drops.iter()
-            .filter(|d| d.slot_id(db) == c_slot.slot_id)
+            .filter(|d| d.slot_id(db) == c_slot.slot_id(db))
             .collect();
 
         assert_eq!(b_drops.len(), 1, "b should have exactly one drop point");

@@ -138,7 +138,7 @@ fn walk_statements<'db>(
                 let name = let_stmt.name(db);
 
                 // Find the slot for this let binding.
-                if let Some(slot_id) = find_slot_by_name(slots, name) {
+                if let Some(slot_id) = find_slot_by_name(db, slots, name) {
                     // Collect all moves from the RHS expression.
                     collect_moves_from_expr(
                         db,
@@ -228,7 +228,7 @@ fn collect_moves_from_expr<'db>(
     match expr.expr(db) {
         ExprFunKind::Name(name) => {
             // Name expression: this is a move of the named slot.
-            if let Some(source_slot) = find_slot_by_name(slots, name) {
+            if let Some(source_slot) = find_slot_by_name(db, slots, name) {
                 moves.push(MoveOp::new(db, expr_id, source_slot, move_kind));
             }
         }
@@ -287,7 +287,7 @@ fn collect_moves_from_expr_for_return<'db>(
     match expr.expr(db) {
         ExprFunKind::Name(name) => {
             // Name expression: this is a move of the named slot for return.
-            if let Some(slot) = find_slot_by_name(slots, name) {
+            if let Some(slot) = find_slot_by_name(db, slots, name) {
                 moves.push(MoveOp::new(db, return_expr_id, slot, MoveKind::FunctionReturn));
             }
         }
@@ -356,7 +356,7 @@ fn process_function_call<'db>(
                 if param.mode(db) == ParamMode::In {
                     // Check if the argument is a name (direct move).
                     if let ExprFunKind::Name(arg_name) = arg.expr(db) {
-                        if let Some(slot_id) = find_slot_by_name(slots, arg_name) {
+                        if let Some(slot_id) = find_slot_by_name(db, slots, arg_name) {
                             moves.push(MoveOp::new(db, expr_id, slot_id, MoveKind::FunctionCall));
                         }
                     } else {
@@ -398,7 +398,7 @@ fn collect_reads_from_expr<'db>(
     match expr.expr(db) {
         ExprFunKind::Name(name) => {
             // Name expression: this is a read of the named slot.
-            if let Some(slot_id) = find_slot_by_name(slots, name) {
+            if let Some(slot_id) = find_slot_by_name(db, slots, name) {
                 reads.push(ReadInfo {
                     slot_id,
                     stmt_id,
@@ -479,10 +479,10 @@ fn correlate_last_uses<'db>(
 }
 
 /// Find a slot by name.
-fn find_slot_by_name<'db>(slots: &[AllocatedSlot<'db>], name: InternedText<'db>) -> Option<SlotId> {
+fn find_slot_by_name<'db>(db: &'db dyn crate::Db, slots: &[AllocatedSlot<'db>], name: InternedText<'db>) -> Option<SlotId> {
     slots.iter()
-        .find(|s| s.name == Some(name))
-        .map(|s| s.slot_id)
+        .find(|s| s.name(db) == Some(name))
+        .map(|s| s.slot_id(db))
 }
 
 #[cfg(test)]
@@ -491,6 +491,7 @@ mod tests {
     use crate::ast::*;
     use crate::function_analysis::slot_allocation::SlotAllocation;
     use crate::function_analysis::cfg::build_cfg;
+    use crate::function_analysis::slot_allocation::allocate_slots;
     use crate::function_analysis::liveness::{compute_live_ranges, analyze_initialization};
     use bct::input::Source;
     use bct::text::InternedText;
@@ -521,11 +522,11 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // Verify we have one move: x -> y (Assignment).
         let moves = move_info.moves(db);
@@ -536,8 +537,8 @@ end fun
 
         // The moved slot should be x.
         let x_name = InternedText::new(db, "x");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
-        assert_eq!(move_op.slot_id(db), x_slot.slot_id);
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
+        assert_eq!(move_op.slot_id(db), x_slot.slot_id(db));
     }
 
     #[test]
@@ -551,11 +552,11 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // Verify we have one move: x returned (FunctionReturn).
         let moves = move_info.moves(db);
@@ -565,8 +566,8 @@ end fun
         assert_eq!(move_op.move_kind(db), MoveKind::FunctionReturn);
 
         let x_name = InternedText::new(db, "x");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
-        assert_eq!(move_op.slot_id(db), x_slot.slot_id);
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
+        assert_eq!(move_op.slot_id(db), x_slot.slot_id(db));
     }
 
     #[test]
@@ -583,11 +584,11 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // Verify we have one move: x moved to helper (FunctionCall).
         let moves = move_info.moves(db);
@@ -597,8 +598,8 @@ end fun
         assert_eq!(move_op.move_kind(db), MoveKind::FunctionCall);
 
         let x_name = InternedText::new(db, "x");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
-        assert_eq!(move_op.slot_id(db), x_slot.slot_id);
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
+        assert_eq!(move_op.slot_id(db), x_slot.slot_id(db));
     }
 
     #[test]
@@ -615,11 +616,11 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // Verify we have NO moves because parameter is Ref, not In.
         let moves = move_info.moves(db);
@@ -641,11 +642,11 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // Verify we have two moves: x and y to helper calls.
         let moves = move_info.moves(db);
@@ -658,15 +659,15 @@ end fun
         // Find slots for x and y.
         let x_name = InternedText::new(db, "x");
         let y_name = InternedText::new(db, "y");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
-        let y_slot = allocation.slots.iter().find(|s| s.name == Some(y_name)).unwrap();
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
+        let y_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(y_name)).unwrap();
 
         // Collect moved slot IDs.
         let moved_slots: Vec<SlotId> = moves.iter().map(|m| m.slot_id(db)).collect();
 
         // Both x and y should be moved.
-        assert!(moved_slots.contains(&x_slot.slot_id));
-        assert!(moved_slots.contains(&y_slot.slot_id));
+        assert!(moved_slots.contains(&x_slot.slot_id(db)));
+        assert!(moved_slots.contains(&y_slot.slot_id(db)));
     }
 
     #[test]
@@ -680,11 +681,11 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // Verify we have two moves: x and y into the tuple (Assignment).
         let moves = move_info.moves(db);
@@ -696,12 +697,12 @@ end fun
 
         let x_name = InternedText::new(db, "x");
         let y_name = InternedText::new(db, "y");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
-        let y_slot = allocation.slots.iter().find(|s| s.name == Some(y_name)).unwrap();
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
+        let y_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(y_name)).unwrap();
 
         let moved_slots: Vec<SlotId> = moves.iter().map(|m| m.slot_id(db)).collect();
-        assert!(moved_slots.contains(&x_slot.slot_id));
-        assert!(moved_slots.contains(&y_slot.slot_id));
+        assert!(moved_slots.contains(&x_slot.slot_id(db)));
+        assert!(moved_slots.contains(&y_slot.slot_id(db)));
     }
 
     #[test]
@@ -715,21 +716,21 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // Verify we have identified the last use of x.
         let last_uses = move_info.last_uses(db);
         assert_eq!(last_uses.len(), 1);
 
         let x_name = InternedText::new(db, "x");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
 
         // Check that x is marked as having a last use.
-        let has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == x_slot.slot_id);
+        let has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == x_slot.slot_id(db));
         assert!(has_last_use, "x should have a last use");
     }
 
@@ -745,20 +746,20 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // x is read twice in the same statement, so we should have 2 last uses (one for each read at the death point).
         let last_uses = move_info.last_uses(db);
 
         let x_name = InternedText::new(db, "x");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
 
         // Count how many times x appears in last_uses.
-        let x_last_use_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == x_slot.slot_id).count();
+        let x_last_use_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == x_slot.slot_id(db)).count();
         assert_eq!(x_last_use_count, 2, "x should have 2 last uses (both reads in the same statement)");
     }
 
@@ -777,20 +778,20 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // x is used in the then branch, and that should be its last use.
         let last_uses = move_info.last_uses(db);
 
         let x_name = InternedText::new(db, "x");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
 
         // Check that x has a last use.
-        let has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == x_slot.slot_id);
+        let has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == x_slot.slot_id(db));
         assert!(has_last_use, "x should have a last use in the then branch");
     }
 
@@ -807,11 +808,11 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // Each variable (x, a, b) should have exactly one last use.
         let last_uses = move_info.last_uses(db);
@@ -820,14 +821,14 @@ end fun
         let a_name = InternedText::new(db, "a");
         let b_name = InternedText::new(db, "b");
 
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
-        let a_slot = allocation.slots.iter().find(|s| s.name == Some(a_name)).unwrap();
-        let b_slot = allocation.slots.iter().find(|s| s.name == Some(b_name)).unwrap();
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
+        let a_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(a_name)).unwrap();
+        let b_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(b_name)).unwrap();
 
         // Check that each slot has exactly one last use.
-        let x_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == x_slot.slot_id).count();
-        let a_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == a_slot.slot_id).count();
-        let b_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == b_slot.slot_id).count();
+        let x_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == x_slot.slot_id(db)).count();
+        let a_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == a_slot.slot_id(db)).count();
+        let b_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == b_slot.slot_id(db)).count();
 
         assert_eq!(x_count, 1, "x should have exactly one last use");
         assert_eq!(a_count, 1, "a should have exactly one last use");
@@ -845,22 +846,22 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let allocation = SlotAllocation::analyze_function(db, func);
+        let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &allocation.slots);
-        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
-        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
 
         // Both x and y should have last uses when they're used in the tuple.
         let last_uses = move_info.last_uses(db);
 
         let x_name = InternedText::new(db, "x");
         let y_name = InternedText::new(db, "y");
-        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
-        let y_slot = allocation.slots.iter().find(|s| s.name == Some(y_name)).unwrap();
+        let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
+        let y_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(y_name)).unwrap();
 
-        let x_has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == x_slot.slot_id);
-        let y_has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == y_slot.slot_id);
+        let x_has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == x_slot.slot_id(db));
+        let y_has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == y_slot.slot_id(db));
 
         assert!(x_has_last_use, "x should have a last use");
         assert!(y_has_last_use, "y should have a last use");
