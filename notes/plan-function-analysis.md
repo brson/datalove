@@ -584,6 +584,320 @@ All changes implemented and tested:
 - Fixed type lookup in `build_frame_layout` to use expression for temporaries
 - All 26 function analysis tests pass
 
+## Phase 6: Validation Implementation Plan
+
+### Architecture
+- Add `errors` field to `FunctionAnalysis<'db>` to store validation errors
+- Create `AnalysisError` enum with all error variants
+- Implement validation passes as separate functions, each returning `Vec<AnalysisError>`
+- Add validation phase to `analyze_function` after drop points computation
+
+### Error Type Definitions
+
+Create new module `crates/datalove-datafun/src/function_analysis/validation.rs`:
+
+```rust
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AnalysisError {
+    UseBeforeInit {
+        slot: SlotId,
+        use_location: ProgramPoint,
+    },
+    DoubleMove {
+        slot: SlotId,
+        first_move: ProgramPoint,
+        second_move: ProgramPoint,
+    },
+    UseAfterMove {
+        slot: SlotId,
+        use_location: ProgramPoint,
+        move_location: ProgramPoint,
+    },
+    UninitializedReturn {
+        slot: SlotId,
+        paths: Vec<ProgramPoint>,
+    },
+    ValueNotUsed {
+        slot: SlotId,
+    },
+    BorrowedValueMoved {
+        slot: SlotId,
+        borrow_location: ProgramPoint,
+        move_location: ProgramPoint,
+    },
+}
+```
+
+### FunctionAnalysis Update
+
+Add error storage to `FunctionAnalysis<'db>`:
+
+```rust
+#[salsa::tracked]
+pub struct FunctionAnalysis<'db> {
+    pub function: StmtFun<'db>,
+    pub frame_layout: FrameLayout<'db>,
+    pub live_ranges: LiveRanges<'db>,
+    pub move_info: MoveInfo<'db>,
+    pub drop_points: DropPoints<'db>,
+    pub control_flow: ControlFlowGraph<'db>,
+    #[returns(ref)]
+    pub errors: Vec<AnalysisError>,  // NEW
+}
+```
+
+Update `analyze_function` to include validation:
+
+```rust
+// Phase 7: Validation
+let errors = validate_function(db, func, slots, control_flow, init_analysis, move_info, live_ranges);
+
+FunctionAnalysis::new(
+    db,
+    func,
+    frame_layout,
+    live_ranges,
+    move_info,
+    drop_points,
+    control_flow,
+    errors,  // NEW
+)
+```
+
+### Validation Passes (Implement One at a Time)
+
+#### Pass 1: Use-Before-Initialization Check
+
+**Purpose**: Detect reads of uninitialized slots.
+
+**Algorithm**:
+1. Walk all statements collecting reads with their locations
+2. For each read at program point P:
+   - Look up slot's initialization state at P using `InitializationAnalysis`
+   - Error if state is `Never` or `Sometimes`
+   - Skip Reference slots (parameters - always initialized)
+3. Return list of `UseBeforeInit` errors
+
+**Implementation**:
+```rust
+fn check_use_before_init<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    slots: &[AllocatedSlot<'db>],
+    init: InitializationAnalysis<'db>,
+    cfg: ControlFlowGraph<'db>,
+) -> Vec<AnalysisError>
+```
+
+**Test cases**:
+- Use of uninitialized local
+- Conditional initialization with use after if
+- Proper use after initialization (no error)
+
+#### Pass 2: Double-Move Check
+
+**Purpose**: Detect multiple moves of the same slot.
+
+**Algorithm**:
+1. Group moves by slot_id from `MoveInfo.moves`
+2. For each slot with 2+ moves:
+   - Since analysis is not path-sensitive, any duplicate is an error
+   - Create `DoubleMove` error with first and second move locations
+3. Return list of `DoubleMove` errors
+
+**Implementation**:
+```rust
+fn check_double_move<'db>(
+    db: &'db dyn crate::Db,
+    move_info: MoveInfo<'db>,
+    slots: &[AllocatedSlot<'db>],
+) -> Vec<AnalysisError>
+```
+
+**Test cases**:
+- Move same local twice in linear flow
+- Move parameter then local derived from it (should be ok - different slots)
+- Single move (no error)
+
+#### Pass 3: Use-After-Move Check
+
+**Purpose**: Detect reads that occur after a slot has been moved.
+
+**Algorithm**:
+1. Build map of slot -> move locations from `MoveInfo`
+2. Walk all reads with their locations
+3. For each read at program point P:
+   - Check if slot has any moves before P
+   - Compare `ProgramPoint` ordering (stmt_id, position)
+   - Error if read follows move
+4. Return list of `UseAfterMove` errors
+
+**Implementation**:
+```rust
+fn check_use_after_move<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    slots: &[AllocatedSlot<'db>],
+    move_info: MoveInfo<'db>,
+) -> Vec<AnalysisError>
+```
+
+**Ordering logic**:
+- If stmt_id_1 < stmt_id_2: move comes before use
+- If stmt_id_1 == stmt_id_2: check position (Before < After)
+
+**Test cases**:
+- Read after move in linear flow
+- Read before move (no error)
+- Read in different branch from move (conservative: still error)
+
+#### Pass 4: Uninitialized-Return Check
+
+**Purpose**: Detect return from function with uninitialized Out parameters.
+
+**Algorithm**:
+1. Find all exit blocks (Return/TryReturn terminators) from CFG
+2. For each exit block:
+   - Get exit_states from `InitializationAnalysis`
+   - For each slot with kind != Reference:
+     - If state is Never or Sometimes, may indicate improper usage
+   - For Out parameters specifically:
+     - Must be Always initialized at return
+3. Return list of `UninitializedReturn` errors
+
+**Implementation**:
+```rust
+fn check_uninitialized_return<'db>(
+    db: &'db dyn crate::Db,
+    slots: &[AllocatedSlot<'db>],
+    init: InitializationAnalysis<'db>,
+    cfg: ControlFlowGraph<'db>,
+) -> Vec<AnalysisError>
+```
+
+**Test cases**:
+- Out parameter not initialized before return
+- Conditional initialization of Out parameter
+- Proper initialization (no error)
+
+#### Pass 5: ValueNotUsed Check
+
+**Purpose**: Detect slots that are written but never read.
+
+**Algorithm**:
+1. For each Local/Temporary slot:
+   - Check if it has any reads (look in LiveRanges for death point)
+   - If no death point found, slot was never read
+   - Skip Reference slots (parameters - used by caller)
+2. Return list of `ValueNotUsed` errors
+
+**Implementation**:
+```rust
+fn check_value_not_used<'db>(
+    db: &'db dyn crate::Db,
+    slots: &[AllocatedSlot<'db>],
+    live_ranges: LiveRanges<'db>,
+) -> Vec<AnalysisError>
+```
+
+**Test cases**:
+- Let binding never used
+- All values used (no error)
+- Parameter not used (should be ok or warning, not error)
+
+#### Pass 6: Unreachable Code Detection
+
+**Purpose**: Warn about code that can never execute.
+
+**Algorithm**:
+1. Find blocks with no predecessors (except entry block)
+2. Find statements after Return/TryReturn terminators
+3. Generate warnings (not errors)
+
+**Implementation**:
+```rust
+fn check_unreachable_code<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    cfg: ControlFlowGraph<'db>,
+) -> Vec<AnalysisWarning>  // New type for warnings
+```
+
+**Test cases**:
+- Code after return
+- Unreachable else branch
+- All code reachable (no warning)
+
+### Orchestration Function
+
+Create main validation entry point:
+
+```rust
+pub fn validate_function<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    slots: &[AllocatedSlot<'db>],
+    cfg: ControlFlowGraph<'db>,
+    init: InitializationAnalysis<'db>,
+    move_info: MoveInfo<'db>,
+    live_ranges: LiveRanges<'db>,
+) -> Vec<AnalysisError> {
+    let mut errors = Vec::new();
+
+    // Pass 1: Use-before-init
+    errors.extend(check_use_before_init(db, func, slots, init, cfg));
+
+    // Pass 2: Double-move
+    errors.extend(check_double_move(db, move_info, slots));
+
+    // Pass 3: Use-after-move
+    errors.extend(check_use_after_move(db, func, slots, move_info));
+
+    // Pass 4: Uninitialized return
+    errors.extend(check_uninitialized_return(db, slots, init, cfg));
+
+    // Pass 5: Value not used
+    errors.extend(check_value_not_used(db, slots, live_ranges));
+
+    errors
+}
+```
+
+### Testing Strategy
+
+For each validation pass:
+1. Create dedicated test module in `crates/datalove-datafun/src/function_analysis/validation.rs`
+2. Test positive cases (error detected)
+3. Test negative cases (no error when code is correct)
+4. Test edge cases (empty functions, parameters, conditionals)
+
+Example test structure:
+```rust
+#[test]
+fn test_use_before_init_detects_error() {
+    // Function with uninitialized use
+    // Assert error is detected
+}
+
+#[test]
+fn test_use_before_init_no_error_when_initialized() {
+    // Function with proper initialization
+    // Assert no errors
+}
+```
+
+### Implementation Status
+
+- [ ] Create validation.rs module with AnalysisError enum
+- [ ] Update FunctionAnalysis with errors field
+- [ ] Implement Pass 1: Use-Before-Initialization
+- [ ] Implement Pass 2: Double-Move Check
+- [ ] Implement Pass 3: Use-After-Move Check
+- [ ] Implement Pass 4: Uninitialized-Return Check
+- [ ] Implement Pass 5: ValueNotUsed Check
+- [ ] Implement Pass 6: Unreachable Code Detection
+- [ ] Integration testing with full analysis pipeline
+
 ## Future Extensions
 
 - **Escape analysis**: detect values that don't escape function
