@@ -75,7 +75,7 @@ impl<'db> InitializationAnalysis<'db> {
 
 impl InitState {
     /// Merge two initialization states (for CFG joins).
-    fn merge(self, other: InitState) -> InitState {
+    pub fn merge(self, other: InitState) -> InitState {
         use InitState::*;
         match (self, other) {
             (Always, Always) => Always,
@@ -85,7 +85,7 @@ impl InitState {
     }
 
     /// Merge multiple initialization states.
-    fn merge_all(states: impl IntoIterator<Item = InitState>) -> InitState {
+    pub fn merge_all(states: impl IntoIterator<Item = InitState>) -> InitState {
         let mut iter = states.into_iter();
         let first = iter.next().unwrap_or(InitState::Never);
         iter.fold(first, |acc, s| acc.merge(s))

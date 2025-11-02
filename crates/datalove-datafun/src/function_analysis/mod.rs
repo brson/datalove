@@ -17,6 +17,7 @@ mod moves;
 mod drops;
 mod slot_allocation;
 mod type_sizing;
+mod validation;
 
 pub use cfg::*;
 pub use layout::*;
@@ -25,6 +26,7 @@ pub use moves::*;
 pub use drops::*;
 pub use slot_allocation::*;
 pub use type_sizing::*;
+pub use validation::*;
 
 /// Complete analysis result for a function.
 #[salsa::tracked]
@@ -35,6 +37,8 @@ pub struct FunctionAnalysis<'db> {
     pub move_info: MoveInfo<'db>,
     pub drop_points: DropPoints<'db>,
     pub control_flow: ControlFlowGraph<'db>,
+    #[returns(ref)]
+    pub errors: Vec<AnalysisError>,
 }
 
 /// Unique identifier for a slot in the frame.
@@ -122,6 +126,9 @@ pub fn analyze_function<'db>(
     // Phase 7: Frame layout with types.
     let frame_layout = build_frame_layout(db, func, slots, tycheck_result);
 
+    // Phase 8: Validation.
+    let errors = validation::check_use_before_init(db, func, slots, init_analysis, control_flow);
+
     FunctionAnalysis::new(
         db,
         func,
@@ -130,6 +137,7 @@ pub fn analyze_function<'db>(
         move_info,
         drop_points,
         control_flow,
+        errors,
     )
 }
 
