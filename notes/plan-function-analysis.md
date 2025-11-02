@@ -539,6 +539,51 @@ When explicit clone syntax is added, a new `Clone` variant will be added.
 - Enables uniform treatment of all types
 - Future optimization can eliminate scalar temporaries that don't need tracking
 
+## Tracking Temporary Expressions for Type Resolution
+
+### Problem Statement
+
+Temporary slots are allocated during slot allocation but we can't look up their types because we don't track which expression created each temporary. This causes all temporaries to get placeholder `bool` types instead of their actual types from the typechecker.
+
+### Root Cause
+
+1. **Slot allocation** creates temporaries when analyzing expressions (BinOp, FunctionCall, etc.) but only stores `SlotId` without recording the corresponding `ExprFun`
+2. **Typechecker** indexes expression types by `ExprFun`'s Salsa ID in `TypecheckResult.expr_types`
+3. **Frame layout** has a `SlotId` but no way to map it back to the `ExprFun` to look up its type
+
+### Solution: Add Expression Field to AllocatedSlot
+
+Add `expr: Option<ExprFun<'db>>` field to `AllocatedSlot`:
+- Reference/Local slots: `expr = None` (they don't come from expressions)
+- Temporary slots: `expr = Some(expr)` pointing to the creating expression
+
+### Implementation Steps
+
+1. **Update `AllocatedSlot` structure** - Add `pub expr: Option<ExprFun<'db>>` field
+2. **Update `SlotAllocationBuilder`** - Add 4th element to internal tuple: `Option<ExprFun<'db>>`
+3. **Update `alloc_slot` signature** - Add `expr: Option<ExprFun<'db>>` parameter
+4. **Update parameter/local allocations** - Pass `None` for expression (they don't come from expressions)
+5. **Update temporary allocations** - Pass `Some(expr)` when creating temporaries for BinOp, FunctionCall, Tuple, UnaryOp, TryOption, TryResult
+6. **Update `allocate_slots` conversion** - Include expression in `AllocatedSlot::new` call
+7. **Fix type lookup in `build_frame_layout`** - Use `slot.expr(db)` to get expression, then look up type in `expr_types`
+
+### Expected Outcome
+
+- All temporary slots will have accurate types from the typechecker
+- Frame layout will compute correct sizes for temporaries
+- No more placeholder `bool` types for temporaries
+- Full type information available for all three slot kinds: Reference, Local, and Temporary
+
+### Status: COMPLETED
+
+All changes implemented and tested:
+- Added `expr: Option<ExprFun<'db>>` field to `AllocatedSlot`
+- Updated `SlotAllocationBuilder` to track expressions
+- Modified `alloc_slot` signature to accept expression parameter
+- Updated all allocation sites (parameters/locals pass `None`, temporaries pass `Some(expr)`)
+- Fixed type lookup in `build_frame_layout` to use expression for temporaries
+- All 26 function analysis tests pass
+
 ## Future Extensions
 
 - **Escape analysis**: detect values that don't escape function

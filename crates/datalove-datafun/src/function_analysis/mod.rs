@@ -159,9 +159,19 @@ fn build_frame_layout<'db>(
                 get_local_type(db, func, slot.name(db), expr_types)
             }
             SlotKind::Temporary => {
-                // Temporary - would need expression tracking, use placeholder for now.
-                // TODO: Track temporary expressions and their types.
-                create_placeholder_type(db)
+                // Temporary - look up type from the creating expression.
+                if let Some(expr) = slot.expr(db) {
+                    use salsa::plumbing::AsId;
+                    let expr_id = expr.as_id();
+                    let index = expr_id.index() as usize;
+
+                    expr_types.get(index)
+                        .and_then(|opt| *opt)
+                        .unwrap_or_else(|| create_placeholder_type(db))
+                } else {
+                    // No expression tracked, use placeholder.
+                    create_placeholder_type(db)
+                }
             }
         };
 
