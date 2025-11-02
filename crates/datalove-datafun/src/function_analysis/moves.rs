@@ -7,6 +7,14 @@ use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind, ParamMode};
 use super::{SlotId, ExprId, StmtId, LiveRanges, ProgramPoint};
 use super::slot_allocation::AllocatedSlot;
 
+/// Information about a read operation.
+#[derive(Clone, Debug)]
+struct ReadInfo {
+    slot_id: SlotId,
+    stmt_id: StmtId,
+    expr_id: ExprId,
+}
+
 /// Move information for all operations.
 #[salsa::tracked]
 pub struct MoveInfo<'db> {
@@ -81,40 +89,48 @@ pub fn compute_move_info<'db>(
     live_ranges: LiveRanges<'db>,
 ) -> MoveInfo<'db> {
     let mut moves = Vec::new();
-    let mut last_uses = Vec::new();
+    let mut reads = Vec::new();
 
     // Build function registry from function body for resolving calls.
     let registry = FunctionRegistry::build(db, func.body(db));
 
-    // Counter for assigning ExprIds.
+    // Counter for assigning ExprIds and StmtIds.
     let mut expr_counter = 0u32;
+    let mut stmt_counter = 0u32;
 
-    // Walk through function body to identify moves.
+    // Walk through function body to identify moves and reads.
     walk_statements(
         db,
         func.body(db),
         &registry,
         slots,
         &mut moves,
+        &mut reads,
         &mut expr_counter,
+        &mut stmt_counter,
     );
 
-    // TODO: Identify last uses using liveness analysis.
-    // For now, we'll leave this empty and implement it in a follow-up.
+    // Correlate reads with death points to identify last uses.
+    let last_uses = correlate_last_uses(db, &reads, live_ranges);
 
     MoveInfo::new(db, moves, last_uses)
 }
 
-/// Walk statements to collect move operations.
+/// Walk statements to collect move operations and reads.
 fn walk_statements<'db>(
     db: &'db dyn crate::Db,
     statements: &[Statement<'db>],
     registry: &FunctionRegistry<'db>,
     slots: &[AllocatedSlot<'db>],
     moves: &mut Vec<MoveOp<'db>>,
+    reads: &mut Vec<ReadInfo>,
     expr_counter: &mut u32,
+    stmt_counter: &mut u32,
 ) {
     for stmt in statements {
+        let stmt_id = StmtId(*stmt_counter);
+        *stmt_counter += 1;
+
         match stmt {
             Statement::Let(let_stmt) => {
                 // Let binding: RHS is moved to LHS slot.
@@ -132,6 +148,15 @@ fn walk_statements<'db>(
                         registry,
                         slots,
                         moves,
+                        expr_counter,
+                    );
+                    // Also collect reads from the RHS expression.
+                    collect_reads_from_expr(
+                        db,
+                        value_expr,
+                        stmt_id,
+                        slots,
+                        reads,
                         expr_counter,
                     );
                 }
@@ -152,16 +177,35 @@ fn walk_statements<'db>(
                     moves,
                     expr_counter,
                 );
+                // Also collect reads from the return expression.
+                collect_reads_from_expr(
+                    db,
+                    value_expr,
+                    stmt_id,
+                    slots,
+                    reads,
+                    expr_counter,
+                );
             }
             Statement::If(if_stmt) => {
+                // Collect reads from the condition.
+                collect_reads_from_expr(
+                    db,
+                    if_stmt.condition(db),
+                    stmt_id,
+                    slots,
+                    reads,
+                    expr_counter,
+                );
+
                 // Process then and else branches.
-                walk_statements(db, if_stmt.then_body(db), registry, slots, moves, expr_counter);
+                walk_statements(db, if_stmt.then_body(db), registry, slots, moves, reads, expr_counter, stmt_counter);
                 if let Some(else_body) = if_stmt.else_body(db) {
-                    walk_statements(db, else_body, registry, slots, moves, expr_counter);
+                    walk_statements(db, else_body, registry, slots, moves, reads, expr_counter, stmt_counter);
                 }
             }
             Statement::Fun(_) | Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
-                // No moves in these statements.
+                // No moves or reads in these statements.
             }
         }
     }
@@ -337,6 +381,101 @@ fn process_function_call<'db>(
             }
         }
     }
+}
+
+/// Collect reads from an expression.
+fn collect_reads_from_expr<'db>(
+    db: &'db dyn crate::Db,
+    expr: ExprFun<'db>,
+    stmt_id: StmtId,
+    slots: &[AllocatedSlot<'db>],
+    reads: &mut Vec<ReadInfo>,
+    expr_counter: &mut u32,
+) {
+    let expr_id = ExprId(*expr_counter);
+    *expr_counter += 1;
+
+    match expr.expr(db) {
+        ExprFunKind::Name(name) => {
+            // Name expression: this is a read of the named slot.
+            if let Some(slot_id) = find_slot_by_name(slots, name) {
+                reads.push(ReadInfo {
+                    slot_id,
+                    stmt_id,
+                    expr_id,
+                });
+            }
+        }
+        ExprFunKind::BinOp(binop) => {
+            // Binary operation: both operands are read.
+            collect_reads_from_expr(db, binop.lhs(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, binop.rhs(db), stmt_id, slots, reads, expr_counter);
+        }
+        ExprFunKind::UnaryOp(unary) => {
+            // Unary operation: operand is read.
+            collect_reads_from_expr(db, unary.operand(db), stmt_id, slots, reads, expr_counter);
+        }
+        ExprFunKind::FunctionCall(call) => {
+            // Function call: all arguments are read.
+            for arg in call.args(db) {
+                collect_reads_from_expr(db, *arg, stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::Tuple(tuple) => {
+            // Tuple: all elements are read.
+            for elem in tuple.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::TryOption(try_op) => {
+            // Try option: operand is read.
+            collect_reads_from_expr(db, try_op.operand(db), stmt_id, slots, reads, expr_counter);
+        }
+        ExprFunKind::TryResult(try_op) => {
+            // Try result: operand is read.
+            collect_reads_from_expr(db, try_op.operand(db), stmt_id, slots, reads, expr_counter);
+        }
+        ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
+            // No reads in literals or parse errors.
+        }
+    }
+}
+
+/// Correlate reads with death points from liveness analysis to identify last uses.
+fn correlate_last_uses<'db>(
+    db: &'db dyn crate::Db,
+    reads: &[ReadInfo],
+    live_ranges: LiveRanges<'db>,
+) -> Vec<(SlotId, ExprId)> {
+    let mut last_uses = Vec::new();
+
+    // Group reads by slot_id to find the last read for each slot.
+    let mut reads_by_slot: HashMap<SlotId, Vec<&ReadInfo>> = HashMap::new();
+    for read in reads {
+        reads_by_slot.entry(read.slot_id).or_insert_with(Vec::new).push(read);
+    }
+
+    // For each slot, find its last read(s).
+    for (slot_id, slot_reads) in reads_by_slot {
+        if slot_reads.is_empty() {
+            continue;
+        }
+
+        // Find the maximum stmt_id among all reads for this slot.
+        let max_stmt_id = slot_reads.iter()
+            .map(|r| r.stmt_id)
+            .max()
+            .unwrap();
+
+        // All reads at that maximum stmt_id are last uses.
+        for read in slot_reads {
+            if read.stmt_id == max_stmt_id {
+                last_uses.push((slot_id, read.expr_id));
+            }
+        }
+    }
+
+    last_uses
 }
 
 /// Find a slot by name.
@@ -563,5 +702,167 @@ end fun
         let moved_slots: Vec<SlotId> = moves.iter().map(|m| m.slot_id(db)).collect();
         assert!(moved_slots.contains(&x_slot.slot_id));
         assert!(moved_slots.contains(&y_slot.slot_id));
+    }
+
+    #[test]
+    fn test_last_use_simple_linear() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32): u32
+    ret x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // Verify we have identified the last use of x.
+        let last_uses = move_info.last_uses(db);
+        assert_eq!(last_uses.len(), 1);
+
+        let x_name = InternedText::new(db, "x");
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+
+        // Check that x is marked as having a last use.
+        let has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == x_slot.slot_id);
+        assert!(has_last_use, "x should have a last use");
+    }
+
+    #[test]
+    fn test_last_use_multiple_reads() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32): u32
+    let y = x +! x
+    ret y
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // x is read twice in the same statement, so we should have 2 last uses (one for each read at the death point).
+        let last_uses = move_info.last_uses(db);
+
+        let x_name = InternedText::new(db, "x");
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+
+        // Count how many times x appears in last_uses.
+        let x_last_use_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == x_slot.slot_id).count();
+        assert_eq!(x_last_use_count, 2, "x should have 2 last uses (both reads in the same statement)");
+    }
+
+    #[test]
+    fn test_last_use_with_conditional() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32): u32
+    if @true
+        ret x
+    else
+        ret @0
+    end if
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // x is used in the then branch, and that should be its last use.
+        let last_uses = move_info.last_uses(db);
+
+        let x_name = InternedText::new(db, "x");
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+
+        // Check that x has a last use.
+        let has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == x_slot.slot_id);
+        assert!(has_last_use, "x should have a last use in the then branch");
+    }
+
+    #[test]
+    fn test_last_use_parameter_multiple_uses() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32): u32
+    let a = x
+    let b = a
+    ret b
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // Each variable (x, a, b) should have exactly one last use.
+        let last_uses = move_info.last_uses(db);
+
+        let x_name = InternedText::new(db, "x");
+        let a_name = InternedText::new(db, "a");
+        let b_name = InternedText::new(db, "b");
+
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        let a_slot = allocation.slots.iter().find(|s| s.name == Some(a_name)).unwrap();
+        let b_slot = allocation.slots.iter().find(|s| s.name == Some(b_name)).unwrap();
+
+        // Check that each slot has exactly one last use.
+        let x_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == x_slot.slot_id).count();
+        let a_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == a_slot.slot_id).count();
+        let b_count = last_uses.iter().filter(|(slot_id, _)| *slot_id == b_slot.slot_id).count();
+
+        assert_eq!(x_count, 1, "x should have exactly one last use");
+        assert_eq!(a_count, 1, "a should have exactly one last use");
+        assert_eq!(b_count, 1, "b should have exactly one last use");
+    }
+
+    #[test]
+    fn test_last_use_in_tuple() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32, y: In u32)
+    let z = (x, y)
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let allocation = SlotAllocation::analyze_function(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &allocation.slots);
+        let live_ranges = compute_live_ranges(db, func, cfg, &allocation.slots, init);
+        let move_info = compute_move_info(db, func, &allocation.slots, live_ranges);
+
+        // Both x and y should have last uses when they're used in the tuple.
+        let last_uses = move_info.last_uses(db);
+
+        let x_name = InternedText::new(db, "x");
+        let y_name = InternedText::new(db, "y");
+        let x_slot = allocation.slots.iter().find(|s| s.name == Some(x_name)).unwrap();
+        let y_slot = allocation.slots.iter().find(|s| s.name == Some(y_name)).unwrap();
+
+        let x_has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == x_slot.slot_id);
+        let y_has_last_use = last_uses.iter().any(|(slot_id, _)| *slot_id == y_slot.slot_id);
+
+        assert!(x_has_last_use, "x should have a last use");
+        assert!(y_has_last_use, "y should have a last use");
     }
 }

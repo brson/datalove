@@ -321,7 +321,12 @@ pub struct ControlFlowEdge {
   - Distinguishes In (move) vs Ref/Mut/Out (borrow) parameter modes
   - Recursively tracks moves through complex expressions (tuples, binary ops, function calls)
   - 6 comprehensive tests: let binding, return, In parameter, Ref parameter (no move), nested calls, tuple construction
-- [ ] Implement last-use detection
+- [x] Implement last-use detection
+  - Tracks all reads during AST walk with stmt_id and expr_id
+  - Groups reads by slot and finds the maximum stmt_id (last read location)
+  - Marks all reads at the last statement as last uses (handles multiple reads in same statement)
+  - Works correctly for Reference slots (parameters) and Local/Temporary slots
+  - 5 comprehensive tests: simple linear, multiple reads, conditionals, parameter chains, tuple construction
 
 ### Milestone 4: Drop Points
 - [ ] Identify drop points for all slots

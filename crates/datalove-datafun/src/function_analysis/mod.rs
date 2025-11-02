@@ -42,7 +42,7 @@ pub struct FunctionAnalysis<'db> {
 pub struct SlotId(pub u32);
 
 /// Unique identifier for a statement.
-#[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct StmtId(pub u32);
 
 /// Unique identifier for an expression.
