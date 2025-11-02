@@ -329,9 +329,20 @@ pub struct ControlFlowEdge {
   - 5 comprehensive tests: simple linear, multiple reads, conditionals, parameter chains, tuple construction
 
 ### Milestone 4: Drop Points
-- [ ] Identify drop points for all slots
-- [ ] Generate drop instructions
-- [ ] Handle moved values (no drop needed)
+- [x] Identify drop points for all slots
+  - Iterates through exit blocks (Return/TryReturn) in CFG
+  - Checks initialization state at each exit using InitializationAnalysis
+  - Skips Reference slots (never dropped)
+  - Skips slots that were moved (no drop needed)
+  - Skips never-initialized slots (no drop needed)
+- [x] Generate drop instructions
+  - Inserts DropPoint at last statement of exit blocks
+  - Distinguishes EndOfScope (normal return) vs EarlyReturn (try operators)
+  - Conservative approach: tracks moves globally (not path-sensitive)
+- [x] Handle moved values (no drop needed)
+  - Collects all moved slots from MoveInfo
+  - Skips drop insertion for moved slots
+  - 5 comprehensive tests: simple local, parameters, not-moved local, conditionals, multiple locals
 
 ### Milestone 5: Integration
 - [ ] Create Salsa tracked query for function analysis
