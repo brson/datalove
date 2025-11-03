@@ -2,7 +2,7 @@
 module sys/std/option
 ----------
 
-fun unwrap_with_try(val: ?u32): ?u32
+fun unwrap_with_try(val: ?u32): ?int
   let x: u32 = val?
   ret x + @10
 end fun
