@@ -2,7 +2,7 @@
 
 ## Current Status
 
-**Latest Update:** 2025-10-24
+**Latest Update:** 2025-11-03
 
 - ✅ Phase 1 Complete: Diagnostic crate created and compiles
 - ✅ Phase 2 Complete: AST error nodes updated
@@ -33,12 +33,21 @@
   - Error testing infrastructure in place ✅
   - Full SourceMap implementation pending
 - 🔲 Phase 7: Not yet started
+- 🔄 Phase 8 In Progress: Improve diagnostic rendering (mostly complete)
+  - Byte-to-line:col utility ✅
+  - DiagnosticContext and SourceInfo tracking ✅
+  - Custom diagnostic renderer with source snippets and carets ✅
+  - 21 parse error test fixtures updated ✅
+  - Type diagnostic retrieval in run_without_sys ✅
+  - Type diagnostic retrieval in run_with_sys 🔲
+  - Type error test fixtures 🔲
 
 **Next Steps:**
-1. Phase 4 Part B: Update datafun type checker to emit TypeDiagnostic (~35 error sites) and assign error codes F001-F053
-2. Phase 4 Part B: Fix test infrastructure issues (35 tests failing due to calling parse() from non-tracked contexts)
-3. Phase 5: Resolution diagnostics
-4. Phase 6: Complete driver integration (SourceMap, improved rendering)
+1. Phase 8: Complete diagnostic rendering improvements (add type error tests, finish run_with_sys integration)
+2. Phase 4 Part B: Update datafun type checker to emit TypeDiagnostic (~35 error sites) and assign error codes F001-F053
+3. Phase 4 Part B: Fix test infrastructure issues (35 tests failing due to calling parse() from non-tracked contexts)
+4. Phase 5: Resolution diagnostics
+5. Phase 6: Complete driver integration (full SourceMap for multi-file support)
 
 ## Overview
 
@@ -943,13 +952,53 @@ error[T022]: mismatched types
 6. Part 7: Add type error tests (validate end-to-end)
 7. Part 5: Fix lit-tycheck (optional, low priority)
 
+### Current Status (2025-11-03)
+
+**Implemented:**
+- ✅ **Part 1 COMPLETE**: `byte_to_line_col()` utility in `datalove-diagnostic/src/lib.rs:358-375`
+- ✅ **Part 2 COMPLETE**: `DiagnosticContext` and `SourceInfo` structs in `datalove-cli/src/main.rs:15-67`
+  - Constructors: `from_file()`, `from_test()`, `from_repl()`
+  - Tracks file path and display name for rendering
+- ✅ **Part 3 COMPLETE**: `render_single_diagnostic()` in `datalove-cli/src/main.rs:394-467`
+  - Shows file:line:col (e.g., `01_tuple_missing_parens.dfs:1:13`)
+  - Displays source line with error
+  - Adds caret (^^^) pointing to error location
+  - Shows labels and notes
+  - Handles multi-line spans
+- ✅ **Part 6 COMPLETE**: 21 error test fixtures updated with proper output format
+  - Example: `error[D001]: expected () after tuple keyword` with file location and source snippet
+
+**Partially Implemented:**
+- 🟡 **Part 4 PARTIAL**: Type diagnostic retrieval
+  - ✅ `run_without_sys()` retrieves and renders TypeDiagnostic (main.rs:493-500)
+  - ❌ `run_with_sys()` still uses old-style `tycheck_result.errors()` Debug output (main.rs:594-598)
+  - ❌ Old-style fallback still exists at main.rs:504-506
+
+**Not Started:**
+- ❌ **Part 7**: No type error test fixtures
+  - No `crates/datalove-cli/tests/fixtures/type_error/` directory
+  - Need end-to-end tests for TypeDiagnostic rendering
+- ⚠️ **Part 5 DEFERRED**: lit-tycheck Salsa context issue (low priority utility command)
+
+### Remaining Work
+
+1. **Complete Part 4**: Add TypeDiagnostic retrieval to `run_with_sys()`
+   - Replace old-style error handling in package world typecheck
+   - Remove fallback at lines 504-506
+2. **Complete Part 7**: Create type error test fixtures
+   - Add `crates/datalove-cli/tests/fixtures/type_error/` directory
+   - Create test cases for common type errors (mismatch, undefined variable, etc.)
+   - Validate TypeDiagnostic rendering end-to-end
+3. **Optional Part 5**: Fix lit-tycheck (deferred - low priority)
+
 ### Success Criteria
 
-- ✅ Parse errors show: file:line:col, source snippet, caret
-- ✅ Type errors use TypeDiagnostic (not Debug output)
-- ✅ All existing tests pass with updated expectations
-- ✅ Error output matches Rust compiler quality
-- ✅ Ready to add datafun type diagnostics with confidence
+- ✅ **Achieved**: Parse errors show file:line:col, source snippet, caret
+- ✅ **Achieved**: Parse error tests updated with proper expectations (21 fixtures)
+- ✅ **Achieved**: Error output quality matches Rust compiler style
+- 🟡 **Partial**: Type errors use TypeDiagnostic in `run_without_sys`, not yet in `run_with_sys`
+- ❌ **Pending**: Type error test fixtures not created
+- 🟡 **Partial**: Ready to add datafun type diagnostics (rendering works, needs complete integration and tests)
 
 ### Out of Scope (Future)
 
