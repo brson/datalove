@@ -337,7 +337,7 @@ impl Value {
         &self,
         rt: &mut rt::impls::rt_local::RtLocal,
         tydesc_table: &mut crate::datalit::tydesc_table::TyDescTable<'db>,
-    ) -> Result<String, crate::interp::InterpError> {
+    ) -> Result<String, crate::interp_old::interp::InterpError> {
         unsafe {
             // Get runtime handle.
             let rt_handle = rt as *mut _ as rt::c::LocalRtHandle;
@@ -354,7 +354,7 @@ impl Value {
             );
 
             if status != rt::c::RtStatus::Ok {
-                return Err(crate::interp::InterpError::RuntimeError(
+                return Err(crate::interp_old::interp::InterpError::RuntimeError(
                     "Failed to create output string".to_string(),
                 ));
             }
@@ -406,7 +406,7 @@ impl Value {
                     &mut output_string as *mut rtdt::String as *mut u8,
                     string_tydesc,
                 );
-                return Err(crate::interp::InterpError::RuntimeError(
+                return Err(crate::interp_old::interp::InterpError::RuntimeError(
                     "Failed to pretty-print value".to_string(),
                 ));
             }

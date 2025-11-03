@@ -4,8 +4,8 @@ use rmx::prelude::*;
 use datalove_rt;
 use datalove_rtdt as rtdt;
 use crate::datalit;
-use crate::interp::{InterpContext, InterpResult, InterpError};
-use crate::value::Value;
+use crate::interp_old::interp::{InterpContext, InterpResult, InterpError};
+use crate::interp_old::value::Value;
 
 /// Tracked wrapper for converting a type hint to a type.
 ///

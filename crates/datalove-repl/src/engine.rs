@@ -11,7 +11,7 @@ pub struct Engine<'db> {
     db: &'db dyn datafun::Db,
     history: ReplHistory,
     /// Persistent interpreter context.
-    interp_ctx: datafun::interp::InterpContext<'db>,
+    interp_ctx: datafun::interp_old::interp::InterpContext<'db>,
 }
 
 struct ReplHistory {
@@ -97,18 +97,18 @@ impl ReplHistory {
 
 impl<'db> Engine<'db> {
     pub fn new(db: &'db dyn datafun::Db) -> AnyResult<Engine<'db>> {
-        let type_table = datafun::type_table::TypeTable::empty();
+        let type_table = datafun::interp_old::type_table::TypeTable::empty();
         Ok(Engine {
             db,
             history: ReplHistory::new(),
-            interp_ctx: datafun::interp::InterpContext::new(db, type_table),
+            interp_ctx: datafun::interp_old::interp::InterpContext::new(db, type_table),
         })
     }
 
     fn reset(&mut self) {
         self.history = ReplHistory::new();
-        let type_table = datafun::type_table::TypeTable::empty();
-        self.interp_ctx = datafun::interp::InterpContext::new(self.db, type_table);
+        let type_table = datafun::interp_old::type_table::TypeTable::empty();
+        self.interp_ctx = datafun::interp_old::interp::InterpContext::new(self.db, type_table);
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -285,7 +285,7 @@ impl<'db> Engine<'db> {
         // Build type table for the full script.
         let tycheck_result = datafun::tycheck::type_check(db, parsed_script, vec![], vec![]);
         let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(db);
-        let type_table = match datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result, &mut tydesc_table) {
+        let type_table = match datafun::interp_old::type_table::TypeTable::build(db, parsed_script, tycheck_result, &mut tydesc_table) {
             Ok(table) => table,
             Err(e) => return Eval::Error(format!("type table error: {}", e)),
         };
@@ -369,7 +369,7 @@ impl<'db> Engine<'db> {
 
         // Build type table for the full script (including temp expression).
         let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(db);
-        let type_table = match datafun::type_table::TypeTable::build(db, parsed_script, tycheck_result, &mut tydesc_table) {
+        let type_table = match datafun::interp_old::type_table::TypeTable::build(db, parsed_script, tycheck_result, &mut tydesc_table) {
             Ok(table) => table,
             Err(e) => return Eval::Error(format!("type table error: {}", e)),
         };

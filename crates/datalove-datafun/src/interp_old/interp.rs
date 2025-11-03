@@ -8,8 +8,8 @@ use datalove_rt as rt;
 use datalove_rtdt as rtdt;
 
 use crate::ast::*;
-use crate::value::Value;
-use crate::type_table::TypeTable;
+use crate::interp_old::value::Value;
+use crate::interp_old::type_table::TypeTable;
 
 /// Tracked helper to parse module scripts for interpreter.
 #[salsa::tracked]
@@ -250,10 +250,10 @@ impl<'db> InterpContext<'db> {
                 // If type hint is provided, convert it and pass to evaluator.
                 let expected_type = stmt.type_hint(self.db)
                     .and_then(|type_hint| {
-                        crate::eval_datalit::convert_type_hint_tracked(self.db, type_hint)
+                        crate::interp_old::eval_datalit::convert_type_hint_tracked(self.db, type_hint)
                     });
 
-                let value = crate::eval_datafun::eval_expr_with_expected(self, value_expr, expected_type)?;
+                let value = crate::interp_old::eval_datafun::eval_expr_with_expected(self, value_expr, expected_type)?;
                 self.current_frame_mut().variables.insert(name, value);
 
                 Ok(())
@@ -267,7 +267,7 @@ impl<'db> InterpContext<'db> {
             Statement::Ret(stmt) => {
                 // Evaluate the return value with expected type for automatic coercion.
                 let expected = self.current_frame().expected_return_type;
-                let value = crate::eval_datafun::eval_expr_with_expected(self, stmt.value(self.db), expected)?;
+                let value = crate::interp_old::eval_datafun::eval_expr_with_expected(self, stmt.value(self.db), expected)?;
                 Err(InterpError::Return(value))
             }
 
@@ -324,7 +324,7 @@ impl<'db> InterpContext<'db> {
                 } else {
                     // Boolean condition path.
                     // Evaluate condition.
-                    let condition_value = crate::eval_datafun::eval_expr(self, condition)?;
+                    let condition_value = crate::interp_old::eval_datafun::eval_expr(self, condition)?;
 
                     // Condition must be a bool.
                     let condition_bool = match condition_value {
@@ -373,7 +373,7 @@ impl<'db> InterpContext<'db> {
         use rtdt::ResultTag;
 
         // Evaluate the condition to get the Option/Result value.
-        let mut condition_value = crate::eval_datafun::eval_expr(self, condition)?;
+        let mut condition_value = crate::interp_old::eval_datafun::eval_expr(self, condition)?;
 
         // Get the type descriptor from the value itself.
         let condition_tydesc = condition_value.tydesc();
@@ -906,7 +906,7 @@ impl<'db> InterpContext<'db> {
     ///
     /// Used by the REPL to incrementally update the type table
     /// without recreating the entire context.
-    pub fn update_type_table(&mut self, type_table: crate::type_table::TypeTable) {
+    pub fn update_type_table(&mut self, type_table: crate::interp_old::type_table::TypeTable) {
         self.type_table = type_table;
     }
 }

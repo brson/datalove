@@ -3,8 +3,8 @@
 use rmx::prelude::*;
 use std::collections::HashMap;
 use crate::ast::*;
-use crate::interp::{InterpContext, InterpResult, InterpError};
-use crate::value::Value;
+use crate::interp_old::interp::{InterpContext, InterpResult, InterpError};
+use crate::interp_old::value::Value;
 use datalove_rt::{self as rt, c::{LocalRtHandle, RtStatus}};
 
 /// Evaluate a datafun expression.
@@ -20,7 +20,7 @@ pub fn eval_expr_with_expected<'db>(
 ) -> InterpResult {
     match expr.expr(ctx.db) {
         ExprFunKind::Datalit(datalit_expr) => {
-            crate::eval_datalit::eval_datalit(ctx, datalit_expr, expected)
+            crate::interp_old::eval_datalit::eval_datalit(ctx, datalit_expr, expected)
         }
 
         ExprFunKind::Name(name) => eval_name(ctx, name),
@@ -1295,7 +1295,7 @@ fn eval_function_call<'db>(
     let args = call.args(ctx.db);
 
     // Check stack depth to prevent overflow.
-    if ctx.call_depth() >= crate::interp::MAX_CALL_DEPTH {
+    if ctx.call_depth() >= crate::interp_old::interp::MAX_CALL_DEPTH {
         return Err(InterpError::StackOverflow);
     }
 
@@ -1312,7 +1312,7 @@ fn eval_function_call<'db>(
         // Get the expected type from the parameter if available.
         let expected_type = if i < params.len() {
             let type_hint = params[i].type_hint(ctx.db);
-            crate::eval_datalit::convert_type_hint_tracked(ctx.db, type_hint)
+            crate::interp_old::eval_datalit::convert_type_hint_tracked(ctx.db, type_hint)
         } else {
             None
         };
@@ -1323,7 +1323,7 @@ fn eval_function_call<'db>(
 
     // Create new stack frame for function call.
     // Copy functions and module_functions from current frame to maintain visibility.
-    let mut new_frame = crate::interp::StackFrame {
+    let mut new_frame = crate::interp_old::interp::StackFrame {
         variables: HashMap::new(),
         functions: ctx.clone_current_functions(),
         module_functions: ctx.clone_current_module_functions(),
@@ -1333,7 +1333,7 @@ fn eval_function_call<'db>(
     // Get the function's return type for handling early returns and automatic coercion.
     let return_type_hint = func.return_type(ctx.db);
     let return_type = return_type_hint.and_then(|type_hint| {
-        crate::eval_datalit::convert_type_hint_tracked(ctx.db, type_hint)
+        crate::interp_old::eval_datalit::convert_type_hint_tracked(ctx.db, type_hint)
     });
     new_frame.expected_return_type = return_type;
 
@@ -1946,7 +1946,7 @@ unsafe fn write_value_to_ptr(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::type_table::TypeTable;
+    use crate::interp_old::type_table::TypeTable;
     use crate::tycheck::type_check;
     use rmx::prelude::*;
 

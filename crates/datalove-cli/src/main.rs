@@ -367,13 +367,13 @@ impl ScriptCommand {
 
         // Build type table.
         let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = match datafun::type_table::TypeTable::build(&db, script, tycheck_result, &mut tydesc_table) {
+        let type_table = match datafun::interp_old::type_table::TypeTable::build(&db, script, tycheck_result, &mut tydesc_table) {
             Ok(table) => table,
             Err(e) => bail!("Failed to build type table: {}", e),
         };
 
         // Create interpreter context.
-        let mut ctx = datafun::interp::InterpContext::new(&db, type_table);
+        let mut ctx = datafun::interp_old::interp::InterpContext::new(&db, type_table);
 
         // Execute the script.
         if let Err(e) = ctx.execute(script) {
@@ -475,13 +475,13 @@ impl ScriptCommand {
 
         // Build type table for the script.
         let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = match datafun::type_table::TypeTable::build(&db, script, script_typecheck, &mut tydesc_table) {
+        let type_table = match datafun::interp_old::type_table::TypeTable::build(&db, script, script_typecheck, &mut tydesc_table) {
             Ok(table) => table,
             Err(e) => bail!("Failed to build type table: {}", e),
         };
 
         // Create interpreter context with package world support.
-        let mut ctx = datafun::interp::InterpContext::with_package_world(
+        let mut ctx = datafun::interp_old::interp::InterpContext::with_package_world(
             &db,
             type_table,
             &script,

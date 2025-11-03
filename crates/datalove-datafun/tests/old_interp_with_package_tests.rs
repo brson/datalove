@@ -64,11 +64,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Build type table for the script.
     let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(&db);
-    let type_table = datafun::type_table::TypeTable::build(&db, script, script_typecheck, &mut tydesc_table)
+    let type_table = datafun::interp_old::type_table::TypeTable::build(&db, script, script_typecheck, &mut tydesc_table)
         .map_err(|e| format!("Failed to build type table: {}", e))?;
 
     // Create interpreter context with package world support.
-    let mut ctx = datafun::interp::InterpContext::with_package_world(
+    let mut ctx = datafun::interp_old::interp::InterpContext::with_package_world(
         &db,
         type_table,
         &script,

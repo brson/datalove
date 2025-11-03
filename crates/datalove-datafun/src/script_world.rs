@@ -5,8 +5,8 @@ use crate::ast::Script;
 use crate::package::PackageWorld;
 use crate::package_resolve::resolve_package_world_with_imports;
 use crate::tycheck::{typecheck_package_world, PackageWorldTypecheckResult, TypecheckResult};
-use crate::type_table::TypeTable;
-use crate::interp::InterpContext;
+use crate::interp_old::type_table::TypeTable;
+use crate::interp_old::interp::InterpContext;
 use bct::package_resolve2::PackageWorldModuleGraphWithErrors;
 
 /// Result of loading and resolving a script with package world.

@@ -10,12 +10,8 @@ pub mod resolution;
 pub mod tycheck;
 pub mod function_analysis;
 
-// Interpreter modules.
-pub mod type_table;
-pub mod value;
-pub mod interp;
-pub mod eval_datalit;
-pub mod eval_datafun;
+// Old interpreter module.
+pub mod interp_old;
 
 // Module system.
 pub mod package;
