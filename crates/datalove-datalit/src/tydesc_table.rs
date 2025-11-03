@@ -719,9 +719,10 @@ mod tests {
         let tydesc = table.get_or_create(&ty_bool);
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Bool);
-            assert_eq!((*tydesc).size, 1);
-            assert_eq!((*tydesc).align, 1);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Bool);
+            assert_eq!(td.size(), 1);
+            assert_eq!(td.align(), 1);
         }
         Ok(())
     }
@@ -735,9 +736,10 @@ mod tests {
         let tydesc = table.get_or_create(&ty_u32);
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::U32);
-            assert_eq!((*tydesc).size, 4);
-            assert_eq!((*tydesc).align, 4);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::U32);
+            assert_eq!(td.size(), 4);
+            assert_eq!(td.align(), 4);
         }
         Ok(())
     }
@@ -751,9 +753,10 @@ mod tests {
         let tydesc = table.get_or_create(&ty_f32);
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::F32);
-            assert_eq!((*tydesc).size, 4);
-            assert_eq!((*tydesc).align, 4);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::F32);
+            assert_eq!(td.size(), 4);
+            assert_eq!(td.align(), 4);
         }
         Ok(())
     }
@@ -767,9 +770,10 @@ mod tests {
         let tydesc = table.get_or_create(&ty_int);
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Int);
-            assert_eq!((*tydesc).size, std::mem::size_of::<rtdt::Int>() as u32);
-            assert_eq!((*tydesc).align, std::mem::align_of::<rtdt::Int>() as u32);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Int);
+            assert_eq!(td.size(), std::mem::size_of::<rtdt::Int>() as u32);
+            assert_eq!(td.align(), std::mem::align_of::<rtdt::Int>() as u32);
         }
         Ok(())
     }
@@ -783,9 +787,10 @@ mod tests {
         let tydesc = table.get_or_create(&ty_string);
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::String);
-            assert_eq!((*tydesc).size, std::mem::size_of::<rtdt::String>() as u32);
-            assert_eq!((*tydesc).align, std::mem::align_of::<rtdt::String>() as u32);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::String);
+            assert_eq!(td.size(), std::mem::size_of::<rtdt::String>() as u32);
+            assert_eq!(td.align(), std::mem::align_of::<rtdt::String>() as u32);
         }
         Ok(())
     }
@@ -799,9 +804,10 @@ mod tests {
         let tydesc = table.get_or_create(&ty_data);
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Data);
-            assert_eq!((*tydesc).size, std::mem::size_of::<rtdt::Data>() as u32);
-            assert_eq!((*tydesc).align, std::mem::align_of::<rtdt::Data>() as u32);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Data);
+            assert_eq!(td.size(), std::mem::size_of::<rtdt::Data>() as u32);
+            assert_eq!(td.align(), std::mem::align_of::<rtdt::Data>() as u32);
         }
         Ok(())
     }
@@ -815,9 +821,10 @@ mod tests {
         let tydesc = table.get_or_create(&ty_error);
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Error);
-            assert_eq!((*tydesc).size, std::mem::size_of::<rtdt::Error>() as u32);
-            assert_eq!((*tydesc).align, std::mem::align_of::<rtdt::Error>() as u32);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Error);
+            assert_eq!(td.size(), std::mem::size_of::<rtdt::Error>() as u32);
+            assert_eq!(td.align(), std::mem::align_of::<rtdt::Error>() as u32);
         }
         Ok(())
     }
@@ -832,13 +839,16 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Tuple);
-            let tuple_info = &(*tydesc).type_info.tuple;
-            assert_eq!(tuple_info.num_fields, 2);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Tuple);
+            let tuple_info = td.tuple_info();
+            assert_eq!(tuple_info.num_fields(), 2);
 
-            let fields = std::slice::from_raw_parts(tuple_info.fields, 2);
-            assert_eq!((*fields[0].tydesc).type_tag, rtdt::TyTag::Bool);
-            assert_eq!((*fields[1].tydesc).type_tag, rtdt::TyTag::U32);
+            let fields = tuple_info.fields();
+            let field0_td = rtdt::TyDescRef::from_ptr(fields[0].tydesc);
+            let field1_td = rtdt::TyDescRef::from_ptr(fields[1].tydesc);
+            assert_eq!(field0_td.type_tag(), rtdt::TyTag::Bool);
+            assert_eq!(field1_td.type_tag(), rtdt::TyTag::U32);
 
             // Check layout computed offsets.
             assert_eq!(fields[0].offset, 0);
@@ -857,13 +867,16 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Struct);
-            let struct_info = &(*tydesc).type_info.struct_;
-            assert_eq!(struct_info.num_fields, 2);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Struct);
+            let struct_info = td.struct_info();
+            assert_eq!(struct_info.num_fields(), 2);
 
-            let fields = std::slice::from_raw_parts(struct_info.fields, 2);
-            assert_eq!((*fields[0].tydesc).type_tag, rtdt::TyTag::U32);
-            assert_eq!((*fields[1].tydesc).type_tag, rtdt::TyTag::U32);
+            let fields = struct_info.fields();
+            let field0_td = rtdt::TyDescRef::from_ptr(fields[0].tydesc);
+            let field1_td = rtdt::TyDescRef::from_ptr(fields[1].tydesc);
+            assert_eq!(field0_td.type_tag(), rtdt::TyTag::U32);
+            assert_eq!(field1_td.type_tag(), rtdt::TyTag::U32);
 
             // Check field names.
             let name0 = std::slice::from_raw_parts(fields[0].name, fields[0].name_len as usize);
@@ -884,11 +897,12 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Enum);
-            let enum_info = &(*tydesc).type_info.enum_;
-            assert_eq!(enum_info.num_variants, 2);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Enum);
+            let enum_info = td.enum_info();
+            assert_eq!(enum_info.num_variants(), 2);
 
-            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let variants = enum_info.variants();
             let name0 = std::slice::from_raw_parts(variants[0].name, variants[0].name_len as usize);
             let name1 = std::slice::from_raw_parts(variants[1].name, variants[1].name_len as usize);
             assert_eq!(name0, b"Ok");
@@ -911,19 +925,22 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Enum);
-            let enum_info = &(*tydesc).type_info.enum_;
-            assert_eq!(enum_info.num_variants, 2);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Enum);
+            let enum_info = td.enum_info();
+            assert_eq!(enum_info.num_variants(), 2);
 
-            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let variants = enum_info.variants();
 
             // Ok variant has u32 payload.
             assert!(!variants[0].payload.is_null());
-            assert_eq!((*variants[0].payload).type_tag, rtdt::TyTag::U32);
+            let payload0_td = rtdt::TyDescRef::from_ptr(variants[0].payload);
+            assert_eq!(payload0_td.type_tag(), rtdt::TyTag::U32);
 
             // Err variant has string payload.
             assert!(!variants[1].payload.is_null());
-            assert_eq!((*variants[1].payload).type_tag, rtdt::TyTag::String);
+            let payload1_td = rtdt::TyDescRef::from_ptr(variants[1].payload);
+            assert_eq!(payload1_td.type_tag(), rtdt::TyTag::String);
         }
         Ok(())
     }
@@ -938,13 +955,14 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::List);
-            assert_eq!((*tydesc).size, std::mem::size_of::<rtdt::List>() as u32);
-            assert_eq!((*tydesc).align, std::mem::align_of::<rtdt::List>() as u32);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::List);
+            assert_eq!(td.size(), std::mem::size_of::<rtdt::List>() as u32);
+            assert_eq!(td.align(), std::mem::align_of::<rtdt::List>() as u32);
 
-            let list_info = &(*tydesc).type_info.list;
-            assert!(!list_info.element_tydesc.is_null());
-            assert_eq!((*list_info.element_tydesc).type_tag, rtdt::TyTag::U32);
+            let element_tydesc = td.list_element_ty();
+            let element_td = rtdt::TyDescRef::from_ptr(element_tydesc.as_ptr());
+            assert_eq!(element_td.type_tag(), rtdt::TyTag::U32);
         }
         Ok(())
     }
@@ -959,15 +977,17 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Map);
-            assert_eq!((*tydesc).size, std::mem::size_of::<rtdt::Map>() as u32);
-            assert_eq!((*tydesc).align, std::mem::align_of::<rtdt::Map>() as u32);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Map);
+            assert_eq!(td.size(), std::mem::size_of::<rtdt::Map>() as u32);
+            assert_eq!(td.align(), std::mem::align_of::<rtdt::Map>() as u32);
 
-            let map_info = &(*tydesc).type_info.map;
-            assert!(!map_info.key_tydesc.is_null());
-            assert!(!map_info.value_tydesc.is_null());
-            assert_eq!((*map_info.key_tydesc).type_tag, rtdt::TyTag::U32);
-            assert_eq!((*map_info.value_tydesc).type_tag, rtdt::TyTag::String);
+            let key_tydesc = td.map_key_ty();
+            let value_tydesc = td.map_value_ty();
+            let key_td = rtdt::TyDescRef::from_ptr(key_tydesc.as_ptr());
+            let value_td = rtdt::TyDescRef::from_ptr(value_tydesc.as_ptr());
+            assert_eq!(key_td.type_tag(), rtdt::TyTag::U32);
+            assert_eq!(value_td.type_tag(), rtdt::TyTag::String);
         }
         Ok(())
     }
@@ -982,13 +1002,14 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Set);
-            assert_eq!((*tydesc).size, std::mem::size_of::<rtdt::Set>() as u32);
-            assert_eq!((*tydesc).align, std::mem::align_of::<rtdt::Set>() as u32);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Set);
+            assert_eq!(td.size(), std::mem::size_of::<rtdt::Set>() as u32);
+            assert_eq!(td.align(), std::mem::align_of::<rtdt::Set>() as u32);
 
-            let set_info = &(*tydesc).type_info.set;
-            assert!(!set_info.element_tydesc.is_null());
-            assert_eq!((*set_info.element_tydesc).type_tag, rtdt::TyTag::U32);
+            let element_tydesc = td.set_element_ty();
+            let element_td = rtdt::TyDescRef::from_ptr(element_tydesc.as_ptr());
+            assert_eq!(element_td.type_tag(), rtdt::TyTag::U32);
         }
         Ok(())
     }
@@ -1003,13 +1024,14 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Option);
-            assert!((*tydesc).size > 0);
-            assert!((*tydesc).align > 0);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Option);
+            assert!(td.size() > 0);
+            assert!(td.align() > 0);
 
-            let option_info = &(*tydesc).type_info.option;
-            assert!(!option_info.inner_tydesc.is_null());
-            assert_eq!((*option_info.inner_tydesc).type_tag, rtdt::TyTag::U32);
+            let inner_tydesc = td.option_inner_ty();
+            let inner_td = rtdt::TyDescRef::from_ptr(inner_tydesc.as_ptr());
+            assert_eq!(inner_td.type_tag(), rtdt::TyTag::U32);
         }
         Ok(())
     }
@@ -1024,13 +1046,14 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Result);
-            assert!((*tydesc).size > 0);
-            assert!((*tydesc).align > 0);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Result);
+            assert!(td.size() > 0);
+            assert!(td.align() > 0);
 
-            let result_info = &(*tydesc).type_info.result;
-            assert!(!result_info.ok_tydesc.is_null());
-            assert_eq!((*result_info.ok_tydesc).type_tag, rtdt::TyTag::U32);
+            let ok_tydesc = td.result_ok_ty();
+            let ok_td = rtdt::TyDescRef::from_ptr(ok_tydesc.as_ptr());
+            assert_eq!(ok_td.type_tag(), rtdt::TyTag::U32);
         }
         Ok(())
     }
@@ -1065,19 +1088,22 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Tuple);
-            let tuple_info = &(*tydesc).type_info.tuple;
-            assert_eq!(tuple_info.num_fields, 2);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Tuple);
+            let tuple_info = td.tuple_info();
+            assert_eq!(tuple_info.num_fields(), 2);
 
-            let fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let fields = tuple_info.fields();
 
             // Both fields should be tuples.
-            assert_eq!((*fields[0].tydesc).type_tag, rtdt::TyTag::Tuple);
-            assert_eq!((*fields[1].tydesc).type_tag, rtdt::TyTag::Tuple);
+            let field0_td = rtdt::TyDescRef::from_ptr(fields[0].tydesc);
+            let field1_td = rtdt::TyDescRef::from_ptr(fields[1].tydesc);
+            assert_eq!(field0_td.type_tag(), rtdt::TyTag::Tuple);
+            assert_eq!(field1_td.type_tag(), rtdt::TyTag::Tuple);
 
             // Check nested tuple structure.
-            let nested_info = &(*fields[0].tydesc).type_info.tuple;
-            assert_eq!(nested_info.num_fields, 2);
+            let nested_info = field0_td.tuple_info();
+            assert_eq!(nested_info.num_fields(), 2);
         }
         Ok(())
     }
@@ -1092,12 +1118,15 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::Option);
-            let option_info = &(*tydesc).type_info.option;
-            assert_eq!((*option_info.inner_tydesc).type_tag, rtdt::TyTag::List);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::Option);
+            let inner_tydesc = td.option_inner_ty();
+            let inner_td = rtdt::TyDescRef::from_ptr(inner_tydesc.as_ptr());
+            assert_eq!(inner_td.type_tag(), rtdt::TyTag::List);
 
-            let list_info = &(*option_info.inner_tydesc).type_info.list;
-            assert_eq!((*list_info.element_tydesc).type_tag, rtdt::TyTag::U32);
+            let element_tydesc = inner_td.list_element_ty();
+            let element_td = rtdt::TyDescRef::from_ptr(element_tydesc.as_ptr());
+            assert_eq!(element_td.type_tag(), rtdt::TyTag::U32);
         }
         Ok(())
     }
@@ -1112,12 +1141,15 @@ mod tests {
         let tydesc = table.get_or_create(root_type.ty(&db));
 
         unsafe {
-            assert_eq!((*tydesc).type_tag, rtdt::TyTag::List);
-            let list_info = &(*tydesc).type_info.list;
-            assert_eq!((*list_info.element_tydesc).type_tag, rtdt::TyTag::Option);
+            let td = rtdt::TyDescRef::from_ptr(tydesc);
+            assert_eq!(td.type_tag(), rtdt::TyTag::List);
+            let element_tydesc = td.list_element_ty();
+            let element_td = rtdt::TyDescRef::from_ptr(element_tydesc.as_ptr());
+            assert_eq!(element_td.type_tag(), rtdt::TyTag::Option);
 
-            let option_info = &(*list_info.element_tydesc).type_info.option;
-            assert_eq!((*option_info.inner_tydesc).type_tag, rtdt::TyTag::U32);
+            let inner_tydesc = element_td.option_inner_ty();
+            let inner_td = rtdt::TyDescRef::from_ptr(inner_tydesc.as_ptr());
+            assert_eq!(inner_td.type_tag(), rtdt::TyTag::U32);
         }
         Ok(())
     }
