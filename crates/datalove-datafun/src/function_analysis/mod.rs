@@ -127,7 +127,11 @@ pub fn analyze_function<'db>(
     let frame_layout = build_frame_layout(db, func, slots, tycheck_result);
 
     // Phase 8: Validation.
-    let errors = validation::check_use_before_init(db, func, slots, init_analysis, control_flow);
+    let mut errors = Vec::new();
+    errors.extend(validation::check_use_before_init(db, func, slots, init_analysis, control_flow));
+    errors.extend(validation::check_double_move(db, func, move_info));
+    errors.extend(validation::check_use_after_move(db, func, slots, move_info));
+    errors.extend(validation::check_uninitialized_return(db, func, slots, init_analysis, control_flow));
 
     FunctionAnalysis::new(
         db,

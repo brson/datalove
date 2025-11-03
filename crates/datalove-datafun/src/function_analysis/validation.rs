@@ -9,11 +9,11 @@
 
 use rmx::prelude::*;
 use std::collections::HashMap;
-use super::{SlotId, ProgramPoint, StmtId, Position, InitState, SlotKind};
+use super::{SlotId, ProgramPoint, StmtId, Position, InitState, SlotKind, ExprId, BlockId};
 use super::cfg::ControlFlowGraph;
 use super::liveness::InitializationAnalysis;
 use super::slot_allocation::AllocatedSlot;
-use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind};
+use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind, ParamMode};
 
 /// Analysis error from validation passes.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -209,6 +209,295 @@ fn collect_reads_from_expr<'db>(
     }
 }
 
+/// Check for double-move errors.
+///
+/// Detects when the same slot is moved multiple times.
+/// Note: Copy moves are not considered real moves for this check.
+pub fn check_double_move<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    move_info: super::MoveInfo<'db>,
+) -> Vec<AnalysisError> {
+    use std::collections::HashMap;
+    use super::{MoveKind};
+
+    let mut errors = Vec::new();
+
+    // Build a map from ExprId to StmtId.
+    let expr_to_stmt = build_expr_to_stmt_map(db, func);
+
+    // Group moves by slot_id, filtering out Copy moves.
+    let mut moves_by_slot: HashMap<SlotId, Vec<super::MoveOp<'db>>> = HashMap::new();
+    for move_op in move_info.moves(db) {
+        // Skip Copy moves - they don't consume the value.
+        if move_op.move_kind(db) == MoveKind::Copy {
+            continue;
+        }
+
+        moves_by_slot
+            .entry(move_op.slot_id(db))
+            .or_insert_with(Vec::new)
+            .push(*move_op);
+    }
+
+    // Check for slots with multiple moves.
+    for (slot_id, moves) in moves_by_slot {
+        if moves.len() >= 2 {
+            // Create error with first two moves.
+            let first = &moves[0];
+            let second = &moves[1];
+
+            let first_stmt = expr_to_stmt.get(&first.expr_id(db))
+                .copied()
+                .unwrap_or(StmtId(0));
+            let second_stmt = expr_to_stmt.get(&second.expr_id(db))
+                .copied()
+                .unwrap_or(StmtId(0));
+
+            errors.push(AnalysisError::DoubleMove {
+                slot: slot_id,
+                first_move: ProgramPoint {
+                    stmt_id: first_stmt,
+                    position: Position::Before,
+                },
+                second_move: ProgramPoint {
+                    stmt_id: second_stmt,
+                    position: Position::Before,
+                },
+            });
+        }
+    }
+
+    errors
+}
+
+/// Check for use-after-move errors.
+///
+/// Detects reads that occur after a slot has been moved.
+/// Note: Copy moves are not considered real moves for this check.
+pub fn check_use_after_move<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    slots: &[AllocatedSlot<'db>],
+    move_info: super::MoveInfo<'db>,
+) -> Vec<AnalysisError> {
+    use std::collections::HashMap;
+    use super::MoveKind;
+
+    let mut errors = Vec::new();
+
+    // Build a map from ExprId to StmtId.
+    let expr_to_stmt = build_expr_to_stmt_map(db, func);
+
+    // Build a map of SlotId -> Vec<ProgramPoint> for all moves.
+    let mut moves_by_slot: HashMap<SlotId, Vec<ProgramPoint>> = HashMap::new();
+    for move_op in move_info.moves(db) {
+        // Skip Copy moves - they don't consume the value.
+        if move_op.move_kind(db) == MoveKind::Copy {
+            continue;
+        }
+
+        let stmt_id = expr_to_stmt.get(&move_op.expr_id(db))
+            .copied()
+            .unwrap_or(StmtId(0));
+
+        let move_point = ProgramPoint {
+            stmt_id,
+            position: Position::Before,
+        };
+
+        moves_by_slot
+            .entry(move_op.slot_id(db))
+            .or_insert_with(Vec::new)
+            .push(move_point);
+    }
+
+    // Collect all reads.
+    let reads = collect_all_reads(db, func, slots);
+
+    // Check each read to see if it follows a move.
+    for read in reads {
+        if let Some(move_points) = moves_by_slot.get(&read.slot_id) {
+            // Check if any move happened before this read.
+            for &move_point in move_points {
+                if program_point_before(move_point, read.location) {
+                    errors.push(AnalysisError::UseAfterMove {
+                        slot: read.slot_id,
+                        use_location: read.location,
+                        move_location: move_point,
+                    });
+                    break; // Only report first move violation.
+                }
+            }
+        }
+    }
+
+    errors
+}
+
+/// Check if point A comes before point B in program order.
+fn program_point_before(a: ProgramPoint, b: ProgramPoint) -> bool {
+    if a.stmt_id.0 < b.stmt_id.0 {
+        true
+    } else if a.stmt_id.0 == b.stmt_id.0 {
+        // Same statement - check position.
+        matches!((a.position, b.position), (Position::Before, Position::After))
+    } else {
+        false
+    }
+}
+
+/// Check for uninitialized-return errors.
+///
+/// Detects return from function with uninitialized Out parameters.
+pub fn check_uninitialized_return<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    slots: &[AllocatedSlot<'db>],
+    init: InitializationAnalysis<'db>,
+    cfg: ControlFlowGraph<'db>,
+) -> Vec<AnalysisError> {
+    use super::cfg::Terminator;
+
+    let mut errors = Vec::new();
+
+    // Find all exit blocks (those with Return or TryReturn terminators).
+    let exit_blocks: Vec<BlockId> = cfg.blocks(db)
+        .iter()
+        .filter(|block| {
+            matches!(block.terminator, Terminator::Return | Terminator::TryReturn)
+        })
+        .map(|block| block.block_id)
+        .collect();
+
+    // For each exit block, check Out parameters are initialized.
+    for block_id in exit_blocks {
+        // Identify Out parameters.
+        for param in func.params(db) {
+            if param.mode(db) != ParamMode::Out {
+                continue;
+            }
+
+            // Find the slot for this parameter.
+            let param_name = param.name(db);
+            let slot = slots.iter().find(|s| s.name(db) == Some(param_name));
+
+            if let Some(slot_info) = slot {
+                let slot_id = slot_info.slot_id(db);
+
+                // Check initialization state at block exit.
+                if let Some(state) = init.get_exit_state(db, block_id, slot_id) {
+                    match state {
+                        InitState::Never | InitState::Sometimes => {
+                            errors.push(AnalysisError::UninitializedReturn {
+                                slot: slot_id,
+                                paths: vec![ProgramPoint {
+                                    stmt_id: StmtId(0), // Placeholder - would need block's last stmt.
+                                    position: Position::After,
+                                }],
+                            });
+                        }
+                        InitState::Always => {
+                            // OK - Out parameter is properly initialized.
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    errors
+}
+
+/// Build a map from ExprId to StmtId.
+fn build_expr_to_stmt_map<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+) -> HashMap<ExprId, StmtId> {
+    let mut map = HashMap::new();
+    let mut expr_counter = 0u32;
+    let mut stmt_counter = 0u32;
+
+    walk_for_expr_mapping(db, func.body(db), &mut map, &mut expr_counter, &mut stmt_counter);
+
+    map
+}
+
+/// Walk statements to map ExprIds to StmtIds.
+fn walk_for_expr_mapping<'db>(
+    db: &'db dyn crate::Db,
+    statements: &[Statement<'db>],
+    map: &mut HashMap<ExprId, StmtId>,
+    expr_counter: &mut u32,
+    stmt_counter: &mut u32,
+) {
+    for stmt in statements {
+        let stmt_id = StmtId(*stmt_counter);
+        *stmt_counter += 1;
+
+        match stmt {
+            Statement::Let(let_stmt) => {
+                map_expr_ids(db, let_stmt.value(db), stmt_id, map, expr_counter);
+            }
+            Statement::Ret(ret_stmt) => {
+                map_expr_ids(db, ret_stmt.value(db), stmt_id, map, expr_counter);
+            }
+            Statement::If(if_stmt) => {
+                map_expr_ids(db, if_stmt.condition(db), stmt_id, map, expr_counter);
+                walk_for_expr_mapping(db, if_stmt.then_body(db), map, expr_counter, stmt_counter);
+                if let Some(else_body) = if_stmt.else_body(db) {
+                    walk_for_expr_mapping(db, else_body, map, expr_counter, stmt_counter);
+                }
+            }
+            Statement::Fun(_) | Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
+                // No expressions.
+            }
+        }
+    }
+}
+
+/// Map all expression IDs in an expression to a statement ID.
+fn map_expr_ids<'db>(
+    db: &'db dyn crate::Db,
+    expr: ExprFun<'db>,
+    stmt_id: StmtId,
+    map: &mut HashMap<ExprId, StmtId>,
+    expr_counter: &mut u32,
+) {
+    let expr_id = ExprId(*expr_counter);
+    *expr_counter += 1;
+    map.insert(expr_id, stmt_id);
+
+    match expr.expr(db) {
+        ExprFunKind::BinOp(binop) => {
+            map_expr_ids(db, binop.lhs(db), stmt_id, map, expr_counter);
+            map_expr_ids(db, binop.rhs(db), stmt_id, map, expr_counter);
+        }
+        ExprFunKind::UnaryOp(unary) => {
+            map_expr_ids(db, unary.operand(db), stmt_id, map, expr_counter);
+        }
+        ExprFunKind::FunctionCall(call) => {
+            for arg in call.args(db) {
+                map_expr_ids(db, *arg, stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::Tuple(tuple) => {
+            for elem in tuple.elements(db) {
+                map_expr_ids(db, *elem, stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::TryOption(try_opt) => {
+            map_expr_ids(db, try_opt.operand(db), stmt_id, map, expr_counter);
+        }
+        ExprFunKind::TryResult(try_res) => {
+            map_expr_ids(db, try_res.operand(db), stmt_id, map, expr_counter);
+        }
+        ExprFunKind::Name(_) | ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
+            // No nested expressions.
+        }
+    }
+}
+
 /// Build a map of initialization states for each (statement, slot) pair.
 ///
 /// This is a simplified linear walk that doesn't follow the full CFG.
@@ -351,7 +640,8 @@ mod tests {
     use bct::input::Source;
     use crate::function_analysis::cfg::build_cfg;
     use crate::function_analysis::slot_allocation::allocate_slots;
-    use crate::function_analysis::liveness::analyze_initialization;
+    use crate::function_analysis::liveness::{analyze_initialization, compute_live_ranges};
+    use crate::function_analysis::moves::compute_move_info;
 
     fn parse_function<'db>(db: &'db dyn crate::Db, source_code: &str) -> StmtFun<'db> {
         let source = Source::new(db, S(source_code));
@@ -479,6 +769,261 @@ end fun
         let errors = check_use_before_init(db, func, &slot_alloc.slots(db), init, cfg);
 
         // Should have no errors - parameters are always initialized.
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn test_double_move_detects_error() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32)
+    fun helper(a: In u32): u32
+        ret a
+    end fun
+    let y = helper(x)
+    let z = helper(x)
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+
+        let errors = check_double_move(db, func, move_info);
+
+        // Should detect double move of x.
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            AnalysisError::DoubleMove { slot, .. } => {
+                let x_name = bct::text::InternedText::new(db, "x");
+                let x_slot = slot_alloc.slots(db)
+                    .iter()
+                    .find(|s| s.name(db) == Some(x_name))
+                    .unwrap();
+                assert_eq!(*slot, x_slot.slot_id(db));
+            }
+            _ => panic!("Expected DoubleMove error"),
+        }
+    }
+
+    #[test]
+    fn test_double_move_different_slots_ok() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32, y: In u32)
+    fun helper(a: In u32): u32
+        ret a
+    end fun
+    let a = helper(x)
+    let b = helper(y)
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+
+        let errors = check_double_move(db, func, move_info);
+
+        // Should have no errors - moving different slots is fine.
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn test_double_move_single_move_ok() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(x: In u32)
+    fun helper(a: In u32): u32
+        ret a
+    end fun
+    let y = helper(x)
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+
+        let errors = check_double_move(db, func, move_info);
+
+        // Should have no errors - single move is fine.
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn test_use_after_move_detects_error() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(x: In u32)
+    fun helper(a: In u32): u32
+        ret a
+    end fun
+    let y = helper(x)
+    let z = x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+
+        let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
+
+        // Should detect error: 'x' is read in 'let z = x' after being moved to helper().
+        assert!(errors.len() > 0, "Expected at least one use-after-move error");
+        let has_x_error = errors.iter().any(|e| {
+            if let AnalysisError::UseAfterMove { slot, .. } = e {
+                let x_name = bct::text::InternedText::new(db, "x");
+                slot_alloc.slots(db)
+                    .iter()
+                    .any(|s| s.slot_id(db) == *slot && s.name(db) == Some(x_name))
+            } else {
+                false
+            }
+        });
+        assert!(has_x_error, "Expected use-after-move error for slot 'x'");
+    }
+
+    #[test]
+    fn test_use_after_move_single_use_ok() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(x: In u32)
+    fun helper(a: In u32): u32
+        ret a
+    end fun
+    let y = helper(x)
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+
+        let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
+
+        // Should have no errors - 'x' is only used once.
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn test_use_after_move_in_branch() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(x: In u32, cond: In u32)
+    fun helper(a: In u32): u32
+        ret a
+    end fun
+    if cond
+        let y = helper(x)
+    end if
+    let z = x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+
+        let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
+
+        // Conservative: should detect error even though move is conditionally executed.
+        // The use of 'x' after the if-statement comes after the move inside the if-statement.
+        assert!(errors.len() > 0, "Expected use-after-move error when move is in branch");
+    }
+
+    #[test]
+    fn test_uninitialized_return_detects_error() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(x: In u32, out result: u32)
+    let y = x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+
+        let errors = check_uninitialized_return(db, func, &slot_alloc.slots(db), init, cfg);
+
+        // Should detect error: Out parameter 'result' is not initialized.
+        assert!(errors.len() > 0, "Expected uninitialized-return error");
+        let has_result_error = errors.iter().any(|e| {
+            if let AnalysisError::UninitializedReturn { slot, .. } = e {
+                let result_name = bct::text::InternedText::new(db, "result");
+                slot_alloc.slots(db)
+                    .iter()
+                    .any(|s| s.slot_id(db) == *slot && s.name(db) == Some(result_name))
+            } else {
+                false
+            }
+        });
+        assert!(has_result_error, "Expected uninitialized-return error for 'result'");
+    }
+
+    #[test]
+    fn test_uninitialized_return_conditional() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(x: In u32, out result: u32)
+    if x
+        let result = @42
+    end if
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+
+        let errors = check_uninitialized_return(db, func, &slot_alloc.slots(db), init, cfg);
+
+        // Should detect error: Out parameter 'result' is only sometimes initialized.
+        assert!(errors.len() > 0, "Expected uninitialized-return error for conditional init");
+    }
+
+    #[test]
+    fn test_uninitialized_return_properly_initialized() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(x: In u32, out result: u32)
+    let result = x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+
+        let errors = check_uninitialized_return(db, func, &slot_alloc.slots(db), init, cfg);
+
+        // Should have no errors - Out parameter is properly initialized.
         assert_eq!(errors.len(), 0);
     }
 }

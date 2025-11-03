@@ -107,11 +107,20 @@ pub fn analyze_initialization<'db>(
     let mut entry_map: HashMap<BlockId, Vec<InitState>> = HashMap::new();
     let mut exit_map: HashMap<BlockId, Vec<InitState>> = HashMap::new();
 
-    // Initial state: Reference slots are always initialized, others are never initialized.
+    // Initial state: Reference slots (except Out parameters) are always initialized,
+    // others are never initialized. Out parameters start uninitialized.
     let initial_state: Vec<InitState> = slots
         .iter()
         .map(|slot| {
             if slot.kind(db) == SlotKind::Reference {
+                // Check if this is an Out parameter.
+                if let Some(slot_name) = slot.name(db) {
+                    for param in func.params(db) {
+                        if param.name(db) == slot_name && param.mode(db) == crate::ast::ParamMode::Out {
+                            return InitState::Never;
+                        }
+                    }
+                }
                 InitState::Always
             } else {
                 InitState::Never

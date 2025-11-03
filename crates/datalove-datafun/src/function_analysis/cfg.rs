@@ -251,6 +251,7 @@ impl CfgBuilder {
                     }
 
                     // Continue from join block.
+                    // Create the join block immediately (even if empty) since edges point to it.
                     current_block = join_block;
                     current_stmts = Vec::new();
                 }
@@ -265,18 +266,26 @@ impl CfgBuilder {
             }
         }
 
-        // If we have remaining statements, create a final block.
-        if !current_stmts.is_empty() {
+        // Create a final block for current_block (even if empty).
+        // This is necessary because edges may already point to current_block
+        // (e.g., join_block after if-statement), and a block may not have been
+        // created yet if we just have simple statements.
+        // Check for duplicates and merge if needed.
+        if let Some(existing) = self.blocks.iter_mut().find(|b| b.block_id == current_block) {
+            // Block already exists - shouldn't normally happen, but handle it.
+            // Update its statements if we have more.
+            if !current_stmts.is_empty() {
+                existing.statements.extend(current_stmts);
+            }
+        } else {
+            // Block doesn't exist - create it.
             self.add_block(BasicBlock {
                 block_id: current_block,
                 statements: current_stmts,
                 terminator: Terminator::Return, // Implicit return at end
             });
-            (Some(current_block), true)
-        } else {
-            // No remaining statements - return current block but indicate no block was created.
-            (Some(current_block), false)
         }
+        (Some(current_block), true)
     }
 
     /// Check if an expression may return early (contains ? or !).
