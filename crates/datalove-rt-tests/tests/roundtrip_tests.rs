@@ -138,7 +138,7 @@ fn compile_and_instantiate<'db>(
     source_text: &str,
 ) -> Result<(datalit::instantiate2::InstantiatedValue, datalit::tycheck::TypecheckResult<'db>), String> {
     let source = bct::input::Source::new(db, source_text.S());
-    let (parsed, _resolved, typechecked) = compile(db, source);
+    let (_parsed, _resolved, typechecked) = compile(db, source);
 
     // Check if we have a root type.
     if typechecked.root_type(db).is_none() {
