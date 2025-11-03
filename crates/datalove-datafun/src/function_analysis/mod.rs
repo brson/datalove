@@ -230,7 +230,12 @@ fn get_local_type<'db>(
         for stmt in func.body(db) {
             if let Statement::Let(let_stmt) = stmt {
                 if let_stmt.name(db) == name {
-                    // Get the RHS expression and its type.
+                    // First, check if there's an explicit type hint.
+                    if let Some(type_hint) = let_stmt.type_hint(db) {
+                        return convert_type_hint_to_type(db, type_hint);
+                    }
+
+                    // No type hint - get the type from the RHS expression.
                     let value_expr = let_stmt.value(db);
                     let expr_id = value_expr.as_id();
                     let index = expr_id.index() as usize;

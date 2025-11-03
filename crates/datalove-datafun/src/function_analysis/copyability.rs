@@ -197,7 +197,12 @@ fn get_local_type<'db>(
         for stmt in func.body(db) {
             if let Statement::Let(let_stmt) = stmt {
                 if let_stmt.name(db) == name {
-                    // Get the RHS expression and its type.
+                    // First, check if there's an explicit type hint.
+                    if let Some(type_hint) = let_stmt.type_hint(db) {
+                        return convert_type_hint_to_type(db, type_hint);
+                    }
+
+                    // No type hint - get the type from the RHS expression.
                     let value_expr = let_stmt.value(db);
                     let expr_id = value_expr.as_id();
                     let index = expr_id.index() as usize;
@@ -273,7 +278,309 @@ fn create_placeholder_type<'db>(
 
 #[cfg(test)]
 mod tests {
-    // Unit tests will be added in Phase 2 when integrated with move tracking.
-    // The move tracking integration tests will demonstrate that copyability
-    // detection works correctly.
+    use super::*;
+    use bct::input::Source;
+    use bct::text::InternedText;
+    use crate::ast::{Statement, StmtFun};
+    use crate::function_analysis::slot_allocation::allocate_slots;
+
+    /// Salsa tracked function to test if a variable is copy type.
+    ///
+    /// This must be tracked to properly create salsa tracked structs.
+    #[salsa::tracked]
+    fn test_var_is_copy<'db>(
+        db: &'db dyn crate::Db,
+        source_code: &'db str,
+        var_name: &'db str,
+    ) -> bool {
+        let source = Source::new(db, S(source_code));
+        let script = crate::parser::parse_for_test(db, source);
+        let tycheck_result = crate::tycheck::type_check(db, script, vec![], vec![]);
+        let statements = script.statements(db);
+
+        // Find the function.
+        let func = statements.iter().find_map(|stmt| {
+            if let Statement::Fun(fun) = stmt {
+                Some(*fun)
+            } else {
+                None
+            }
+        }).expect("No function found in source code");
+
+        // Find the slot and get its type.
+        let slot_alloc = allocate_slots(db, func);
+        let slots = slot_alloc.slots(db);
+        let name = InternedText::new(db, var_name);
+
+        for slot in slots {
+            if slot.name(db) == Some(name) {
+                let ty = get_slot_type(db, slot, tycheck_result, func);
+                return is_copy_type(db, ty);
+            }
+        }
+        panic!("Variable {} not found", var_name);
+    }
+
+    // Group A: Primitive Copy Types
+
+    #[test]
+    fn test_primitives_are_copy() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(): bool
+    let a = true
+    let b: u8 = @5
+    let c: i8 = @-5
+    let d: u16 = @300
+    let e: i16 = @-300
+    let f = @42u32
+    let g = @-42i32
+    let h = @1000000u64
+    let i = @-1000000i64
+    let j = @3.14f32
+    ret a
+end fun
+        "#;
+
+        // All primitives should be copy.
+        assert!(test_var_is_copy(db, source, "a"), "bool should be copy");
+        assert!(test_var_is_copy(db, source, "b"), "u8 should be copy");
+        assert!(test_var_is_copy(db, source, "c"), "i8 should be copy");
+        assert!(test_var_is_copy(db, source, "d"), "u16 should be copy");
+        assert!(test_var_is_copy(db, source, "e"), "i16 should be copy");
+        assert!(test_var_is_copy(db, source, "f"), "u32 should be copy");
+        assert!(test_var_is_copy(db, source, "g"), "i32 should be copy");
+        assert!(test_var_is_copy(db, source, "h"), "u64 should be copy");
+        assert!(test_var_is_copy(db, source, "i"), "i64 should be copy");
+        assert!(test_var_is_copy(db, source, "j"), "f32 should be copy");
+    }
+
+    // Group B: Heap-Allocated Linear Types
+
+    #[test]
+    fn test_heap_types_not_copy() {
+        let ref db = crate::Database::default();
+
+        // Test with parameters which definitely have type information.
+        let source = r#"
+fun test(a: String, b: [Int]): String
+    ret a
+end fun
+        "#;
+
+        // String and List are heap-allocated, should not be copy.
+        assert!(!test_var_is_copy(db, source, "a"), "String parameter should not be copy");
+        assert!(!test_var_is_copy(db, source, "b"), "List parameter should not be copy");
+    }
+
+    #[test]
+    fn test_list_of_copy_type_still_not_copy() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: [u32]): [u32]
+    ret a
+end fun
+        "#;
+
+        // List<u32> is still heap-allocated even though u32 is copy.
+        assert!(!test_var_is_copy(db, source, "a"),
+                "List<copy> should not be copy (container semantics)");
+    }
+
+    // Group C: Option Types
+
+    #[test]
+    fn test_option_copy_when_inner_copy() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: u32?): u32?
+    ret a
+end fun
+        "#;
+
+        // Option<u32> should be copy.
+        assert!(test_var_is_copy(db, source, "a"),
+                "Option<copy> should be copy");
+    }
+
+    #[test]
+    fn test_option_not_copy_when_inner_not_copy() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: String?): String?
+    ret a
+end fun
+        "#;
+
+        // Option<String> should not be copy.
+        assert!(!test_var_is_copy(db, source, "a"),
+                "Option<linear> should not be copy");
+    }
+
+    // Group D: Compound Types - Tuples
+
+    #[test]
+    fn test_tuple_all_copy_is_copy() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: (u32, bool, f32)): (u32, bool, f32)
+    ret a
+end fun
+        "#;
+
+        // Tuple with all copy fields should be copy.
+        assert!(test_var_is_copy(db, source, "a"),
+                "Tuple<copy, copy, copy> should be copy");
+    }
+
+    #[test]
+    fn test_tuple_with_linear_field_not_copy() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: (u32, String)): (u32, String)
+    ret a
+end fun
+        "#;
+
+        // Tuple with any linear field should not be copy.
+        assert!(!test_var_is_copy(db, source, "a"),
+                "Tuple with linear field should not be copy");
+    }
+
+    #[test]
+    fn test_nested_tuples_all_copy() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: ((u32, bool), (i32, f32))): ((u32, bool), (i32, f32))
+    ret a
+end fun
+        "#;
+
+        // Nested tuples with all copy fields should be copy.
+        assert!(test_var_is_copy(db, source, "a"),
+                "Nested tuple<copy...> should be copy");
+    }
+
+    #[test]
+    fn test_nested_tuples_with_linear() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(a: ((u32, String), bool)): ((u32, String), bool)
+    ret a
+end fun
+        "#;
+
+        // Nested tuple with linear field deep inside should not be copy.
+        assert!(!test_var_is_copy(db, source, "a"),
+                "Nested tuple with linear field should not be copy");
+    }
+
+    // Group E: Local Variables with Type Hints (verify the bug fix)
+
+    #[test]
+    fn test_local_with_type_hint_string() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(): String
+    let a: String = "hello"
+    ret a
+end fun
+        "#;
+
+        // String local with type hint should not be copy.
+        assert!(!test_var_is_copy(db, source, "a"),
+                "Local String with type hint should not be copy");
+    }
+
+    #[test]
+    fn test_local_with_type_hint_list() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(): [u32]
+    let a: [u32] = [1u32, 2u32, 3u32]
+    ret a
+end fun
+        "#;
+
+        // List local with type hint should not be copy.
+        assert!(!test_var_is_copy(db, source, "a"),
+                "Local List with type hint should not be copy");
+    }
+
+    #[test]
+    fn test_local_with_type_hint_option_copy() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(): u32?
+    let a: u32? = some(42u32)
+    ret a
+end fun
+        "#;
+
+        // Option<u32> local with type hint should be copy.
+        assert!(test_var_is_copy(db, source, "a"),
+                "Local Option<copy> with type hint should be copy");
+    }
+
+    #[test]
+    fn test_local_with_type_hint_option_linear() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(): String?
+    let a: String? = some("hello")
+    ret a
+end fun
+        "#;
+
+        // Option<String> local with type hint should not be copy.
+        assert!(!test_var_is_copy(db, source, "a"),
+                "Local Option<linear> with type hint should not be copy");
+    }
+
+    #[test]
+    fn test_local_with_type_hint_tuple() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(): (u32, String)
+    let a: (u32, String) = (42u32, "hello")
+    ret a
+end fun
+        "#;
+
+        // Tuple with linear field should not be copy.
+        assert!(!test_var_is_copy(db, source, "a"),
+                "Local tuple with type hint should not be copy");
+    }
+
+    #[test]
+    fn test_local_primitive_with_type_hint() {
+        let ref db = crate::Database::default();
+
+        let source = r#"
+fun test(): u32
+    let a: u32 = @42
+    let b: bool = true
+    let c: f32 = @3.14
+    ret a
+end fun
+        "#;
+
+        // Primitive locals with type hints should be copy.
+        assert!(test_var_is_copy(db, source, "a"), "Local u32 with type hint should be copy");
+        assert!(test_var_is_copy(db, source, "b"), "Local bool with type hint should be copy");
+        assert!(test_var_is_copy(db, source, "c"), "Local f32 with type hint should be copy");
+    }
 }
