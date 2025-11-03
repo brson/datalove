@@ -700,6 +700,22 @@ mod tests {
         panic!("No function found in source code");
     }
 
+    fn parse_and_typecheck<'db>(db: &'db dyn crate::Db, source_code: &str) -> (StmtFun<'db>, crate::tycheck::TypecheckResult<'db>) {
+        let source = Source::new(db, S(source_code));
+        let script = crate::parser::parse_for_test(db, source);
+        let tycheck_result = crate::tycheck::type_check(db, script, vec![], vec![]);
+        let statements = script.statements(db);
+
+        // Find the first function statement.
+        for stmt in statements {
+            if let crate::ast::Statement::Fun(fun) = stmt {
+                return (*fun, tycheck_result);
+            }
+        }
+
+        panic!("No function found in source code");
+    }
+
     #[test]
     fn test_use_before_init_detects_error() {
         let ref db = crate::Database::default();
@@ -711,7 +727,7 @@ fun test()
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -745,7 +761,7 @@ fun test()
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -761,7 +777,7 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(cond: In bool)
+fun test(cond: bool)
     if cond
         let x = @42
     end if
@@ -769,7 +785,7 @@ fun test(cond: In bool)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -798,12 +814,12 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32)
+fun test(x: u32)
     let y = x
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -819,8 +835,8 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32)
-    fun helper(a: In u32): u32
+fun test(x: [u32])
+    fun helper(a: [u32]): [u32]
         ret a
     end fun
     let y = helper(x)
@@ -828,12 +844,12 @@ fun test(x: In u32)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         let errors = check_double_move(db, func, move_info);
 
@@ -857,8 +873,8 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32, y: In u32)
-    fun helper(a: In u32): u32
+fun test(x: u32, y: u32)
+    fun helper(a: u32): u32
         ret a
     end fun
     let a = helper(x)
@@ -866,12 +882,12 @@ fun test(x: In u32, y: In u32)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         let errors = check_double_move(db, func, move_info);
 
@@ -884,20 +900,20 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32)
-    fun helper(a: In u32): u32
+fun test(x: u32)
+    fun helper(a: u32): u32
         ret a
     end fun
     let y = helper(x)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         let errors = check_double_move(db, func, move_info);
 
@@ -909,8 +925,8 @@ end fun
     fn test_use_after_move_detects_error() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: In u32)
-    fun helper(a: In u32): u32
+fun test(x: [u32])
+    fun helper(a: [u32]): [u32]
         ret a
     end fun
     let y = helper(x)
@@ -918,12 +934,12 @@ fun test(x: In u32)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
 
@@ -946,20 +962,20 @@ end fun
     fn test_use_after_move_single_use_ok() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: In u32)
-    fun helper(a: In u32): u32
+fun test(x: u32)
+    fun helper(a: u32): u32
         ret a
     end fun
     let y = helper(x)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
 
@@ -971,8 +987,8 @@ end fun
     fn test_use_after_move_in_branch() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: In u32, cond: In u32)
-    fun helper(a: In u32): u32
+fun test(x: [u32], cond: u32)
+    fun helper(a: [u32]): [u32]
         ret a
     end fun
     if cond
@@ -982,12 +998,12 @@ fun test(x: In u32, cond: In u32)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
 
@@ -1000,12 +1016,12 @@ end fun
     fn test_uninitialized_return_detects_error() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: In u32, out result: u32)
+fun test(x: u32, out result: u32)
     let y = x
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1031,14 +1047,14 @@ end fun
     fn test_uninitialized_return_conditional() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: In u32, out result: u32)
+fun test(x: u32, out result: u32)
     if x
         let result = @42
     end if
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1053,12 +1069,12 @@ end fun
     fn test_uninitialized_return_properly_initialized() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: In u32, out result: u32)
+fun test(x: u32, out result: u32)
     let result = x
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1073,13 +1089,13 @@ end fun
     fn test_value_not_used_detects_error() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: In u32): u32
+fun test(x: u32): u32
     let unused = @42
     ret x
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1106,13 +1122,13 @@ end fun
     fn test_value_not_used_all_values_used() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: In u32): u32
+fun test(x: u32): u32
     let y = x
     ret y
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1128,12 +1144,12 @@ end fun
     fn test_value_not_used_parameter_ok() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(unused_param: In u32): u32
+fun test(unused_param: u32): u32
     ret @0
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));

@@ -7,6 +7,7 @@ use super::cfg::{ControlFlowGraph, Terminator};
 use super::liveness::{LiveRanges, InitializationAnalysis};
 use super::moves::MoveInfo;
 use super::slot_allocation::AllocatedSlot;
+use super::copyability::{is_copy_type, get_slot_type};
 use crate::ast::StmtFun;
 
 /// Drop points for all slots.
@@ -43,6 +44,7 @@ impl<'db> DropPoints<'db> {
 /// Compute drop points for all slots in a function.
 ///
 /// This identifies where each slot must be dropped to ensure proper resource cleanup.
+/// Copy types are automatically skipped as they don't require cleanup.
 #[salsa::tracked]
 pub fn compute_drop_points<'db>(
     db: &'db dyn crate::Db,
@@ -51,6 +53,7 @@ pub fn compute_drop_points<'db>(
     slots: &'db [AllocatedSlot<'db>],
     init_analysis: InitializationAnalysis<'db>,
     move_info: MoveInfo<'db>,
+    tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> DropPoints<'db> {
     let mut drops = Vec::new();
     let blocks = cfg.blocks(db);
@@ -96,6 +99,12 @@ pub fn compute_drop_points<'db>(
 
                     // If the slot was moved, no drop is needed.
                     if moved_slots.contains(&slot_id) {
+                        continue;
+                    }
+
+                    // If the slot has a copy type, no drop is needed.
+                    let slot_type = get_slot_type(db, slot, tycheck_result, func);
+                    if is_copy_type(db, slot_type) {
                         continue;
                     }
 
@@ -150,6 +159,22 @@ mod tests {
         panic!("No function found in source code");
     }
 
+    fn parse_and_typecheck<'db>(db: &'db dyn crate::Db, source_code: &str) -> (StmtFun<'db>, crate::tycheck::TypecheckResult<'db>) {
+        let source = Source::new(db, S(source_code));
+        let script = crate::parser::parse_for_test(db, source);
+        let tycheck_result = crate::tycheck::type_check(db, script, vec![], vec![]);
+        let statements = script.statements(db);
+
+        // Find the first function statement.
+        for stmt in statements {
+            if let crate::ast::Statement::Fun(fun) = stmt {
+                return (*fun, tycheck_result);
+            }
+        }
+
+        panic!("No function found in source code");
+    }
+
     #[test]
     fn test_drop_simple_local() {
         let ref db = crate::Database::default();
@@ -161,13 +186,13 @@ fun test(): u32
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info, tycheck_result);
 
         // x is moved to the return, so it should NOT have a drop point.
         let drops = drop_points.drops(db);
@@ -187,18 +212,18 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32): u32
+fun test(x: u32): u32
     ret x
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info, tycheck_result);
 
         // Parameters (Reference slots) should never be dropped.
         let drops = drop_points.drops(db);
@@ -219,22 +244,22 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(): u32
-    let x = @42
-    let y = @10
+fun test(): [u32]
+    let x = [42]
+    let y = [10]
     ret x
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info, tycheck_result);
 
-        // x is moved, y is not moved, so y should be dropped.
+        // x is moved, y is not moved and is non-copy, so y should be dropped.
         let drops = drop_points.drops(db);
         let y_name = InternedText::new(db, "y");
         let y_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(y_name)).unwrap();
@@ -252,7 +277,7 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(cond: In bool): u32
+fun test(cond: bool): u32
     let x = @42
     let y = @10
     if cond
@@ -263,13 +288,13 @@ fun test(cond: In bool): u32
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info, tycheck_result);
 
         // Both x and y are moved (x in then branch, y in else branch).
         // Current implementation tracks moves globally, so both are marked as moved.
@@ -285,23 +310,23 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(): u32
-    let a = @1
-    let b = @2
-    let c = @3
+fun test(): [u32]
+    let a = [1]
+    let b = [2]
+    let c = [3]
     ret a
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, move_info, tycheck_result);
 
-        // a is moved, b and c are not moved, so b and c should be dropped.
+        // a is moved, b and c are not moved and are non-copy, so b and c should be dropped.
         let drops = drop_points.drops(db);
 
         let b_name = InternedText::new(db, "b");

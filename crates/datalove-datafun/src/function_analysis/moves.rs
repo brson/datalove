@@ -87,6 +87,7 @@ pub fn compute_move_info<'db>(
     func: StmtFun<'db>,
     slots: &'db [AllocatedSlot<'db>],
     live_ranges: LiveRanges<'db>,
+    tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> MoveInfo<'db> {
     let mut moves = Vec::new();
     let mut reads = Vec::new();
@@ -108,6 +109,8 @@ pub fn compute_move_info<'db>(
         &mut reads,
         &mut expr_counter,
         &mut stmt_counter,
+        tycheck_result,
+        func,
     );
 
     // Correlate reads with death points to identify last uses.
@@ -126,6 +129,8 @@ fn walk_statements<'db>(
     reads: &mut Vec<ReadInfo>,
     expr_counter: &mut u32,
     stmt_counter: &mut u32,
+    tycheck_result: crate::tycheck::TypecheckResult<'db>,
+    func: StmtFun<'db>,
 ) {
     for stmt in statements {
         let stmt_id = StmtId(*stmt_counter);
@@ -149,6 +154,8 @@ fn walk_statements<'db>(
                         slots,
                         moves,
                         expr_counter,
+                        tycheck_result,
+                        func,
                     );
                     // Also collect reads from the RHS expression.
                     collect_reads_from_expr(
@@ -176,6 +183,8 @@ fn walk_statements<'db>(
                     slots,
                     moves,
                     expr_counter,
+                    tycheck_result,
+                    func,
                 );
                 // Also collect reads from the return expression.
                 collect_reads_from_expr(
@@ -199,9 +208,9 @@ fn walk_statements<'db>(
                 );
 
                 // Process then and else branches.
-                walk_statements(db, if_stmt.then_body(db), registry, slots, moves, reads, expr_counter, stmt_counter);
+                walk_statements(db, if_stmt.then_body(db), registry, slots, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
                 if let Some(else_body) = if_stmt.else_body(db) {
-                    walk_statements(db, else_body, registry, slots, moves, reads, expr_counter, stmt_counter);
+                    walk_statements(db, else_body, registry, slots, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
                 }
             }
             Statement::Fun(_) | Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
@@ -221,6 +230,8 @@ fn collect_moves_from_expr<'db>(
     slots: &[AllocatedSlot<'db>],
     moves: &mut Vec<MoveOp<'db>>,
     expr_counter: &mut u32,
+    tycheck_result: crate::tycheck::TypecheckResult<'db>,
+    func: StmtFun<'db>,
 ) {
     let expr_id = ExprId(*expr_counter);
     *expr_counter += 1;
@@ -229,12 +240,25 @@ fn collect_moves_from_expr<'db>(
         ExprFunKind::Name(name) => {
             // Name expression: this is a move of the named slot.
             if let Some(source_slot) = find_slot_by_name(db, slots, name) {
-                moves.push(MoveOp::new(db, expr_id, source_slot, move_kind));
+                // Get slot info and type to check copyability.
+                let slot_info = slots.iter()
+                    .find(|s| s.slot_id(db) == source_slot)
+                    .expect("slot should exist");
+                let slot_type = super::copyability::get_slot_type(db, slot_info, tycheck_result, func);
+
+                // Determine actual move kind based on copyability.
+                let actual_move_kind = if super::copyability::is_copy_type(db, slot_type) {
+                    MoveKind::Copy
+                } else {
+                    move_kind  // Use the passed-in kind.
+                };
+
+                moves.push(MoveOp::new(db, expr_id, source_slot, actual_move_kind));
             }
         }
         ExprFunKind::FunctionCall(call) => {
             // Function call: arguments might be moved depending on parameter modes.
-            process_function_call(db, call, registry, slots, moves, expr_counter);
+            process_function_call(db, call, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Tuple(tuple) => {
             // Tuple: each element might be moved.
@@ -248,25 +272,27 @@ fn collect_moves_from_expr<'db>(
                     slots,
                     moves,
                     expr_counter,
+                    tycheck_result,
+                    func,
                 );
             }
         }
         ExprFunKind::BinOp(binop) => {
             // Binary operation: both operands might be moved.
-            collect_moves_from_expr(db, binop.lhs(db), target_slot, move_kind, registry, slots, moves, expr_counter);
-            collect_moves_from_expr(db, binop.rhs(db), target_slot, move_kind, registry, slots, moves, expr_counter);
+            collect_moves_from_expr(db, binop.lhs(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, binop.rhs(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::UnaryOp(unary) => {
             // Unary operation: operand might be moved.
-            collect_moves_from_expr(db, unary.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter);
+            collect_moves_from_expr(db, unary.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryOption(try_op) => {
             // Try option: operand might be moved.
-            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter);
+            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryResult(try_op) => {
             // Try result: operand might be moved.
-            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter);
+            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
             // No moves in literals or parse errors.
@@ -283,17 +309,32 @@ fn collect_moves_from_expr_for_return<'db>(
     slots: &[AllocatedSlot<'db>],
     moves: &mut Vec<MoveOp<'db>>,
     expr_counter: &mut u32,
+    tycheck_result: crate::tycheck::TypecheckResult<'db>,
+    func: StmtFun<'db>,
 ) {
     match expr.expr(db) {
         ExprFunKind::Name(name) => {
             // Name expression: this is a move of the named slot for return.
             if let Some(slot) = find_slot_by_name(db, slots, name) {
-                moves.push(MoveOp::new(db, return_expr_id, slot, MoveKind::FunctionReturn));
+                // Get slot info and type to check copyability.
+                let slot_info = slots.iter()
+                    .find(|s| s.slot_id(db) == slot)
+                    .expect("slot should exist");
+                let slot_type = super::copyability::get_slot_type(db, slot_info, tycheck_result, func);
+
+                // Determine actual move kind based on copyability.
+                let actual_move_kind = if super::copyability::is_copy_type(db, slot_type) {
+                    MoveKind::Copy
+                } else {
+                    MoveKind::FunctionReturn
+                };
+
+                moves.push(MoveOp::new(db, return_expr_id, slot, actual_move_kind));
             }
         }
         ExprFunKind::FunctionCall(call) => {
             // Function call: the result is moved to return, but also process arguments.
-            process_function_call(db, call, registry, slots, moves, expr_counter);
+            process_function_call(db, call, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Tuple(tuple) => {
             // Tuple: each element might be moved.
@@ -306,23 +347,25 @@ fn collect_moves_from_expr_for_return<'db>(
                     slots,
                     moves,
                     expr_counter,
+                    tycheck_result,
+                    func,
                 );
             }
         }
         ExprFunKind::BinOp(binop) => {
             // Binary operation: both operands might be moved.
-            collect_moves_from_expr_for_return(db, binop.lhs(db), return_expr_id, registry, slots, moves, expr_counter);
-            collect_moves_from_expr_for_return(db, binop.rhs(db), return_expr_id, registry, slots, moves, expr_counter);
+            collect_moves_from_expr_for_return(db, binop.lhs(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, binop.rhs(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::UnaryOp(unary) => {
             // Unary operation: operand might be moved.
-            collect_moves_from_expr_for_return(db, unary.operand(db), return_expr_id, registry, slots, moves, expr_counter);
+            collect_moves_from_expr_for_return(db, unary.operand(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryOption(try_op) => {
-            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, registry, slots, moves, expr_counter);
+            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryResult(try_op) => {
-            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, registry, slots, moves, expr_counter);
+            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
             // No moves in literals or parse errors.
@@ -338,6 +381,8 @@ fn process_function_call<'db>(
     slots: &[AllocatedSlot<'db>],
     moves: &mut Vec<MoveOp<'db>>,
     expr_counter: &mut u32,
+    tycheck_result: crate::tycheck::TypecheckResult<'db>,
+    func: StmtFun<'db>,
 ) {
     let name = call.name(db);
     let args = call.args(db);
@@ -357,7 +402,20 @@ fn process_function_call<'db>(
                     // Check if the argument is a name (direct move).
                     if let ExprFunKind::Name(arg_name) = arg.expr(db) {
                         if let Some(slot_id) = find_slot_by_name(db, slots, arg_name) {
-                            moves.push(MoveOp::new(db, expr_id, slot_id, MoveKind::FunctionCall));
+                            // Get slot info and type to check copyability.
+                            let slot_info = slots.iter()
+                                .find(|s| s.slot_id(db) == slot_id)
+                                .expect("slot should exist");
+                            let slot_type = super::copyability::get_slot_type(db, slot_info, tycheck_result, func);
+
+                            // Determine actual move kind based on copyability.
+                            let actual_move_kind = if super::copyability::is_copy_type(db, slot_type) {
+                                MoveKind::Copy
+                            } else {
+                                MoveKind::FunctionCall
+                            };
+
+                            moves.push(MoveOp::new(db, expr_id, slot_id, actual_move_kind));
                         }
                     } else {
                         // For complex expressions, recursively collect moves.
@@ -371,6 +429,8 @@ fn process_function_call<'db>(
                             slots,
                             moves,
                             expr_counter,
+                            tycheck_result,
+                            func,
                         );
                     }
                 } else {
@@ -511,29 +571,45 @@ mod tests {
         panic!("No function found in source code");
     }
 
+    fn parse_and_typecheck<'db>(db: &'db dyn crate::Db, source_code: &str) -> (StmtFun<'db>, crate::tycheck::TypecheckResult<'db>) {
+        let source = Source::new(db, S(source_code));
+        let script = crate::parser::parse_for_test(db, source);
+        let tycheck_result = crate::tycheck::type_check(db, script, vec![], vec![]);
+        let statements = script.statements(db);
+
+        // Find the first function statement.
+        for stmt in statements {
+            if let crate::ast::Statement::Fun(fun) = stmt {
+                return (*fun, tycheck_result);
+            }
+        }
+
+        panic!("No function found in source code");
+    }
+
     #[test]
     fn test_move_simple_let_binding() {
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32)
+fun test(x: u32)
     let y = x
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
-        // Verify we have one move: x -> y (Assignment).
+        // Verify we have one move: x -> y (Copy because u32 is copy).
         let moves = move_info.moves(db);
         assert_eq!(moves.len(), 1);
 
         let move_op = moves[0];
-        assert_eq!(move_op.move_kind(db), MoveKind::Assignment);
+        assert_eq!(move_op.move_kind(db), MoveKind::Copy);
 
         // The moved slot should be x.
         let x_name = InternedText::new(db, "x");
@@ -546,24 +622,24 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32): u32
+fun test(x: u32): u32
     ret x
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         // Verify we have one move: x returned (FunctionReturn).
         let moves = move_info.moves(db);
         assert_eq!(moves.len(), 1);
 
         let move_op = moves[0];
-        assert_eq!(move_op.move_kind(db), MoveKind::FunctionReturn);
+        assert_eq!(move_op.move_kind(db), MoveKind::Copy); // u32 is copy
 
         let x_name = InternedText::new(db, "x");
         let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
@@ -575,27 +651,27 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32): u32
-    fun helper(a: In u32): u32
+fun test(x: u32): u32
+    fun helper(a: u32): u32
         ret a
     end fun
     ret helper(x)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         // Verify we have one move: x moved to helper (FunctionCall).
         let moves = move_info.moves(db);
         assert_eq!(moves.len(), 1);
 
         let move_op = moves[0];
-        assert_eq!(move_op.move_kind(db), MoveKind::FunctionCall);
+        assert_eq!(move_op.move_kind(db), MoveKind::Copy); // u32 is copy
 
         let x_name = InternedText::new(db, "x");
         let x_slot = slot_alloc.slots(db).iter().find(|s| s.name(db) == Some(x_name)).unwrap();
@@ -615,12 +691,12 @@ fun test(x: u32): u32
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         // Verify we have NO moves because parameter is Ref, not In.
         let moves = move_info.moves(db);
@@ -632,8 +708,8 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32, y: In u32): u32
-    fun helper(a: In u32): u32
+fun test(x: u32, y: u32): u32
+    fun helper(a: u32): u32
         ret a
     end fun
     let z = helper(x)
@@ -641,20 +717,20 @@ fun test(x: In u32, y: In u32): u32
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
-        // Verify we have two moves: x and y to helper calls.
+        // Verify we have two moves: x and y to helper calls (Copy because u32 is copy).
         let moves = move_info.moves(db);
         assert_eq!(moves.len(), 2);
 
-        // Both should be FunctionCall moves.
-        assert_eq!(moves[0].move_kind(db), MoveKind::FunctionCall);
-        assert_eq!(moves[1].move_kind(db), MoveKind::FunctionCall);
+        // Both should be Copy moves.
+        assert_eq!(moves[0].move_kind(db), MoveKind::Copy);
+        assert_eq!(moves[1].move_kind(db), MoveKind::Copy);
 
         // Find slots for x and y.
         let x_name = InternedText::new(db, "x");
@@ -675,25 +751,25 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32, y: In u32)
+fun test(x: u32, y: u32)
     let z = (x, y)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
-        // Verify we have two moves: x and y into the tuple (Assignment).
+        // Verify we have two moves: x and y into the tuple (Copy because u32 is copy).
         let moves = move_info.moves(db);
         assert_eq!(moves.len(), 2);
 
-        // Both should be Assignment moves.
-        assert_eq!(moves[0].move_kind(db), MoveKind::Assignment);
-        assert_eq!(moves[1].move_kind(db), MoveKind::Assignment);
+        // Both should be Copy moves.
+        assert_eq!(moves[0].move_kind(db), MoveKind::Copy);
+        assert_eq!(moves[1].move_kind(db), MoveKind::Copy);
 
         let x_name = InternedText::new(db, "x");
         let y_name = InternedText::new(db, "y");
@@ -710,17 +786,17 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32): u32
+fun test(x: u32): u32
     ret x
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         // Verify we have identified the last use of x.
         let last_uses = move_info.last_uses(db);
@@ -739,18 +815,18 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32): u32
+fun test(x: u32): u32
     let y = x +! x
     ret y
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         // x is read twice in the same statement, so we should have 2 last uses (one for each read at the death point).
         let last_uses = move_info.last_uses(db);
@@ -768,7 +844,7 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32): u32
+fun test(x: u32): u32
     if @true
         ret x
     else
@@ -777,12 +853,12 @@ fun test(x: In u32): u32
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         // x is used in the then branch, and that should be its last use.
         let last_uses = move_info.last_uses(db);
@@ -800,19 +876,19 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32): u32
+fun test(x: u32): u32
     let a = x
     let b = a
     ret b
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         // Each variable (x, a, b) should have exactly one last use.
         let last_uses = move_info.last_uses(db);
@@ -840,17 +916,17 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: In u32, y: In u32)
+fun test(x: u32, y: u32)
     let z = (x, y)
 end fun
         "#;
 
-        let func = parse_function(db, source);
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
 
         // Both x and y should have last uses when they're used in the tuple.
         let last_uses = move_info.last_uses(db);

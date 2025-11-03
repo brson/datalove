@@ -11,6 +11,7 @@ use bct::text::InternedText;
 use crate::ast::StmtFun;
 
 mod cfg;
+mod copyability;
 mod layout;
 mod liveness;
 mod moves;
@@ -20,6 +21,7 @@ mod type_sizing;
 mod validation;
 
 pub use cfg::*;
+pub use copyability::*;
 pub use layout::*;
 pub use liveness::*;
 pub use moves::*;
@@ -118,10 +120,10 @@ pub fn analyze_function<'db>(
     let live_ranges = liveness::compute_live_ranges(db, func, control_flow, slots, init_analysis);
 
     // Phase 5: Move tracking.
-    let move_info = moves::compute_move_info(db, func, slots, live_ranges);
+    let move_info = moves::compute_move_info(db, func, slots, live_ranges, tycheck_result);
 
     // Phase 6: Drop points.
-    let drop_points = drops::compute_drop_points(db, func, control_flow, slots, init_analysis, move_info);
+    let drop_points = drops::compute_drop_points(db, func, control_flow, slots, init_analysis, move_info, tycheck_result);
 
     // Phase 7: Frame layout with types.
     let frame_layout = build_frame_layout(db, func, slots, tycheck_result);
