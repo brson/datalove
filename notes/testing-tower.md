@@ -17,6 +17,6 @@ datalove-cli/tests/error_tests
 ## Other test suites
 
 datalove-rt/tests/*
-datalove-datafun/tests/std_tests
-datalove-datafun/tests/tycheck_world_tests
 datalove-datafun/tests/interp_with_package_tests
+datalove-datafun/tests/tycheck_world_tests
+datalove-datafun/tests/std_tests
