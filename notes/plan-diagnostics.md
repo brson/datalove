@@ -592,6 +592,237 @@ match expr.kind {
 - [ ] Diagnostic filtering by severity
 - [ ] JSON output for IDE integration
 
+## Redundant Error Reporting Analysis (2025-11-03)
+
+### Current Problem
+
+Parse error sites currently do redundant work, calling two separate APIs with nearly identical information:
+
+```rust
+// Example from datalit parser.rs:921-923
+let message = self.db.intern_text("expected '(' after tuple name");
+
+DiagnosticBuilder::error(self.db, message.as_str(self.db))
+    .code("D001")
+    .primary_label(keyword_text, keyword_span.clone(), "expected '(' after tuple name")
+    .emit_parse();
+
+return ast::Expr::ParseError(ast::ExprParseError::new(self.db, keyword_text, keyword_span, message));
+```
+
+**Redundancy:**
+1. Message text appears twice (in DiagnosticBuilder and ExprParseError)
+2. Text and span appear twice (in primary_label and ExprParseError)
+3. Two separate function calls with duplicate information
+4. Pattern repeated at 21 datalit sites + 9 datafun sites
+
+**Why Both Exist:**
+- **ParseError nodes** (ExprParseError, TypeHintParseError, StmtParseError): Required for error recovery. AST needs error nodes so type checker and other passes can skip invalid nodes gracefully.
+- **DiagnosticBuilder/accumulators**: Required for rich error reporting. Collects all diagnostics for display to user with spans, labels, notes, suggestions.
+
+### Solution Options
+
+#### Option 1: Helper Functions in Parser Modules (Recommended)
+
+Create convenience functions in each parser that emit diagnostic and create error node in one call:
+
+```rust
+// In datalove-datalit/src/parser.rs
+impl<'db> DynParser<'db> {
+    fn emit_expr_error(
+        &self,
+        text: Text<'db>,
+        span: ByteSpan,
+        message: &str,
+        code: &str,
+        label: &str,
+    ) -> ast::Expr<'db> {
+        let message = self.db.intern_text(message);
+        DiagnosticBuilder::error(self.db, message.as_str(self.db))
+            .code(code)
+            .primary_label(text, span.clone(), label)
+            .emit_parse();
+        ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message))
+    }
+
+    fn emit_type_hint_error(
+        &self,
+        text: Text<'db>,
+        span: ByteSpan,
+        message: &str,
+        code: &str,
+        label: &str,
+    ) -> ast::TypeHint<'db> {
+        let message = self.db.intern_text(message);
+        DiagnosticBuilder::error(self.db, message.as_str(self.db))
+            .code(code)
+            .primary_label(text, span.clone(), label)
+            .emit_parse();
+        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message))
+    }
+}
+
+// In datalove-datafun/src/parser.rs
+impl<'db> Parser<'db> {
+    fn emit_stmt_error(
+        &self,
+        text: Text<'db>,
+        span: ByteSpan,
+        message: &str,
+        code: &str,
+        label: &str,
+    ) -> ast::Statement<'db> {
+        let message = self.db.intern_text(message);
+        DiagnosticBuilder::error(self.db, message.as_str(self.db))
+            .code(code)
+            .primary_label(text, span.clone(), label)
+            .emit_parse();
+        ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message))
+    }
+
+    fn emit_expr_error(
+        &self,
+        text: Text<'db>,
+        span: ByteSpan,
+        message: &str,
+        code: &str,
+        label: &str,
+    ) -> ast::ExprFun<'db> {
+        let message = self.db.intern_text(message);
+        DiagnosticBuilder::error(self.db, message.as_str(self.db))
+            .code(code)
+            .primary_label(text, span.clone(), label)
+            .emit_parse();
+        ast::ExprFun::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))
+    }
+}
+```
+
+**Usage becomes:**
+```rust
+// Before (datalit parser.rs:918-923)
+let message = self.db.intern_text("expected '(' after tuple name");
+DiagnosticBuilder::error(self.db, message.as_str(self.db))
+    .code("D001")
+    .primary_label(keyword_text, keyword_span.clone(), "expected '(' after tuple name")
+    .emit_parse();
+return ast::Expr::ParseError(ast::ExprParseError::new(self.db, keyword_text, keyword_span, message));
+
+// After
+return self.emit_expr_error(
+    keyword_text,
+    keyword_span,
+    "expected '(' after tuple name",
+    "D001",
+    "expected '(' after 'tuple'"
+);
+```
+
+**Pros:**
+- Single call site - much cleaner
+- No coupling between diagnostic and AST crates
+- Type-safe (each helper returns correct type)
+- Easy to extend (add note/suggestion parameters)
+- Minimal changes to existing code
+
+**Cons:**
+- Still creates two separate data structures internally
+- Need separate helper for each return type
+
+#### Option 2: Builder Methods That Create Error Nodes
+
+Add methods to DiagnosticBuilder:
+```rust
+impl<'db> DiagnosticBuilder<'db> {
+    pub fn emit_parse_as_expr_error(self, text: Text<'db>, span: ByteSpan) -> ExprParseError<'db> {
+        self.emit_parse();
+        ExprParseError::new(self.db, text, span, self.diagnostic.message)
+    }
+}
+```
+
+**Pros:**
+- Builder already has all the information
+
+**Cons:**
+- ❌ Diagnostic crate would depend on AST types (tight coupling)
+- ❌ Would need separate method for each error node type
+- ❌ Wrong responsibility (diagnostics shouldn't know about AST)
+
+#### Option 3: Keep Both Separate (Current Approach)
+
+Continue with explicit calls at each error site.
+
+**Pros:**
+- Clear separation of concerns
+- No new abstractions
+
+**Cons:**
+- ❌ Verbose and repetitive (5-6 lines per error)
+- ❌ Easy to forget one or the other
+- ❌ Message text duplicated
+
+#### Option 4: Error Nodes That Emit Diagnostics
+
+Add method to error nodes:
+```rust
+impl<'db> ExprParseError<'db> {
+    pub fn emit_diagnostic(self, db: &'db dyn Db, code: &str, label: &str) {
+        DiagnosticBuilder::error(db, self.message.as_str(db))
+            .code(code)
+            .primary_label(self.text, self.span.clone(), label)
+            .emit_parse();
+    }
+}
+```
+
+**Pros:**
+- Error node is single source of truth
+
+**Cons:**
+- ❌ Still two call sites (create node, then emit)
+- ❌ AST types would depend on diagnostic crate (acceptable but less clean)
+- ❌ Awkward API (why create node if you're going to emit separately?)
+
+### Recommendation: Option 1 (Helper Functions)
+
+Implement parser helper methods that do both in one call. This is the cleanest approach:
+
+1. No new dependencies or coupling between crates
+2. Single, clear call site for each error
+3. Type-safe with appropriate return types
+4. Easy to extend (add notes/suggestions later)
+5. Parser-specific logic stays in parser modules
+
+**Implementation Plan:**
+1. Add helper methods to DynParser (datalit)
+2. Add helper methods to Parser (datafun)
+3. Update all error sites to use helpers (21 datalit + 9 datafun)
+4. Verify all tests still pass
+
+**Future Enhancement:**
+Add optional parameters for notes and suggestions:
+```rust
+fn emit_expr_error(
+    &self,
+    text: Text<'db>,
+    span: ByteSpan,
+    message: &str,
+    code: &str,
+    label: &str,
+    notes: &[&str],  // Optional notes
+    suggestions: &[(&str, &str)],  // Optional (label, replacement) pairs
+) -> ast::Expr<'db>
+```
+
+### Next Steps
+
+1. Implement helper functions in both parsers
+2. Update datalit error sites (21 sites)
+3. Update datafun error sites (9 sites)
+4. Run test suite to verify
+5. Document pattern for future error sites
+
 ## Phase 8: Improve Diagnostic Rendering (NEW - 2025-11-03)
 
 ### Current Problems

@@ -1,5 +1,5 @@
 Parse errors:
-error[P006]: expected '.' in import statement
+error[P006]: expected '.' after module name
  --> 20_import_missing_dot.dfs:1:15
   |
 1 | import example/pkg/mod foo

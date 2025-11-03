@@ -116,6 +116,43 @@ struct Parser<'db> {
 }
 
 impl<'db> Parser<'db> {
+    /// Emit both a diagnostic and create a StmtParseError node in one call.
+    fn emit_stmt_error(
+        &self,
+        text: bct::text::Text<'db>,
+        span: datalove_diagnostic::ByteSpan,
+        message: &str,
+        code: &str,
+        label: &str,
+    ) -> ast::Statement<'db> {
+        let message_text = InternedText::new(self.db, message.S());
+        DiagnosticBuilder::error(self.db, message)
+            .code(code)
+            .primary_label(text, span.clone(), label)
+            .emit_parse();
+        ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message_text))
+    }
+
+    /// Emit both a diagnostic and create an ExprFun with ParseError kind in one call.
+    fn emit_expr_error(
+        &self,
+        text: bct::text::Text<'db>,
+        span: datalove_diagnostic::ByteSpan,
+        message: &str,
+        code: &str,
+        label: &str,
+    ) -> ast::ExprFun<'db> {
+        let message_text = InternedText::new(self.db, message.S());
+        DiagnosticBuilder::error(self.db, message)
+            .code(code)
+            .primary_label(text, span.clone(), label)
+            .emit_parse();
+        ast::ExprFun::new(
+            self.db,
+            ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message_text))
+        )
+    }
+
     fn parse_statements(&mut self, lines: Vec<Vec<TreeToken<'db>>>) -> Vec<ast::Statement<'db>> {
         let mut statements = vec![];
         let mut line_iter = lines.into_iter().enumerate().peekable();
@@ -148,14 +185,13 @@ impl<'db> Parser<'db> {
             Some("if") => self.parse_if(&mut tokens, remaining_lines),
             _ => {
                 let (text, span) = self.peek_text_span(&mut tokens);
-                let message = InternedText::new(self.db, "unexpected statement".S());
-
-                DiagnosticBuilder::error(self.db, "unexpected statement")
-                    .code("P001")
-                    .primary_label(text, span.clone(), "expected 'let', 'fun', 'ret', 'require', 'import', or 'if'")
-                    .emit_parse();
-
-                ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message))
+                self.emit_stmt_error(
+                    text,
+                    span,
+                    "unexpected statement",
+                    "P001",
+                    "expected 'let', 'fun', 'ret', 'require', 'import', or 'if'"
+                )
             }
         }
     }
@@ -206,14 +242,13 @@ impl<'db> Parser<'db> {
             }
             _ => {
                 let (text, span) = self.peek_text_span(tokens);
-                let message = InternedText::new(self.db, "expected parameter list".S());
-
-                DiagnosticBuilder::error(self.db, "expected parameter list")
-                    .code("P002")
-                    .primary_label(text, span.clone(), "expected '(' to start parameter list")
-                    .emit_parse();
-
-                return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
+                return self.emit_stmt_error(
+                    text,
+                    span,
+                    "expected parameter list",
+                    "P002",
+                    "expected '(' to start parameter list"
+                );
             }
         };
 
@@ -380,14 +415,13 @@ impl<'db> Parser<'db> {
                 // Need forward slash
                 if !self.peek_sigil(tokens, Sigil::SlashForward) {
                     let (text, span) = self.peek_text_span(tokens);
-                    let message = InternedText::new(self.db, "expected '/' after import space".S());
-
-                    DiagnosticBuilder::error(self.db, "expected '/' in module path")
-                        .code("P003")
-                        .primary_label(text, span.clone(), "expected '/' after import space")
-                        .emit_parse();
-
-                    return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
+                    return self.emit_stmt_error(
+                        text,
+                        span,
+                        "expected '/' after import space",
+                        "P003",
+                        "expected '/' after import space"
+                    );
                 }
                 self.eat_sigil(tokens, Sigil::SlashForward);
 
@@ -396,14 +430,13 @@ impl<'db> Parser<'db> {
                 // Need forward slash
                 if !self.peek_sigil(tokens, Sigil::SlashForward) {
                     let (text, span) = self.peek_text_span(tokens);
-                    let message = InternedText::new(self.db, "expected '/' after package alias".S());
-
-                    DiagnosticBuilder::error(self.db, "expected '/' in module path")
-                        .code("P004")
-                        .primary_label(text, span.clone(), "expected '/' after package alias")
-                        .emit_parse();
-
-                    return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
+                    return self.emit_stmt_error(
+                        text,
+                        span,
+                        "expected '/' after package alias",
+                        "P004",
+                        "expected '/' after package alias"
+                    );
                 }
                 self.eat_sigil(tokens, Sigil::SlashForward);
 
@@ -441,14 +474,13 @@ impl<'db> Parser<'db> {
             }
             _ => {
                 let (text, span) = self.peek_text_span(tokens);
-                let message = InternedText::new(self.db, "expected 'module' or 'data' after 'require'".S());
-
-                DiagnosticBuilder::error(self.db, "expected 'module' or 'data' after 'require'")
-                    .code("P005")
-                    .primary_label(text, span.clone(), "expected 'module' or 'data'")
-                    .emit_parse();
-
-                ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message))
+                self.emit_stmt_error(
+                    text,
+                    span,
+                    "expected 'module' or 'data' after 'require'",
+                    "P005",
+                    "expected 'module' or 'data'"
+                )
             }
         }
     }
@@ -465,14 +497,13 @@ impl<'db> Parser<'db> {
         // Need dot sigil.
         if !self.peek_sigil(tokens, Sigil::Dot) {
             let (text, span) = self.peek_text_span(tokens);
-            let message = InternedText::new(self.db, "expected '.' after module name".S());
-
-            DiagnosticBuilder::error(self.db, "expected '.' in import statement")
-                .code("P006")
-                .primary_label(text, span.clone(), "expected '.' after module name")
-                .emit_parse();
-
-            return ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message));
+            return self.emit_stmt_error(
+                text,
+                span,
+                "expected '.' after module name",
+                "P006",
+                "expected '.' after module name"
+            );
         }
         self.eat_sigil(tokens, Sigil::Dot);
 
@@ -869,16 +900,12 @@ impl<'db> Parser<'db> {
                         } else {
                             let (text, span) = self.peek_text_span(tokens);
                             tokens.next();
-                            let message = InternedText::new(self.db, "unexpected token in expression".S());
-
-                            DiagnosticBuilder::error(self.db, "unexpected token in expression")
-                                .code("P007")
-                                .primary_label(text, span.clone(), "unexpected token")
-                                .emit_parse();
-
-                            ast::ExprFun::new(
-                                self.db,
-                                ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))
+                            self.emit_expr_error(
+                                text,
+                                span,
+                                "unexpected token in expression",
+                                "P007",
+                                "unexpected token"
                             )
                         }
                     }
@@ -899,16 +926,12 @@ impl<'db> Parser<'db> {
             }
             None => {
                 let (text, span) = self.peek_text_span(tokens);
-                let message = InternedText::new(self.db, "expected expression".S());
-
-                DiagnosticBuilder::error(self.db, "expected expression")
-                    .code("P008")
-                    .primary_label(text, span.clone(), "expected expression")
-                    .emit_parse();
-
-                ast::ExprFun::new(
-                    self.db,
-                    ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))
+                self.emit_expr_error(
+                    text,
+                    span,
+                    "expected expression",
+                    "P008",
+                    "expected expression"
                 )
             }
         }
@@ -1017,16 +1040,12 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
             _ => {
                 let (text, span) = self.peek_text_span(tokens);
-                let message = InternedText::new(self.db, "expected tuple".S());
-
-                DiagnosticBuilder::error(self.db, "expected tuple")
-                    .code("P009")
-                    .primary_label(text, span.clone(), "expected '(' to start tuple")
-                    .emit_parse();
-
-                return ast::ExprFun::new(
-                    self.db,
-                    ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message))
+                return self.emit_expr_error(
+                    text,
+                    span,
+                    "expected tuple",
+                    "P009",
+                    "expected '(' to start tuple"
                 );
             }
         };
