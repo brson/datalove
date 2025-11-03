@@ -537,8 +537,9 @@ fn instantiate_list<'db>(
     debug_assert!(!dest_ptr.is_null());
     let element_ty = element_type.ty(db);
     let element_tydesc = tydesc_table.get_or_create(element_ty);
-    let element_size = unsafe { (*element_tydesc).size };
-    let element_align = unsafe { (*element_tydesc).align };
+    let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
+    let element_size = element_tydesc_ref.size();
+    let element_align = element_tydesc_ref.align();
 
     unsafe {
         // Allocate list data using size=element_size, align=element_align, count=len.
@@ -735,9 +736,11 @@ fn instantiate_map<'db>(
     // Get type descriptors.
     let key_tydesc = tydesc_table.get_or_create(key_type.ty(db));
     let value_tydesc = tydesc_table.get_or_create(value_type.ty(db));
+    let key_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(key_tydesc) };
+    let value_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(value_tydesc) };
 
     // Compute leaf node layout.
-    let leaf_layout = unsafe { rtdt::layout::compute_map_leaf_node_layout(rtdt::TyDescRef::from_ptr(key_tydesc), rtdt::TyDescRef::from_ptr(value_tydesc)) };
+    let leaf_layout = unsafe { rtdt::layout::compute_map_leaf_node_layout(key_tydesc_ref, value_tydesc_ref) };
 
     // Allocate leaf node.
     let leaf_node = unsafe {
@@ -760,8 +763,8 @@ fn instantiate_map<'db>(
     let keys_array = unsafe { leaf_node.add(leaf_layout.keys_offset as usize) };
     let values_array = unsafe { leaf_node.add(leaf_layout.values_offset as usize) };
 
-    let key_size = unsafe { (*key_tydesc).size as usize };
-    let value_size = unsafe { (*value_tydesc).size as usize };
+    let key_size = key_tydesc_ref.size() as usize;
+    let value_size = value_tydesc_ref.size() as usize;
 
     // Instantiate and copy each key-value pair.
     for (i, entry) in entries.iter().enumerate() {
@@ -816,9 +819,10 @@ fn instantiate_set<'db>(
 
     // Get type descriptor.
     let element_tydesc = tydesc_table.get_or_create(element_type.ty(db));
+    let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
 
     // Compute leaf node layout.
-    let leaf_layout = unsafe { rtdt::layout::compute_set_leaf_node_layout(rtdt::TyDescRef::from_ptr(element_tydesc)) };
+    let leaf_layout = unsafe { rtdt::layout::compute_set_leaf_node_layout(element_tydesc_ref) };
 
     // Allocate leaf node.
     let leaf_node = unsafe {
@@ -835,7 +839,7 @@ fn instantiate_set<'db>(
     // Get pointer to keys array.
     let keys_array = unsafe { leaf_node.add(leaf_layout.keys_offset as usize) };
 
-    let element_size = unsafe { (*element_tydesc).size as usize };
+    let element_size = element_tydesc_ref.size() as usize;
 
     // Instantiate and copy each element.
     for (i, elem_expr) in elements.iter().enumerate() {
@@ -865,8 +869,9 @@ fn instantiate_tensor<'db>(
     debug_assert!(!dest_ptr.is_null());
     let element_ty = element_type.ty(db);
     let element_tydesc = tydesc_table.get_or_create(element_ty);
-    let element_size = unsafe { (*element_tydesc).size };
-    let element_align = unsafe { (*element_tydesc).align };
+    let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
+    let element_size = element_tydesc_ref.size();
+    let element_align = element_tydesc_ref.align();
 
     let rank = shape.len();
     let total_elems: usize = shape.iter().map(|&d| d as usize).product();
@@ -1699,13 +1704,14 @@ mod tests {
 
             let element_tydesc = inst.tydesc.list_element_ty().as_ptr();
             assert!(!element_tydesc.is_null());
-            assert_eq!((*element_tydesc).type_tag, rtdt::TyTag::Tuple);
+            let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
+            assert_eq!(element_tydesc_ref.type_tag(), rtdt::TyTag::Tuple);
 
             let tuple_info = &(*element_tydesc).type_info.tuple;
             assert_eq!(tuple_info.num_fields, 2);
 
             let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
-            let tuple_size = (*element_tydesc).size as usize;
+            let tuple_size = element_tydesc_ref.size() as usize;
 
             for i in 0..3 {
                 let tuple_ptr = list.data.add(i * tuple_size);
