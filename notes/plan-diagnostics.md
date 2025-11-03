@@ -592,6 +592,144 @@ match expr.kind {
 - [ ] Diagnostic filtering by severity
 - [ ] JSON output for IDE integration
 
+## Phase 8: Improve Diagnostic Rendering (NEW - 2025-11-03)
+
+### Current Problems
+
+**Parse Error Output Quality:**
+```
+Parse errors:
+error[D001]: expected () after tuple keyword
+  --> expected '(' after 'tuple'
+     |
+Error: 1 parse error(s)
+```
+
+**Issues:**
+- ❌ No file path
+- ❌ No line:column numbers (just shows byte span content)
+- ❌ No source code context
+- ❌ No caret (^) pointing to exact location
+- ❌ No surrounding lines
+
+**Type Error Output:**
+```
+Error: Script has 1 typecheck error(s):
+DatalitError("TypeMismatch { expected: \"u32\", actual: \"string\" }")
+```
+
+**Issues:**
+- ❌ Just raw Debug output of TypeError enum
+- ❌ Not using TypeDiagnostic accumulators
+- ❌ No source location information at all
+
+### Root Causes
+
+1. **render_diagnostics() is minimal** (crates/datalove-cli/src/main.rs:312-338)
+   - Just prints error code and message
+   - Doesn't convert byte spans to line:column
+   - Doesn't show file path
+   - Doesn't display source snippets
+
+2. **Type diagnostics aren't retrieved** (main.rs:469-474)
+   - TypeDiagnostic accumulators exist but aren't used
+   - CLI uses old `tycheck_result.errors()` with Debug formatting
+   - Need to call `accumulated::<TypeDiagnostic>()`
+
+3. **No SourceMap implementation**
+   - Need to track Text → file path + line:column mapping
+   - Required for proper diagnostic rendering
+
+### Target Output Quality
+
+**Good parse error:**
+```
+error[D001]: expected () after tuple keyword
+ --> 01_tuple_missing_parens.dfs:1:18
+  |
+1 | let output: tuple Foo = @5
+  |                  ^^^ expected '(' after 'tuple'
+```
+
+**Good type error:**
+```
+error[T022]: mismatched types
+ --> test.dfs:1:17
+  |
+1 | let x: @u32 = @"hello"
+  |        ----   ^^^^^^^ expected u32, found string
+  |        |
+  |        expected due to this type annotation
+```
+
+### Implementation Plan
+
+**Part 1: Byte → Line:Col Conversion Utility**
+- Add to `crates/datalove-diagnostic/src/lib.rs`
+- `byte_to_line_col(text: &str, byte_offset: usize) -> (usize, usize)`
+- Helper to convert byte offsets to 1-based line:column numbers
+
+**Part 2: Basic SourceInfo for Single Files**
+- Add to `crates/datalove-cli/src/main.rs`
+- `struct SourceInfo` with file path and original source text
+- Store alongside Source/Text for diagnostic rendering
+- Simple version: one file at a time (not multi-file yet)
+
+**Part 3: Improved Diagnostic Renderer**
+- Replace `render_diagnostics()` with proper formatting
+- Show file path and line:col (e.g., `file.dfs:1:18`)
+- Display source line with error
+- Add caret (^) pointing to error location
+- Show labels and notes
+- **Approach**: Custom simple renderer (can use annotate-snippets later)
+
+**Part 4: Retrieve Type Diagnostics**
+- Update `ScriptCommand::run_without_sys()` and `run_with_sys()`
+- Change from `tycheck_result.errors()` to `accumulated::<TypeDiagnostic>()`
+- Add `render_type_diagnostics()` similar to parse diagnostics
+- Stop using Debug formatting
+
+**Part 5: Fix lit-tycheck Salsa Context**
+- Currently panics: "cannot accumulate values outside of an active tracked function"
+- Create `parse_for_tycheck()` tracked wrapper in datalit
+- Or: accept that lit-tycheck doesn't emit accumulators (low priority)
+
+**Part 6: Update Error Test Expectations**
+- Update `.out.expected` files in `crates/datalove-cli/tests/fixtures/error/`
+- Add file paths, line:col, source snippets with carets
+
+**Part 7: Create Type Error Tests**
+- Add test fixtures for type errors (type mismatch, unresolved name, etc.)
+- Test TypeDiagnostic emission and rendering end-to-end
+
+### Implementation Order
+
+1. Part 1: Byte → line:col utility (foundation)
+2. Part 2: Basic SourceInfo tracking (needed for file paths)
+3. Part 3: Custom diagnostic renderer (improve parse error output)
+4. Part 6: Update parse error test expectations (validate Part 3)
+5. Part 4: Retrieve type diagnostics (show we can get them)
+6. Part 7: Add type error tests (validate end-to-end)
+7. Part 5: Fix lit-tycheck (optional, low priority)
+
+### Success Criteria
+
+- ✅ Parse errors show: file:line:col, source snippet, caret
+- ✅ Type errors use TypeDiagnostic (not Debug output)
+- ✅ All existing tests pass with updated expectations
+- ✅ Error output matches Rust compiler quality
+- ✅ Ready to add datafun type diagnostics with confidence
+
+### Out of Scope (Future)
+
+- Multi-file diagnostics (imports, modules) - requires full SourceMap
+- Secondary labels across files
+- Suggestion/fix rendering
+- JSON output for IDE integration
+- Color support
+
+**Rationale**: Fix diagnostic rendering before adding more datafun type diagnostics. Otherwise we're just generating more diagnostics that will be rendered poorly.
+
 ## Benefits
 
 1. ✅ **Memoization-pure** - Parser never touches Source, only Text
