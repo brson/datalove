@@ -69,6 +69,16 @@ impl TypeTable {
         }
     }
 
+    /// Get the type descriptor for an expression as a safe TyDescRef.
+    pub fn get_expr_type_ref(&self, expr: datalit::ast::ExprFull<'_>) -> Option<rtdt::TyDescRef<'_>> {
+        let ptr = self.get_expr_type(expr);
+        if ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { rtdt::TyDescRef::from_ptr(ptr) })
+        }
+    }
+
     /// Get the type descriptor for a datafun expression.
     pub fn get_datafun_expr_type(&self, expr: ExprFun<'_>) -> *const rtdt::TyDesc {
         let id = expr.as_id();
@@ -78,6 +88,16 @@ impl TypeTable {
             self.datafun_expr_types[index]
         } else {
             std::ptr::null()
+        }
+    }
+
+    /// Get the type descriptor for a datafun expression as a safe TyDescRef.
+    pub fn get_datafun_expr_type_ref(&self, expr: ExprFun<'_>) -> Option<rtdt::TyDescRef<'_>> {
+        let ptr = self.get_datafun_expr_type(expr);
+        if ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { rtdt::TyDescRef::from_ptr(ptr) })
         }
     }
 }
@@ -590,13 +610,11 @@ mod tests {
                 let value_expr = stmt.value(db);
                 match value_expr.expr(db) {
                     ExprFunKind::Datalit(datalit_expr) => {
-                        let tydesc = type_table.get_expr_type(datalit_expr);
-                        assert!(!tydesc.is_null(), "Type descriptor should not be null");
+                        let tydesc_ref = type_table.get_expr_type_ref(datalit_expr)
+                            .expect("Type descriptor should not be null");
 
                         // Verify it's a u32 type.
-                        unsafe {
-                            assert_eq!((*tydesc).type_tag, rtdt::TyTag::U32);
-                        }
+                        assert_eq!(tydesc_ref.type_tag(), rtdt::TyTag::U32);
                     }
                     _ => panic!("Expected Datalit expression"),
                 }
@@ -619,12 +637,10 @@ mod tests {
                 let value_expr = stmt.value(db);
                 match value_expr.expr(db) {
                     ExprFunKind::Datalit(datalit_expr) => {
-                        let tydesc = type_table.get_expr_type(datalit_expr);
-                        assert!(!tydesc.is_null(), "Type descriptor should not be null");
+                        let tydesc_ref = type_table.get_expr_type_ref(datalit_expr)
+                            .expect("Type descriptor should not be null");
 
-                        unsafe {
-                            assert_eq!((*tydesc).type_tag, rtdt::TyTag::U32);
-                        }
+                        assert_eq!(tydesc_ref.type_tag(), rtdt::TyTag::U32);
                     }
                     _ => panic!("Expected Datalit expression"),
                 }
@@ -647,13 +663,11 @@ mod tests {
                 let value_expr = stmt.value(db);
 
                 // Get the type of the datafun expression (which wraps the datalit).
-                let tydesc = type_table.get_datafun_expr_type(value_expr);
-                assert!(!tydesc.is_null(), "Datafun expression type should not be null");
+                let tydesc_ref = type_table.get_datafun_expr_type_ref(value_expr)
+                    .expect("Datafun expression type should not be null");
 
                 // Should be the same type as the wrapped datalit expression.
-                unsafe {
-                    assert_eq!((*tydesc).type_tag, rtdt::TyTag::U32);
-                }
+                assert_eq!(tydesc_ref.type_tag(), rtdt::TyTag::U32);
             }
             _ => panic!("Expected Let statement"),
         }
@@ -708,11 +722,9 @@ mod tests {
                     let value_expr = stmt.value(db);
                     match value_expr.expr(db) {
                         ExprFunKind::Datalit(datalit_expr) => {
-                            let tydesc = type_table.get_expr_type(datalit_expr);
-                            assert!(!tydesc.is_null(), "Type descriptor for statement {} should not be null", stmt_idx);
-                            unsafe {
-                                assert_eq!((*tydesc).type_tag, rtdt::TyTag::U32);
-                            }
+                            let tydesc_ref = type_table.get_expr_type_ref(datalit_expr)
+                                .expect(&format!("Type descriptor for statement {} should not be null", stmt_idx));
+                            assert_eq!(tydesc_ref.type_tag(), rtdt::TyTag::U32);
                         }
                         _ => panic!("Expected Datalit expression at statement {}", stmt_idx),
                     }
@@ -741,11 +753,9 @@ mod tests {
                         let value_expr = ret_stmt.value(db);
                         match value_expr.expr(db) {
                             ExprFunKind::Datalit(datalit_expr) => {
-                                let tydesc = type_table.get_expr_type(datalit_expr);
-                                assert!(!tydesc.is_null(), "Return value type should not be null");
-                                unsafe {
-                                    assert_eq!((*tydesc).type_tag, rtdt::TyTag::U32);
-                                }
+                                let tydesc_ref = type_table.get_expr_type_ref(datalit_expr)
+                                    .expect("Return value type should not be null");
+                                assert_eq!(tydesc_ref.type_tag(), rtdt::TyTag::U32);
                             }
                             _ => panic!("Expected Datalit expression in return"),
                         }
@@ -773,11 +783,9 @@ mod tests {
             match &statements[*idx] {
                 Statement::Let(stmt) => {
                     let value_expr = stmt.value(db);
-                    let tydesc = type_table.get_datafun_expr_type(value_expr);
-                    assert!(!tydesc.is_null(), "Type for expression {} should not be null", idx);
-                    unsafe {
-                        assert_eq!((*tydesc).type_tag, *expected_tag);
-                    }
+                    let tydesc_ref = type_table.get_datafun_expr_type_ref(value_expr)
+                        .expect(&format!("Type for expression {} should not be null", idx));
+                    assert_eq!(tydesc_ref.type_tag(), *expected_tag);
                 }
                 _ => panic!("Expected Let statement at {}", idx),
             }

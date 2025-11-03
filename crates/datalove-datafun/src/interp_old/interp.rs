@@ -387,7 +387,8 @@ impl<'db> InterpContext<'db> {
         }
 
         // Check if it's Option or Result.
-        let type_tag = unsafe { (*condition_tydesc).type_tag };
+        let condition_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(condition_tydesc) };
+        let type_tag = condition_tydesc_ref.type_tag();
 
         match type_tag {
             rtdt::TyTag::Option => {
@@ -418,7 +419,7 @@ impl<'db> InterpContext<'db> {
                         let payload_ptr = unsafe { option_ptr.add(layout.payload_offset as usize) };
 
                         // Get the inner type descriptor.
-                        let inner_tydesc = unsafe { (*condition_tydesc).type_info.option.inner_tydesc };
+                        let inner_tydesc = condition_tydesc_ref.option_inner_ty().as_ptr();
 
                         // Create a Value for the payload.
                         let payload_value = match Self::value_from_ptr(&mut self.rt, payload_ptr, inner_tydesc) {
@@ -505,7 +506,7 @@ impl<'db> InterpContext<'db> {
                         let payload_ptr = unsafe { result_ptr.add(layout.payload_offset as usize) };
 
                         // Get the Ok type descriptor.
-                        let ok_tydesc = unsafe { (*condition_tydesc).type_info.result.ok_tydesc };
+                        let ok_tydesc = condition_tydesc_ref.result_ok_ty().as_ptr();
 
                         // Create a Value for the payload.
                         let payload_value = match Self::value_from_ptr(&mut self.rt, payload_ptr, ok_tydesc) {
@@ -655,7 +656,8 @@ impl<'db> InterpContext<'db> {
             ));
         }
 
-        let type_tag = unsafe { (*tydesc).type_tag };
+        let tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(tydesc) };
+        let type_tag = tydesc_ref.type_tag();
 
         match type_tag {
             rtdt::TyTag::Bool => {

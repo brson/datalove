@@ -75,9 +75,9 @@ fn instantiate_expr<'db>(
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
 ) -> AnyResult<*const u8> {
-    let tydesc = tydesc_table.get_or_create(ty);
+    let tydesc_ref = tydesc_table.get_or_create_ref(ty);
     let dest_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, (*tydesc).size, (*tydesc).align, 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, tydesc_ref.size(), tydesc_ref.align(), 1)
     };
     instantiate_expr_into(db, rt, expr, ty, tydesc_table, dest_ptr)?;
     Ok(dest_ptr)

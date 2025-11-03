@@ -56,6 +56,12 @@ impl<'db> TyDescTable<'db> {
         ptr
     }
 
+    /// Get or create a TyDesc for the given type, returning a safe TyDescRef.
+    pub fn get_or_create_ref(&mut self, ty: &Type<'db>) -> rtdt::TyDescRef<'_> {
+        let ptr = self.get_or_create(ty);
+        unsafe { rtdt::TyDescRef::from_ptr(ptr) }
+    }
+
     /// Create a tuple type descriptor from raw element type descriptors.
     ///
     /// This is used when building tuples from datafun expressions where we
@@ -532,6 +538,13 @@ impl<'db> TyDescTable<'db> {
         ptr
     }
 
+    /// Create TyDesc for Option<T> from an existing inner tydesc, returning a safe TyDescRef.
+    pub fn create_option_from_inner_tydesc_ref(&mut self, inner_tydesc_ref: rtdt::TyDescRef<'_>) -> rtdt::TyDescRef<'_> {
+        let inner_ptr = inner_tydesc_ref.as_ptr();
+        let result_ptr = self.create_option_from_inner_tydesc(inner_ptr);
+        unsafe { rtdt::TyDescRef::from_ptr(result_ptr) }
+    }
+
     /// Create TyDesc for option.
     fn create_option_tydesc(&mut self, inner_type: TypeAndHeap<'db>) -> Box<rtdt::TyDesc> {
         // Recursively create TyDesc for inner type.
@@ -641,6 +654,13 @@ impl<'db> TyDescTable<'db> {
         self.tydescs.push(tydesc);
         self.runtime_result_cache.insert(inner_tydesc, ptr);
         ptr
+    }
+
+    /// Create TyDesc for Result<T> from an existing inner tydesc, returning a safe TyDescRef.
+    pub fn create_result_from_inner_tydesc_ref(&mut self, inner_tydesc_ref: rtdt::TyDescRef<'_>) -> rtdt::TyDescRef<'_> {
+        let inner_ptr = inner_tydesc_ref.as_ptr();
+        let result_ptr = self.create_result_from_inner_tydesc(inner_ptr);
+        unsafe { rtdt::TyDescRef::from_ptr(result_ptr) }
     }
 
     /// Create TyDesc for result.
