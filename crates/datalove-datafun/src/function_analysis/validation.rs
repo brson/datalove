@@ -11,7 +11,7 @@ use rmx::prelude::*;
 use std::collections::HashMap;
 use super::{SlotId, ProgramPoint, StmtId, Position, InitState, SlotKind, ExprId, BlockId};
 use super::cfg::ControlFlowGraph;
-use super::liveness::InitializationAnalysis;
+use super::liveness::{InitializationAnalysis, LiveRanges};
 use super::slot_allocation::AllocatedSlot;
 use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind, ParamMode};
 
@@ -401,6 +401,48 @@ pub fn check_uninitialized_return<'db>(
                             // OK - Out parameter is properly initialized.
                         }
                     }
+                }
+            }
+        }
+    }
+
+    errors
+}
+
+/// Check for value-not-used errors.
+///
+/// Detects Local and Temporary slots that are written but never read.
+pub fn check_value_not_used<'db>(
+    db: &'db dyn crate::Db,
+    slots: &[AllocatedSlot<'db>],
+    live_ranges: LiveRanges<'db>,
+) -> Vec<AnalysisError> {
+    let mut errors = Vec::new();
+
+    // Check each slot.
+    for slot in slots {
+        // Skip Reference slots (parameters - they are used by caller).
+        if slot.kind(db) == SlotKind::Reference {
+            continue;
+        }
+
+        let slot_id = slot.slot_id(db);
+
+        // Look for a live range for this slot.
+        let range = live_ranges.ranges(db)
+            .iter()
+            .find(|r| r.slot_id(db) == slot_id);
+
+        match range {
+            None => {
+                // No live range means slot was never written or used.
+                // This shouldn't happen for allocated slots, but handle it.
+                errors.push(AnalysisError::ValueNotUsed { slot: slot_id });
+            }
+            Some(r) => {
+                // Check if death point equals birth point - no actual use.
+                if r.death(db) == r.birth(db) {
+                    errors.push(AnalysisError::ValueNotUsed { slot: slot_id });
                 }
             }
         }
@@ -1024,6 +1066,82 @@ end fun
         let errors = check_uninitialized_return(db, func, &slot_alloc.slots(db), init, cfg);
 
         // Should have no errors - Out parameter is properly initialized.
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn test_value_not_used_detects_error() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(x: In u32): u32
+    let unused = @42
+    ret x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+
+        let errors = check_value_not_used(db, &slot_alloc.slots(db), live_ranges);
+
+        // Should detect error: 'unused' is never read.
+        assert!(errors.len() > 0, "Expected value-not-used error");
+        let has_unused_error = errors.iter().any(|e| {
+            if let AnalysisError::ValueNotUsed { slot } = e {
+                let unused_name = bct::text::InternedText::new(db, "unused");
+                slot_alloc.slots(db)
+                    .iter()
+                    .any(|s| s.slot_id(db) == *slot && s.name(db) == Some(unused_name))
+            } else {
+                false
+            }
+        });
+        assert!(has_unused_error, "Expected value-not-used error for 'unused'");
+    }
+
+    #[test]
+    fn test_value_not_used_all_values_used() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(x: In u32): u32
+    let y = x
+    ret y
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+
+        let errors = check_value_not_used(db, &slot_alloc.slots(db), live_ranges);
+
+        // Should have no errors - all values are used.
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn test_value_not_used_parameter_ok() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(unused_param: In u32): u32
+    ret @0
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+
+        let errors = check_value_not_used(db, &slot_alloc.slots(db), live_ranges);
+
+        // Should have no errors - parameters (Reference slots) are skipped.
         assert_eq!(errors.len(), 0);
     }
 }

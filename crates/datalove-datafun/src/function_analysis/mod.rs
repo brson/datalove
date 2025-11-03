@@ -132,6 +132,7 @@ pub fn analyze_function<'db>(
     errors.extend(validation::check_double_move(db, func, move_info));
     errors.extend(validation::check_use_after_move(db, func, slots, move_info));
     errors.extend(validation::check_uninitialized_return(db, func, slots, init_analysis, control_flow));
+    errors.extend(validation::check_value_not_used(db, slots, live_ranges));
 
     FunctionAnalysis::new(
         db,

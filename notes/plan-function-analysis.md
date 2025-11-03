@@ -905,9 +905,12 @@ fn test_use_before_init_no_error_when_initialized() {
 - [x] Implement Pass 4: Uninitialized-Return Check
   - Modified initialization analysis to treat Out parameters as Never initially
   - Checks exit states of all return blocks for Out parameters
-  - 2 tests: detects uninitialized Out param, properly initialized ok
-  - Note: Conditional initialization test disabled (CFG edge issue)
-- [ ] Implement Pass 5: ValueNotUsed Check
+  - Fixed CFG bug where join_block wasn't created after if-statements
+  - 3 tests: detects uninitialized Out param, conditional init, properly initialized ok
+- [x] Implement Pass 5: ValueNotUsed Check
+  - Checks LiveRanges to find slots with no reads (death == birth)
+  - Skips Reference slots (parameters used by caller)
+  - 3 tests: detects unused local, all values used ok, unused parameter ok
 - [ ] Implement Pass 6: Unreachable Code Detection
 - [ ] Integration testing with full analysis pipeline
 
