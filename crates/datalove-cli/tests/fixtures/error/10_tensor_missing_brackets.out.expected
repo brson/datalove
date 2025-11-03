@@ -1,5 +1,8 @@
 Parse errors:
 error[D009]: expected <> after tensor keyword
-  --> expected '<' after 'tensor'
-     | 
+ --> 10_tensor_missing_brackets.dfs:1:1
+  |
+1 | let output: tensor = @5
+  | ^ expected '<' after 'tensor'
+
 Error: 1 parse error(s)

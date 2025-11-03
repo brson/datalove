@@ -1,5 +1,8 @@
 Parse errors:
 error[D007]: expected <> after list keyword
-  --> expected '<' after 'list'
-     | 
+ --> 07_list_missing_brackets.dfs:1:1
+  |
+1 | let output: list = @42
+  | ^ expected '<' after 'list'
+
 Error: 1 parse error(s)

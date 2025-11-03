@@ -1,5 +1,8 @@
 Parse errors:
 error[D019]: unexpected identifier 'foo'
-  --> unexpected identifier
-     | foo
+ --> 04_unexpected_identifier.dfs:1:15
+  |
+1 | let output = @foo
+  |               ^^^ unexpected identifier
+
 Error: 1 parse error(s)

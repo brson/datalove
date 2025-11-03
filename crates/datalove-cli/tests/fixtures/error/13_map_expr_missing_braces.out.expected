@@ -1,5 +1,8 @@
 Parse errors:
 error[D016]: expected {} after map keyword
-  --> expected '{' after 'map'
-     | 
+ --> 13_map_expr_missing_braces.dfs:1:1
+  |
+1 | let output = @map
+  | ^ expected '{' after 'map'
+
 Error: 1 parse error(s)

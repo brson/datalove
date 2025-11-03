@@ -1,5 +1,8 @@
 Parse errors:
 error[P003]: expected '/' in module path
-  --> expected '/' after import space
-     | pkg
+ --> 17_require_missing_first_slash.dfs:1:24
+  |
+1 | require module example pkg/mod
+  |                        ^^^ expected '/' after import space
+
 Error: 1 parse error(s)

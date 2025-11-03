@@ -1,5 +1,8 @@
 Parse errors:
 error[P001]: unexpected statement
-  --> expected 'let', 'fun', 'ret', 'require', 'import', or 'if'
-     | foo
+ --> 15_unexpected_statement.dfs:1:1
+  |
+1 | foo bar baz
+  | ^^^ expected 'let', 'fun', 'ret', 'require', 'import', or 'if'
+
 Error: 1 parse error(s)

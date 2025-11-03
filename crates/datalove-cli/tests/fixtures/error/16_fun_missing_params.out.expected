@@ -1,8 +1,14 @@
 Parse errors:
 error[P002]: expected parameter list
-  --> expected '(' to start parameter list
-     | 
+ --> 16_fun_missing_params.dfs:1:1
+  |
+1 | fun foo
+  | ^ expected '(' to start parameter list
+
 error[P001]: unexpected statement
-  --> expected 'let', 'fun', 'ret', 'require', 'import', or 'if'
-     | end
+ --> 16_fun_missing_params.dfs:2:1
+  |
+2 | end fun
+  | ^^^ expected 'let', 'fun', 'ret', 'require', 'import', or 'if'
+
 Error: 2 parse error(s)

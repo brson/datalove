@@ -1,5 +1,8 @@
 Parse errors:
 error[D002]: expected {} after struct keyword
-  --> expected '{' after 'struct'
-     | 
+ --> 02_struct_missing_braces.dfs:1:1
+  |
+1 | let output: struct Bar = @42
+  | ^ expected '{' after 'struct'
+
 Error: 1 parse error(s)

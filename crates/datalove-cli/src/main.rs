@@ -4,8 +4,67 @@ use rmx::prelude::*;
 
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
+use std::collections::HashMap;
 
 mod docs;
+
+/// Context for rendering diagnostics with source location information.
+///
+/// Simplified version for single-file CLI use case.
+/// Lives in the driver (CLI) outside of salsa.
+struct DiagnosticContext {
+    /// Source information (path, display name).
+    source_info: SourceInfo,
+    /// Original source text (for line:col conversion).
+    source_text: String,
+}
+
+struct SourceInfo {
+    /// File path if the source came from a file.
+    path: Option<PathBuf>,
+    /// Display name for rendering (e.g., "file.dfs", "<repl-5>", "<test>").
+    display_name: String,
+}
+
+impl DiagnosticContext {
+    /// Register a file source.
+    fn from_file(path: PathBuf, source_text: String) -> Self {
+        let display_name = path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        DiagnosticContext {
+            source_info: SourceInfo {
+                path: Some(path),
+                display_name,
+            },
+            source_text,
+        }
+    }
+
+    /// Register a test source (no file path).
+    fn from_test(source_text: String) -> Self {
+        DiagnosticContext {
+            source_info: SourceInfo {
+                path: None,
+                display_name: "<test>".to_string(),
+            },
+            source_text,
+        }
+    }
+
+    /// Register a REPL input.
+    fn from_repl(line_num: usize, source_text: String) -> Self {
+        DiagnosticContext {
+            source_info: SourceInfo {
+                path: None,
+                display_name: format!("<repl-{}>", line_num),
+            },
+            source_text,
+        }
+    }
+}
 
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
@@ -313,6 +372,7 @@ impl ScriptCommand {
         &self,
         db: &dyn datalove_datafun::Db,
         source: bct::input::Source,
+        diag_ctx: &DiagnosticContext,
     ) -> AnyResult<()> {
         use datalove_diagnostic::ParseDiagnostic;
         use datalove_datafun::parser;
@@ -323,23 +383,87 @@ impl ScriptCommand {
             eprintln!("Parse errors:");
             for diag_wrapper in &parse_diags {
                 let diag = diag_wrapper.to_diagnostic(db);
-                let code_str = diag.code.map(|c| c.as_str(db)).unwrap_or("");
-                let message = diag.message.as_str(db);
-                eprintln!("error[{}]: {}", code_str, message);
-
-                for label in &diag.labels {
-                    let text_str = label.text.as_str(db);
-                    let span_str = &text_str[label.span.start..label.span.end];
-                    if let Some(label_msg) = label.message {
-                        eprintln!("  --> {}", label_msg.as_str(db));
-                    }
-                    eprintln!("     | {}", span_str);
-                }
+                self.render_single_diagnostic(db, &diag, diag_ctx);
             }
             bail!("{} parse error(s)", parse_diags.len());
         }
 
         Ok(())
+    }
+
+    fn render_single_diagnostic(
+        &self,
+        db: &dyn datalove_datafun::Db,
+        diag: &datalove_diagnostic::Diagnostic,
+        diag_ctx: &DiagnosticContext,
+    ) {
+        use datalove_diagnostic::byte_to_line_col;
+
+        let severity = diag.severity.as_str();
+        let code_str = diag.code.map(|c| c.as_str(db)).unwrap_or("");
+        let message = diag.message.as_str(db);
+
+        // Print main error line.
+        eprintln!("{}[{}]: {}", severity, code_str, message);
+
+        // Render each label.
+        for label in &diag.labels {
+            // Use the single source context (simplified for single-file CLI).
+            let source_info = &diag_ctx.source_info;
+            let source_text = &diag_ctx.source_text;
+
+            // Convert byte offset to line:col.
+            let (line, col) = byte_to_line_col(source_text, label.span.start);
+
+            // Print location.
+            eprintln!(" --> {}:{}:{}", source_info.display_name, line, col);
+
+            // Extract the relevant source line.
+            let lines: Vec<&str> = source_text.lines().collect();
+            if line > 0 && line <= lines.len() {
+                let source_line = lines[line - 1];
+
+                // Calculate column positions for the span.
+                let (_, start_col) = byte_to_line_col(source_text, label.span.start);
+                let (end_line, end_col) = byte_to_line_col(source_text, label.span.end);
+
+                // Only show caret if span is on one line.
+                if end_line == line {
+                    let span_len = if end_col > start_col {
+                        end_col - start_col
+                    } else {
+                        1
+                    };
+
+                    eprintln!("  |");
+                    eprintln!("{} | {}", line, source_line);
+
+                    // Print caret line.
+                    let padding = " ".repeat(start_col - 1);
+                    let carets = "^".repeat(span_len);
+
+                    if let Some(label_msg) = label.message {
+                        eprintln!("  | {}{} {}", padding, carets, label_msg.as_str(db));
+                    } else {
+                        eprintln!("  | {}{}", padding, carets);
+                    }
+                } else {
+                    // Multi-line span, just show the line.
+                    eprintln!("  |");
+                    eprintln!("{} | {}", line, source_line);
+                    if let Some(label_msg) = label.message {
+                        eprintln!("  | {}", label_msg.as_str(db));
+                    }
+                }
+            }
+        }
+
+        // Print notes.
+        for note in &diag.notes {
+            eprintln!("  = note: {}", note.as_str(db));
+        }
+
+        eprintln!();
     }
 
     fn run_without_sys(&self) -> AnyResult<()> {
@@ -352,15 +476,31 @@ impl ScriptCommand {
         let source_text = rmx::std::fs::read_to_string(&self.file_path)?;
         let source = Source::new(&db, source_text.S());
 
+        // Create diagnostic context.
+        let diag_ctx = DiagnosticContext::from_file(self.file_path.clone(), source_text);
+
         // Call tracked wrapper to enable diagnostic accumulation and get script.
         let script = datafun::parser::parse_for_diagnostics(&db, source);
 
         // Render parse diagnostics (must be called after parse_for_diagnostics).
-        self.render_diagnostics(&db, source)?;
+        self.render_diagnostics(&db, source, &diag_ctx)?;
 
         // Type check the script.
         // TODO: Pass actual spans once we have a way to retrieve them from parse_for_diagnostics.
         let tycheck_result = datafun::tycheck::type_check(&db, script, vec![], vec![]);
+
+        // Retrieve and render type diagnostics.
+        let type_diags = datafun::tycheck::type_check::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, script, vec![], vec![]);
+        if !type_diags.is_empty() {
+            eprintln!("Type errors:");
+            for diag_wrapper in &type_diags {
+                let diag = diag_wrapper.to_diagnostic(&db);
+                self.render_single_diagnostic(&db, &diag, &diag_ctx);
+            }
+            bail!("{} type error(s)", type_diags.len());
+        }
+
+        // Also check old-style errors for now (fallback).
         if !tycheck_result.errors(&db).is_empty() {
             bail!("Type check errors: {} error(s)", tycheck_result.errors(&db).len());
         }
@@ -402,11 +542,14 @@ impl ScriptCommand {
         let script_text = rmx::std::fs::read_to_string(&self.file_path)?;
         let source = Source::new(&db, script_text.S());
 
+        // Create diagnostic context.
+        let diag_ctx = DiagnosticContext::from_file(self.file_path.clone(), script_text);
+
         // Call tracked wrapper to enable diagnostic accumulation and get script.
         let script = datafun::parser::parse_for_diagnostics(&db, source);
 
         // Render parse diagnostics (must be called after parse_for_diagnostics).
-        self.render_diagnostics(&db, source)?;
+        self.render_diagnostics(&db, source, &diag_ctx)?;
 
         // Load package world from sys/ directory.
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -465,7 +608,20 @@ impl ScriptCommand {
             *typecheck_result,
         );
 
-        // Check for script typecheck errors.
+        // Retrieve and render type diagnostics.
+        let type_diags = datafun::tycheck::type_check_with_package_world::accumulated::<datalove_diagnostic::TypeDiagnostic>(
+            &db, script, vec![], vec![], package_world, *typecheck_result
+        );
+        if !type_diags.is_empty() {
+            eprintln!("Type errors:");
+            for diag_wrapper in &type_diags {
+                let diag = diag_wrapper.to_diagnostic(&db);
+                self.render_single_diagnostic(&db, &diag, &diag_ctx);
+            }
+            bail!("{} type error(s)", type_diags.len());
+        }
+
+        // Also check old-style errors for now (fallback).
         if !script_typecheck.errors(&db).is_empty() {
             let errors: Vec<_> = script_typecheck.errors(&db).iter()
                 .map(|e| format!("{:?}", e.error(&db)))
