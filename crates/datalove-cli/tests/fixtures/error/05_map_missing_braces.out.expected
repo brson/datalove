@@ -1,8 +1,8 @@
 Parse errors:
 error[D005]: expected <> after map keyword
- --> 05_map_missing_braces.dfs:1:1
+ --> 05_map_missing_braces.dfs:1:13
   |
 1 | let output: map = @42
-  | ^ expected '<' after 'map'
+  |             ^^^ expected '<' after 'map'
 
 Error: 1 parse error(s)

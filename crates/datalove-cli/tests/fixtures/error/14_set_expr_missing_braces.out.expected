@@ -1,8 +1,8 @@
 Parse errors:
 error[D017]: expected {} after set keyword
- --> 14_set_expr_missing_braces.dfs:1:1
+ --> 14_set_expr_missing_braces.dfs:1:15
   |
 1 | let output = @set
-  | ^ expected '{' after 'set'
+  |               ^^^ expected '{' after 'set'
 
 Error: 1 parse error(s)
