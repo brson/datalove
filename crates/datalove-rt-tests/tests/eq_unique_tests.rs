@@ -28,16 +28,22 @@ fn test_eq_unique_f32_equals() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -53,16 +59,22 @@ fn test_eq_unique_u32_equals() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -78,16 +90,22 @@ fn test_eq_unique_tuple_equals() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -103,16 +121,22 @@ fn test_eq_unique_tuple_not_equals() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -130,16 +154,22 @@ fn test_eq_unique_map_empty_equals() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -155,16 +185,22 @@ fn test_eq_unique_map_equals_same_contents() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -180,16 +216,22 @@ fn test_eq_unique_map_not_equals_different_keys() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -205,16 +247,22 @@ fn test_eq_unique_map_not_equals_different_values() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -230,16 +278,22 @@ fn test_eq_unique_map_not_equals_different_sizes() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -257,16 +311,22 @@ fn test_eq_unique_set_empty_equals() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -282,16 +342,22 @@ fn test_eq_unique_set_equals_same_contents() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -307,16 +373,22 @@ fn test_eq_unique_set_not_equals_different_elements() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 
@@ -332,16 +404,22 @@ fn test_eq_unique_set_not_equals_different_sizes() -> AnyResult<()> {
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let inst_a = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
-    let inst_b = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
 
     let result = unsafe {
         datalove_rt::c::dtlv_rti_eq_unique(
             std::ptr::null_mut(),
-            inst_a.ptr,
-            inst_a.tydesc,
-            inst_b.ptr,
-            inst_b.tydesc,
+            ptr_a,
+            tydesc_a,
+            ptr_b,
+            tydesc_b,
         )
     };
 

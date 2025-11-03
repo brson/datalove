@@ -42,15 +42,14 @@ fn instantiated_to_value(
 ) -> InterpResult {
     use rtdt::TyTag;
 
-    let tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(inst.tydesc) };
-    let type_tag = tydesc_ref.type_tag();
+    let type_tag = inst.tydesc.type_tag();
 
     match type_tag {
         TyTag::Bool => {
             let value = unsafe { *(inst.ptr as *const bool) };
             // Free the wrapper allocation since we copied the value.
             unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
             }
             Ok(Value::Bool(value))
         }
@@ -58,7 +57,7 @@ fn instantiated_to_value(
             let value = unsafe { *(inst.ptr as *const u8) };
             // Free the wrapper allocation since we copied the value.
             unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
             }
             Ok(Value::U32(value as u32))
         }
@@ -66,7 +65,7 @@ fn instantiated_to_value(
             let value = unsafe { *(inst.ptr as *const i8) };
             // Free the wrapper allocation since we copied the value.
             unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
             }
             Ok(Value::U32((value as i32) as u32))
         }
@@ -74,7 +73,7 @@ fn instantiated_to_value(
             let value = unsafe { *(inst.ptr as *const u16) };
             // Free the wrapper allocation since we copied the value.
             unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
             }
             Ok(Value::U32(value as u32))
         }
@@ -82,7 +81,7 @@ fn instantiated_to_value(
             let value = unsafe { *(inst.ptr as *const i16) };
             // Free the wrapper allocation since we copied the value.
             unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
             }
             Ok(Value::U32((value as i32) as u32))
         }
@@ -90,7 +89,7 @@ fn instantiated_to_value(
             let value = unsafe { *(inst.ptr as *const u32) };
             // Free the wrapper allocation since we copied the value.
             unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
             }
             Ok(Value::U32(value))
         }
@@ -98,7 +97,7 @@ fn instantiated_to_value(
             let value = unsafe { *(inst.ptr as *const i32) };
             // Free the wrapper allocation since we copied the value.
             unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
             }
             Ok(Value::U32(value as u32))
         }
@@ -106,80 +105,80 @@ fn instantiated_to_value(
             let value = unsafe { *(inst.ptr as *const f32) };
             // Free the wrapper allocation since we copied the value.
             unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc, 1, inst.ptr as *mut u8);
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
             }
             Ok(Value::F32(value))
         }
         TyTag::Int => {
             Ok(Value::Int {
                 ptr: inst.ptr as *mut rtdt::Int,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::String => {
             Ok(Value::String {
                 ptr: inst.ptr as *mut rtdt::String,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::Tuple => {
             Ok(Value::Tuple {
                 ptr: inst.ptr as *mut u8,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::Struct => {
             Ok(Value::Struct {
                 ptr: inst.ptr as *mut u8,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::Enum => {
             Ok(Value::Enum {
                 ptr: inst.ptr as *mut u8,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::List => {
             Ok(Value::List {
                 ptr: inst.ptr as *mut rtdt::List,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::Map => {
             Ok(Value::Map {
                 ptr: inst.ptr as *mut rtdt::Map,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::Set => {
             Ok(Value::Set {
                 ptr: inst.ptr as *mut rtdt::Set,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::Option => {
             Ok(Value::Option {
                 ptr: inst.ptr as *mut u8,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::Result => {
             Ok(Value::Result {
                 ptr: inst.ptr as *mut u8,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::Data => {
             Ok(Value::Data {
                 ptr: inst.ptr as *mut rtdt::Data,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         TyTag::Error => {
             Ok(Value::Error {
                 ptr: inst.ptr as *mut rtdt::Error,
-                tydesc: inst.tydesc,
+                tydesc: inst.tydesc.as_ptr(),
             })
         }
         _ => {

@@ -299,9 +299,9 @@ impl LitOpCommand {
                     datalove_rt::c::dtlv_rti_eq(
                         std::ptr::null_mut(), // runtime handle not needed
                         inst1.ptr,
-                        inst1.tydesc,
+                        inst1.tydesc.as_ptr(),
                         inst2.ptr,
-                        inst2.tydesc,
+                        inst2.tydesc.as_ptr(),
                     )
                 };
 
@@ -317,9 +317,9 @@ impl LitOpCommand {
                     datalove_rt::c::dtlv_rti_cmp_total(
                         std::ptr::null_mut(), // runtime handle not needed
                         inst1.ptr,
-                        inst1.tydesc,
+                        inst1.tydesc.as_ptr(),
                         inst2.ptr,
-                        inst2.tydesc,
+                        inst2.tydesc.as_ptr(),
                     )
                 };
 
@@ -338,10 +338,10 @@ impl LitOpCommand {
         // Clean up instantiated values before shutdown.
         unsafe {
             let rt_handle = rt.handle();
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc, 1, inst1.ptr as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc, 1, inst2.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc.as_ptr(), 1, inst1.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc.as_ptr(), 1, inst2.ptr as *mut u8);
             // Runtime shutdown handled by Drop
         }
         Ok(())

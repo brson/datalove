@@ -38,7 +38,7 @@ fn test_destroy_int_small() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -49,7 +49,7 @@ fn test_destroy_int_small() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -85,7 +85,7 @@ fn test_destroy_int_large() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -96,7 +96,7 @@ fn test_destroy_int_large() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -131,7 +131,7 @@ fn test_destroy_list_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -142,7 +142,7 @@ fn test_destroy_list_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -178,7 +178,7 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -189,7 +189,7 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -225,7 +225,7 @@ fn test_destroy_list_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -236,7 +236,7 @@ fn test_destroy_list_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -272,7 +272,7 @@ fn test_destroy_list_nested() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -283,7 +283,7 @@ fn test_destroy_list_nested() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -314,14 +314,14 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { (*inst.tydesc).size as usize };
+    let tydesc_size = unsafe { inst.tydesc.size() as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -332,7 +332,7 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -357,14 +357,14 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { (*inst.tydesc).size as usize };
+    let tydesc_size = unsafe { inst.tydesc.size() as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -375,7 +375,7 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -400,14 +400,14 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { (*inst.tydesc).size as usize };
+    let tydesc_size = unsafe { inst.tydesc.size() as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -418,7 +418,7 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -443,14 +443,14 @@ fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { (*inst.tydesc).size as usize };
+    let tydesc_size = unsafe { inst.tydesc.size() as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -461,7 +461,7 @@ fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -492,7 +492,7 @@ fn test_destroy_set_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -503,7 +503,7 @@ fn test_destroy_set_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -541,7 +541,7 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -552,7 +552,7 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -590,7 +590,7 @@ fn test_destroy_set_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -601,7 +601,7 @@ fn test_destroy_set_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -639,7 +639,7 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -650,7 +650,7 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -689,7 +689,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -700,7 +700,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -730,14 +730,14 @@ fn test_destroy_option_none() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { (*inst.tydesc).size as usize };
+    let tydesc_size = unsafe { inst.tydesc.size() as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -748,7 +748,7 @@ fn test_destroy_option_none() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -774,14 +774,14 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { (*inst.tydesc).size as usize };
+    let tydesc_size = unsafe { inst.tydesc.size() as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -792,7 +792,7 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -818,14 +818,14 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { (*inst.tydesc).size as usize };
+    let tydesc_size = unsafe { inst.tydesc.size() as usize };
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -836,7 +836,7 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -867,7 +867,7 @@ fn test_destroy_map_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -877,7 +877,7 @@ fn test_destroy_map_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -910,7 +910,7 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -920,7 +920,7 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -953,7 +953,7 @@ fn test_destroy_map_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -963,7 +963,7 @@ fn test_destroy_map_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -996,7 +996,7 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -1006,7 +1006,7 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1039,7 +1039,7 @@ fn test_destroy_map_nested() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -1049,7 +1049,7 @@ fn test_destroy_map_nested() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1091,7 +1091,7 @@ fn test_destroy_map_large() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_clone_local(
             rt,
             inst.ptr,
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
         )
     };
@@ -1101,7 +1101,7 @@ fn test_destroy_map_large() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt,
             cloned_buffer.as_mut_ptr(),
-            inst.tydesc,
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);

@@ -35,29 +35,28 @@ use crate::tydesc_table::TyDescTable;
 /// An instantiated value with its type descriptor.
 ///
 /// The value's lifetime is managed by the allocator that created it.
-#[derive(Debug)]
-pub struct InstantiatedValue {
+pub struct InstantiatedValue<'a> {
     pub ptr: *const u8,
-    pub tydesc: *const rtdt::TyDesc,
+    pub tydesc: rtdt::TyDescRef<'a>,
 }
 
 /// Instantiate a value from typechecked AST using the runtime.
 ///
 /// This is the primary entry point for runtime-integrated instantiation.
 /// The caller provides a LocalRt and is responsible for cleanup.
-pub fn instantiate_value<'db>(
+pub fn instantiate_value<'db, 't>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
-    tydesc_table: &mut TyDescTable<'db>,
+    tydesc_table: &'t mut TyDescTable<'db>,
     typechecked: TypecheckResult<'db>,
-) -> AnyResult<InstantiatedValue> {
+) -> AnyResult<InstantiatedValue<'t>> {
     let root_type = typechecked.root_type(db)
         .ok_or_else(|| anyhow!("No root type"))?;
     let root_expr = typechecked.root_expr(db);
 
-    let tydesc = tydesc_table.get_or_create(root_type.ty(db));
-
     let value_ptr = instantiate_expr(db, rt, root_expr, root_type.ty(db), tydesc_table)?;
+
+    let tydesc = tydesc_table.get_or_create_ref(root_type.ty(db));
 
     Ok(InstantiatedValue {
         ptr: value_ptr,
@@ -964,32 +963,32 @@ mod tests {
     }
 
     /// RAII guard for InstantiatedValue to ensure proper cleanup.
-    struct InstGuard {
+    struct InstGuard<'a> {
         rt_handle: datalove_rt::c::LocalRtHandle,
-        inst: InstantiatedValue,
+        inst: InstantiatedValue<'a>,
     }
 
-    impl InstGuard {
-        fn new(rt_handle: datalove_rt::c::LocalRtHandle, inst: InstantiatedValue) -> Self {
+    impl<'a> InstGuard<'a> {
+        fn new(rt_handle: datalove_rt::c::LocalRtHandle, inst: InstantiatedValue<'a>) -> Self {
             Self { rt_handle, inst }
         }
 
-        fn value(&self) -> &InstantiatedValue {
+        fn value(&self) -> &InstantiatedValue<'a> {
             &self.inst
         }
     }
 
-    impl Drop for InstGuard {
+    impl<'a> Drop for InstGuard<'a> {
         fn drop(&mut self) {
             unsafe {
                 datalove_rt::c::dtlv_rti_any_destroy_local(
                     self.rt_handle,
                     self.inst.ptr as *mut u8,
-                    self.inst.tydesc,
+                    self.inst.tydesc.as_ptr(),
                 );
                 datalove_rt::c::dtlv_rti_mem_free_local(
                     self.rt_handle,
-                    self.inst.tydesc,
+                    self.inst.tydesc.as_ptr(),
                     1,
                     self.inst.ptr as *mut u8,
                 );
@@ -1019,7 +1018,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Bool);
             assert_eq!(*inst.ptr, 1);
         }
         Ok(())
@@ -1039,7 +1038,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Bool);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Bool);
             assert_eq!(*inst.ptr, 0);
         }
         Ok(())
@@ -1059,7 +1058,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::U32);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::U32);
             assert_eq!(*(inst.ptr as *const u32), 42);
         }
         Ok(())
@@ -1079,7 +1078,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::F32);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::F32);
             assert_eq!(*(inst.ptr as *const f32), 3.14);
         }
         Ok(())
@@ -1099,7 +1098,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::String);
             let string = &*(inst.ptr as *const rtdt::String);
             assert_eq!(string.size, 5);
             assert!(string.capacity >= 5);
@@ -1123,7 +1122,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::String);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::String);
             let string = &*(inst.ptr as *const rtdt::String);
             assert_eq!(string.size, 0);
             assert_eq!(string.capacity, 0);
@@ -1146,11 +1145,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
-            let tuple_info = &(*inst.tydesc).type_info.tuple;
-            assert_eq!(tuple_info.num_fields, 2);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tuple);
+            let tuple_info = inst.tydesc.tuple_info();
+            assert_eq!(tuple_info.num_fields(), 2);
 
-            let fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let fields = tuple_info.fields();
             let bool_value = *(inst.ptr.add(fields[0].offset as usize));
             assert_eq!(bool_value, 1);
 
@@ -1174,7 +1173,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Int);
             let int = &*(inst.ptr as *const rtdt::Int);
             assert_eq!(int.size_and_sign, 1);
             assert_eq!(int.capacity, 1);
@@ -1198,7 +1197,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Int);
             let int = &*(inst.ptr as *const rtdt::Int);
             assert_eq!(int.size_and_sign, 1);
             assert_eq!(int.capacity, 1);
@@ -1222,11 +1221,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
-            let struct_info = &(*inst.tydesc).type_info.struct_;
-            assert_eq!(struct_info.num_fields, 2);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Struct);
+            let struct_info = inst.tydesc.struct_info();
+            assert_eq!(struct_info.num_fields(), 2);
 
-            let fields = std::slice::from_raw_parts(struct_info.fields, 2);
+            let fields = struct_info.fields();
 
             let field0_name = std::slice::from_raw_parts(fields[0].name, fields[0].name_len as usize);
             assert_eq!(field0_name, b"x");
@@ -1257,9 +1256,9 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
-            let enum_info = &(*inst.tydesc).type_info.enum_;
-            assert_eq!(enum_info.num_variants, 2);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
+            let enum_info = inst.tydesc.enum_info();
+            assert_eq!(enum_info.num_variants(), 2);
 
             let discriminant = *(inst.ptr as *const u32);
             assert_eq!(discriminant, 0);
@@ -1281,14 +1280,14 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
-            let enum_info = &(*inst.tydesc).type_info.enum_;
-            assert_eq!(enum_info.num_variants, 2);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
+            let enum_info = inst.tydesc.enum_info();
+            assert_eq!(enum_info.num_variants(), 2);
 
             let discriminant = *(inst.ptr as *const u32);
             assert_eq!(discriminant, 0);
 
-            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let variants = enum_info.variants();
             let payload_offset = variants[0].offset;
             let payload_value = *(inst.ptr.add(payload_offset as usize) as *const u32);
             assert_eq!(payload_value, 42);
@@ -1310,12 +1309,12 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
             let list = &*(inst.ptr as *const rtdt::List);
             assert_eq!(list.size, 5);
             assert_eq!(list.capacity, 5);
 
-            let element_tydesc = (*inst.tydesc).type_info.list.element_tydesc;
+            let element_tydesc = inst.tydesc.list_element_ty().as_ptr();
             assert!(!element_tydesc.is_null());
             assert_eq!((*element_tydesc).type_tag, rtdt::TyTag::U32);
 
@@ -1339,7 +1338,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
             let list = &*(inst.ptr as *const rtdt::List);
             assert_eq!(list.size, 0);
             assert_eq!(list.capacity, 0);
@@ -1362,7 +1361,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::None as u8);
         }
@@ -1383,11 +1382,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize) as *const u32;
             assert_eq!(*payload_ptr, 42);
         }
@@ -1408,11 +1407,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
             let list = &*(inst.ptr as *const rtdt::List);
             assert_eq!(list.size, 2);
 
-            let element_tydesc = (*inst.tydesc).type_info.list.element_tydesc;
+            let element_tydesc = inst.tydesc.list_element_ty().as_ptr();
             assert_eq!((*element_tydesc).type_tag, rtdt::TyTag::String);
 
             let strings = std::slice::from_raw_parts(list.data as *const rtdt::String, list.size as usize);
@@ -1442,14 +1441,14 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let outer_tag = *inst.ptr;
             assert_eq!(outer_tag, rtdt::OptionTag::Some as u8);
 
-            let outer_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let outer_layout = rtdt::layout::compute_option_layout(inst.tydesc);
             let outer_payload_ptr = inst.ptr.add(outer_layout.payload_offset as usize);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Option);
             let inner_tag = *outer_payload_ptr;
             assert_eq!(inner_tag, rtdt::OptionTag::Some as u8);
@@ -1476,11 +1475,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tuple);
-            let tuple_info = &(*inst.tydesc).type_info.tuple;
-            assert_eq!(tuple_info.num_fields, 2);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tuple);
+            let tuple_info = inst.tydesc.tuple_info();
+            assert_eq!(tuple_info.num_fields(), 2);
 
-            let fields = std::slice::from_raw_parts(tuple_info.fields, 2);
+            let fields = tuple_info.fields();
             let u32_value_1 = *(inst.ptr.add(fields[0].offset as usize) as *const u32);
             assert_eq!(u32_value_1, 1);
 
@@ -1504,7 +1503,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Int);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Int);
             let int = &*(inst.ptr as *const rtdt::Int);
             assert!(int.size_and_sign > 0);
             let num_limbs = int.size_and_sign as usize;
@@ -1533,11 +1532,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
-            let struct_info = &(*inst.tydesc).type_info.struct_;
-            assert_eq!(struct_info.num_fields, 2);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Struct);
+            let struct_info = inst.tydesc.struct_info();
+            assert_eq!(struct_info.num_fields(), 2);
 
-            let fields = std::slice::from_raw_parts(struct_info.fields, 2);
+            let fields = struct_info.fields();
             let x_value = *(inst.ptr.add(fields[0].offset as usize) as *const u32);
             assert_eq!(x_value, 10);
 
@@ -1561,11 +1560,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Struct);
-            let struct_info = &(*inst.tydesc).type_info.struct_;
-            assert_eq!(struct_info.num_fields, 2);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Struct);
+            let struct_info = inst.tydesc.struct_info();
+            assert_eq!(struct_info.num_fields(), 2);
 
-            let fields = std::slice::from_raw_parts(struct_info.fields, 2);
+            let fields = struct_info.fields();
             let x_value = *(inst.ptr.add(fields[0].offset as usize) as *const u32);
             assert_eq!(x_value, 5);
 
@@ -1589,7 +1588,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
             let discriminant = *(inst.ptr as *const u32);
             assert_eq!(discriminant, 1);
         }
@@ -1610,14 +1609,14 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
-            let enum_info = &(*inst.tydesc).type_info.enum_;
-            assert_eq!(enum_info.num_variants, 2);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
+            let enum_info = inst.tydesc.enum_info();
+            assert_eq!(enum_info.num_variants(), 2);
 
             let discriminant = *(inst.ptr as *const u32);
             assert_eq!(discriminant, 0);
 
-            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let variants = enum_info.variants();
             let payload_offset = variants[0].offset;
             let payload_ptr = inst.ptr.add(payload_offset as usize);
 
@@ -1652,14 +1651,14 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Enum);
-            let enum_info = &(*inst.tydesc).type_info.enum_;
-            assert_eq!(enum_info.num_variants, 2);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
+            let enum_info = inst.tydesc.enum_info();
+            assert_eq!(enum_info.num_variants(), 2);
 
             let discriminant = *(inst.ptr as *const u32);
             assert_eq!(discriminant, 0);
 
-            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let variants = enum_info.variants();
             let payload_offset = variants[0].offset;
             let payload_ptr = inst.ptr.add(payload_offset as usize);
 
@@ -1670,7 +1669,7 @@ mod tests {
             let struct_info = &(*payload_tydesc).type_info.struct_;
             assert_eq!(struct_info.num_fields, 2);
 
-            let struct_fields = std::slice::from_raw_parts(struct_info.fields, 2);
+            let struct_fields = std::slice::from_raw_parts(struct_info.fields, struct_info.num_fields as usize);
             let x_value = *(payload_ptr.add(struct_fields[0].offset as usize) as *const u32);
             let y_value = *(payload_ptr.add(struct_fields[1].offset as usize) as *const u32);
 
@@ -1694,11 +1693,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
             let list = &*(inst.ptr as *const rtdt::List);
             assert_eq!(list.size, 3);
 
-            let element_tydesc = (*inst.tydesc).type_info.list.element_tydesc;
+            let element_tydesc = inst.tydesc.list_element_ty().as_ptr();
             assert!(!element_tydesc.is_null());
             assert_eq!((*element_tydesc).type_tag, rtdt::TyTag::Tuple);
 
@@ -1734,11 +1733,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::None as u8);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tuple);
             let tuple_info = &(*inner_tydesc).type_info.tuple;
             assert_eq!(tuple_info.num_fields, 2);
@@ -1760,14 +1759,14 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tuple);
             let tuple_info = &(*inner_tydesc).type_info.tuple;
             let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
@@ -1794,11 +1793,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::None as u8);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Struct);
             let struct_info = &(*inner_tydesc).type_info.struct_;
             assert_eq!(struct_info.num_fields, 2);
@@ -1820,17 +1819,17 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Struct);
             let struct_info = &(*inner_tydesc).type_info.struct_;
-            let struct_fields = std::slice::from_raw_parts(struct_info.fields, 2);
+            let struct_fields = std::slice::from_raw_parts(struct_info.fields, struct_info.num_fields as usize);
 
             let x_value = *(payload_ptr.add(struct_fields[0].offset as usize) as *const u32);
             let y_value = *(payload_ptr.add(struct_fields[1].offset as usize) as *const u32);
@@ -1854,11 +1853,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::None as u8);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::List);
         }
         Ok(())
@@ -1878,11 +1877,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let list = &*(payload_ptr as *const rtdt::List);
@@ -1907,11 +1906,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let list = &*(payload_ptr as *const rtdt::List);
@@ -1938,11 +1937,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::None as u8);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::String);
         }
         Ok(())
@@ -1962,11 +1961,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::None as u8);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Enum);
             let enum_info = &(*inner_tydesc).type_info.enum_;
             assert_eq!(enum_info.num_variants, 2);
@@ -1988,19 +1987,19 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let discriminant = *(payload_ptr as *const u32);
             assert_eq!(discriminant, 1);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             let enum_info = &(*inner_tydesc).type_info.enum_;
-            let variants = std::slice::from_raw_parts(enum_info.variants, 2);
+            let variants = std::slice::from_raw_parts(enum_info.variants, enum_info.num_variants as usize);
             let enum_layout = rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(inner_tydesc));
 
             let enum_payload_ptr = payload_ptr.add(enum_layout.variant_offsets[1] as usize);
@@ -2026,11 +2025,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::None as u8);
 
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Option);
 
             let innermost_tydesc = (*inner_tydesc).type_info.option.inner_tydesc;
@@ -2053,7 +2052,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::None as u8);
         }
@@ -2074,14 +2073,14 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let outer_tag = *inst.ptr;
             assert_eq!(outer_tag, rtdt::OptionTag::Some as u8);
 
-            let outer_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let outer_layout = rtdt::layout::compute_option_layout(inst.tydesc);
             let outer_payload_ptr = inst.ptr.add(outer_layout.payload_offset as usize);
 
-            let inner_opt_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_opt_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_opt_tydesc).type_tag, rtdt::TyTag::Option);
             let inner_tag = *outer_payload_ptr;
             assert_eq!(inner_tag, rtdt::OptionTag::Some as u8);
@@ -2117,11 +2116,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Result);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Result);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::ResultTag::Ok as u8);
 
-            let layout = rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let layout = rtdt::layout::compute_result_layout(inst.tydesc);
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize) as *const u32;
             assert_eq!(*payload_ptr, 42);
         }
@@ -2142,11 +2141,11 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Result);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Result);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::ResultTag::Err as u8);
 
-            let layout = rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let layout = rtdt::layout::compute_result_layout(inst.tydesc);
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             // The error payload is an Error type (which has same layout as Data).
@@ -2176,7 +2175,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Error);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Error);
 
             let error_ptr = inst.ptr as *const rtdt::Error;
             let inner_tydesc = (*error_ptr).tydesc();
@@ -2203,7 +2202,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
             assert_eq!((*tensor).capacity_elems, 6);
@@ -2239,7 +2238,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
             assert_eq!((*tensor).capacity_elems, 5);
@@ -2275,7 +2274,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
             assert_eq!((*tensor).capacity_elems, 16);
@@ -2311,7 +2310,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
             assert_eq!((*tensor).capacity_elems, 8);
@@ -2347,7 +2346,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Tensor);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
             assert_eq!((*tensor).capacity_elems, 4);
@@ -2381,7 +2380,7 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::List);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
 
             let list = inst.ptr as *const rtdt::List;
             assert_eq!((*list).size, 2);
@@ -2405,15 +2404,15 @@ mod tests {
         let inst = inst_guard.value();
 
         unsafe {
-            assert_eq!((*inst.tydesc).type_tag, rtdt::TyTag::Option);
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
+            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             // Verify the payload is a tensor
-            let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
+            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tensor);
         }
         Ok(())
