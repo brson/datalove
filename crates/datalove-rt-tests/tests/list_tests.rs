@@ -33,9 +33,7 @@ fn create_option_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
     });
 
     // Now compute the layout.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     // Update size and align.
     option_tydesc.size = option_layout.size;
@@ -358,9 +356,7 @@ fn test_list_pop_empty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Try to pop from empty list.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -434,9 +430,7 @@ fn test_list_push_pop() -> AnyResult<()> {
     assert_eq!(list.size, 1);
 
     // Pop.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -509,9 +503,7 @@ fn test_list_get_empty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Try to get element at index 0.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -587,9 +579,7 @@ fn test_list_get_valid() -> AnyResult<()> {
     }
 
     // Get element at index 1.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -671,9 +661,7 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
     }
 
     // Try to get element at index 5.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -971,9 +959,7 @@ fn test_list_insert_at_start() -> AnyResult<()> {
     assert_eq!(list.size, 4);
 
     // Verify list is now [5, 10, 20, 30].
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     for (idx, expected) in [(0, 5), (1, 10), (2, 20), (3, 30)] {
         let mut option_buffer = vec![0u8; option_layout.size as usize];
@@ -1056,9 +1042,7 @@ fn test_list_remove_middle() -> AnyResult<()> {
     }
 
     // Remove element at index 2 (value 20).
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -1134,9 +1118,7 @@ fn create_option_string_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
     });
 
     // Compute the layout.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     option_tydesc.size = option_layout.size;
     option_tydesc.align = option_layout.align;
@@ -1467,9 +1449,7 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -1540,9 +1520,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
 
     assert_eq!(list.size, 1);
 
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -1611,9 +1589,7 @@ fn test_list_get_empty_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -1687,9 +1663,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
         }
     }
 
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -1772,9 +1746,7 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
         }
     }
 
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -2053,9 +2025,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
         }
     }
 
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {

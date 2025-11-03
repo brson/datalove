@@ -1200,7 +1200,7 @@ fn eval_try_option<'db>(
         }
         rtdt::OptionTag::Some => {
             // Extract the Some value using the same pattern as if-destructuring.
-            let layout = unsafe { rtdt::layout::compute_option_layout(tydesc) };
+            let layout = unsafe { rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(tydesc)) };
             let payload_ptr = unsafe { ptr.add(layout.payload_offset as usize) };
 
             // Get the inner type descriptor.
@@ -1250,7 +1250,7 @@ fn eval_try_result<'db>(
     match result_tag {
         rtdt::ResultTag::Err => {
             // Extract the Error value and return early.
-            let layout = unsafe { rtdt::layout::compute_result_layout(tydesc) };
+            let layout = unsafe { rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(tydesc)) };
             let payload_ptr = unsafe { ptr.add(layout.payload_offset as usize) };
 
             // The error payload is of type Error (same layout as Data).
@@ -1269,7 +1269,7 @@ fn eval_try_result<'db>(
         }
         rtdt::ResultTag::Ok => {
             // Extract the Ok value using the same pattern as if-destructuring.
-            let layout = unsafe { rtdt::layout::compute_result_layout(tydesc) };
+            let layout = unsafe { rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(tydesc)) };
             let payload_ptr = unsafe { ptr.add(layout.payload_offset as usize) };
 
             // Get the Ok type descriptor.
@@ -1387,7 +1387,7 @@ fn eval_function_call<'db>(
                     let mut err_result = unsafe { Value::alloc_result(&mut ctx.rt, tydesc) };
 
                     // Write Err tag.
-                    let layout = unsafe { datalove_rtdt::layout::compute_result_layout(tydesc) };
+                    let layout = unsafe { datalove_rtdt::layout::compute_result_layout(datalove_rtdt::TyDescRef::from_ptr(tydesc)) };
                     unsafe {
                         *(err_result.as_mut_ptr()) = datalove_rtdt::ResultTag::Err as u8;
                     }
@@ -1539,7 +1539,7 @@ fn eval_tuple<'db>(
     };
 
     // Compute the layout to get field offsets.
-    let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_tuple_layout(rtdt::TyDescRef::from_ptr(tuple_tydesc)) };
 
     // Copy each element into the tuple at the correct offset.
     for (i, mut elem_value) in element_values.into_iter().enumerate() {
@@ -1693,7 +1693,7 @@ fn create_option_some(
     }
 
     let mut option_value = unsafe { Value::alloc_option(&mut ctx.rt, option_tydesc) };
-    let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(option_tydesc)) };
 
     // Write Some tag.
     unsafe {
@@ -1749,7 +1749,7 @@ fn create_result_ok(
     }
 
     let mut result_value = unsafe { Value::alloc_result(&mut ctx.rt, result_tydesc) };
-    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(result_tydesc)) };
 
     // Write Ok tag.
     unsafe {
@@ -1798,7 +1798,7 @@ fn create_result_err_with_string(
     }
 
     let mut result_value = unsafe { Value::alloc_result(&mut ctx.rt, result_tydesc) };
-    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(result_tydesc)) };
 
     // Write Err tag.
     unsafe {

@@ -410,7 +410,7 @@ unsafe fn pretty_map(
             while !current_leaf.is_null() {
                 let node_len = (*current_leaf).len;
 
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_ty.as_ptr(), value_ty.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_ty, value_ty);
                 let keys_array = (current_leaf as *const u8).add(layout.keys_offset as usize);
                 let values_array = (current_leaf as *const u8).add(layout.values_offset as usize);
 
@@ -461,7 +461,7 @@ unsafe fn pretty_set(
             while !current_leaf.is_null() {
                 let node_len = (*current_leaf).len;
 
-                let layout = rtdt::layout::compute_set_leaf_node_layout(elem_ty.as_ptr());
+                let layout = rtdt::layout::compute_set_leaf_node_layout(elem_ty);
                 let keys_array = (current_leaf as *const u8).add(layout.keys_offset as usize);
 
                 for i in 0..node_len {
@@ -521,7 +521,7 @@ unsafe fn pretty_result(
         let ok_ty = tydesc.result_ok_ty();
 
         // Calculate payload offset using the correct layout that accounts for both ok and error types.
-        let layout = rtdt::layout::compute_result_layout(tydesc.as_ptr());
+        let layout = rtdt::layout::compute_result_layout(tydesc);
         let payload_value = value_ref.add(layout.payload_offset as usize);
 
         match result.tag {

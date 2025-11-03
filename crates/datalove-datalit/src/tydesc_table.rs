@@ -89,7 +89,7 @@ impl<'db> TyDescTable<'db> {
                     },
                 },
             };
-            rtdt::layout::compute_tuple_layout(&temp_tydesc)
+            rtdt::layout::compute_tuple_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc))
         };
 
         // Create final field info array with computed offsets.
@@ -312,7 +312,7 @@ impl<'db> TyDescTable<'db> {
                     },
                 },
             };
-            rtdt::layout::compute_tuple_layout(&temp_tydesc)
+            rtdt::layout::compute_tuple_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc))
         };
 
         // Create final field info array with computed offsets.
@@ -376,7 +376,7 @@ impl<'db> TyDescTable<'db> {
                     },
                 },
             };
-            rtdt::layout::compute_struct_layout(&temp_tydesc)
+            rtdt::layout::compute_struct_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc))
         };
 
         // Create final field info array with computed offsets.
@@ -441,7 +441,7 @@ impl<'db> TyDescTable<'db> {
                     },
                 },
             };
-            rtdt::layout::compute_enum_layout(&temp_tydesc)
+            rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc))
         };
 
         // Update variant offsets from layout.
@@ -520,7 +520,7 @@ impl<'db> TyDescTable<'db> {
         };
 
         // Compute layout.
-        let layout = unsafe { rtdt::layout::compute_option_layout(&temp_tydesc) };
+        let layout = unsafe { rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc)) };
 
         // Create final TyDesc with computed layout.
         let tydesc = Box::new(rtdt::TyDesc {
@@ -561,7 +561,7 @@ impl<'db> TyDescTable<'db> {
         };
 
         // Compute layout.
-        let layout = unsafe { rtdt::layout::compute_option_layout(&temp_tydesc) };
+        let layout = unsafe { rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc)) };
 
         // Create final TyDesc with computed layout.
         Box::new(rtdt::TyDesc {
@@ -636,7 +636,7 @@ impl<'db> TyDescTable<'db> {
         };
 
         // Compute layout.
-        let layout = unsafe { rtdt::layout::compute_result_layout(&temp_tydesc) };
+        let layout = unsafe { rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc)) };
 
         // Create final TyDesc with computed layout.
         let tydesc = Box::new(rtdt::TyDesc {
@@ -681,7 +681,7 @@ impl<'db> TyDescTable<'db> {
         };
 
         // Compute layout.
-        let layout = unsafe { rtdt::layout::compute_result_layout(&temp_tydesc) };
+        let layout = unsafe { rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc)) };
 
         // Create final TyDesc with computed layout.
         Box::new(rtdt::TyDesc {

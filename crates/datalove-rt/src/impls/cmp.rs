@@ -441,7 +441,7 @@ unsafe fn eq_value(
                 // If both are Some, compare inner values.
                 if option_a.tag == rtdt::OptionTag::Some {
                     let inner_ty = td.option_inner_ty();
-                    let layout = rtdt::layout::compute_option_layout(tydesc.as_ptr());
+                    let layout = rtdt::layout::compute_option_layout(tydesc);
                     let payload_a = value_a.add(layout.payload_offset as usize);
                     let payload_b = value_b.add(layout.payload_offset as usize);
                     return eq_value(payload_a, payload_b, inner_ty, float_policy);
@@ -459,7 +459,7 @@ unsafe fn eq_value(
                 }
 
                 let ok_ty = td.result_ok_ty();
-                let layout = rtdt::layout::compute_result_layout(tydesc.as_ptr());
+                let layout = rtdt::layout::compute_result_layout(tydesc);
                 let payload_a = value_a.add(layout.payload_offset as usize);
                 let payload_b = value_b.add(layout.payload_offset as usize);
 
@@ -984,7 +984,7 @@ unsafe fn cmp_value(
                     (rtdt::OptionTag::Some, rtdt::OptionTag::None) => crate::c::RtOrdering::Greater,
                     (rtdt::OptionTag::Some, rtdt::OptionTag::Some) => {
                         let inner_ty = td.option_inner_ty();
-                        let layout = rtdt::layout::compute_option_layout(tydesc.as_ptr());
+                        let layout = rtdt::layout::compute_option_layout(tydesc);
                         let payload_a = value_a.add(layout.payload_offset as usize);
                         let payload_b = value_b.add(layout.payload_offset as usize);
                         cmp_value(payload_a, payload_b, inner_ty, float_policy)
@@ -1001,7 +1001,7 @@ unsafe fn cmp_value(
                     (rtdt::ResultTag::Ok, rtdt::ResultTag::Err) => crate::c::RtOrdering::Greater,
                     _ => {
                         let ok_ty = td.result_ok_ty();
-                        let layout = rtdt::layout::compute_result_layout(tydesc.as_ptr());
+                        let layout = rtdt::layout::compute_result_layout(tydesc);
                         let payload_a = value_a.add(layout.payload_offset as usize);
                         let payload_b = value_b.add(layout.payload_offset as usize);
 
@@ -1174,7 +1174,7 @@ unsafe fn find_leftmost_map_leaf(mut node: *mut rtdt::MapNode, key_tydesc: rtdt:
             match tag {
                 rtdt::MapNodeTag::Leaf => return node,
                 rtdt::MapNodeTag::Internal => {
-                    let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
+                    let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
                     let children_ptr = (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut rtdt::MapNode;
                     node = *children_ptr;
                 }
@@ -1191,7 +1191,7 @@ unsafe fn find_leftmost_set_leaf(mut node: *mut rtdt::SetNode, key_tydesc: rtdt:
             match tag {
                 rtdt::SetNodeTag::Leaf => return node,
                 rtdt::SetNodeTag::Internal => {
-                    let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc.as_ptr());
+                    let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc);
                     let children_ptr = (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut rtdt::SetNode;
                     node = *children_ptr;
                 }
@@ -1264,13 +1264,13 @@ unsafe fn eq_map_trees(
         loop {
             // Check if we've exhausted leaves.
             let exhausted_a = idx_a >= len_a && {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 (*next_ptr).is_null()
             };
 
             let exhausted_b = idx_b >= len_b && {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 (*next_ptr).is_null()
             };
@@ -1284,7 +1284,7 @@ unsafe fn eq_map_trees(
 
             // Move to next leaf if needed.
             if idx_a >= len_a {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_a = *next_ptr;
                 idx_a = 0;
@@ -1292,7 +1292,7 @@ unsafe fn eq_map_trees(
             }
 
             if idx_b >= len_b {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_b = *next_ptr;
                 idx_b = 0;
@@ -1300,13 +1300,13 @@ unsafe fn eq_map_trees(
             }
 
             // Get key and value pointers.
-            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
             let keys_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
             let values_a = (leaf_a as *mut u8).add(layout_a.values_offset as usize);
             let key_a = keys_a.add((idx_a as usize) * key_size);
             let value_a = values_a.add((idx_a as usize) * value_size);
 
-            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
             let keys_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
             let values_b = (leaf_b as *mut u8).add(layout_b.values_offset as usize);
             let key_b = keys_b.add((idx_b as usize) * key_size);
@@ -1350,13 +1350,13 @@ unsafe fn eq_set_trees(
         loop {
             // Check if we've exhausted leaves.
             let exhausted_a = idx_a >= len_a && {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 (*next_ptr).is_null()
             };
 
             let exhausted_b = idx_b >= len_b && {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 (*next_ptr).is_null()
             };
@@ -1370,7 +1370,7 @@ unsafe fn eq_set_trees(
 
             // Move to next leaf if needed.
             if idx_a >= len_a {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_a = *next_ptr;
                 idx_a = 0;
@@ -1378,7 +1378,7 @@ unsafe fn eq_set_trees(
             }
 
             if idx_b >= len_b {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_b = *next_ptr;
                 idx_b = 0;
@@ -1386,11 +1386,11 @@ unsafe fn eq_set_trees(
             }
 
             // Get element pointers.
-            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
             let elements_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
             let element_a = elements_a.add((idx_a as usize) * element_size);
 
-            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
             let elements_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
             let element_b = elements_b.add((idx_b as usize) * element_size);
 
@@ -1440,13 +1440,13 @@ unsafe fn cmp_map_trees(
         loop {
             // Check if we've exhausted leaves.
             let exhausted_a = idx_a >= len_a && {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 (*next_ptr).is_null()
             };
 
             let exhausted_b = idx_b >= len_b && {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 (*next_ptr).is_null()
             };
@@ -1463,7 +1463,7 @@ unsafe fn cmp_map_trees(
 
             // Move to next leaf if needed.
             if idx_a >= len_a {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_a = *next_ptr;
                 idx_a = 0;
@@ -1471,7 +1471,7 @@ unsafe fn cmp_map_trees(
             }
 
             if idx_b >= len_b {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
                 leaf_b = *next_ptr;
                 idx_b = 0;
@@ -1479,13 +1479,13 @@ unsafe fn cmp_map_trees(
             }
 
             // Get key and value pointers.
-            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+            let layout_a = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
             let keys_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
             let values_a = (leaf_a as *mut u8).add(layout_a.values_offset as usize);
             let key_a = keys_a.add((idx_a as usize) * key_size);
             let value_a = values_a.add((idx_a as usize) * value_size);
 
-            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+            let layout_b = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
             let keys_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
             let values_b = (leaf_b as *mut u8).add(layout_b.values_offset as usize);
             let key_b = keys_b.add((idx_b as usize) * key_size);
@@ -1549,13 +1549,13 @@ unsafe fn cmp_set_trees(
         loop {
             // Check if we've exhausted leaves.
             let exhausted_a = idx_a >= len_a && {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 (*next_ptr).is_null()
             };
 
             let exhausted_b = idx_b >= len_b && {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 (*next_ptr).is_null()
             };
@@ -1572,7 +1572,7 @@ unsafe fn cmp_set_trees(
 
             // Move to next leaf if needed.
             if idx_a >= len_a {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
                 let next_ptr = (leaf_a as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_a = *next_ptr;
                 idx_a = 0;
@@ -1580,7 +1580,7 @@ unsafe fn cmp_set_trees(
             }
 
             if idx_b >= len_b {
-                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
                 let next_ptr = (leaf_b as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
                 leaf_b = *next_ptr;
                 idx_b = 0;
@@ -1588,11 +1588,11 @@ unsafe fn cmp_set_trees(
             }
 
             // Get element pointers.
-            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+            let layout_a = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
             let elements_a = (leaf_a as *mut u8).add(layout_a.keys_offset as usize);
             let element_a = elements_a.add((idx_a as usize) * element_size);
 
-            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc.as_ptr());
+            let layout_b = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
             let elements_b = (leaf_b as *mut u8).add(layout_b.keys_offset as usize);
             let element_b = elements_b.add((idx_b as usize) * element_size);
 

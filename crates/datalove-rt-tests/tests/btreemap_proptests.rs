@@ -1005,9 +1005,7 @@ fn create_option_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
     });
 
     // Now compute the layout.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     // Update size and align.
     option_tydesc.size = option_layout.size;
@@ -1059,7 +1057,7 @@ proptest! {
             }
 
             // Get each unique key and verify we get Some with correct value.
-            let option_layout = rtdt::layout::compute_option_layout(&*option_tydesc);
+            let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc) });
 
             for (key, expected_value) in &expected_values {
                 let mut option_buffer = vec![0u8; option_layout.size as usize];
@@ -1134,7 +1132,7 @@ proptest! {
             }
 
             // Query keys and check if they should exist.
-            let option_layout = rtdt::layout::compute_option_layout(&*option_tydesc);
+            let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc) });
 
             for key in &query_keys {
                 let mut option_buffer = vec![0u8; option_layout.size as usize];
@@ -1190,7 +1188,7 @@ proptest! {
             let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-            let option_layout = rtdt::layout::compute_option_layout(&*option_tydesc);
+            let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc) });
 
             // Insert and update the same key multiple times.
             for (i, value) in values.iter().enumerate() {
@@ -1258,7 +1256,7 @@ proptest! {
             let status = datalove_rt::c::dtlv_rti_btreemap_create_local(rt, map_ptr, &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-            let option_layout = rtdt::layout::compute_option_layout(&*option_tydesc);
+            let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc) });
             let mut expected_values: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
 
             for (is_insert, key, value) in operations {

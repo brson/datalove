@@ -21,7 +21,7 @@ unsafe fn alloc_internal_node(
     key_tydesc: rtdt::TyDescRef,
 ) -> *mut MapNode {
     unsafe {
-        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
+        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
 
         // Allocate the node.
         let ptr = rt.alloc.alloc(layout.size, layout.align, 1);
@@ -46,7 +46,7 @@ unsafe fn alloc_leaf_node(
     value_tydesc: rtdt::TyDescRef,
 ) -> *mut MapNode {
     unsafe {
-        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
 
         // Allocate the node.
         let ptr = rt.alloc.alloc(layout.size, layout.align, 1);
@@ -84,11 +84,11 @@ unsafe fn free_node(
 
         match tag {
             MapNodeTag::Internal => {
-                let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
                 rt.alloc.free(layout.size, layout.align, 1, node as *mut u8);
             }
             MapNodeTag::Leaf => {
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+                let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
                 rt.alloc.free(layout.size, layout.align, 1, node as *mut u8);
             }
         };
@@ -143,7 +143,7 @@ unsafe fn internal_keys_ptr(
     key_tydesc: rtdt::TyDescRef,
 ) -> *mut u8 {
     unsafe {
-        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
+        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
         (node as *mut u8).add(layout.keys_offset as usize)
     }
 }
@@ -155,7 +155,7 @@ unsafe fn internal_child_ptrs_ptr(
     key_tydesc: rtdt::TyDescRef,
 ) -> *mut *mut MapNode {
     unsafe {
-        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc.as_ptr());
+        let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
         (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut MapNode
     }
 }
@@ -170,7 +170,7 @@ unsafe fn leaf_next_ptr_mut(
     value_tydesc: rtdt::TyDescRef,
 ) -> *mut *mut MapNode {
     unsafe {
-        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
         (node as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut MapNode
     }
 }
@@ -183,7 +183,7 @@ unsafe fn leaf_keys_ptr(
     value_tydesc: rtdt::TyDescRef,
 ) -> *mut u8 {
     unsafe {
-        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
         (node as *mut u8).add(layout.keys_offset as usize)
     }
 }
@@ -196,7 +196,7 @@ unsafe fn leaf_values_ptr(
     value_tydesc: rtdt::TyDescRef,
 ) -> *mut u8 {
     unsafe {
-        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc.as_ptr(), value_tydesc.as_ptr());
+        let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
         (node as *mut u8).add(layout.values_offset as usize)
     }
 }
@@ -1056,7 +1056,7 @@ pub unsafe fn btreemap_get_impl(
         let root = (*map_ptr).root as *mut MapNode;
 
         // Compute option layout.
-        let option_layout = rtdt::layout::compute_option_layout(option_tydesc.as_ptr());
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
         let option_tag_ptr = option_value_out as *mut u8;
         let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
 

@@ -42,7 +42,8 @@ fn instantiated_to_value(
 ) -> InterpResult {
     use rtdt::TyTag;
 
-    let type_tag = unsafe { (*inst.tydesc).type_tag };
+    let tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(inst.tydesc) };
+    let type_tag = tydesc_ref.type_tag();
 
     match type_tag {
         TyTag::Bool => {

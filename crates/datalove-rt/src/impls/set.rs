@@ -40,7 +40,8 @@ unsafe fn write_node_len(node: *mut SetNode, len: u32) {
 /// Gets pointer to keys array in an internal node.
 unsafe fn internal_keys_ptr(node: *mut SetNode, key_tydesc: *const TyDesc) -> *mut u8 {
     unsafe {
-        let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc);
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+        let layout = rtdt::layout::compute_set_internal_node_layout(tydesc_ref);
         (node as *mut u8).add(layout.keys_offset as usize)
     }
 }
@@ -48,7 +49,7 @@ unsafe fn internal_keys_ptr(node: *mut SetNode, key_tydesc: *const TyDesc) -> *m
 /// Gets pointer to child pointers array in an internal node.
 unsafe fn internal_child_ptrs_ptr(node: *mut SetNode, key_tydesc: *const TyDesc) -> *mut *mut SetNode {
     unsafe {
-        let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc);
+        let layout = rtdt::layout::compute_set_internal_node_layout(rtdt::TyDescRef::from_ptr(key_tydesc));
         (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut SetNode
     }
 }
@@ -56,7 +57,7 @@ unsafe fn internal_child_ptrs_ptr(node: *mut SetNode, key_tydesc: *const TyDesc)
 /// Gets pointer to keys array in a leaf node.
 unsafe fn leaf_keys_ptr(node: *mut SetNode, key_tydesc: *const TyDesc) -> *mut u8 {
     unsafe {
-        let layout = rtdt::layout::compute_set_leaf_node_layout(key_tydesc);
+        let layout = rtdt::layout::compute_set_leaf_node_layout(rtdt::TyDescRef::from_ptr(key_tydesc));
         (node as *mut u8).add(layout.keys_offset as usize)
     }
 }
@@ -67,7 +68,7 @@ unsafe fn alloc_internal_node(
     element_tydesc: *const TyDesc,
 ) -> *mut SetNode {
     unsafe {
-        let layout = rtdt::layout::compute_set_internal_node_layout(element_tydesc);
+        let layout = rtdt::layout::compute_set_internal_node_layout(rtdt::TyDescRef::from_ptr(element_tydesc));
 
         let ptr = rt.alloc.alloc(layout.size, layout.align, 1);
         if ptr.is_null() {
@@ -88,7 +89,7 @@ unsafe fn alloc_leaf_node(
     element_tydesc: *const TyDesc,
 ) -> *mut SetNode {
     unsafe {
-        let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc);
+        let layout = rtdt::layout::compute_set_leaf_node_layout(rtdt::TyDescRef::from_ptr(element_tydesc));
 
         let ptr = rt.alloc.alloc(layout.size, layout.align, 1);
         if ptr.is_null() {
@@ -109,11 +110,11 @@ unsafe fn free_node(rt: &mut RtLocal, node: *mut SetNode, key_tydesc: *const TyD
         let tag = read_node_tag(node);
         let layout = match tag {
             SetNodeTag::Internal => {
-                let l = rtdt::layout::compute_set_internal_node_layout(key_tydesc);
+                let l = rtdt::layout::compute_set_internal_node_layout(rtdt::TyDescRef::from_ptr(key_tydesc));
                 (l.size, l.align)
             }
             SetNodeTag::Leaf => {
-                let l = rtdt::layout::compute_set_leaf_node_layout(key_tydesc);
+                let l = rtdt::layout::compute_set_leaf_node_layout(rtdt::TyDescRef::from_ptr(key_tydesc));
                 (l.size, l.align)
             }
         };
@@ -191,7 +192,7 @@ unsafe fn clone_tree_recursive(
         match tag {
             SetNodeTag::Internal => {
                 // Allocate a new internal node.
-                let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc);
+                let layout = rtdt::layout::compute_set_internal_node_layout(rtdt::TyDescRef::from_ptr(key_tydesc));
                 let new_node_ptr = rt.alloc.alloc(layout.size, layout.align, 1);
                 if new_node_ptr.is_null() {
                     return std::ptr::null_mut();
@@ -235,7 +236,7 @@ unsafe fn clone_tree_recursive(
             }
             SetNodeTag::Leaf => {
                 // Allocate a new leaf node.
-                let layout = rtdt::layout::compute_set_leaf_node_layout(key_tydesc);
+                let layout = rtdt::layout::compute_set_leaf_node_layout(rtdt::TyDescRef::from_ptr(key_tydesc));
                 let new_leaf_ptr = rt.alloc.alloc(layout.size, layout.align, 1);
                 if new_leaf_ptr.is_null() {
                     return std::ptr::null_mut();

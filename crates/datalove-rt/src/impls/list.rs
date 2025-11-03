@@ -196,7 +196,7 @@ pub unsafe fn list_get_impl(
         let size = (*list_ptr).size;
 
         // Compute option layout.
-        let option_layout = rtdt::layout::compute_option_layout(option_tydesc.as_ptr());
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
         let option_tag_ptr = option_value_out;
         let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
 
@@ -341,7 +341,7 @@ pub unsafe fn list_pop_impl(
         let size = (*list_ptr).size;
 
         // Compute option layout.
-        let option_layout = rtdt::layout::compute_option_layout(option_tydesc.as_ptr());
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
         let option_tag_ptr = option_value_out;
         let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
 
@@ -451,7 +451,7 @@ pub unsafe fn list_remove_impl(
         let size = (*list_ptr).size;
 
         // Compute option layout.
-        let option_layout = rtdt::layout::compute_option_layout(option_tydesc.as_ptr());
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
         let option_tag_ptr = option_value_out;
         let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
 

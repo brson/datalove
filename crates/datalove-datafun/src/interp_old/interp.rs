@@ -415,7 +415,7 @@ impl<'db> InterpContext<'db> {
                 let result = match option_tag {
                     OptionTag::Some => {
                         // Extract payload and execute then branch.
-                        let layout = unsafe { rtdt::layout::compute_option_layout(condition_tydesc) };
+                        let layout = unsafe { rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(condition_tydesc)) };
                         let payload_ptr = unsafe { option_ptr.add(layout.payload_offset as usize) };
 
                         // Get the inner type descriptor.
@@ -502,7 +502,7 @@ impl<'db> InterpContext<'db> {
                 let result = match result_tag {
                     ResultTag::Ok => {
                         // Extract Ok payload and execute then branch.
-                        let layout = unsafe { rtdt::layout::compute_result_layout(condition_tydesc) };
+                        let layout = unsafe { rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(condition_tydesc)) };
                         let payload_ptr = unsafe { result_ptr.add(layout.payload_offset as usize) };
 
                         // Get the Ok type descriptor.
@@ -543,7 +543,7 @@ impl<'db> InterpContext<'db> {
                     ResultTag::Err => {
                         // Extract Err payload and execute else branch.
                         if let Some(else_stmts) = else_body {
-                            let layout = unsafe { rtdt::layout::compute_result_layout(condition_tydesc) };
+                            let layout = unsafe { rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(condition_tydesc)) };
                             let payload_ptr = unsafe { result_ptr.add(layout.payload_offset as usize) };
 
                             // The error payload is of type Error (16 bytes containing tydesc + value_ptr).

@@ -33,9 +33,7 @@ fn create_option_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
     });
 
     // Now compute the layout.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     // Update size and align.
     option_tydesc.size = option_layout.size;
@@ -1450,9 +1448,7 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
 
     // Try to get a key from empty map.
     let key = 42u32;
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -1529,9 +1525,7 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Get the key.
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -1618,9 +1612,7 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
 
     // Try to get a key that doesn't exist.
     let key = 42u32;
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
@@ -1698,9 +1690,7 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     // Get each key and verify value.
     for i in 0u32..5 {
@@ -1786,9 +1776,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     // Get and verify initial value.
     let mut option_buffer = vec![0u8; option_layout.size as usize];
@@ -1911,9 +1899,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     // Get each key and verify value.
     for i in 0u32..50 {
@@ -2466,9 +2452,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
 
     // Verify we can still get values for non-removed keys.
     let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     for i in 0u32..100 {
         if i % 3 != 0 {
@@ -2598,9 +2582,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
 
     // Verify remaining keys are still accessible.
     let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     for i in 0u32..200 {
         let key = i;
@@ -2971,9 +2953,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
 
     // Verify we can retrieve the value.
     let (option_tydesc, _inner) = create_option_u32_tydesc();
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let key = rtdt::U32(42);
@@ -3057,9 +3037,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
 
     // Verify all values are retrievable.
     let (option_tydesc, _inner) = create_option_u32_tydesc();
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
 
     for (k, v) in &[(10, 100), (20, 200), (30, 300), (40, 400), (50, 500)] {
         let mut option_buffer = vec![0u8; option_layout.size as usize];
@@ -3145,9 +3123,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
 
     // Verify key 10 has the updated value.
     let (option_tydesc, _inner) = create_option_u32_tydesc();
-    let option_layout = unsafe {
-        rtdt::layout::compute_option_layout(&*option_tydesc as *const rtdt::TyDesc)
-    };
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let key = rtdt::U32(10);

@@ -427,7 +427,7 @@ fn instantiate_tuple<'db>(
     dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_tuple_layout(rtdt::TyDescRef::from_ptr(tuple_tydesc)) };
 
     for (i, (elem, field_ty)) in elements.iter().zip(field_types.iter()).enumerate() {
         let field_offset = layout.field_offsets[i];
@@ -448,7 +448,7 @@ fn instantiate_struct<'db>(
     dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let layout = unsafe { rtdt::layout::compute_struct_layout(struct_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_struct_layout(rtdt::TyDescRef::from_ptr(struct_tydesc)) };
 
     // For small structs, linear search is faster than HashMap allocation.
     const SMALL_STRUCT_THRESHOLD: usize = 8;
@@ -511,7 +511,7 @@ fn instantiate_enum<'db>(
         .find(|(_, v)| v.name(db).as_str(db) == variant_name_str)
         .ok_or_else(|| anyhow!("Variant not found: {}", variant_name_str))?;
 
-    let layout = unsafe { rtdt::layout::compute_enum_layout(enum_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(enum_tydesc)) };
 
     unsafe {
         *(dest_ptr as *mut u32) = variant_index as u32;
@@ -575,7 +575,7 @@ fn instantiate_option<'db>(
     dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(option_tydesc)) };
 
     if is_some {
         unsafe { *dest_ptr = rtdt::OptionTag::Some as u8 };
@@ -602,7 +602,7 @@ fn instantiate_result<'db>(
     dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc) };
+    let layout = unsafe { rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(result_tydesc)) };
 
     if is_ok {
         unsafe { *dest_ptr = rtdt::ResultTag::Ok as u8 };
@@ -738,7 +738,7 @@ fn instantiate_map<'db>(
     let value_tydesc = tydesc_table.get_or_create(value_type.ty(db));
 
     // Compute leaf node layout.
-    let leaf_layout = unsafe { rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc) };
+    let leaf_layout = unsafe { rtdt::layout::compute_map_leaf_node_layout(rtdt::TyDescRef::from_ptr(key_tydesc), rtdt::TyDescRef::from_ptr(value_tydesc)) };
 
     // Allocate leaf node.
     let leaf_node = unsafe {
@@ -819,7 +819,7 @@ fn instantiate_set<'db>(
     let element_tydesc = tydesc_table.get_or_create(element_type.ty(db));
 
     // Compute leaf node layout.
-    let leaf_layout = unsafe { rtdt::layout::compute_set_leaf_node_layout(element_tydesc) };
+    let leaf_layout = unsafe { rtdt::layout::compute_set_leaf_node_layout(rtdt::TyDescRef::from_ptr(element_tydesc)) };
 
     // Allocate leaf node.
     let leaf_node = unsafe {
@@ -1387,7 +1387,7 @@ mod tests {
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize) as *const u32;
             assert_eq!(*payload_ptr, 42);
         }
@@ -1446,7 +1446,7 @@ mod tests {
             let outer_tag = *inst.ptr;
             assert_eq!(outer_tag, rtdt::OptionTag::Some as u8);
 
-            let outer_layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let outer_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let outer_payload_ptr = inst.ptr.add(outer_layout.payload_offset as usize);
 
             let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
@@ -1454,7 +1454,7 @@ mod tests {
             let inner_tag = *outer_payload_ptr;
             assert_eq!(inner_tag, rtdt::OptionTag::Some as u8);
 
-            let inner_layout = rtdt::layout::compute_option_layout(inner_tydesc);
+            let inner_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inner_tydesc));
             let inner_payload_ptr = outer_payload_ptr.add(inner_layout.payload_offset as usize);
             let value = *(inner_payload_ptr as *const u32);
             assert_eq!(value, 42);
@@ -1764,7 +1764,7 @@ mod tests {
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
@@ -1824,7 +1824,7 @@ mod tests {
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
@@ -1882,7 +1882,7 @@ mod tests {
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let list = &*(payload_ptr as *const rtdt::List);
@@ -1911,7 +1911,7 @@ mod tests {
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let list = &*(payload_ptr as *const rtdt::List);
@@ -1992,7 +1992,7 @@ mod tests {
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let discriminant = *(payload_ptr as *const u32);
@@ -2001,7 +2001,7 @@ mod tests {
             let inner_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
             let enum_info = &(*inner_tydesc).type_info.enum_;
             let variants = std::slice::from_raw_parts(enum_info.variants, 2);
-            let enum_layout = rtdt::layout::compute_enum_layout(inner_tydesc);
+            let enum_layout = rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(inner_tydesc));
 
             let enum_payload_ptr = payload_ptr.add(enum_layout.variant_offsets[1] as usize);
             let string = &*(enum_payload_ptr as *const rtdt::String);
@@ -2078,7 +2078,7 @@ mod tests {
             let outer_tag = *inst.ptr;
             assert_eq!(outer_tag, rtdt::OptionTag::Some as u8);
 
-            let outer_layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let outer_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let outer_payload_ptr = inst.ptr.add(outer_layout.payload_offset as usize);
 
             let inner_opt_tydesc = (*inst.tydesc).type_info.option.inner_tydesc;
@@ -2086,7 +2086,7 @@ mod tests {
             let inner_tag = *outer_payload_ptr;
             assert_eq!(inner_tag, rtdt::OptionTag::Some as u8);
 
-            let inner_layout = rtdt::layout::compute_option_layout(inner_opt_tydesc);
+            let inner_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inner_opt_tydesc));
             let inner_payload_ptr = outer_payload_ptr.add(inner_layout.payload_offset as usize);
 
             let tuple_tydesc = (*inner_opt_tydesc).type_info.option.inner_tydesc;
@@ -2121,7 +2121,7 @@ mod tests {
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::ResultTag::Ok as u8);
 
-            let layout = rtdt::layout::compute_result_layout(inst.tydesc);
+            let layout = rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize) as *const u32;
             assert_eq!(*payload_ptr, 42);
         }
@@ -2146,7 +2146,7 @@ mod tests {
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::ResultTag::Err as u8);
 
-            let layout = rtdt::layout::compute_result_layout(inst.tydesc);
+            let layout = rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             // The error payload is an Error type (which has same layout as Data).
@@ -2409,7 +2409,7 @@ mod tests {
             let tag = *inst.ptr;
             assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
+            let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(inst.tydesc));
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             // Verify the payload is a tensor

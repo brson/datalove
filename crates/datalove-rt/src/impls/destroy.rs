@@ -186,7 +186,7 @@ pub unsafe fn any_destroy_local(
             // Enum - check tag and destroy payload.
             rtdt::TyTag::Enum => {
                 let enum_info = ty.enum_info();
-                let layout = rtdt::layout::compute_enum_layout(tydesc);
+                let layout = rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(tydesc));
 
                 // Read the discriminant (u32 at offset 0).
                 let discriminant_ptr = value_in as *const u32;
@@ -217,7 +217,7 @@ pub unsafe fn any_destroy_local(
 
                 if tag == rtdt::OptionTag::Some {
                     let inner_ty = ty.option_inner_ty();
-                    let layout = rtdt::layout::compute_option_layout(tydesc);
+                    let layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(tydesc));
                     let payload_ptr = value_in.add(layout.payload_offset as usize);
                     any_destroy_local(rt, payload_ptr, inner_ty.as_ptr())
                 } else {
@@ -231,7 +231,7 @@ pub unsafe fn any_destroy_local(
                 let tag = (*result_ptr).tag;
 
                 let ok_ty = ty.result_ok_ty();
-                let layout = rtdt::layout::compute_result_layout(tydesc);
+                let layout = rtdt::layout::compute_result_layout(rtdt::TyDescRef::from_ptr(tydesc));
                 let payload_ptr = value_in.add(layout.payload_offset as usize);
 
                 match tag {
