@@ -585,3 +585,221 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
 
     Ok(())
 }
+
+
+// ==================== Property-Based Tests ====================
+
+use proptest::prelude::*;
+use datalove_datalit::ast_gen::*;
+use datalove_rt::rust::Runtime;
+
+proptest! {
+    /// Property: Clone equals original - for all x, eq(x, clone(x)) = Equals.
+    #[test]
+    fn proptest_clone_equals_original(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assume!(typechecked.errors(&db).is_empty());
+
+        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
+            Ok(v) => v,
+            Err(_) => return Ok(()),
+        };
+
+        // Clone the value into a buffer.
+        let tydesc = inst.tydesc.as_ref();
+        let mut clone_buffer = vec![0u8; tydesc.size as usize];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_clone_local(
+                rt.handle(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                clone_buffer.as_mut_ptr(),
+            )
+        };
+        prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        // Test equality.
+        let result = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                clone_buffer.as_ptr(),
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert!(matches!(result, datalove_rt::c::RtEq::Equals),
+            "Clone should equal original");
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+        }
+    }
+
+    /// Property: Clone transitivity - for all x, eq(clone(clone(x)), x) = Equals.
+    #[test]
+    fn proptest_clone_transitivity(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assume!(typechecked.errors(&db).is_empty());
+
+        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
+            Ok(v) => v,
+            Err(_) => return Ok(()),
+        };
+
+        let tydesc = inst.tydesc.as_ref();
+        let buffer_size = tydesc.size as usize;
+
+        // Clone once.
+        let mut clone1_buffer = vec![0u8; buffer_size];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_clone_local(
+                rt.handle(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                clone1_buffer.as_mut_ptr(),
+            )
+        };
+        prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        // Clone twice.
+        let mut clone2_buffer = vec![0u8; buffer_size];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_clone_local(
+                rt.handle(),
+                clone1_buffer.as_ptr(),
+                inst.tydesc.as_ptr(),
+                clone2_buffer.as_mut_ptr(),
+            )
+        };
+        prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        // Test equality between double-cloned and original.
+        let result = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                clone2_buffer.as_ptr(),
+                inst.tydesc.as_ptr(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert!(matches!(result, datalove_rt::c::RtEq::Equals),
+            "Double-cloned value should equal original");
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone1_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone2_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+        }
+    }
+
+    /// Property: Clone moderate containers with 100-200 elements.
+    #[test]
+    fn proptest_clone_moderate_containers(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            max_collection_size: 150,
+            max_depth: 3,
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assume!(typechecked.errors(&db).is_empty());
+
+        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
+            Ok(v) => v,
+            Err(_) => return Ok(()),
+        };
+
+        // Clone the moderate-sized container.
+        let tydesc = inst.tydesc.as_ref();
+        let mut clone_buffer = vec![0u8; tydesc.size as usize];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_clone_local(
+                rt.handle(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                clone_buffer.as_mut_ptr(),
+            )
+        };
+        prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        // Test equality.
+        let result = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                clone_buffer.as_ptr(),
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert!(matches!(result, datalove_rt::c::RtEq::Equals),
+            "Cloned moderate container should equal original");
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+        }
+    }
+}

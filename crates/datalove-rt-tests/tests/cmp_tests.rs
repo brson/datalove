@@ -1543,3 +1543,285 @@ fn test_cmp_set_with_strings() -> AnyResult<()> {
     assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
     Ok(())
 }
+
+// ==================== Property-Based Tests ====================
+
+use proptest::prelude::*;
+use datalove_datalit::ast_gen::*;
+
+proptest! {
+    /// Property: Transitivity - if cmp(x,y)=Less and cmp(y,z)=Less then cmp(x,z)=Less.
+    #[test]
+    fn proptest_cmp_transitivity(seed1 in any::<u64>(), seed2 in any::<u64>(), seed3 in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
+        let expr2 = gen_expr_full_seeded(&db, seed2, config.clone());
+        let expr3 = gen_expr_full_seeded(&db, seed3, config);
+
+        let mut rt = RtLocal::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+
+        let resolved1 = datalove_datalit::resolve::resolve_names(&db, expr1, vec![]);
+        let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
+        prop_assert!(typechecked1.errors(&db).is_empty());
+
+        let resolved2 = datalove_datalit::resolve::resolve_names(&db, expr2, vec![]);
+        let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
+        prop_assert!(typechecked2.errors(&db).is_empty());
+
+        let resolved3 = datalove_datalit::resolve::resolve_names(&db, expr3, vec![]);
+        let typechecked3 = datalove_datalit::tycheck::type_check(&db, expr3, resolved3);
+        prop_assert!(typechecked3.errors(&db).is_empty());
+
+        let inst1 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1)
+            .expect("Should instantiate");
+        let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
+        drop(inst1);
+
+        let inst2 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked2)
+            .expect("Should instantiate");
+        let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
+        drop(inst2);
+
+        let inst3 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked3)
+            .expect("Should instantiate");
+        let (ptr3, tydesc3) = (inst3.ptr, inst3.tydesc.as_ptr());
+        drop(inst3);
+
+        let cmp_xy = unsafe {
+            datalove_rt::c::dtlv_rti_cmp(
+                std::ptr::null_mut(),
+                ptr1,
+                tydesc1,
+                ptr2,
+                tydesc2,
+            )
+        };
+
+        let cmp_yz = unsafe {
+            datalove_rt::c::dtlv_rti_cmp(
+                std::ptr::null_mut(),
+                ptr2,
+                tydesc2,
+                ptr3,
+                tydesc3,
+            )
+        };
+
+        // Only test transitivity if cmp(x,y)=Less AND cmp(y,z)=Less.
+        if matches!(cmp_xy, datalove_rt::c::RtOrdering::Less) && matches!(cmp_yz, datalove_rt::c::RtOrdering::Less) {
+            let cmp_xz = unsafe {
+                datalove_rt::c::dtlv_rti_cmp(
+                    std::ptr::null_mut(),
+                    ptr1,
+                    tydesc1,
+                    ptr3,
+                    tydesc3,
+                )
+            };
+
+            prop_assert!(matches!(cmp_xz, datalove_rt::c::RtOrdering::Less),
+                "Transitivity: if cmp(x,y)=Less and cmp(y,z)=Less then cmp(x,z)=Less");
+        }
+    }
+
+    /// Property: Antisymmetry - if cmp(x,y)=Less then cmp(y,x)=Greater.
+    #[test]
+    fn proptest_cmp_antisymmetry(seed1 in any::<u64>(), seed2 in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
+        let expr2 = gen_expr_full_seeded(&db, seed2, config);
+
+        let mut rt = RtLocal::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+
+        let resolved1 = datalove_datalit::resolve::resolve_names(&db, expr1, vec![]);
+        let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
+        prop_assert!(typechecked1.errors(&db).is_empty());
+
+        let resolved2 = datalove_datalit::resolve::resolve_names(&db, expr2, vec![]);
+        let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
+        prop_assert!(typechecked2.errors(&db).is_empty());
+
+        let inst1 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1)
+            .expect("Should instantiate");
+        let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
+        drop(inst1);
+
+        let inst2 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked2)
+            .expect("Should instantiate");
+        let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
+        drop(inst2);
+
+        let cmp_xy = unsafe {
+            datalove_rt::c::dtlv_rti_cmp(
+                std::ptr::null_mut(),
+                ptr1,
+                tydesc1,
+                ptr2,
+                tydesc2,
+            )
+        };
+
+        let cmp_yx = unsafe {
+            datalove_rt::c::dtlv_rti_cmp(
+                std::ptr::null_mut(),
+                ptr2,
+                tydesc2,
+                ptr1,
+                tydesc1,
+            )
+        };
+
+        // Test antisymmetry based on cmp_xy result.
+        match cmp_xy {
+            datalove_rt::c::RtOrdering::Less => {
+                prop_assert!(matches!(cmp_yx, datalove_rt::c::RtOrdering::Greater),
+                    "Antisymmetry: if cmp(x,y)=Less then cmp(y,x)=Greater");
+            }
+            datalove_rt::c::RtOrdering::Greater => {
+                prop_assert!(matches!(cmp_yx, datalove_rt::c::RtOrdering::Less),
+                    "Antisymmetry: if cmp(x,y)=Greater then cmp(y,x)=Less");
+            }
+            datalove_rt::c::RtOrdering::Equal => {
+                prop_assert!(matches!(cmp_yx, datalove_rt::c::RtOrdering::Equal),
+                    "Antisymmetry: if cmp(x,y)=Equal then cmp(y,x)=Equal");
+            }
+            datalove_rt::c::RtOrdering::Error => {
+                // Errors can occur, just skip the test.
+            }
+        }
+    }
+
+    /// Property: Consistency with equality - cmp(x,y)=Equal iff eq(x,y)=Equals.
+    #[test]
+    fn proptest_cmp_consistency_with_eq(seed1 in any::<u64>(), seed2 in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
+        let expr2 = gen_expr_full_seeded(&db, seed2, config);
+
+        let mut rt = RtLocal::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+
+        let resolved1 = datalove_datalit::resolve::resolve_names(&db, expr1, vec![]);
+        let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
+        prop_assert!(typechecked1.errors(&db).is_empty());
+
+        let resolved2 = datalove_datalit::resolve::resolve_names(&db, expr2, vec![]);
+        let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
+        prop_assert!(typechecked2.errors(&db).is_empty());
+
+        let inst1 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1)
+            .expect("Should instantiate");
+        let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
+        drop(inst1);
+
+        let inst2 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked2)
+            .expect("Should instantiate");
+        let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
+        drop(inst2);
+
+        let cmp_result = unsafe {
+            datalove_rt::c::dtlv_rti_cmp(
+                std::ptr::null_mut(),
+                ptr1,
+                tydesc1,
+                ptr2,
+                tydesc2,
+            )
+        };
+
+        let eq_result = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                ptr1,
+                tydesc1,
+                ptr2,
+                tydesc2,
+            )
+        };
+
+        // Test consistency: cmp(x,y)=Equal iff eq(x,y)=Equals.
+        if matches!(cmp_result, datalove_rt::c::RtOrdering::Equal) {
+            prop_assert!(matches!(eq_result, datalove_rt::c::RtEq::Equals),
+                "If cmp(x,y)=Equal then eq(x,y) should be Equals");
+        }
+        if matches!(eq_result, datalove_rt::c::RtEq::Equals) {
+            prop_assert!(matches!(cmp_result, datalove_rt::c::RtOrdering::Equal),
+                "If eq(x,y)=Equals then cmp(x,y) should be Equal");
+        }
+    }
+
+    /// Property: Numeric boundary testing with MIN/MAX values.
+    #[test]
+    fn proptest_cmp_numeric_boundaries(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            numeric_strategy: NumericStrategy::CornerCases,
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let mut rt = RtLocal::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assert!(typechecked.errors(&db).is_empty());
+
+        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
+
+        // Test that boundary values compare to themselves as Equal.
+        let result = unsafe {
+            datalove_rt::c::dtlv_rti_cmp(
+                std::ptr::null_mut(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert!(matches!(result, datalove_rt::c::RtOrdering::Equal),
+            "Boundary values: cmp(x, x) should be Equal");
+    }
+}

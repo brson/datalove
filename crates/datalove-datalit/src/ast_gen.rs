@@ -241,7 +241,22 @@ pub fn gen_type_hint<'db, R: Rng>(
     depth: usize,
 ) -> TypeHint<'db> {
     let weights = if depth >= config.max_depth {
-        TypeWeights::leaf_only()
+        // At max depth, use leaf types only but respect user's disabled types.
+        let mut leaf = TypeWeights::leaf_only();
+        // Zero out any types the user explicitly disabled.
+        if config.type_weights.bool_type == 0 { leaf.bool_type = 0; }
+        if config.type_weights.u8_type == 0 { leaf.u8_type = 0; }
+        if config.type_weights.i8_type == 0 { leaf.i8_type = 0; }
+        if config.type_weights.u16_type == 0 { leaf.u16_type = 0; }
+        if config.type_weights.i16_type == 0 { leaf.i16_type = 0; }
+        if config.type_weights.u32_type == 0 { leaf.u32_type = 0; }
+        if config.type_weights.i32_type == 0 { leaf.i32_type = 0; }
+        if config.type_weights.u64_type == 0 { leaf.u64_type = 0; }
+        if config.type_weights.i64_type == 0 { leaf.i64_type = 0; }
+        if config.type_weights.f32_type == 0 { leaf.f32_type = 0; }
+        if config.type_weights.int_type == 0 { leaf.int_type = 0; }
+        if config.type_weights.string_type == 0 { leaf.string_type = 0; }
+        leaf
     } else {
         config.type_weights.clone()
     };
@@ -588,12 +603,13 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 // Success case: just generate the inner value directly
                 gen_expr_matching_type(db, rng, inner_type, config, depth + 1)
             } else {
-                // Error case: generate error with a message
-                let error_msg = gen_string_expr(db, rng);
+                // Error case: generate error with an arbitrary value (respecting config).
+                let error_type = gen_type_hint(db, rng, config, depth + 1);
+                let error_value = gen_expr_matching_type(db, rng, error_type, config, depth + 1);
                 let error_expr_full = ExprFull::new(
                     db,
                     None,
-                    ExprAndHeap::new(db, Heap::Omitted, error_msg),
+                    ExprAndHeap::new(db, Heap::Omitted, error_value),
                 );
                 Expr::Err(ExprErr::new(db, error_expr_full))
             }
@@ -819,7 +835,15 @@ fn gen_expr_full_with_heap<'db, R: Rng>(
     let expr = gen_expr_matching_type(db, rng, type_hint.clone(), config, depth);
     let expr_and_heap = ExprAndHeap::new(db, heap, expr);
 
-    let type_hint_opt = if config.include_type_hints {
+    // Always include type hints for types that cannot be synthesized.
+    // Option::None, Result values, and anonymous enums require type hints
+    // for typechecking - the typechecker explicitly rejects these without hints.
+    let requires_hint = matches!(
+        type_hint,
+        TypeHint::Option(_) | TypeHint::Result(_) | TypeHint::AnonEnum(_)
+    );
+
+    let type_hint_opt = if config.include_type_hints || requires_hint {
         Some(TypeHintAndHeap::new(db, heap, type_hint))
     } else {
         None
