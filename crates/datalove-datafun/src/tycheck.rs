@@ -299,6 +299,17 @@ impl<'db> TypeContext<'db> {
         }
     }
 
+    /// F050: Datalit type error (propagated from datalit type checker).
+    fn error_datalit_error(&self, expr: ExprFun<'db>, error_msg: &str) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, error_msg)
+                .code("F050")
+                .primary_label(text, span, "type error in datalit expression")
+                .emit_type();
+        }
+        TypeError::DatalitError(error_msg.to_string())
+    }
+
     /// Look up the source location for an expression.
     fn get_span(&self, expr: ExprFun<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
         use salsa::plumbing::AsId;
@@ -385,6 +396,27 @@ pub fn type_check_for_diagnostics<'db>(
 ) -> TypecheckResult<'db> {
     let parse_result = crate::parser::parse(db, source);
     type_check(db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans)
+}
+
+/// Typecheck a script with package world for diagnostic emission.
+///
+/// This tracked wrapper parses and typechecks a script with package world support.
+#[salsa::tracked]
+pub fn type_check_with_package_world_for_diagnostics<'db>(
+    db: &'db dyn crate::Db,
+    source: bct::input::Source,
+    package_world: crate::package::PackageWorld,
+    package_world_typecheck: PackageWorldTypecheckResult<'db>,
+) -> TypecheckResult<'db> {
+    let parse_result = crate::parser::parse(db, source);
+    type_check_with_package_world(
+        db,
+        parse_result.script,
+        parse_result.expr_spans,
+        parse_result.datalit_expr_spans,
+        package_world,
+        package_world_typecheck,
+    )
 }
 
 /// Typecheck a script with package world support.
@@ -831,10 +863,13 @@ fn check_statement<'db>(
 
                             ctx.variables.remove(&else_binding_name);
                         } else {
-                            ctx.add_error(TypeError::TypeMismatch {
-                                expected: "Result type for else binding".S(),
-                                actual: "other type".S(),
-                            });
+                            let actual_type = type_to_string(db, condition_ty.ty(db));
+                            ctx.add_error(ctx.error_type_mismatch(
+                                condition,
+                                "Result",
+                                &actual_type,
+                                "else binding requires Result type"
+                            ));
                         }
                     } else {
                         for stmt in else_stmts {
@@ -893,7 +928,7 @@ fn synthesize_expr<'db>(
             if !tycheck_result.errors(db).is_empty() {
                 let first_error = &tycheck_result.errors(db)[0];
                 let error_msg = format!("{:?}", first_error.error(db));
-                return Err(TypeError::DatalitError(error_msg));
+                return Err(ctx.error_datalit_error(expr, &error_msg));
             }
 
             // Get the synthesized type.
@@ -904,7 +939,7 @@ fn synthesize_expr<'db>(
                     let ty = Type::Datalit(datalit_ty.ty(db).clone());
                     Ok(TypeAndHeap::new(db, heap, ty))
                 }
-                None => Err(TypeError::CannotSynthesize),
+                None => Err(ctx.error_cannot_synthesize(expr, "cannot infer type for datalit expression")),
             }
         }
 
@@ -974,7 +1009,7 @@ fn synthesize_expr<'db>(
         }
 
         ExprFunKind::ParseError(_) => {
-            Err(TypeError::CannotSynthesize)
+            Err(ctx.error_cannot_synthesize(expr, "cannot type check parse error"))
         }
     }
 }
@@ -1502,7 +1537,7 @@ fn check_expr<'db>(
                 if !tycheck_result.errors(db).is_empty() {
                     let first_error = &tycheck_result.errors(db)[0];
                     let error_msg = format!("{:?}", first_error.error(db));
-                    return Err(TypeError::DatalitError(error_msg));
+                    return Err(ctx.error_datalit_error(expr, &error_msg));
                 }
 
                 Ok(())
@@ -1513,10 +1548,9 @@ fn check_expr<'db>(
                 if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
                     Ok(())
                 } else {
-                    Err(TypeError::TypeMismatch {
-                        expected: type_to_string(db, expected.ty(db)),
-                        actual: type_to_string(db, synthesized.ty(db)),
-                    })
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
         }
@@ -1557,10 +1591,9 @@ fn check_expr<'db>(
             }
 
             // No match or coercion possible.
-            Err(TypeError::TypeMismatch {
-                expected: type_to_string(db, expected.ty(db)),
-                actual: type_to_string(db, synthesized.ty(db)),
-            })
+            let expected_str = type_to_string(db, expected.ty(db));
+            let actual_str = type_to_string(db, synthesized.ty(db));
+            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
         }
     }
 }

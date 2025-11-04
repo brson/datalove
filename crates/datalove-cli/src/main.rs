@@ -544,10 +544,10 @@ impl ScriptCommand {
         // Create diagnostic context.
         let diag_ctx = DiagnosticContext::from_file(self.file_path.clone(), script_text);
 
-        // Call tracked wrapper to enable diagnostic accumulation and get script.
+        // Parse and get script (tracked wrapper for diagnostic accumulation).
         let script = datafun::parser::parse_for_diagnostics(&db, source);
 
-        // Render parse diagnostics (must be called after parse_for_diagnostics).
+        // Render parse diagnostics.
         self.render_diagnostics(&db, source, &diag_ctx)?;
 
         // Load package world from sys/ directory.
@@ -596,20 +596,17 @@ impl ScriptCommand {
             bail!("Package world has {} typecheck error(s)", error_count);
         }
 
-        // Typecheck the script with package world context.
-        // TODO: Pass actual spans once we have a way to retrieve them from parse_for_diagnostics.
-        let script_typecheck = datafun::tycheck::type_check_with_package_world(
+        // Typecheck the script with package world context using tracked wrapper.
+        let script_typecheck = datafun::tycheck::type_check_with_package_world_for_diagnostics(
             &db,
-            script,
-            vec![],
-            vec![],
+            source,
             package_world,
             *typecheck_result,
         );
 
         // Retrieve and render type diagnostics.
-        let type_diags = datafun::tycheck::type_check_with_package_world::accumulated::<datalove_diagnostic::TypeDiagnostic>(
-            &db, script, vec![], vec![], package_world, *typecheck_result
+        let type_diags = datafun::tycheck::type_check_with_package_world_for_diagnostics::accumulated::<datalove_diagnostic::TypeDiagnostic>(
+            &db, source, package_world, *typecheck_result
         );
         if !type_diags.is_empty() {
             eprintln!("Type errors:");
@@ -618,14 +615,6 @@ impl ScriptCommand {
                 self.render_single_diagnostic(&db, &diag, &diag_ctx);
             }
             bail!("{} type error(s)", type_diags.len());
-        }
-
-        // Also check old-style errors for now (fallback).
-        if !script_typecheck.errors(&db).is_empty() {
-            let errors: Vec<_> = script_typecheck.errors(&db).iter()
-                .map(|e| format!("{:?}", e.error(&db)))
-                .collect();
-            bail!("Script has {} typecheck error(s):\n{}", errors.len(), errors.join("\n"));
         }
 
         // Build type table for the script.
