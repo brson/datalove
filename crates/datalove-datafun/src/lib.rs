@@ -11,8 +11,9 @@ pub mod tycheck;
 pub mod function_analysis;
 pub mod spans;
 
-// Old interpreter module.
-pub mod interp_old;
+// Interpreter modules.
+pub mod interp_old;  // Old interpreter (to be deprecated).
+pub mod interp;      // New analysis-driven interpreter.
 
 // Module system.
 pub mod package;
