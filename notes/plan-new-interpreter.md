@@ -4,7 +4,7 @@
 
 - [x] Phase 0: Script Execution Infrastructure - **COMPLETED**
 - [ ] Phase 1: Core Infrastructure (Frame Management)
-- [ ] Phase 2: Expression Evaluation
+- [ ] Phase 2: Expression Evaluation - **IN PROGRESS** (literals done)
 - [ ] Phase 3: Move Semantics
 - [ ] Phase 4: Control Flow
 - [ ] Phase 5: Drop Execution
@@ -12,7 +12,7 @@
 - [ ] Phase 7: Module Integration
 - [ ] Phase 8: Testing & Validation
 
-**Current Status**: Phase 0 completed. Core infrastructure for script execution in place with linear semantics support. Expression evaluation stubs ready for implementation.
+**Current Status**: Phase 0 completed with basic literal evaluation working. Fixed critical dangling pointer bug in TyDescTable and runtime lifetime bug in execute_script. All 5 interp tests passing (empty script, function definition, u32/bool/string literals). Ready to continue implementing remaining expression types.
 
 ## Overview
 
@@ -843,7 +843,7 @@ pub enum InterpError {
 
 **Goal**: Top-level script execution entry points with linear semantics.
 
-**Status**: Completed
+**Status**: Completed with basic literal evaluation working
 
 **Tasks**:
 1. ✅ Create `crates/datalove-datafun/src/interp/` module
@@ -854,47 +854,69 @@ pub enum InterpError {
 6. ✅ Implement script statement execution (Let, Function definitions)
 7. ✅ Implement `read_script_variable()` with copy/move logic
 8. ✅ Wire up with ScriptWithPackageWorld
+9. ✅ Implement basic literal evaluation (u32, bool, string)
+10. ✅ Fix runtime lifetime management
 
 **What was implemented**:
 - Created `crates/datalove-datafun/src/interp/mod.rs` with core infrastructure
 - Defined complete data structures:
-  - `InterpContext<'db>`: interpreter state with db, runtime, package_world, script, and script_scope
+  - `InterpContext<'db>`: interpreter state with db, runtime, package_world, script, script_scope, and tydesc_table
   - `ScriptScope<'db>`: variables (HashMap with move tracking) and functions
   - `ScriptVariable`: value, state (Available/Moved), and is_copy flag
   - `ScriptVarState`: enum for Available/Moved
-  - `Value`: Copy struct with ptr and tydesc (for now)
+  - `Value`: Copy struct with ptr and tydesc
+  - `ScriptResult`: bundles Value with Runtime to keep memory alive
   - `InterpError`: comprehensive error types
 - Implemented execution functions:
-  - `execute_script()`: batch mode entry point (typechecking deferred)
+  - `execute_script()`: batch mode entry point, returns ScriptResult
   - `execute_script_unit()`: REPL mode entry point
   - `execute_unit()`: per-unit execution
   - `execute_statement()`: statement dispatcher
   - `execute_let_statement()`: variable binding with move tracking
   - `execute_fun_statement()`: function definition registration
-- Implemented expression evaluation infrastructure:
-  - `eval_expression_in_script_scope()`: expression dispatcher with stubs
+- Implemented expression evaluation:
+  - `eval_expression_in_script_scope()`: expression dispatcher
   - `read_script_variable()`: enforces linear semantics (use-after-move detection)
-  - `clone_value()`: stub for copy type cloning
-  - `eval_datalit_expression()`: stub for literal evaluation
-- Added basic integration tests in `crates/datalove-datafun/tests/interp_tests.rs`
-- All existing tests continue to pass (139 tests total)
+  - `clone_value()`: clones values using runtime
+  - `eval_datalit_expression()`: evaluates literals
+  - `allocate_bool()`: allocates boolean values
+  - `allocate_int()`: allocates u32 integers
+  - `allocate_string()`: allocates string values
+- Fixed critical bugs:
+  - **TyDescTable dangling pointer bug**: Fixed in `crates/datalove-datalit/src/tydesc_table.rs`
+    - `get_or_create()`, `get_or_create_tuple()`, `create_option_from_inner_tydesc()`, `create_result_from_inner_tydesc()`
+    - Was taking pointer before pushing to vector, creating dangling pointers
+    - Fixed by pushing first, then getting pointer from stored element
+  - **Runtime lifetime bug**: Fixed in `crates/datalove-datafun/src/interp/mod.rs`
+    - Runtime was being dropped when `execute_script()` returned, freeing all allocated memory
+    - Created `ScriptResult` struct that bundles `Value` with `Runtime`
+    - Keeps runtime alive as long as value is used
+- Added integration tests in `crates/datalove-datafun/tests/interp_tests.rs`:
+  - `test_interp_empty_script`: empty script returns NoOutputVariable error
+  - `test_interp_function_definition`: can define functions at script level
+  - `test_interp_u32_literal`: can evaluate u32 literals
+  - `test_interp_bool_literals`: can evaluate true/false literals
+  - `test_interp_string_literal`: can evaluate string literals
+- All tests passing: 5 new interp_tests, 136 existing datafun tests
 
-**Success criteria** (partial):
-- ✅ Can execute simple scripts (infrastructure in place, expression eval pending)
+**Success criteria**:
+- ✅ Can execute simple scripts with literal evaluation
 - ✅ Can define functions at script level
-- ✅ Linear types move on use (use-after-move detected) - infrastructure ready
+- ✅ Linear types move on use (use-after-move detected)
 - ✅ Can accumulate state in REPL mode - infrastructure ready
+- ✅ Basic literals working (u32, bool, string)
+- ✅ No segfaults or crashes
 - ⏸️ Copy types behavior - needs type analysis integration
-- ⏸️ Package world modules - deferred until expression evaluation works
-- ⏸️ Let statement execution - needs expression evaluation
+- ⏸️ Package world modules - deferred until more expressions work
+- ⏸️ Full expression evaluation - only literals done
 
 **Deviations from plan**:
-- PackageWorld integration temporarily disabled (returns early from execute_script)
-- Expression evaluation returns errors (stubs in place for future implementation)
+- PackageWorld integration temporarily disabled (typechecking deferred)
+- Most expression types not yet implemented (BinOp, FunctionCall, Tuple, etc.)
 - Copy type detection not yet implemented (always assumes non-copy for now)
 - Value representation simplified (no ValueLocation enum yet)
 
-**Next**: Phase 1 needs to be reordered. Should implement expression evaluation before frames.
+**Next**: Phase 2 (Expression Evaluation) - Implement remaining expression types before moving to frames.
 
 ### Phase 1: Core Infrastructure
 **Goal**: Basic interpreter shell with frame management for function execution.
@@ -1398,20 +1420,29 @@ Implementation complete when:
 - Variable binding infrastructure
 - Linear semantics enforcement (use-after-move detection)
 - REPL state accumulation infrastructure
+- Basic literal evaluation (u32, bool, string)
+- Runtime value allocation (allocate_bool, allocate_int, allocate_string)
+- Value cloning using runtime
+- TyDescTable type descriptor management
+- Runtime lifetime management via ScriptResult
 
 **Not yet implemented:**
-- Expression evaluation (literals, operations, function calls)
+- Remaining expression types (BinOp, FunctionCall, Tuple, UnaryOp, Try operators)
 - PackageWorld integration (temporarily disabled)
 - Type analysis integration for copy detection
-- Runtime value operations (allocate, clone, destroy)
 - Function execution with stack frames
 - CFG-based control flow
 - Drop insertion
 
 **Test results:**
-- All existing tests pass (139 tests in datalove-datafun)
-- 2 new integration tests pass (function definition, empty script)
-- Infrastructure ready for expression evaluation implementation
+- All existing tests pass (136 datafun tests + 93 datalit tests + 5 rt-tests + others)
+- 5 new interp_tests pass:
+  - test_interp_empty_script
+  - test_interp_function_definition
+  - test_interp_u32_literal
+  - test_interp_bool_literals
+  - test_interp_string_literal
+- Full test suite: 282 tests passing
 
 ## References
 
