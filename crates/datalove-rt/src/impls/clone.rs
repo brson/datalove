@@ -205,6 +205,14 @@ unsafe fn clone_impl(
                     };
 
                     if status != RtStatus::Ok {
+                        // Clone failed. Destroy successfully cloned elements and free buffer.
+                        unsafe {
+                            for j in 0..i {
+                                let elem_to_destroy = new_data.add((j * elem_size) as usize);
+                                let _ = crate::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ptr());
+                            }
+                            rt_ref.alloc.free(elem_size, elem_align, list_in.size, new_data);
+                        }
                         return status;
                     }
                 }
