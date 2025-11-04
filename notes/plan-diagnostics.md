@@ -23,14 +23,17 @@
 - 🔄 Phase 4 Part B In Progress: Datafun type checker diagnostics
   - Parser span infrastructure complete ✅
   - TypeContext updates complete ✅
-  - Error helper abstraction created ✅ (tycheck.rs:148-226)
+  - Error helper abstraction created ✅ (tycheck.rs:148-300)
   - type_check_for_diagnostics() wrapper created ✅ (tycheck.rs:308-314)
-  - Error helpers implemented: F001, F002, F011, F016, F045, F046 ✅
-  - Type checker diagnostic emission: 6/~47 error sites updated ✅
+  - Error helpers implemented: 11 helpers ✅
+    - F001, F002, F011, F016, F045, F046 (name/type/arity errors)
+    - F026, F027 (operator/tuple errors)
+    - F047, F048, F049 (try operator errors)
+  - Type checker diagnostic emission: 34/~47 error sites updated ✅
   - Error code design: F001-F053 designed ✅
   - CLI integration: run_without_sys working perfectly ✅
   - All 136 tests passing ✅
-  - Remaining: ~41 error sites to convert to use helpers
+  - Remaining: ~13 error sites (DatalitError, module errors, check_expr)
   - Remaining: run_with_sys diagnostic integration
 - 🔲 Phase 4 Part C: Documentation (not started)
 - 🔲 Phase 5: Resolution diagnostics (not yet started)
@@ -49,9 +52,9 @@
   - Type error test fixtures 🔲
 
 **Next Steps:**
-1. Phase 4 Part B: Complete datafun diagnostic emission (~41 remaining error sites)
+1. Phase 4 Part B: Complete datafun diagnostic emission (~13 remaining error sites)
 2. Phase 4 Part B: Add run_with_sys diagnostic integration
-3. Phase 8: Add type error test fixtures
+3. Phase 8 Part 7: Create type error test fixtures
 4. Phase 5: Resolution diagnostics
 5. Phase 6: Complete driver integration (full SourceMap for multi-file support)
 
@@ -549,26 +552,39 @@ match expr.kind {
   - All internal callers updated
 
 **Error Helper Abstraction (Complete):**
-- ✅ Error helper methods on TypeContext (tycheck.rs:148-226)
+- ✅ Error helper methods on TypeContext (tycheck.rs:148-300)
   - Pattern: Methods both emit TypeDiagnostic AND return TypeError
   - Allows error recovery while providing rich diagnostics
   - Takes expr for span lookup, formats nice error messages
-- ✅ Implemented helpers:
+- ✅ Implemented helpers (11 total):
   - error_undefined_variable() - F001
   - error_undefined_function() - F002
   - error_cannot_synthesize() - F011
   - error_type_mismatch() - F016
   - error_arity_mismatch() - F045
   - error_result_requires_binding() - F046
+  - error_invalid_operand_type() - F026
+  - error_invalid_tuple_element() - F027
+  - error_try_outside_function() - F047
+  - error_try_type_mismatch() - F048
+  - error_try_return_type_mismatch() - F049
 
-**Diagnostic Emission (Partial - 6/~47 sites):**
+**Diagnostic Emission (Mostly Complete - 34/~47 sites):**
 - ✅ F001: Undefined variable (ExprFunKind::Name)
 - ✅ F002: Undefined function (synthesize_function_call)
 - ✅ F011: Cannot synthesize return type (Statement::Ret)
-- ✅ F016: Type mismatch (if/match condition)
+- ✅ F016: Type mismatch (if/match condition, binop operands)
 - ✅ F045: Function arity mismatch (synthesize_function_call)
 - ✅ F046: Result requires error binding (if let destructuring)
-- 🔲 Remaining: ~41 error sites (InvalidOperandType: 18, others: 23)
+- ✅ F026: Invalid operand type (~18 sites in synthesize_binop, synthesize_unaryop)
+- ✅ F027: Invalid tuple element (ExprFunKind::Tuple)
+- ✅ F047: Try outside function (synthesize_try_option, synthesize_try_result)
+- ✅ F048: Try type mismatch (synthesize_try_option, synthesize_try_result)
+- ✅ F049: Try return type mismatch (synthesize_try_option, synthesize_try_result)
+- 🔲 Remaining: ~13 error sites
+  - DatalitError propagation (~4 sites in synthesize_expr, check_expr)
+  - Module/import errors (~6 sites in type_check_with_package_world, typecheck_package_world)
+  - Other TypeMismatch sites in check_expr (~3 sites)
 
 **Error Code Design (Complete):**
 - ✅ F001-F010: Name resolution errors
@@ -582,13 +598,31 @@ match expr.kind {
 - ✅ type_check_for_diagnostics() wrapper working perfectly
 - ✅ Diagnostic accumulation via Salsa accumulators
 - ✅ Rich error rendering with file:line:col, source snippets, carets
-- ✅ Example output working:
+- ✅ Example outputs working:
   ```
   error[F001]: cannot find value `undefined_var` in this scope
    --> test.dfs:1:14
     |
   1 | let output = undefined_var
     |              ^^^^^^^^^^^^^ not found in this scope
+
+  error[F026]: invalid operand type `string` for operator `Add`
+   --> test.dfs:1:9
+    |
+  1 | let x = @"hello" + @"world"
+    |         ^ operator `Add` cannot be applied to type `string`
+
+  error[F047]: try operator `?` can only be used inside a function
+   --> test.dfs:1:9
+    |
+  1 | let x = some(@42)?
+    |         ^^^^ try operator here
+
+  error[F048]: try operator `?` requires Option type, found `u32`
+   --> test.dfs:3:9
+    |
+  3 |     ret x?
+    |         ^ expected Option, found `u32`
   ```
 - 🔲 run_with_sys diagnostic integration pending
 
@@ -598,10 +632,12 @@ match expr.kind {
 - ✅ Production code fully functional
 
 **Next Steps:**
-- Convert remaining ~41 error sites to use helper methods
-- Add remaining helper methods (InvalidOperandType, etc.)
+- Convert remaining ~13 error sites to use helper methods
+  - Add helpers for DatalitError, NotAFunction, module errors
+  - Update module/import error sites in package world functions
+  - Update check_expr TypeMismatch sites
 - Update run_with_sys to use type_check_for_diagnostics
-- Create type error test fixtures
+- Create type error test fixtures (Phase 8 Part 7)
 
 **Key Implementation Details:**
 - ParseResult pattern: Non-Salsa struct with script + 2 span vectors
