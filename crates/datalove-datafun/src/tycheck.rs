@@ -225,6 +225,80 @@ impl<'db> TypeContext<'db> {
         TypeError::ResultRequiresErrorBinding
     }
 
+    /// F026: Invalid operand type for operator.
+    fn error_invalid_operand_type(&self, expr: ExprFun<'db>, op: &str, ty: &str) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            let msg = format!("invalid operand type `{}` for operator `{}`", ty, op);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                .code("F026")
+                .primary_label(text, span, &format!("operator `{}` cannot be applied to type `{}`", op, ty))
+                .emit_type();
+        }
+        TypeError::InvalidOperandType {
+            op: op.to_string(),
+            ty: ty.to_string(),
+        }
+    }
+
+    /// F027: Invalid tuple element type.
+    fn error_invalid_tuple_element(&self, expr: ExprFun<'db>, ty: &str) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            let msg = format!("tuple elements must be datalit types, found `{}`", ty);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                .code("F027")
+                .primary_label(text, span, "invalid type for tuple element")
+                .emit_type();
+        }
+        TypeError::InvalidTupleElement {
+            ty: ty.to_string(),
+        }
+    }
+
+    /// F047: Try operator used outside function.
+    fn error_try_outside_function(&self, expr: ExprFun<'db>, operator: &str) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            let msg = format!("try operator `{}` can only be used inside a function", operator);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                .code("F047")
+                .primary_label(text, span, "try operator here")
+                .emit_type();
+        }
+        TypeError::TryOutsideFunction {
+            operator: operator.to_string(),
+        }
+    }
+
+    /// F048: Try operator type mismatch.
+    fn error_try_type_mismatch(&self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            let msg = format!("try operator `{}` requires {} type, found `{}`", operator, expected, actual);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                .code("F048")
+                .primary_label(text, span, &format!("expected {}, found `{}`", expected, actual))
+                .emit_type();
+        }
+        TypeError::TryTypeMismatch {
+            operator: operator.to_string(),
+            actual_type: actual.to_string(),
+        }
+    }
+
+    /// F049: Try operator return type mismatch.
+    fn error_try_return_type_mismatch(&self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            let msg = format!("try operator `{}` requires function to return {}, found `{}`", operator, expected, actual);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                .code("F049")
+                .primary_label(text, span, "try operator here")
+                .note(&format!("function must return {} to use `{}` operator", expected, operator))
+                .emit_type();
+        }
+        TypeError::TryReturnTypeMismatch {
+            operator: operator.to_string(),
+            return_type: actual.to_string(),
+        }
+    }
+
     /// Look up the source location for an expression.
     fn get_span(&self, expr: ExprFun<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
         use salsa::plumbing::AsId;
@@ -841,11 +915,11 @@ fn synthesize_expr<'db>(
         }
 
         ExprFunKind::BinOp(binop) => {
-            synthesize_binop(ctx, binop)
+            synthesize_binop(ctx, expr, binop)
         }
 
         ExprFunKind::UnaryOp(unaryop) => {
-            synthesize_unaryop(ctx, unaryop)
+            synthesize_unaryop(ctx, expr, unaryop)
         }
 
         ExprFunKind::FunctionCall(call) => {
@@ -872,9 +946,10 @@ fn synthesize_expr<'db>(
                         datalit_element_types.push(datalit_elem_ty);
                     }
                     _ => {
-                        return Err(TypeError::InvalidTupleElement {
-                            ty: type_to_string(db, elem_ty.ty(db)),
-                        });
+                        return Err(ctx.error_invalid_tuple_element(
+                            *elem,
+                            &type_to_string(db, elem_ty.ty(db))
+                        ));
                     }
                 }
             }
@@ -891,11 +966,11 @@ fn synthesize_expr<'db>(
         }
 
         ExprFunKind::TryOption(try_op) => {
-            synthesize_try_option(ctx, try_op)
+            synthesize_try_option(ctx, expr, try_op)
         }
 
         ExprFunKind::TryResult(try_op) => {
-            synthesize_try_result(ctx, try_op)
+            synthesize_try_result(ctx, expr, try_op)
         }
 
         ExprFunKind::ParseError(_) => {
@@ -907,6 +982,7 @@ fn synthesize_expr<'db>(
 /// Synthesize type for binary operation.
 fn synthesize_binop<'db>(
     ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
     binop: ExprBinOp<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
@@ -920,19 +996,22 @@ fn synthesize_binop<'db>(
 
     // Check that operands have the same type.
     if !types_equivalent(db, lhs_ty.ty(db), rhs_ty.ty(db)) {
-        return Err(TypeError::TypeMismatch {
-            expected: type_to_string(db, lhs_ty.ty(db)),
-            actual: type_to_string(db, rhs_ty.ty(db)),
-        });
+        return Err(ctx.error_type_mismatch(
+            expr,
+            &type_to_string(db, lhs_ty.ty(db)),
+            &type_to_string(db, rhs_ty.ty(db)),
+            "operands must have the same type"
+        ));
     }
 
     // Check that operands are numeric types.
     let operand_ty = lhs_ty.ty(db);
     if !is_numeric_type(operand_ty) {
-        return Err(TypeError::InvalidOperandType {
-            op: format!("{:?}", op),
-            ty: type_to_string(db, operand_ty),
-        });
+        return Err(ctx.error_invalid_operand_type(
+            expr,
+            &format!("{:?}", op),
+            &type_to_string(db, operand_ty)
+        ));
     }
 
     // Determine result type based on operator.
@@ -951,20 +1030,22 @@ fn synthesize_binop<'db>(
                 let int_ty = Type::Datalit(datalit::tycheck::Type::Int);
                 TypeAndHeap::new(db, datalit::ast::Heap::Omitted, int_ty)
             } else {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_ty),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_ty)
+                ));
             }
         }
 
         // Bare division: only floats (bigints must use /! or /?).
         Div => {
             if !is_float_type(operand_ty) {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_ty),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_ty)
+                ));
             }
             lhs_ty
         }
@@ -972,19 +1053,21 @@ fn synthesize_binop<'db>(
         // Checked arithmetic: only fixed ints, plus division for bigints.
         AddChecked | SubChecked | MulChecked => {
             if !is_fixed_int_type(operand_ty) {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_ty),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_ty)
+                ));
             }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let lhs_datalit_ty = match lhs_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
                 _ => {
-                    return Err(TypeError::InvalidOperandType {
-                        op: format!("{:?}", op),
-                        ty: type_to_string(db, lhs_ty.ty(db)),
-                    });
+                    return Err(ctx.error_invalid_operand_type(
+                        expr,
+                        &format!("{:?}", op),
+                        &type_to_string(db, lhs_ty.ty(db))
+                    ));
                 }
             };
             let result_inner = datalit::tycheck::TypeResult::new(db, lhs_datalit_ty);
@@ -995,19 +1078,21 @@ fn synthesize_binop<'db>(
         DivChecked => {
             // Division: fixed ints or bigints.
             if !is_fixed_int_type(operand_ty) && !is_bigint_type(operand_ty) {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_ty),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_ty)
+                ));
             }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let lhs_datalit_ty = match lhs_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
                 _ => {
-                    return Err(TypeError::InvalidOperandType {
-                        op: format!("{:?}", op),
-                        ty: type_to_string(db, lhs_ty.ty(db)),
-                    });
+                    return Err(ctx.error_invalid_operand_type(
+                        expr,
+                        &format!("{:?}", op),
+                        &type_to_string(db, lhs_ty.ty(db))
+                    ));
                 }
             };
             let result_inner = datalit::tycheck::TypeResult::new(db, lhs_datalit_ty);
@@ -1018,19 +1103,21 @@ fn synthesize_binop<'db>(
         // Optional arithmetic: only fixed ints, plus division for bigints.
         AddOptional | SubOptional | MulOptional => {
             if !is_fixed_int_type(operand_ty) {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_ty),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_ty)
+                ));
             }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let lhs_datalit_ty = match lhs_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
                 _ => {
-                    return Err(TypeError::InvalidOperandType {
-                        op: format!("{:?}", op),
-                        ty: type_to_string(db, lhs_ty.ty(db)),
-                    });
+                    return Err(ctx.error_invalid_operand_type(
+                        expr,
+                        &format!("{:?}", op),
+                        &type_to_string(db, lhs_ty.ty(db))
+                    ));
                 }
             };
             let option_inner = datalit::tycheck::TypeOption::new(db, lhs_datalit_ty);
@@ -1041,19 +1128,21 @@ fn synthesize_binop<'db>(
         DivOptional => {
             // Division: fixed ints or bigints.
             if !is_fixed_int_type(operand_ty) && !is_bigint_type(operand_ty) {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_ty),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_ty)
+                ));
             }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let lhs_datalit_ty = match lhs_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
                 _ => {
-                    return Err(TypeError::InvalidOperandType {
-                        op: format!("{:?}", op),
-                        ty: type_to_string(db, lhs_ty.ty(db)),
-                    });
+                    return Err(ctx.error_invalid_operand_type(
+                        expr,
+                        &format!("{:?}", op),
+                        &type_to_string(db, lhs_ty.ty(db))
+                    ));
                 }
             };
             let option_inner = datalit::tycheck::TypeOption::new(db, lhs_datalit_ty);
@@ -1074,6 +1163,7 @@ fn synthesize_binop<'db>(
 /// Synthesize type for unary operation.
 fn synthesize_unaryop<'db>(
     ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
     unaryop: ExprUnaryOp<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
@@ -1086,10 +1176,11 @@ fn synthesize_unaryop<'db>(
     // Check that operand is a numeric type.
     let operand_type = operand_ty.ty(db);
     if !is_numeric_type(operand_type) {
-        return Err(TypeError::InvalidOperandType {
-            op: format!("{:?}", op),
-            ty: type_to_string(db, operand_type),
-        });
+        return Err(ctx.error_invalid_operand_type(
+            expr,
+            &format!("{:?}", op),
+            &type_to_string(db, operand_type)
+        ));
     }
 
     // Determine result type based on operator.
@@ -1097,10 +1188,11 @@ fn synthesize_unaryop<'db>(
         // Bare negation: only floats and bigints.
         UnaryOp::Neg => {
             if !is_float_type(operand_type) && !is_bigint_type(operand_type) {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_type),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_type)
+                ));
             }
             operand_ty
         }
@@ -1108,26 +1200,29 @@ fn synthesize_unaryop<'db>(
         // Optional negation: only fixed ints, and not unsigned.
         UnaryOp::NegOptional => {
             if !is_fixed_int_type(operand_type) {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_type),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_type)
+                ));
             }
             // Disallow -? for unsigned ints (footgun).
             if is_unsigned_int_type(operand_type) {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_type),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_type)
+                ));
             }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let operand_datalit_ty = match operand_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, operand_ty.heap(db), dt.clone()),
                 _ => {
-                    return Err(TypeError::InvalidOperandType {
-                        op: format!("{:?}", op),
-                        ty: type_to_string(db, operand_ty.ty(db)),
-                    });
+                    return Err(ctx.error_invalid_operand_type(
+                        expr,
+                        &format!("{:?}", op),
+                        &type_to_string(db, operand_ty.ty(db))
+                    ));
                 }
             };
             let option_inner = datalit::tycheck::TypeOption::new(db, operand_datalit_ty);
@@ -1138,19 +1233,21 @@ fn synthesize_unaryop<'db>(
         // Result negation: only fixed ints.
         UnaryOp::NegResult => {
             if !is_fixed_int_type(operand_type) {
-                return Err(TypeError::InvalidOperandType {
-                    op: format!("{:?}", op),
-                    ty: type_to_string(db, operand_type),
-                });
+                return Err(ctx.error_invalid_operand_type(
+                    expr,
+                    &format!("{:?}", op),
+                    &type_to_string(db, operand_type)
+                ));
             }
             // Convert datafun TypeAndHeap to datalit TypeAndHeap.
             let operand_datalit_ty = match operand_ty.ty(db) {
                 Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, operand_ty.heap(db), dt.clone()),
                 _ => {
-                    return Err(TypeError::InvalidOperandType {
-                        op: format!("{:?}", op),
-                        ty: type_to_string(db, operand_ty.ty(db)),
-                    });
+                    return Err(ctx.error_invalid_operand_type(
+                        expr,
+                        &format!("{:?}", op),
+                        &type_to_string(db, operand_ty.ty(db))
+                    ));
                 }
             };
             let result_inner = datalit::tycheck::TypeResult::new(db, operand_datalit_ty);
@@ -1196,6 +1293,7 @@ fn synthesize_function_call<'db>(
 /// Synthesize type for try-option operator (?).
 fn synthesize_try_option<'db>(
     ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
     try_op: ExprTryOption<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
@@ -1203,7 +1301,7 @@ fn synthesize_try_option<'db>(
 
     // Verify we're inside a function.
     let expected_return = ctx.expected_return_type
-        .ok_or_else(|| TypeError::TryOutsideFunction { operator: "?".to_string() })?;
+        .ok_or_else(|| ctx.error_try_outside_function(expr, "?"))?;
 
     // Synthesize operand type.
     let operand_ty = ctx.synthesize_expr(operand)?;
@@ -1214,10 +1312,12 @@ fn synthesize_try_option<'db>(
             opt.inner_type(db)
         }
         _ => {
-            return Err(TypeError::TryTypeMismatch {
-                operator: "?".to_string(),
-                actual_type: type_to_string(db, operand_ty.ty(db)),
-            });
+            return Err(ctx.error_try_type_mismatch(
+                expr,
+                "?",
+                "Option",
+                &type_to_string(db, operand_ty.ty(db))
+            ));
         }
     };
 
@@ -1227,10 +1327,12 @@ fn synthesize_try_option<'db>(
             // OK, function returns Option type.
         }
         _ => {
-            return Err(TypeError::TryReturnTypeMismatch {
-                operator: "?".to_string(),
-                return_type: type_to_string(db, expected_return.ty(db)),
-            });
+            return Err(ctx.error_try_return_type_mismatch(
+                expr,
+                "?",
+                "Option",
+                &type_to_string(db, expected_return.ty(db))
+            ));
         }
     }
 
@@ -1243,6 +1345,7 @@ fn synthesize_try_option<'db>(
 /// Synthesize type for try-result operator (!).
 fn synthesize_try_result<'db>(
     ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
     try_op: ExprTryResult<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
@@ -1250,7 +1353,7 @@ fn synthesize_try_result<'db>(
 
     // Verify we're inside a function.
     let expected_return = ctx.expected_return_type
-        .ok_or_else(|| TypeError::TryOutsideFunction { operator: "!".to_string() })?;
+        .ok_or_else(|| ctx.error_try_outside_function(expr, "!"))?;
 
     // Synthesize operand type.
     let operand_ty = ctx.synthesize_expr(operand)?;
@@ -1261,10 +1364,12 @@ fn synthesize_try_result<'db>(
             res.inner_type(db)
         }
         _ => {
-            return Err(TypeError::TryTypeMismatch {
-                operator: "!".to_string(),
-                actual_type: type_to_string(db, operand_ty.ty(db)),
-            });
+            return Err(ctx.error_try_type_mismatch(
+                expr,
+                "!",
+                "Result",
+                &type_to_string(db, operand_ty.ty(db))
+            ));
         }
     };
 
@@ -1274,10 +1379,12 @@ fn synthesize_try_result<'db>(
             // OK, function returns Result type.
         }
         _ => {
-            return Err(TypeError::TryReturnTypeMismatch {
-                operator: "!".to_string(),
-                return_type: type_to_string(db, expected_return.ty(db)),
-            });
+            return Err(ctx.error_try_return_type_mismatch(
+                expr,
+                "!",
+                "Result",
+                &type_to_string(db, expected_return.ty(db))
+            ));
         }
     }
 
