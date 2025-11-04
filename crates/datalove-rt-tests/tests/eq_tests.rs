@@ -2488,3 +2488,280 @@ fn test_eq_set_not_equals_different_sizes() -> AnyResult<()> {
     }
     Ok(())
 }
+
+// ==================== Property-Based Tests ====================
+
+use proptest::prelude::*;
+use datalove_datalit::ast_gen::*;
+
+proptest! {
+    /// Property: Reflexivity - for all x, eq(x, x) = Equals.
+    #[test]
+    fn proptest_eq_reflexive(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assert!(typechecked.errors(&db).is_empty(), "Generated expression should typecheck");
+
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
+
+        // DEBUG: Print what type we're comparing
+        eprintln!("Testing seed {}, type_tag: {:?}", seed, inst.tydesc.as_ref().type_tag);
+
+        let result = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert!(matches!(result, datalove_rt::c::RtEq::Equals),
+            "Reflexivity: eq(x, x) should always be Equals");
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                rt.handle(),
+                inst.ptr as *mut u8,
+                inst.tydesc.as_ptr(),
+            );
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt.handle(),
+                inst.tydesc.as_ptr(),
+                1,
+                inst.ptr as *mut u8,
+            );
+        }
+    }
+
+    /// Property: Symmetry - for all x, y, eq(x, y) = eq(y, x).
+    #[test]
+    fn proptest_eq_symmetric(seed1 in any::<u64>(), seed2 in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
+        let expr2 = gen_expr_full_seeded(&db, seed2, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+
+        let resolved1 = datalove_datalit::resolve::resolve_names(&db, expr1, vec![]);
+        let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
+        prop_assert!(typechecked1.errors(&db).is_empty());
+
+        let resolved2 = datalove_datalit::resolve::resolve_names(&db, expr2, vec![]);
+        let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
+        prop_assert!(typechecked2.errors(&db).is_empty());
+
+        let inst1 = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked1)
+            .expect("Should instantiate");
+        let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
+        drop(inst1);
+
+        let inst2 = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked2)
+            .expect("Should instantiate");
+        let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
+        drop(inst2);
+
+        let result_xy = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                ptr1,
+                tydesc1,
+                ptr2,
+                tydesc2,
+            )
+        };
+
+        let result_yx = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                ptr2,
+                tydesc2,
+                ptr1,
+                tydesc1,
+            )
+        };
+
+        prop_assert_eq!(result_xy, result_yx, "Symmetry: eq(x, y) should equal eq(y, x)");
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, tydesc1);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc1, 1, ptr1 as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr2 as *mut u8, tydesc2);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc2, 1, ptr2 as *mut u8);
+        }
+    }
+
+    /// Property: Consistency with clone - for all x, eq(x, clone(x)) = Equals.
+    #[test]
+    fn proptest_eq_consistency_with_clone(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assert!(typechecked.errors(&db).is_empty());
+
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
+
+        // Clone the value into a buffer.
+        let tydesc = inst.tydesc.as_ref();
+        let mut clone_buffer = vec![0u8; tydesc.size as usize];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_clone_local(
+                rt.handle(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                clone_buffer.as_mut_ptr(),
+            )
+        };
+        prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        let result = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                clone_buffer.as_ptr(),
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert!(matches!(result, datalove_rt::c::RtEq::Equals),
+            "Clone consistency: eq(x, clone(x)) should be Equals");
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+        }
+    }
+
+    /// Property: Numeric boundary testing with MIN/MAX values.
+    #[test]
+    fn proptest_eq_numeric_boundaries(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            numeric_strategy: NumericStrategy::CornerCases,
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assert!(typechecked.errors(&db).is_empty());
+
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
+
+        // Test reflexivity with boundary values.
+        let result = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert!(matches!(result, datalove_rt::c::RtEq::Equals),
+            "Boundary values: eq(x, x) should be Equals");
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        }
+    }
+
+    /// Property: Moderate structures with 100-200 elements, depth 3-4.
+    #[test]
+    fn proptest_eq_moderate_structures(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            max_collection_size: 150,
+            max_depth: 3,
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assert!(typechecked.errors(&db).is_empty());
+
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
+
+        // Test reflexivity with moderate-sized structures.
+        let result = unsafe {
+            datalove_rt::c::dtlv_rti_eq(
+                std::ptr::null_mut(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+                inst.ptr,
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert!(matches!(result, datalove_rt::c::RtEq::Equals),
+            "Moderate structures: eq(x, x) should be Equals");
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        }
+    }
+}

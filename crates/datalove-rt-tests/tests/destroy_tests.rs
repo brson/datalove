@@ -1115,3 +1115,154 @@ fn test_destroy_map_large() -> AnyResult<()> {
 
     Ok(())
 }
+
+
+// ==================== Property-Based Tests ====================
+
+use proptest::prelude::*;
+use datalove_datalit::ast_gen::*;
+
+proptest! {
+    /// Property: Destroy moderate structures with 100-200 elements, depth 3-4.
+    #[test]
+    fn proptest_destroy_moderate_structures(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            max_collection_size: 150,
+            max_depth: 3,
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = datalove_rt::c::dtlv_rti_init();
+        prop_assert!(!rt.is_null());
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assert!(typechecked.errors(&db).is_empty());
+
+        let inst = instantiate2::instantiate_value(&db, rt, &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
+
+        // Destroy the moderate-sized structure.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                rt,
+                inst.ptr as *mut u8,
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "Destroy should succeed for moderate structures");
+
+        // Free the memory.
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt,
+                inst.tydesc.as_ptr(),
+                1,
+                inst.ptr as *mut u8,
+            );
+            datalove_rt::c::dtlv_rti_shutdown(rt);
+        }
+    }
+
+    /// Property: Destroy all types - test destruction across all datalit types.
+    #[test]
+    fn proptest_destroy_all_types(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = datalove_rt::c::dtlv_rti_init();
+        prop_assert!(!rt.is_null());
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assert!(typechecked.errors(&db).is_empty());
+
+        let inst = instantiate2::instantiate_value(&db, rt, &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
+
+        // Destroy the value.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                rt,
+                inst.ptr as *mut u8,
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "Destroy should succeed for all types");
+
+        // Free the memory.
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt,
+                inst.tydesc.as_ptr(),
+                1,
+                inst.ptr as *mut u8,
+            );
+            datalove_rt::c::dtlv_rti_shutdown(rt);
+        }
+    }
+
+    /// Property: Deep nesting destruction - test with depth 3-4.
+    #[test]
+    fn proptest_destroy_deep_nesting(seed in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            max_depth: 4,
+            max_collection_size: 50,
+            ..Default::default()
+        };
+        let expr = gen_expr_full_seeded(&db, seed, config);
+
+        let rt = datalove_rt::c::dtlv_rti_init();
+        prop_assert!(!rt.is_null());
+        let mut tydesc_table = TyDescTable::new(&db);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        prop_assert!(typechecked.errors(&db).is_empty());
+
+        let inst = instantiate2::instantiate_value(&db, rt, &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
+
+        // Destroy the deeply nested structure.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                rt,
+                inst.ptr as *mut u8,
+                inst.tydesc.as_ptr(),
+            )
+        };
+
+        prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "Destroy should succeed for deeply nested structures");
+
+        // Free the memory.
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt,
+                inst.tydesc.as_ptr(),
+                1,
+                inst.ptr as *mut u8,
+            );
+            datalove_rt::c::dtlv_rti_shutdown(rt);
+        }
+    }
+}
