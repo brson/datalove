@@ -2,7 +2,7 @@
 
 ## Current Status
 
-**Latest Update:** 2025-11-03
+**Latest Update:** 2025-11-04
 
 - ✅ Phase 1 Complete: Diagnostic crate created and compiles
 - ✅ Phase 2 Complete: AST error nodes updated
@@ -23,9 +23,15 @@
 - 🔄 Phase 4 Part B In Progress: Datafun type checker diagnostics
   - Parser span infrastructure complete ✅
   - TypeContext updates complete ✅
-  - All production code compiles and runs ✅
-  - Type checker diagnostic emission: 0/35 error sites (next step)
-  - Error codes F001-F053 to be assigned (next step)
+  - Error helper abstraction created ✅ (tycheck.rs:148-226)
+  - type_check_for_diagnostics() wrapper created ✅ (tycheck.rs:308-314)
+  - Error helpers implemented: F001, F002, F011, F016, F045, F046 ✅
+  - Type checker diagnostic emission: 6/~47 error sites updated ✅
+  - Error code design: F001-F053 designed ✅
+  - CLI integration: run_without_sys working perfectly ✅
+  - All 136 tests passing ✅
+  - Remaining: ~41 error sites to convert to use helpers
+  - Remaining: run_with_sys diagnostic integration
 - 🔲 Phase 4 Part C: Documentation (not started)
 - 🔲 Phase 5: Resolution diagnostics (not yet started)
 - 🔄 Phase 6 In Progress: Driver integration (basic)
@@ -43,9 +49,9 @@
   - Type error test fixtures 🔲
 
 **Next Steps:**
-1. Phase 8: Complete diagnostic rendering improvements (add type error tests, finish run_with_sys integration)
-2. Phase 4 Part B: Update datafun type checker to emit TypeDiagnostic (~35 error sites) and assign error codes F001-F053
-3. Phase 4 Part B: Fix test infrastructure issues (35 tests failing due to calling parse() from non-tracked contexts)
+1. Phase 4 Part B: Complete datafun diagnostic emission (~41 remaining error sites)
+2. Phase 4 Part B: Add run_with_sys diagnostic integration
+3. Phase 8: Add type error test fixtures
 4. Phase 5: Resolution diagnostics
 5. Phase 6: Complete driver integration (full SourceMap for multi-file support)
 
@@ -518,7 +524,9 @@ match expr.kind {
 - ✅ Error codes T001-T046 assigned
 - ✅ **Total: 800+ tests passing, 0 failures**
 
-**Phase 4 Part B (Datafun) - INFRASTRUCTURE COMPLETE:**
+**Phase 4 Part B (Datafun) - IN PROGRESS (2025-11-04):**
+
+**Infrastructure (Complete):**
 - ✅ ParseResult struct added to datafun ast.rs
   - Contains: script + expr_spans + datalit_expr_spans
   - Regular struct (not Salsa-tracked) due to Vec lifetime constraints
@@ -534,25 +542,66 @@ match expr.kind {
 - ✅ Type check signature updates
   - type_check() accepts expr_spans and datalit_expr_spans parameters
   - type_check_with_package_world() updated similarly
-  - All call sites updated to pass spans
+  - type_check_for_diagnostics() wrapper created (tycheck.rs:308-314)
 - ✅ Call site updates (all production code)
-  - CLI: crates/datalove-cli/src/main.rs (run_without_sys, run_with_sys)
-  - REPL: crates/datalove-repl/src/engine.rs (4 type_check calls)
-  - Library: interp.rs, import_demands.rs, script_world.rs
-  - Type checker: tycheck.rs (typecheck_package_world_module)
-  - Test helpers: type_table.rs, eval_datafun.rs (10+ test functions)
-- ✅ Build status
-  - All crates compile successfully (cargo build --all)
-  - CLI builds and runs
-  - REPL builds successfully
-  - Production code fully functional
-- ⚠️ Test status
-  - CLI tests: 2/2 passed ✅
-  - Datafun lib tests: 39/74 passed (35 failures due to Salsa context issues)
-  - Test failures: Tests call parse() from non-tracked contexts
-  - **Note**: Test failures are purely test infrastructure issues - production code works correctly
-- 🔲 Next: Emit TypeDiagnostic from datafun type checker (~35 error sites)
-- 🔲 Next: Assign error codes F001-F053 for datafun type errors
+  - CLI: uses type_check_for_diagnostics() for proper accumulation
+  - Test helpers: fixed to use parse_for_diagnostics() in tracked context
+  - All internal callers updated
+
+**Error Helper Abstraction (Complete):**
+- ✅ Error helper methods on TypeContext (tycheck.rs:148-226)
+  - Pattern: Methods both emit TypeDiagnostic AND return TypeError
+  - Allows error recovery while providing rich diagnostics
+  - Takes expr for span lookup, formats nice error messages
+- ✅ Implemented helpers:
+  - error_undefined_variable() - F001
+  - error_undefined_function() - F002
+  - error_cannot_synthesize() - F011
+  - error_type_mismatch() - F016
+  - error_arity_mismatch() - F045
+  - error_result_requires_binding() - F046
+
+**Diagnostic Emission (Partial - 6/~47 sites):**
+- ✅ F001: Undefined variable (ExprFunKind::Name)
+- ✅ F002: Undefined function (synthesize_function_call)
+- ✅ F011: Cannot synthesize return type (Statement::Ret)
+- ✅ F016: Type mismatch (if/match condition)
+- ✅ F045: Function arity mismatch (synthesize_function_call)
+- ✅ F046: Result requires error binding (if let destructuring)
+- 🔲 Remaining: ~41 error sites (InvalidOperandType: 18, others: 23)
+
+**Error Code Design (Complete):**
+- ✅ F001-F010: Name resolution errors
+- ✅ F011-F015: Type synthesis errors
+- ✅ F016-F025: Type mismatch errors
+- ✅ F026-F045: Operator type errors
+- ✅ F046-F050: Error handling errors
+- ✅ F051-F053: Integration errors
+
+**CLI Integration (run_without_sys Complete):**
+- ✅ type_check_for_diagnostics() wrapper working perfectly
+- ✅ Diagnostic accumulation via Salsa accumulators
+- ✅ Rich error rendering with file:line:col, source snippets, carets
+- ✅ Example output working:
+  ```
+  error[F001]: cannot find value `undefined_var` in this scope
+   --> test.dfs:1:14
+    |
+  1 | let output = undefined_var
+    |              ^^^^^^^^^^^^^ not found in this scope
+  ```
+- 🔲 run_with_sys diagnostic integration pending
+
+**Test Status:**
+- ✅ All 136 datafun tests passing
+- ✅ CLI tests passing
+- ✅ Production code fully functional
+
+**Next Steps:**
+- Convert remaining ~41 error sites to use helper methods
+- Add remaining helper methods (InvalidOperandType, etc.)
+- Update run_with_sys to use type_check_for_diagnostics
+- Create type error test fixtures
 
 **Key Implementation Details:**
 - ParseResult pattern: Non-Salsa struct with script + 2 span vectors
