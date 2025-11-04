@@ -276,9 +276,11 @@ fn eval_expression_in_script_scope<'db>(
             // TODO: Implement function calls.
             Err(InterpError::InvalidExpression("Function calls not yet implemented".to_string()))
         }
-        ast::ExprFunKind::BinOp(_) => {
-            // TODO: Implement binary operations.
-            Err(InterpError::InvalidExpression("Binary operations not yet implemented".to_string()))
+        ast::ExprFunKind::BinOp(binop_expr) => {
+            // Evaluate binary operations.
+            let lhs = eval_expression_in_script_scope(ctx, binop_expr.lhs(ctx.db))?;
+            let rhs = eval_expression_in_script_scope(ctx, binop_expr.rhs(ctx.db))?;
+            execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs)
         }
         ast::ExprFunKind::Tuple(_) => {
             // TODO: Implement tuple construction.
@@ -509,4 +511,572 @@ fn allocate_string<'db>(
         ptr: string_ptr,
         tydesc: tydesc_ptr,
     })
+}
+
+/// Check if a value is a u32 type.
+fn is_u32_value(value: Value) -> bool {
+    unsafe {
+        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::U32
+    }
+}
+
+/// Check if a value is an int (bigint) type.
+fn is_int_value(value: Value) -> bool {
+    unsafe {
+        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::Int
+    }
+}
+
+/// Allocate a bigint value.
+fn allocate_bigint<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::Int);
+    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tydesc_ref.size(),
+            tydesc_ref.align(),
+            1
+        )
+    };
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+    })
+}
+
+/// Widen a u32 value to an int (bigint) value.
+fn widen_u32_to_int<'db>(
+    ctx: &mut InterpContext<'db>,
+    u32_value: Value,
+) -> Result<Value, InterpError> {
+    // Read the u32 value.
+    let value_u32 = unsafe { *(u32_value.ptr as *const u32) };
+
+    // Allocate the Int structure.
+    let int_val = allocate_bigint(ctx)?;
+    let int_ptr = int_val.ptr as *mut datalove_rt::rtdt::Int;
+
+    unsafe {
+        if value_u32 == 0 {
+            // Zero: no limbs needed.
+            (*int_ptr).data = std::ptr::null();
+            (*int_ptr).size_and_sign = 0;
+            (*int_ptr).capacity = 0;
+        } else {
+            // Non-zero: allocate one limb.
+            let rt_handle = ctx.runtime.handle();
+            let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                rt_handle,
+                4,  // size of u32
+                4,  // alignment of u32
+                1   // count
+            ) as *mut u32;
+
+            *limb_ptr = value_u32;
+
+            (*int_ptr).data = limb_ptr;
+            (*int_ptr).size_and_sign = 1;  // 1 limb, positive
+            (*int_ptr).capacity = 1;
+        }
+    }
+
+    Ok(int_val)
+}
+
+/// Destroy a value by calling the runtime destroy function.
+fn destroy_value<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+) {
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            ctx.runtime.handle(),
+            value.ptr,
+            value.tydesc,
+        );
+    }
+}
+
+/// Evaluate addition with automatic widening to int.
+fn eval_add<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    // Both u32: widen to Int and add.
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+
+        // Allocate result Int.
+        let result_int = allocate_bigint(ctx)?;
+
+        // Perform bigint addition.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_add(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        // Clean up temporary widened values.
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int addition failed".to_string()))
+        }
+    }
+    // Both Int: add directly.
+    else if is_int_value(lhs) && is_int_value(rhs) {
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_add(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int addition failed".to_string()))
+        }
+    }
+    // Mixed u32 and Int: widen u32 side.
+    else if is_u32_value(lhs) && is_int_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_add(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int addition failed".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_u32_value(rhs) {
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_add(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int addition failed".to_string()))
+        }
+    }
+    else {
+        Err(InterpError::InvalidExpression(
+            "Unsupported types for addition".to_string()
+        ))
+    }
+}
+
+/// Evaluate subtraction with automatic widening to int.
+fn eval_sub<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    // Both u32: widen to Int and subtract.
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_sub(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
+        }
+    }
+    // Both Int: subtract directly.
+    else if is_int_value(lhs) && is_int_value(rhs) {
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_sub(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
+        }
+    }
+    // Mixed cases.
+    else if is_u32_value(lhs) && is_int_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_sub(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_u32_value(rhs) {
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_sub(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
+        }
+    }
+    else {
+        Err(InterpError::InvalidExpression(
+            "Unsupported types for subtraction".to_string()
+        ))
+    }
+}
+
+/// Evaluate multiplication with automatic widening to int.
+fn eval_mul<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    // Both u32: widen to Int and multiply.
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_mul(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
+        }
+    }
+    // Both Int: multiply directly.
+    else if is_int_value(lhs) && is_int_value(rhs) {
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_mul(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
+        }
+    }
+    // Mixed cases.
+    else if is_u32_value(lhs) && is_int_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_mul(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_u32_value(rhs) {
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_mul(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
+        }
+    }
+    else {
+        Err(InterpError::InvalidExpression(
+            "Unsupported types for multiplication".to_string()
+        ))
+    }
+}
+
+/// Evaluate division with automatic widening to int.
+fn eval_div<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    // Both u32: widen to Int and divide.
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
+        }
+    }
+    // Both Int: divide directly.
+    else if is_int_value(lhs) && is_int_value(rhs) {
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
+        }
+    }
+    // Mixed cases.
+    else if is_u32_value(lhs) && is_int_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_u32_value(rhs) {
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        let result_int = allocate_bigint(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_int.ptr,
+                result_int.tydesc,
+            )
+        };
+
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(result_int)
+        } else {
+            Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
+        }
+    }
+    else {
+        Err(InterpError::InvalidExpression(
+            "Unsupported types for division".to_string()
+        ))
+    }
+}
+
+/// Execute a binary operation.
+fn execute_binop<'db>(
+    ctx: &mut InterpContext<'db>,
+    op: crate::ast::BinOp,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    use crate::ast::BinOp;
+
+    match op {
+        BinOp::Add => eval_add(ctx, lhs, rhs),
+        BinOp::Sub => eval_sub(ctx, lhs, rhs),
+        BinOp::Mul => eval_mul(ctx, lhs, rhs),
+        BinOp::Div => eval_div(ctx, lhs, rhs),
+
+        // Not yet implemented.
+        BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked => {
+            Err(InterpError::InvalidExpression("Checked operators not yet implemented".to_string()))
+        }
+        BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional => {
+            Err(InterpError::InvalidExpression("Optional operators not yet implemented".to_string()))
+        }
+        BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
+            Err(InterpError::InvalidExpression("Comparison operators not yet implemented".to_string()))
+        }
+    }
 }

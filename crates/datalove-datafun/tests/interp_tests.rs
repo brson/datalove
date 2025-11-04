@@ -39,8 +39,6 @@ end fun
 
 #[test]
 fn test_interp_empty_script() {
-    unsafe { std::env::set_var("DATALOVE_LEAK_CHECK", "ignore"); }
-
     // Test that an empty script fails with NoOutputVariable.
     let db = Database::default();
 
@@ -65,8 +63,6 @@ fn test_interp_empty_script() {
 
 #[test]
 fn test_interp_u32_literal() {
-    unsafe { std::env::set_var("DATALOVE_LEAK_CHECK", "ignore"); }
-
     // Test that we can evaluate a simple u32 literal.
     let db = Database::default();
 
@@ -98,8 +94,6 @@ let output = @42
 
 #[test]
 fn test_interp_bool_literals() {
-    unsafe { std::env::set_var("DATALOVE_LEAK_CHECK", "ignore"); }
-
     // Test that we can evaluate boolean literals.
     let db = Database::default();
 
@@ -147,8 +141,6 @@ let output = @false
 
 #[test]
 fn test_interp_string_literal() {
-    unsafe { std::env::set_var("DATALOVE_LEAK_CHECK", "ignore"); }
-
     // Test that we can evaluate a string literal.
     let db = Database::default();
 
@@ -176,5 +168,157 @@ let output = "hello"
     unsafe {
         let string_ref = &*string_ptr;
         assert_eq!(string_ref.size, 5);  // "hello" is 5 bytes.
+    }
+}
+
+#[test]
+fn test_interp_u32_add_widens_to_int() {
+    // Test that u32 + u32 widens to int (bigint).
+    let db = Database::default();
+
+    let source_text = r#"
+let output = @10 + @20
+"#;
+
+    let source = Source::new(&db, source_text.to_string());
+    let unit = datafun::script::ScriptUnit::new(&db, source);
+    let script = datafun::script::Script::new(&db, vec![unit]);
+
+    let empty_sys = rmx::std::collections::BTreeMap::new();
+    let empty_local = rmx::std::collections::BTreeMap::new();
+    let package_world = datafun::package::PackageWorld::new(&db, empty_sys, empty_local);
+
+    let result = datafun::interp::execute_script(&db, script, package_world);
+    assert!(result.is_ok(), "Script execution failed: {:?}", result);
+
+    // Check the value is an Int (bigint).
+    let script_result = result.unwrap();
+    let int_ptr = script_result.value.ptr as *const datalove_rtdt::Int;
+    assert!(!int_ptr.is_null());
+
+    // Verify it's an Int type and has the correct value (30).
+    unsafe {
+        let int_ref = &*int_ptr;
+        // For a small positive value like 30, we expect 1 limb.
+        assert_eq!(int_ref.size_and_sign, 1);
+        assert_eq!(*int_ref.data, 30);
+    }
+}
+
+#[test]
+fn test_interp_u32_sub() {
+    let db = Database::default();
+
+    let source_text = r#"
+let output = @50 - @20
+"#;
+
+    let source = Source::new(&db, source_text.to_string());
+    let unit = datafun::script::ScriptUnit::new(&db, source);
+    let script = datafun::script::Script::new(&db, vec![unit]);
+
+    let empty_sys = rmx::std::collections::BTreeMap::new();
+    let empty_local = rmx::std::collections::BTreeMap::new();
+    let package_world = datafun::package::PackageWorld::new(&db, empty_sys, empty_local);
+
+    let result = datafun::interp::execute_script(&db, script, package_world);
+    assert!(result.is_ok(), "Script execution failed: {:?}", result);
+
+    let script_result = result.unwrap();
+    let int_ptr = script_result.value.ptr as *const datalove_rtdt::Int;
+
+    unsafe {
+        let int_ref = &*int_ptr;
+        assert_eq!(int_ref.size_and_sign, 1);
+        assert_eq!(*int_ref.data, 30);
+    }
+}
+
+#[test]
+fn test_interp_u32_mul() {
+    let db = Database::default();
+
+    let source_text = r#"
+let output = @6 * @7
+"#;
+
+    let source = Source::new(&db, source_text.to_string());
+    let unit = datafun::script::ScriptUnit::new(&db, source);
+    let script = datafun::script::Script::new(&db, vec![unit]);
+
+    let empty_sys = rmx::std::collections::BTreeMap::new();
+    let empty_local = rmx::std::collections::BTreeMap::new();
+    let package_world = datafun::package::PackageWorld::new(&db, empty_sys, empty_local);
+
+    let result = datafun::interp::execute_script(&db, script, package_world);
+    assert!(result.is_ok(), "Script execution failed: {:?}", result);
+
+    let script_result = result.unwrap();
+    let int_ptr = script_result.value.ptr as *const datalove_rtdt::Int;
+
+    unsafe {
+        let int_ref = &*int_ptr;
+        assert_eq!(int_ref.size_and_sign, 1);
+        assert_eq!(*int_ref.data, 42);
+    }
+}
+
+#[test]
+fn test_interp_u32_div() {
+    let db = Database::default();
+
+    let source_text = r#"
+let output = @84 / @2
+"#;
+
+    let source = Source::new(&db, source_text.to_string());
+    let unit = datafun::script::ScriptUnit::new(&db, source);
+    let script = datafun::script::Script::new(&db, vec![unit]);
+
+    let empty_sys = rmx::std::collections::BTreeMap::new();
+    let empty_local = rmx::std::collections::BTreeMap::new();
+    let package_world = datafun::package::PackageWorld::new(&db, empty_sys, empty_local);
+
+    let result = datafun::interp::execute_script(&db, script, package_world);
+    assert!(result.is_ok(), "Script execution failed: {:?}", result);
+
+    let script_result = result.unwrap();
+    let int_ptr = script_result.value.ptr as *const datalove_rtdt::Int;
+
+    unsafe {
+        let int_ref = &*int_ptr;
+        assert_eq!(int_ref.size_and_sign, 1);
+        assert_eq!(*int_ref.data, 42);
+    }
+}
+
+#[test]
+fn test_interp_expression_chain() {
+    // Test chained expressions: (5 + 10) * 2 = 30.
+    let db = Database::default();
+
+    let source_text = r#"
+let a = @5 + @10
+let output = a * @2
+"#;
+
+    let source = Source::new(&db, source_text.to_string());
+    let unit = datafun::script::ScriptUnit::new(&db, source);
+    let script = datafun::script::Script::new(&db, vec![unit]);
+
+    let empty_sys = rmx::std::collections::BTreeMap::new();
+    let empty_local = rmx::std::collections::BTreeMap::new();
+    let package_world = datafun::package::PackageWorld::new(&db, empty_sys, empty_local);
+
+    let result = datafun::interp::execute_script(&db, script, package_world);
+    assert!(result.is_ok(), "Script execution failed: {:?}", result);
+
+    let script_result = result.unwrap();
+    let int_ptr = script_result.value.ptr as *const datalove_rtdt::Int;
+
+    unsafe {
+        let int_ref = &*int_ptr;
+        assert_eq!(int_ref.size_and_sign, 1);
+        assert_eq!(*int_ref.data, 30);
     }
 }
