@@ -314,7 +314,7 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { inst.tydesc.size() as usize };
+    let tydesc_size = inst.tydesc.size() as usize;
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
@@ -357,7 +357,7 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { inst.tydesc.size() as usize };
+    let tydesc_size = inst.tydesc.size() as usize;
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
@@ -400,7 +400,7 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { inst.tydesc.size() as usize };
+    let tydesc_size = inst.tydesc.size() as usize;
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
@@ -443,7 +443,7 @@ fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { inst.tydesc.size() as usize };
+    let tydesc_size = inst.tydesc.size() as usize;
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
@@ -730,7 +730,7 @@ fn test_destroy_option_none() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { inst.tydesc.size() as usize };
+    let tydesc_size = inst.tydesc.size() as usize;
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
@@ -774,7 +774,7 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { inst.tydesc.size() as usize };
+    let tydesc_size = inst.tydesc.size() as usize;
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
@@ -818,7 +818,7 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let tydesc_size = unsafe { inst.tydesc.size() as usize };
+    let tydesc_size = inst.tydesc.size() as usize;
     let mut cloned_buffer = vec![0u8; tydesc_size];
 
     let status = unsafe {
