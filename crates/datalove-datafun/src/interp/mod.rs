@@ -17,6 +17,7 @@ pub struct InterpContext<'db> {
     package_world: PackageWorld,
     script: Option<crate::script::Script>,
     script_scope: ScriptScope<'db>,
+    tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
 }
 
 /// Script-level scope for REPL incremental execution.
@@ -42,10 +43,27 @@ pub enum ScriptVarState {
 }
 
 /// Value representation.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Value {
-    ptr: *mut u8,
-    tydesc: *const datalove_rt::rtdt::TyDesc,
+    pub ptr: *mut u8,
+    pub tydesc: *const datalove_rt::rtdt::TyDesc,
+}
+
+/// Result of script execution containing the value and runtime.
+///
+/// The runtime must be kept alive for the value pointer to remain valid.
+pub struct ScriptResult {
+    pub value: Value,
+    pub runtime: datalove_rt::rust::Runtime,
+}
+
+impl std::fmt::Debug for ScriptResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScriptResult")
+            .field("value", &self.value)
+            .field("runtime", &"<Runtime>")
+            .finish()
+    }
 }
 
 /// Interpreter errors.
@@ -87,6 +105,7 @@ impl InterpContext<'_> {
                 variables: HashMap::new(),
                 functions: HashMap::new(),
             },
+            tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
         }
     }
 }
@@ -109,7 +128,7 @@ pub fn execute_script<'db>(
     db: &'db dyn crate::Db,
     script: crate::script::Script,
     package_world: PackageWorld,
-) -> Result<Value, InterpError> {
+) -> Result<ScriptResult, InterpError> {
     // Create interpreter context.
     let mut ctx = InterpContext::new(db, package_world, Some(script));
 
@@ -124,9 +143,15 @@ pub fn execute_script<'db>(
 
     // Return the output variable if present.
     let output_name = bct::text::InternedText::new(db, "output");
-    ctx.script_scope.variables.get(&output_name)
-        .ok_or(InterpError::NoOutputVariable)
-        .map(|var| var.value)
+    let value = ctx.script_scope.variables.get(&output_name)
+        .ok_or(InterpError::NoOutputVariable)?
+        .value;
+
+    // Return both the value and the runtime (which keeps the memory alive).
+    Ok(ScriptResult {
+        value,
+        runtime: ctx.runtime,
+    })
 }
 
 /// Execute a single script unit in REPL mode.
@@ -304,19 +329,184 @@ fn read_script_variable<'db>(
 /// Evaluate a datalit expression.
 fn eval_datalit_expression<'db>(
     ctx: &mut InterpContext<'db>,
-    _expr: crate::datalit::ast::ExprFull<'db>,
+    expr: crate::datalit::ast::ExprFull<'db>,
 ) -> Result<Value, InterpError> {
-    // TODO: Implement datalit expression evaluation.
-    // For now, create a placeholder null value.
-    Err(InterpError::InvalidExpression("Datalit expressions not yet implemented".to_string()))
+    use crate::datalit::ast::{Expr, ExprAndHeap};
+
+    let expr_and_heap: &ExprAndHeap<'db> = expr.expr(ctx.db);
+    let expr_inner: Expr<'db> = expr_and_heap.expr(ctx.db).clone();
+
+    match expr_inner {
+        Expr::True => allocate_bool(ctx, true),
+        Expr::False => allocate_bool(ctx, false),
+        Expr::Int(int_expr) => allocate_int(ctx, &int_expr),
+        Expr::String(string_expr) => allocate_string(ctx, &string_expr),
+        Expr::ParseError(_) => Err(InterpError::InvalidExpression("Parse error".to_string())),
+        _ => Err(InterpError::InvalidExpression(
+            "Datalit expression type not yet implemented".to_string()
+        )),
+    }
 }
 
 /// Clone a value (for copy types or explicit cloning).
 fn clone_value<'db>(
-    _ctx: &mut InterpContext<'db>,
+    ctx: &mut InterpContext<'db>,
     value: Value,
 ) -> Value {
-    // TODO: Implement proper value cloning using runtime.
-    // For now, just return the same value (shallow copy of pointers).
-    value
+    // Allocate memory for the clone.
+    let rt_handle = ctx.runtime.handle();
+    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(value.tydesc) };
+
+    let cloned_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tydesc_ref.size(),
+            tydesc_ref.align(),
+            1
+        )
+    };
+
+    // Clone into the allocated memory.
+    unsafe {
+        datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, cloned_ptr);
+    }
+
+    Value {
+        ptr: cloned_ptr,
+        tydesc: value.tydesc,
+    }
+}
+
+/// Allocate a boolean value.
+fn allocate_bool<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: bool,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::Bool);
+    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tydesc_ref.size(),
+            tydesc_ref.align(),
+            1
+        )
+    };
+
+    unsafe {
+        *ptr = if value { 1 } else { 0 };
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+    })
+}
+
+/// Allocate an integer value.
+///
+/// For now, we default to u32 since we don't have type information yet.
+fn allocate_int<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_expr: &crate::datalit::ast::ExprInt<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    // Parse the integer value.
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+    let value: u32 = value_str.parse()
+        .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
+    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tydesc_ref.size(),
+            tydesc_ref.align(),
+            1
+        )
+    };
+
+    unsafe {
+        *(ptr as *mut u32) = value;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+    })
+}
+
+/// Allocate a string value.
+fn allocate_string<'db>(
+    ctx: &mut InterpContext<'db>,
+    string_expr: &crate::datalit::ast::ExprString<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let string_value_raw = string_expr.value(ctx.db).as_str(ctx.db);
+
+    // Strip quotes if present.
+    let string_value = if string_value_raw.starts_with('"') && string_value_raw.ends_with('"') {
+        &string_value_raw[1..string_value_raw.len()-1]
+    } else {
+        string_value_raw
+    };
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
+    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
+
+    let rt_handle = ctx.runtime.handle();
+
+    // Allocate memory for the string structure.
+    let string_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tydesc_ref.size(),
+            tydesc_ref.align(),
+            1
+        )
+    };
+
+    // Initialize the string structure.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            string_ptr,
+            tydesc_ref.as_ptr(),
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create string".to_string()));
+    }
+
+    // Push the string bytes if non-empty.
+    if !string_value.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                string_ptr,
+                tydesc_ref.as_ptr(),
+                string_value.as_ptr(),
+                string_value.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push string bytes".to_string()));
+        }
+    }
+
+    Ok(Value {
+        ptr: string_ptr,
+        tydesc: tydesc_ptr,
+    })
 }

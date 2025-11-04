@@ -50,8 +50,8 @@ impl<'db> TyDescTable<'db> {
         }
 
         let tydesc = self.create_tydesc(ty);
-        let ptr = &*tydesc as *const rtdt::TyDesc;
         self.tydescs.push(tydesc);
+        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.cache.insert(ty.clone(), ptr);
         ptr
     }
@@ -117,8 +117,8 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        let ptr = &*tydesc as *const rtdt::TyDesc;
         self.tydescs.push(tydesc);
+        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         ptr
     }
 
@@ -532,8 +532,8 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        let ptr = &*tydesc as *const rtdt::TyDesc;
         self.tydescs.push(tydesc);
+        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.runtime_option_cache.insert(inner_tydesc, ptr);
         ptr
     }
@@ -650,8 +650,8 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        let ptr = &*tydesc as *const rtdt::TyDesc;
         self.tydescs.push(tydesc);
+        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.runtime_result_cache.insert(inner_tydesc, ptr);
         ptr
     }
