@@ -74,12 +74,31 @@ fn instantiate_expr<'db>(
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
 ) -> AnyResult<*const u8> {
-    let tydesc_ref = tydesc_table.get_or_create_ref(ty);
-    let dest_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, tydesc_ref.size(), tydesc_ref.align(), 1)
+    let tydesc_ptr = tydesc_table.get_or_create(ty);
+    let (size, align) = unsafe {
+        let td = rtdt::TyDescRef::from_ptr(tydesc_ptr);
+        (td.size(), td.align())
     };
-    instantiate_expr_into(db, rt, expr, ty, tydesc_table, dest_ptr)?;
-    Ok(dest_ptr)
+    let dest_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, size, align, 1)
+    };
+
+    // Try to instantiate the expression. If it fails, free the allocated memory.
+    match instantiate_expr_into(db, rt, expr, ty, tydesc_table, dest_ptr) {
+        Ok(_) => Ok(dest_ptr),
+        Err(e) => {
+            // Free the allocated memory on error to avoid leak.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    rt,
+                    tydesc_ptr,
+                    1,
+                    dest_ptr as *mut u8,
+                );
+            }
+            Err(e)
+        }
+    }
 }
 
 /// Instantiate an expression into pre-allocated memory at dest_ptr.
@@ -546,9 +565,20 @@ fn instantiate_list<'db>(
         let data_ptr = if !elements.is_empty() {
             let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, element_size, element_align, elements.len() as u32);
 
+            // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
                 let elem_dest = array_ptr.add(i * element_size as usize);
-                instantiate_expr_into(db, rt, *elem, element_ty, tydesc_table, elem_dest)?;
+                if let Err(e) = instantiate_expr_into(db, rt, *elem, element_ty, tydesc_table, elem_dest) {
+                    // Destroy successfully instantiated elements.
+                    for j in 0..i {
+                        let elem_to_destroy = array_ptr.add(j * element_size as usize);
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
+                    }
+                    // Free the array by calling the allocator's free through the rt handle.
+                    let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+                    rt_ref.alloc.free(element_size, element_align, elements.len() as u32, array_ptr);
+                    return Err(e);
+                }
             }
             array_ptr as *const u8
         } else {
@@ -776,8 +806,41 @@ fn instantiate_map<'db>(
         let key_dest = unsafe { keys_array.add(i * key_size) };
         let value_dest = unsafe { values_array.add(i * value_size) };
 
-        instantiate_expr_into(db, rt, key_expr, key_type.ty(db), tydesc_table, key_dest)?;
-        instantiate_expr_into(db, rt, value_expr, value_type.ty(db), tydesc_table, value_dest)?;
+        // Try to instantiate key. If it fails, clean up.
+        if let Err(e) = instantiate_expr_into(db, rt, key_expr, key_type.ty(db), tydesc_table, key_dest) {
+            // Destroy all successfully instantiated entries before this one.
+            unsafe {
+                for j in 0..i {
+                    let key_to_destroy = keys_array.add(j * key_size);
+                    let value_to_destroy = values_array.add(j * value_size);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_to_destroy, key_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
+                }
+                // Free the leaf node.
+                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node);
+            }
+            return Err(e);
+        }
+
+        // Try to instantiate value. If it fails, clean up key and previous entries.
+        if let Err(e) = instantiate_expr_into(db, rt, value_expr, value_type.ty(db), tydesc_table, value_dest) {
+            unsafe {
+                // Destroy the key we just instantiated.
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_dest, key_tydesc);
+                // Destroy all successfully instantiated entries before this one.
+                for j in 0..i {
+                    let key_to_destroy = keys_array.add(j * key_size);
+                    let value_to_destroy = values_array.add(j * value_size);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_to_destroy, key_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
+                }
+                // Free the leaf node.
+                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node);
+            }
+            return Err(e);
+        }
     }
 
     // Initialize Map struct.
@@ -846,7 +909,20 @@ fn instantiate_set<'db>(
     // Instantiate and copy each element.
     for (i, elem_expr) in elements.iter().enumerate() {
         let elem_dest = unsafe { keys_array.add(i * element_size) };
-        instantiate_expr_into(db, rt, *elem_expr, element_type.ty(db), tydesc_table, elem_dest)?;
+        // Try to instantiate element. If it fails, clean up.
+        if let Err(e) = instantiate_expr_into(db, rt, *elem_expr, element_type.ty(db), tydesc_table, elem_dest) {
+            // Destroy all successfully instantiated elements before this one.
+            unsafe {
+                for j in 0..i {
+                    let elem_to_destroy = keys_array.add(j * element_size);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
+                }
+                // Free the leaf node.
+                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node);
+            }
+            return Err(e);
+        }
     }
 
     // Initialize Set struct.
@@ -883,9 +959,20 @@ fn instantiate_tensor<'db>(
         let data_ptr = if total_elems > 0 {
             let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, element_size, element_align, total_elems as u32);
 
+            // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
                 let elem_dest = array_ptr.add(i * element_size as usize);
-                instantiate_expr_into(db, rt, *elem, element_ty, tydesc_table, elem_dest)?;
+                if let Err(e) = instantiate_expr_into(db, rt, *elem, element_ty, tydesc_table, elem_dest) {
+                    // Destroy successfully instantiated elements.
+                    for j in 0..i {
+                        let elem_to_destroy = array_ptr.add(j * element_size as usize);
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
+                    }
+                    // Free the array by calling the allocator's free through the rt handle.
+                    let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+                    rt_ref.alloc.free(element_size, element_align, total_elems as u32, array_ptr);
+                    return Err(e);
+                }
             }
             array_ptr
         } else {
