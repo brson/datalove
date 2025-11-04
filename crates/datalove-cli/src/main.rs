@@ -479,18 +479,17 @@ impl ScriptCommand {
         // Create diagnostic context.
         let diag_ctx = DiagnosticContext::from_file(self.file_path.clone(), source_text);
 
-        // Call tracked wrapper to enable diagnostic accumulation and get script.
+        // Parse and get script.
         let script = datafun::parser::parse_for_diagnostics(&db, source);
 
-        // Render parse diagnostics (must be called after parse_for_diagnostics).
+        // Render parse diagnostics.
         self.render_diagnostics(&db, source, &diag_ctx)?;
 
-        // Type check the script.
-        // TODO: Pass actual spans once we have a way to retrieve them from parse_for_diagnostics.
-        let tycheck_result = datafun::tycheck::type_check(&db, script, vec![], vec![]);
+        // Type check and retrieve diagnostics.
+        let tycheck_result = datafun::tycheck::type_check_for_diagnostics(&db, source);
 
         // Retrieve and render type diagnostics.
-        let type_diags = datafun::tycheck::type_check::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, script, vec![], vec![]);
+        let type_diags = datafun::tycheck::type_check_for_diagnostics::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, source);
         if !type_diags.is_empty() {
             eprintln!("Type errors:");
             for diag_wrapper in &type_diags {

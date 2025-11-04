@@ -143,6 +143,88 @@ impl<'db> TypeContext<'db> {
         self.errors.push(error);
     }
 
+    // Error emission helpers that both emit diagnostics and return TypeError.
+
+    /// F001: Undefined variable.
+    fn error_undefined_variable(&self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            let msg = format!("cannot find value `{}` in this scope", name.as_str(self.db));
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                .code("F001")
+                .primary_label(text, span, "not found in this scope")
+                .emit_type();
+        }
+        TypeError::UnresolvedName(name.as_str(self.db).to_string())
+    }
+
+    /// F002: Undefined function.
+    fn error_undefined_function(&self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            let msg = format!("cannot find function `{}` in this scope", name.as_str(self.db));
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                .code("F002")
+                .primary_label(text, span, "not found in this scope")
+                .emit_type();
+        }
+        TypeError::UnresolvedName(name.as_str(self.db).to_string())
+    }
+
+    /// F011: Cannot synthesize type.
+    fn error_cannot_synthesize(&self, expr: ExprFun<'db>, message: &str) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, message)
+                .code("F011")
+                .primary_label(text, span, "cannot infer type")
+                .emit_type();
+        }
+        TypeError::CannotSynthesize
+    }
+
+    /// F016: Type mismatch.
+    fn error_type_mismatch(&self, expr: ExprFun<'db>, expected: &str, actual: &str, label: &str) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            let msg = format!("mismatched types: expected `{}`, found `{}`", expected, actual);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                .code("F016")
+                .primary_label(text, span, label)
+                .emit_type();
+        }
+        TypeError::TypeMismatch {
+            expected: expected.to_string(),
+            actual: actual.to_string(),
+        }
+    }
+
+    /// F045: Function arity mismatch.
+    fn error_arity_mismatch(&self, expr: ExprFun<'db>, expected: usize, actual: usize) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            let msg = format!(
+                "this function takes {} argument{} but {} {} supplied",
+                expected,
+                if expected == 1 { "" } else { "s" },
+                actual,
+                if actual == 1 { "was" } else { "were" }
+            );
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                .code("F045")
+                .primary_label(text, span, &format!("expected {} arguments", expected))
+                .emit_type();
+        }
+        TypeError::ArityMismatch { expected, actual }
+    }
+
+    /// F046: Result destructuring requires error binding.
+    fn error_result_requires_binding(&self, expr: ExprFun<'db>) -> TypeError {
+        if let Some((text, span)) = self.get_span(expr) {
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, "Result destructuring requires an else binding")
+                .code("F046")
+                .primary_label(text, span, "Result type here")
+                .note("use `if let ok(x) = result { ... } else error(e) { ... }` to handle both cases")
+                .emit_type();
+        }
+        TypeError::ResultRequiresErrorBinding
+    }
+
     /// Look up the source location for an expression.
     fn get_span(&self, expr: ExprFun<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
         use salsa::plumbing::AsId;
@@ -216,6 +298,19 @@ pub fn type_check<'db>(
         .collect();
 
     TypecheckResult::new(db, script, errors, ctx.expr_types)
+}
+
+/// Typecheck a script for diagnostic emission.
+///
+/// This is a tracked wrapper that parses and typechecks a source,
+/// enabling diagnostic accumulation via Salsa.
+#[salsa::tracked]
+pub fn type_check_for_diagnostics<'db>(
+    db: &'db dyn crate::Db,
+    source: bct::input::Source,
+) -> TypecheckResult<'db> {
+    let parse_result = crate::parser::parse(db, source);
+    type_check(db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans)
 }
 
 /// Typecheck a script with package world support.
@@ -570,7 +665,8 @@ fn check_statement<'db>(
                     ctx.add_error(e);
                 }
             } else {
-                ctx.add_error(TypeError::CannotSynthesize);
+                // F011: Cannot synthesize return type.
+                ctx.add_error(ctx.error_cannot_synthesize(value, "cannot infer return type"));
             }
         }
 
@@ -607,18 +703,21 @@ fn check_statement<'db>(
                         opt.inner_type(db)
                     }
                     Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-                        // Result destructuring requires error-binding else branch.
+                        // F046: Result destructuring requires error-binding else branch.
                         if else_body.is_none() || else_binding.is_none() {
-                            ctx.add_error(TypeError::ResultRequiresErrorBinding);
+                            ctx.add_error(ctx.error_result_requires_binding(condition));
                             return;
                         }
                         res.inner_type(db)
                     }
                     _ => {
-                        ctx.add_error(TypeError::TypeMismatch {
-                            expected: "Option or Result".S(),
-                            actual: "other type".S(),
-                        });
+                        // F017: If/match condition type mismatch.
+                        ctx.add_error(ctx.error_type_mismatch(
+                            condition,
+                            "Option or Result",
+                            "other type",
+                            "expected Option or Result type for destructuring"
+                        ));
                         return;
                     }
                 };
@@ -736,9 +835,9 @@ fn synthesize_expr<'db>(
         }
 
         ExprFunKind::Name(name) => {
-            // Look up variable in context.
+            // F001: Undefined variable.
             ctx.lookup_variable(name)
-                .ok_or_else(|| TypeError::UnresolvedName(name.as_str(db).to_string()))
+                .ok_or_else(|| ctx.error_undefined_variable(expr, name))
         }
 
         ExprFunKind::BinOp(binop) => {
@@ -750,7 +849,7 @@ fn synthesize_expr<'db>(
         }
 
         ExprFunKind::FunctionCall(call) => {
-            synthesize_function_call(ctx, call)
+            synthesize_function_call(ctx, expr, call)
         }
 
         ExprFunKind::Tuple(tuple) => {
@@ -1066,25 +1165,23 @@ fn synthesize_unaryop<'db>(
 /// Synthesize type for function call.
 fn synthesize_function_call<'db>(
     ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
     call: ExprFunctionCall<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let name = call.name(db);
     let args = call.args(db);
 
-    // Look up function signature.
+    // F002: Undefined function.
     let func_type = ctx.lookup_function(name)
-        .ok_or_else(|| TypeError::UnresolvedName(name.as_str(db).to_string()))?;
+        .ok_or_else(|| ctx.error_undefined_function(expr, name))?;
 
     let param_types = func_type.param_types(db);
     let return_type = func_type.return_type(db);
 
-    // Check argument count.
+    // F045: Function arity mismatch.
     if args.len() != param_types.len() {
-        return Err(TypeError::ArityMismatch {
-            expected: param_types.len(),
-            actual: args.len(),
-        });
+        return Err(ctx.error_arity_mismatch(expr, param_types.len(), args.len()));
     }
 
     // Check each argument type.

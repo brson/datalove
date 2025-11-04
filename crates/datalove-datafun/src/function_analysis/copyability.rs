@@ -294,7 +294,7 @@ mod tests {
         var_name: &'db str,
     ) -> bool {
         let source = Source::new(db, S(source_code));
-        let script = crate::parser::parse_for_test(db, source);
+        let script = crate::parser::parse_for_diagnostics(db, source);
         let tycheck_result = crate::tycheck::type_check(db, script, vec![], vec![]);
         let statements = script.statements(db);
 

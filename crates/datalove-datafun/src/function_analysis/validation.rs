@@ -702,7 +702,7 @@ mod tests {
 
     fn parse_and_typecheck<'db>(db: &'db dyn crate::Db, source_code: &str) -> (StmtFun<'db>, crate::tycheck::TypecheckResult<'db>) {
         let source = Source::new(db, S(source_code));
-        let script = crate::parser::parse_for_test(db, source);
+        let script = crate::parser::parse_for_diagnostics(db, source);
         let tycheck_result = crate::tycheck::type_check(db, script, vec![], vec![]);
         let statements = script.statements(db);
 
