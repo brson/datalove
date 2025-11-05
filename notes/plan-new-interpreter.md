@@ -12,7 +12,11 @@
 - [ ] Phase 7: Module Integration
 - [ ] Phase 8: Testing & Validation
 
-**Current Status**: Phase 2 completed with literals, binary arithmetic operations, and function calls with parameters. Implemented automatic u32→Int widening for bare operators (+, -, *, /). Added full function call support with In-mode parameters, proper argument evaluation in both script and function scopes, and local variable management. Implemented basic copy type detection (u32, Bool are copy; Int, String are linear). Converted to example-based testing pattern. Fixed memory management issues (ScriptResult Drop, destroy_value). All 24 interp tests passing with zero memory leaks. Ready for remaining expression types (comparisons, tuples) and control flow.
+**Current Status**: Phase 2 completed with literals, binary arithmetic operations, and function calls with parameters. Implemented automatic u32→Int widening for bare operators (+, -, *, /). Added full function call support with In-mode parameters, proper argument evaluation in both script and function scopes, and local variable management. Implemented basic copy type detection (u32, Bool are copy; Int, String are linear). Converted to example-based testing pattern. Fixed memory management issues (ScriptResult Drop, destroy_value). All 24 interp tests passing with zero memory leaks.
+
+**Latest Update (2025-11-05)**: Implemented worldfile test format infrastructure. Created `worldfile_analysis` module with RON-serialized `SectionAnalysis` types (Module, ScriptUnit, Expr, Script). Extended worldfile parser to support all 4 section types. Converted all 24 test fixtures from `.dfs` to `.world` format. Tests now output structured RON analysis including typecheck results and execution values. Test infrastructure ready for advanced scenarios (incremental REPL, package world integration, expression evaluation). All tests passing.
+
+Ready for remaining expression types (comparisons, tuples) and control flow.
 
 ## Overview
 
@@ -1455,11 +1459,12 @@ Expected output:
 
 #### Migration Plan
 
-Phase 2 tests will be converted from `.dfs` to `.world` format:
-- Current: 24 `.dfs` files with `.out.expected` (plain text)
-- New: 24 `.world` files with `.ron.expected` (structured RON)
-- Test runner: `tests/interp_tests.rs` updated to use worldfile loader
-- Worldfile parser extended to support `scriptunit` and `expr` sections
+**COMPLETED (2025-11-05)**: Phase 2 tests converted from `.dfs` to `.world` format:
+- ✓ Converted: 24 `.dfs` files → 24 `.world` files with RON-serialized output
+- ✓ Test runner: `tests/interp_tests.rs` updated to use `parse_worldfile_sections()` and `analyze_worldfile()`
+- ✓ Worldfile parser: Extended to support all 4 section types (module, scriptunit, expr, script)
+- ✓ Analysis module: Created `worldfile_analysis.rs` with SectionAnalysis types
+- ✓ All 24 tests passing with structured RON output showing typecheck and execution results
 
 ## Script vs Function Execution Boundary
 
@@ -1686,6 +1691,15 @@ Implementation complete when:
   - Value operations: allocate_bool(), allocate_int(), allocate_bigint(), allocate_string(), widen_u32_to_int(), destroy_value()
   - Output formatting: pretty_print_value()
 
+**Worldfile testing infrastructure:**
+- `crates/datalove-datafun/src/worldfile_analysis.rs` - Analysis output types (~313 lines)
+  - Types: SectionAnalysis, ModuleAnalysis, ScriptUnitAnalysis, ExprAnalysis, ScriptAnalysis, TypecheckResult
+  - Functions: analyze_worldfile(), analyze_module_section(), analyze_scriptunit_section(), analyze_expr_section(), analyze_script_section()
+  - RON serialization for structured test output
+- `crates/datalove-datafun/src/package_load_worldfile.rs` - Extended parser
+  - Added WorldfileSection enum (Module, ScriptUnit, Expr, Script)
+  - Added parse_worldfile_sections() for sequential section processing
+
 **Test files:**
 - `crates/datalove-datafun/tests/interp_tests.rs` - Worldfile-based integration tests
 - `crates/datalove-datafun/tests/fixtures/interp2/` - Test fixtures directory
@@ -1693,8 +1707,9 @@ Implementation complete when:
   - 24 `.ron.expected` files (structured analysis output)
 
 **Modified files:**
-- `crates/datalove-datafun/src/lib.rs` - Added `pub mod interp;` declaration
-- `crates/datalove-datafun/Cargo.toml` - Added `[[test]]` configuration for interp_tests
+- `crates/datalove-datafun/src/lib.rs` - Added `pub mod interp;` and `pub mod worldfile_analysis;` declarations
+- `crates/datalove-datafun/src/interp/mod.rs` - Made script_scope, variables, functions, and ScriptVariable fields public for worldfile analysis
+- `crates/datalove-datafun/Cargo.toml` - Added `[[test]]` configuration for interp_tests and `ron = "0.8"` dev-dependency
 
 ### Current State
 
@@ -1708,6 +1723,7 @@ Implementation complete when:
 - Literal evaluation (u32, bool, string)
 - Binary arithmetic operations (+, -, *, /) with automatic u32→Int widening
 - Expression chaining (let bindings + arithmetic)
+- Function calls with In-mode parameters (evaluation in script and function scopes)
 - Runtime value allocation (allocate_bool, allocate_int, allocate_bigint, allocate_string)
 - Type widening (widen_u32_to_int)
 - Value cloning using runtime
@@ -1715,10 +1731,12 @@ Implementation complete when:
 - TyDescTable type descriptor management
 - Runtime lifetime management via ScriptResult (includes tydesc_table)
 - Pretty-printing values for test output
-- Worldfile-based testing infrastructure with RON output
+- Worldfile-based testing infrastructure with RON output (module, scriptunit, expr, script sections)
+- Worldfile parser supporting all 4 section types
+- SectionAnalysis types with RON serialization (ModuleAnalysis, ScriptUnitAnalysis, ExprAnalysis, ScriptAnalysis)
 
 **Not yet implemented:**
-- Remaining expression types (Comparison, FunctionCall, Tuple, UnaryOp, Try operators)
+- Remaining expression types (Comparison, Tuple, UnaryOp, Try operators)
 - PackageWorld integration (temporarily disabled)
 - Type analysis integration for copy detection
 - Function execution with stack frames
@@ -1727,11 +1745,12 @@ Implementation complete when:
 
 **Test results:**
 - All existing tests pass (136 datafun tests + 93 datalit tests + others)
-- 24 new interp_tests pass with zero memory leaks (current `.dfs` format, to be converted to `.world`):
+- 24 new interp_tests pass with zero memory leaks (worldfile format with RON output):
   - 01_empty_script through 24_fun_nested_call_with_params
   - Tests cover: literals, arithmetic, function calls with parameters, state building
+  - Each test produces structured SectionAnalysis showing typecheck results and execution values
 - Full test suite: `just test` passes (282+ tests total)
-- Migration to worldfile format planned (will add RON-based analysis output)
+- Worldfile migration complete: all fixtures converted from `.dfs` to `.world`, output changed from plain text to RON-serialized analysis
 
 ## References
 
