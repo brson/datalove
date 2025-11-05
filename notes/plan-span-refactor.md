@@ -551,6 +551,142 @@ The real win will come later when we implement content-addressed ASTs, where whi
 
 - ✅ Type check signatures take `(source, script)` instead of `(script, spans, ...)`
 - ✅ All diagnostic emission still works correctly
-- ✅ All 402+ tests pass
+- ✅ All 800+ tests pass
 - ✅ No change to diagnostic output quality
 - ✅ Code is cleaner and more maintainable
+
+## Implementation Progress
+
+### Status: COMPLETE ✅
+
+All phases completed successfully. The span refactor is now fully functional with proper diagnostic emission.
+
+### Critical Issue Discovered and Resolved
+
+**Problem:** After initial implementation following the plan, tests showed "Failed to build type table" errors instead of detailed diagnostics. Investigation revealed a fundamental Salsa memoization issue.
+
+**Root Cause:**
+- The `parse()` function is NOT a Salsa tracked function - it's a plain Rust function
+- Multiple code paths were calling `parse(db, source)` directly, each creating fresh AST nodes with different Salsa IDs
+- The original plan assumed `parse()` would be memoized, but it wasn't
+- This caused span lookup failures: spans were recorded for expression `Id(2c02)` but type checker looked up `Id(2c01)`
+
+**Solution:** Implemented Salsa Accumulators Pattern
+
+Instead of storing spans in `ParseResult` vectors (which get recreated on each `parse()` call), use Salsa's accumulator pattern:
+
+1. **Created accumulator types** in `spans.rs`:
+```rust
+#[salsa::accumulator]
+pub struct DatafunSpanAccumulator {
+    pub expr_id: salsa::Id,
+    pub text_id: salsa::Id,
+    pub span: ByteSpan,
+}
+
+#[salsa::accumulator]
+pub struct DatalitSpanAccumulator {
+    pub expr_id: salsa::Id,
+    pub text_id: salsa::Id,
+    pub span: ByteSpan,
+}
+```
+
+2. **Emit spans during parsing** instead of collecting in vectors:
+```rust
+fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, text: Text<'db>, span: ByteSpan) -> ast::ExprFun<'db> {
+    use salsa::plumbing::AsId;
+    let expr = ast::ExprFun::new(self.db, kind);
+    // Emit span as accumulator.
+    crate::spans::DatafunSpanAccumulator {
+        expr_id: expr.as_id(),
+        text_id: text.as_id(),
+        span,
+    }.accumulate(self.db);
+    expr
+}
+```
+
+3. **Query accumulated spans** in span query functions:
+```rust
+pub fn datafun_spans<'db>(db: &'db dyn crate::Db, source: Source) -> DatafunSpans<'db> {
+    // Trigger parsing to accumulate spans.
+    crate::parser::parse_for_diagnostics(db, source);
+
+    // Retrieve accumulated spans.
+    let accumulated = crate::parser::parse_for_diagnostics::accumulated::<DatafunSpanAccumulator>(db, source);
+
+    let entries: Vec<SpanMapEntry> = accumulated.iter()
+        .map(|acc| SpanMapEntry {
+            expr_id: acc.expr_id,
+            entry: SpanEntry::new(acc.text_id, acc.span.clone()),
+        })
+        .collect();
+
+    DatafunSpans::new(db, entries)
+}
+```
+
+4. **Fixed function call paths** to use tracked `parse_for_diagnostics()`:
+```rust
+// Changed from:
+let parse_result = crate::parser::parse(db, source);
+type_check(db, source, parse_result.script)
+
+// To:
+let script = crate::parser::parse_for_diagnostics(db, source);
+type_check(db, source, script)
+```
+
+5. **Removed span vectors** from `ParseResult` and `Parser` structs - no longer needed.
+
+### Final Implementation Details
+
+**Modified Files:**
+- `crates/datalove-datafun/src/spans.rs` - Added accumulator types, updated span query functions
+- `crates/datalove-datafun/src/parser.rs` - Added `create_expr()` helper, emit accumulators, removed span vectors
+- `crates/datalove-datafun/src/ast.rs` - Removed `expr_spans` and `datalit_expr_spans` from `ParseResult`
+- `crates/datalove-datafun/src/tycheck.rs` - Updated `type_check_for_diagnostics()` to use `parse_for_diagnostics()`
+- `crates/datalove-cli/src/main.rs` - Already correct (no changes needed)
+
+**Key Differences from Original Plan:**
+- Plan used `HashMap` storage - actual implementation uses `Vec` with linear search (simpler, sufficient for diagnostic use case)
+- Plan assumed `parse()` memoization - reality required Salsa accumulator pattern
+- Plan stored spans in tracked structs - reality emits them as accumulators during parsing
+
+### Test Results
+
+All 800+ tests passing:
+- 136 datafun unit tests ✅
+- 93 datalit unit tests ✅
+- 300+ runtime tests (btreemap, btreeset, clone, cmp, destroy, eq, list, roundtrip, tensor) ✅
+- 21 error tests ✅
+- 8 type error tests ✅ (updated expected output with proper diagnostics)
+- 70 tycheck tests ✅
+- All integration tests ✅
+
+### Example Output
+
+Before (regression):
+```
+Error: Failed to build type table: Type errors found: 1 errors
+```
+
+After (working):
+```
+Type errors:
+error[F001]: cannot find value `undefined_var` in this scope
+ --> 01_undefined_variable.dfs:1:14
+  |
+1 | let output = undefined_var
+  |              ^^^^^^^^^^^^^ not found in this scope
+
+Error: 1 type error(s)
+```
+
+### Lessons Learned
+
+1. **Salsa memoization requires tracked functions** - plain Rust functions are not memoized
+2. **Accumulator pattern is ideal for span storage** - solves the ID mismatch problem elegantly
+3. **Always verify Salsa assumptions** - what seems like it "should" memoize may not
+4. **Diagnostic testing is critical** - the regression was only caught because we actually ran the CLI
