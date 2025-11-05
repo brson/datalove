@@ -1,7 +1,9 @@
 [
     ScriptAnalysis(
         type: "Script",
-        ast: "<script>",
+        ast: Script(
+            statements: [],
+        ),
         typecheck: TypecheckResult(
             status: "Error",
             errors: [

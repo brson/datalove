@@ -1,7 +1,52 @@
 [
     ScriptAnalysis(
         type: "Script",
-        ast: "<script>",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "greet",
+                    params: [],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: ParseError(TypeHintParseError(
+                            message: "unknown type hint in DynParser",
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Omitted,
+                                            expr: String(ExprString(
+                                                value: "\"hello\"",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "greet",
+                            args: [],
+                        ),
+                    ),
+                ),
+            ],
+        ),
         typecheck: TypecheckResult(
             status: "Success",
         ),

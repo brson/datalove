@@ -10,6 +10,7 @@ rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
 serde = { version = "1", features = ["derive"] }
+ron = "0.8"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-rt.path = "../datalove-rt"
@@ -17,7 +18,6 @@ datalove-rtdt.path = "../datalove-rtdt"
 
 [dev-dependencies]
 datalove-exampletest.path = "../datalove-exampletest"
-ron = "0.8"
 
 [[test]]
 name = "parser_tests"

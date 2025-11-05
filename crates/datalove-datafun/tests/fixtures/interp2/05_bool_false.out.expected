@@ -1,7 +1,27 @@
 [
     ScriptAnalysis(
         type: "Script",
-        ast: "<script>",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: False,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
         typecheck: TypecheckResult(
             status: "Success",
         ),

@@ -22,8 +22,8 @@ pub enum SectionAnalysis {
 pub struct ModuleAnalysis {
     /// Module path (e.g., "sys/std/u32").
     pub path: String,
-    /// AST dump.
-    pub ast: String,
+    /// AST.
+    pub ast: crate::ast_serde::Script,
     /// Typecheck result.
     pub typecheck: TypecheckResult,
     /// Exported function names.
@@ -33,8 +33,8 @@ pub struct ModuleAnalysis {
 /// Analysis of a scriptunit section.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptUnitAnalysis {
-    /// AST dump.
-    pub ast: String,
+    /// AST.
+    pub ast: crate::ast_serde::Script,
     /// Typecheck result.
     pub typecheck: TypecheckResult,
     /// Variables and functions added to interpreter state.
@@ -54,8 +54,8 @@ pub struct ExprAnalysis {
 /// Analysis of a script section.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptAnalysis {
-    /// AST dump.
-    pub ast: String,
+    /// AST.
+    pub ast: crate::ast_serde::Script,
     /// Typecheck result.
     pub typecheck: TypecheckResult,
     /// Final output value.
@@ -160,15 +160,14 @@ fn analyze_module_section(
 
     // Parse the module source.
     let source_obj = bct::input::Source::new(db, source.S());
-    let _parsed_module = crate::parser::parse_for_diagnostics(db, source_obj);
+    let parsed_ast = crate::parser::parse_for_diagnostics(db, source_obj);
 
-    // For now, skip AST dump (requires Debug trait).
-    // TODO: Add proper AST serialization and export extraction.
-    let ast_dump = format!("<module {}>", module_path);
+    // Convert to serializable AST.
+    let serde_ast = crate::ast_serde::Script::from_ast(db, parsed_ast);
 
     Ok(SectionAnalysis::Module(ModuleAnalysis {
         path: module_path,
-        ast: ast_dump,
+        ast: serde_ast,
         typecheck: TypecheckResult::Success,
         exports: vec![],  // TODO: Extract exports from parsed module.
     }))
@@ -185,9 +184,9 @@ fn analyze_scriptunit_section<'db>(
     let unit = crate::script::ScriptUnit::new(db, source_obj);
     let script = crate::script::Script::new(db, vec![unit]);
 
-    // Skip AST dump for now (requires Debug trait).
-    let _parsed = crate::parser::parse_script_unit(db, script, 0);
-    let ast_dump = String::from("<scriptunit>");
+    // Convert AST to serializable format.
+    let parsed_ast = crate::parser::parse_script_unit(db, script, 0);
+    let serde_ast = crate::ast_serde::Script::from_ast(db, parsed_ast);
 
     // Execute the scriptunit against the context.
     // This will update ctx.script_scope with new variables and functions.
@@ -221,14 +220,14 @@ fn analyze_scriptunit_section<'db>(
             }
 
             Ok(SectionAnalysis::ScriptUnit(ScriptUnitAnalysis {
-                ast: ast_dump,
+                ast: serde_ast,
                 typecheck: TypecheckResult::Success,
                 state_changes,
             }))
         }
         Err(e) => {
             Ok(SectionAnalysis::ScriptUnit(ScriptUnitAnalysis {
-                ast: ast_dump,
+                ast: serde_ast,
                 typecheck: TypecheckResult::Error {
                     errors: vec![format!("{:?}", e)],
                 },
@@ -288,9 +287,9 @@ fn analyze_script_section(
     let unit = crate::script::ScriptUnit::new(db, source_obj);
     let script = crate::script::Script::new(db, vec![unit]);
 
-    // Skip AST dump for now (requires Debug trait).
-    let _parsed = crate::parser::parse_script_unit(db, script, 0);
-    let ast_dump = String::from("<script>");
+    // Convert AST to serializable format.
+    let parsed_ast = crate::parser::parse_script_unit(db, script, 0);
+    let serde_ast = crate::ast_serde::Script::from_ast(db, parsed_ast);
 
     // Execute the script.
     match crate::interp::execute_script(db, script, package_world) {
@@ -300,14 +299,14 @@ fn analyze_script_section(
                 .unwrap_or_else(|e| format!("Error: {:?}", e));
 
             Ok(SectionAnalysis::Script(ScriptAnalysis {
-                ast: ast_dump,
+                ast: serde_ast,
                 typecheck: TypecheckResult::Success,
                 output,
             }))
         }
         Err(e) => {
             Ok(SectionAnalysis::Script(ScriptAnalysis {
-                ast: ast_dump,
+                ast: serde_ast,
                 typecheck: TypecheckResult::Error {
                     errors: vec![format!("{:?}", e)],
                 },
