@@ -1,0 +1,29 @@
+----------
+module sys/test/helpers
+----------
+
+fun triple(x: u32): u32
+    ret x *! @3
+end fun
+
+----------
+scriptunit
+----------
+
+let factor = @2
+
+----------
+expr
+----------
+
+factor
+
+----------
+script
+----------
+
+fun test(): u32
+    ret @42
+end fun
+
+let output = test()

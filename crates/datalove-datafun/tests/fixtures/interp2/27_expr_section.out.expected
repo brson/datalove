@@ -1,0 +1,17 @@
+[
+    ExprAnalysis(
+        type: "Expr",
+        type: "Unknown",
+        value: "@42",
+    ),
+    ExprAnalysis(
+        type: "Expr",
+        type: "Unknown",
+        value: "@true",
+    ),
+    ExprAnalysis(
+        type: "Expr",
+        type: "Unknown",
+        value: "@\"hello\"",
+    ),
+]

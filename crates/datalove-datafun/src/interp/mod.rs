@@ -137,6 +137,73 @@ impl InterpContext<'_> {
             tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
         }
     }
+
+    /// Pretty-print a value using this context's runtime and tydesc_table.
+    pub fn pretty_print_value(&mut self, value: &Value) -> Result<String, InterpError> {
+        use datalove_rt as rt;
+        use datalove_rt::rtdt;
+
+        unsafe {
+            // Get runtime handle.
+            let rt_handle = self.runtime.handle();
+
+            // Get string type descriptor from the tydesc_table.
+            let string_tydesc = self.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::String);
+
+            // Create output string.
+            let mut output_string = std::mem::MaybeUninit::<rtdt::String>::uninit();
+            let status = rt::c::dtlv_rti_string_create_local(
+                rt_handle,
+                output_string.as_mut_ptr() as *mut u8,
+                string_tydesc,
+            );
+
+            if status != rt::c::RtStatus::Ok {
+                return Err(InterpError::RuntimeError(
+                    "Failed to create output string".to_string(),
+                ));
+            }
+
+            let mut output_string = output_string.assume_init();
+
+            // Pretty-print value.
+            let status = rt::c::dtlv_rti_pretty_print_local(
+                rt_handle,
+                value.ptr,
+                value.tydesc,
+                &mut output_string as *mut rtdt::String as *mut u8,
+                string_tydesc,
+            );
+
+            if status != rt::c::RtStatus::Ok {
+                rt::c::dtlv_rti_string_destroy_local(
+                    rt_handle,
+                    &mut output_string as *mut rtdt::String as *mut u8,
+                    string_tydesc,
+                );
+                return Err(InterpError::RuntimeError(
+                    "Failed to pretty-print value".to_string(),
+                ));
+            }
+
+            // Extract string contents.
+            let result = if output_string.data.is_null() || output_string.size == 0 {
+                String::new()
+            } else {
+                let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
+                String::from_utf8_lossy(bytes).to_string()
+            };
+
+            // Cleanup.
+            rt::c::dtlv_rti_string_destroy_local(
+                rt_handle,
+                &mut output_string as *mut rtdt::String as *mut u8,
+                string_tydesc,
+            );
+
+            Ok(result)
+        }
+    }
 }
 
 impl ScriptScope<'_> {
@@ -945,7 +1012,7 @@ fn widen_u32_to_int<'db>(
 }
 
 /// Destroy a value by calling the runtime destroy function.
-fn destroy_value<'db>(
+pub fn destroy_value<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
 ) {
@@ -1464,14 +1531,20 @@ fn execute_binop<'db>(
         BinOp::Mul => eval_mul(ctx, lhs, rhs),
         BinOp::Div => eval_div(ctx, lhs, rhs),
 
-        // Not yet implemented.
+        // Not yet implemented - clean up values before returning error.
         BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked => {
+            destroy_value(ctx, lhs);
+            destroy_value(ctx, rhs);
             Err(InterpError::InvalidExpression("Checked operators not yet implemented".to_string()))
         }
         BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional => {
+            destroy_value(ctx, lhs);
+            destroy_value(ctx, rhs);
             Err(InterpError::InvalidExpression("Optional operators not yet implemented".to_string()))
         }
         BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
+            destroy_value(ctx, lhs);
+            destroy_value(ctx, rhs);
             Err(InterpError::InvalidExpression("Comparison operators not yet implemented".to_string()))
         }
     }

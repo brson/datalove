@@ -145,6 +145,12 @@ pub fn analyze_worldfile(
         analyses.push(analysis);
     }
 
+    // Clean up any remaining variables in the interp_ctx before dropping.
+    let remaining_vars: Vec<_> = interp_ctx.script_scope.variables.drain().map(|(_, var)| var.value).collect();
+    for value in remaining_vars {
+        crate::interp::destroy_value(&mut interp_ctx, value);
+    }
+
     Ok(analyses)
 }
 
@@ -252,15 +258,15 @@ fn analyze_expr_section<'db>(
     // Execute to get the value.
     match crate::interp::execute_script_unit(ctx, script, 0) {
         Ok(_) => {
-            // Extract the __temp variable.
+            // Extract and remove the __temp variable.
             let temp_name = bct::text::InternedText::new(db, S("__temp"));
-            if let Some(var) = ctx.script_scope.variables.get(&temp_name) {
-                // Pretty-print the value.
-                // TODO: Implement proper pretty-printing and type inference.
-                let value_str = format!("{:?}", var.value);
+            if let Some(var) = ctx.script_scope.variables.remove(&temp_name) {
+                // Pretty-print the value using the context's runtime.
+                let value_str = ctx.pretty_print_value(&var.value)
+                    .unwrap_or_else(|e| format!("Error: {:?}", e));
 
-                // Remove __temp from scope.
-                ctx.script_scope.variables.remove(&temp_name);
+                // Destroy the value to avoid leaks.
+                crate::interp::destroy_value(ctx, var.value);
 
                 Ok(SectionAnalysis::Expr(ExprAnalysis {
                     type_: "Unknown".to_string(),  // TODO: Infer type.
