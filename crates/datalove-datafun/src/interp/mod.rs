@@ -380,8 +380,8 @@ fn eval_expression_in_script_scope<'db>(
             eval_datalit_expression(ctx, datalit_expr)
         }
         ast::ExprFunKind::FunctionCall(call_expr) => {
-            // Evaluate function call.
-            eval_function_call(ctx, call_expr)
+            // Evaluate function call in script scope.
+            eval_function_call_in_script_scope(ctx, call_expr)
         }
         ast::ExprFunKind::BinOp(binop_expr) => {
             // Evaluate binary operations.
@@ -457,36 +457,71 @@ fn eval_datalit_expression<'db>(
     }
 }
 
-/// Evaluate a function call.
-fn eval_function_call<'db>(
+/// Evaluate a function call from script scope.
+fn eval_function_call_in_script_scope<'db>(
     ctx: &mut InterpContext<'db>,
     call_expr: ast::ExprFunctionCall<'db>,
 ) -> Result<Value, InterpError> {
     let name = call_expr.name(ctx.db);
-    let args = call_expr.args(ctx.db);
+    let arg_exprs = call_expr.args(ctx.db);
 
-    // Look up the function in script scope.
-    let func = ctx.script_scope.functions.get(&name)
+    // Look up the function in script scope and copy it.
+    let func = *ctx.script_scope.functions.get(&name)
         .ok_or_else(|| InterpError::FunctionNotFound(name.text(ctx.db).to_string()))?;
 
-    // For now, only support zero-argument functions.
     let params = func.params(ctx.db);
-    if !params.is_empty() {
+
+    // Check argument count matches parameter count.
+    if arg_exprs.len() != params.len() {
         return Err(InterpError::InvalidExpression(
-            format!("Function calls with parameters not yet implemented (function '{}' has {} parameters)",
-                name.text(ctx.db), params.len())
+            format!("Function '{}' expects {} arguments but {} provided",
+                name.text(ctx.db), params.len(), arg_exprs.len())
         ));
     }
 
-    if !args.is_empty() {
+    // Evaluate all arguments in script scope.
+    let mut arg_values = Vec::new();
+    for arg_expr in arg_exprs {
+        let value = eval_expression_in_script_scope(ctx, *arg_expr)?;
+        arg_values.push(value);
+    }
+
+    // Execute the function body with arguments.
+    execute_function_body(ctx, func, arg_values)
+}
+
+/// Evaluate a function call from function scope.
+fn eval_function_call_in_function_scope<'db>(
+    ctx: &mut InterpContext<'db>,
+    local_variables: &mut HashMap<InternedText<'db>, ScriptVariable>,
+    call_expr: ast::ExprFunctionCall<'db>,
+) -> Result<Value, InterpError> {
+    let name = call_expr.name(ctx.db);
+    let arg_exprs = call_expr.args(ctx.db);
+
+    // Look up the function in script scope and copy it.
+    let func = *ctx.script_scope.functions.get(&name)
+        .ok_or_else(|| InterpError::FunctionNotFound(name.text(ctx.db).to_string()))?;
+
+    let params = func.params(ctx.db);
+
+    // Check argument count matches parameter count.
+    if arg_exprs.len() != params.len() {
         return Err(InterpError::InvalidExpression(
-            format!("Function '{}' expects 0 arguments but {} provided",
-                name.text(ctx.db), args.len())
+            format!("Function '{}' expects {} arguments but {} provided",
+                name.text(ctx.db), params.len(), arg_exprs.len())
         ));
     }
 
-    // Execute the function body.
-    execute_function_body(ctx, *func)
+    // Evaluate all arguments in function scope (can access local variables).
+    let mut arg_values = Vec::new();
+    for arg_expr in arg_exprs {
+        let value = eval_expression_in_function_scope(ctx, local_variables, *arg_expr)?;
+        arg_values.push(value);
+    }
+
+    // Execute the function body with arguments.
+    execute_function_body(ctx, func, arg_values)
 }
 
 /// Execute a function body and return its result.
@@ -496,9 +531,32 @@ fn eval_function_call<'db>(
 fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
+    arg_values: Vec<Value>,
 ) -> Result<Value, InterpError> {
     // Create a local variable scope for the function.
     let mut local_variables: HashMap<InternedText<'db>, ScriptVariable> = HashMap::new();
+
+    // Initialize parameters from arguments.
+    let params = func.params(ctx.db);
+    for (i, param) in params.iter().enumerate() {
+        // For now, only support In mode parameters.
+        if param.mode(ctx.db) != ast::ParamMode::In {
+            return Err(InterpError::InvalidExpression(
+                format!("Parameter mode {:?} not yet supported (function '{}')",
+                    param.mode(ctx.db), func.name(ctx.db).text(ctx.db))
+            ));
+        }
+
+        let param_name = param.name(ctx.db);
+        let param_value = arg_values[i];
+        let is_copy = is_copy_type(param_value);
+
+        local_variables.insert(param_name, ScriptVariable {
+            value: param_value,
+            state: ScriptVarState::Available,
+            is_copy,
+        });
+    }
 
     // Execute each statement in the function body.
     for stmt in func.body(ctx.db) {
@@ -597,7 +655,7 @@ fn eval_expression_in_function_scope<'db>(
             eval_datalit_expression(ctx, datalit_expr)
         }
         ast::ExprFunKind::FunctionCall(call_expr) => {
-            eval_function_call(ctx, call_expr)
+            eval_function_call_in_function_scope(ctx, local_variables, call_expr)
         }
         ast::ExprFunKind::BinOp(binop_expr) => {
             let lhs = eval_expression_in_function_scope(ctx, local_variables, binop_expr.lhs(ctx.db))?;

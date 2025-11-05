@@ -1,0 +1,7 @@
+fun multiply(x: u32, y: u32): Int
+    ret x * y
+end fun
+
+let a = @6
+let b = @7
+let output = multiply(a, b)

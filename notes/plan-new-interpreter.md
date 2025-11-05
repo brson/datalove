@@ -12,7 +12,7 @@
 - [ ] Phase 7: Module Integration
 - [ ] Phase 8: Testing & Validation
 
-**Current Status**: Phase 2 completed with literals, binary arithmetic operations, and zero-argument function calls. Implemented automatic u32→Int widening for bare operators (+, -, *, /). Added function call support for script-level zero-argument functions with proper local variable scoping and return value handling. Implemented basic copy type detection (u32, Bool are copy; Int, String are linear). Converted to example-based testing pattern. Fixed memory management issues (ScriptResult Drop, destroy_value). All 20 interp tests passing with zero memory leaks. Ready for function parameters and remaining expression types (comparisons, tuples).
+**Current Status**: Phase 2 completed with literals, binary arithmetic operations, and function calls with parameters. Implemented automatic u32→Int widening for bare operators (+, -, *, /). Added full function call support with In-mode parameters, proper argument evaluation in both script and function scopes, and local variable management. Implemented basic copy type detection (u32, Bool are copy; Int, String are linear). Converted to example-based testing pattern. Fixed memory management issues (ScriptResult Drop, destroy_value). All 24 interp tests passing with zero memory leaks. Ready for remaining expression types (comparisons, tuples) and control flow.
 
 ## Overview
 
@@ -934,20 +934,21 @@ pub enum InterpError {
 - Slot states track initialization correctly
 - No memory leaks in frame allocation tests
 
-### Phase 2: Expression Evaluation - ✅ COMPLETED (literals, binary ops, and zero-arg function calls)
+### Phase 2: Expression Evaluation - ✅ COMPLETED (literals, binary ops, and function calls with parameters)
 
-**Goal**: Evaluate expressions including zero-argument function calls.
+**Goal**: Evaluate expressions including function calls with parameters.
 
-**Status**: Completed literals, binary operations, and zero-argument function calls with automatic type widening
+**Status**: Completed literals, binary operations, and function calls with In-mode parameters
 
 **Tasks**:
 1. ✅ Implement literal evaluation
 2. ✅ Implement variable reference (Name expressions) - in script and function scope
 3. ✅ Implement BinOp evaluation (arithmetic with automatic u32→Int widening)
-4. ✅ Implement zero-argument function calls
-5. ✅ Implement basic copy type detection (u32, Bool)
-6. ⏸️ Implement Tuple construction - deferred
-7. ✅ Add tests for expression evaluation
+4. ✅ Implement function calls (zero-argument and with parameters)
+5. ✅ Implement In-mode parameter passing
+6. ✅ Implement basic copy type detection (u32, Bool)
+7. ⏸️ Implement Tuple construction - deferred
+8. ✅ Add tests for expression evaluation
 
 **What was implemented**:
 - Binary operation infrastructure:
@@ -969,12 +970,19 @@ pub enum InterpError {
   - Destroy original u32 values after widening in all arithmetic operations
   - Fixed all 8 mixed-type branches (u32-Int and Int-u32) in add/sub/mul/div
 - Function call infrastructure:
-  - `eval_function_call()`: looks up function in script scope, validates zero arguments
-  - `execute_function_body()`: executes function statements with local variable scope
+  - `eval_function_call_in_script_scope()`: evaluates function calls from script scope
+  - `eval_function_call_in_function_scope()`: evaluates function calls from function scope (can access local variables)
+  - `execute_function_body()`: executes function statements with local variable scope and parameter initialization
   - `execute_function_statement()`: handles let, ret statements in functions
   - `eval_expression_in_function_scope()`: evaluates expressions with access to local and script variables
   - `cleanup_local_variables()`: properly destroys local variables on return
   - FunctionReturn error type: used to propagate return values up the call stack
+- Parameter support:
+  - In-mode parameters supported (by-value parameter passing)
+  - Arguments evaluated in appropriate scope (script or function)
+  - Parameter values moved/copied into function's local scope based on copy type detection
+  - Argument count validation (ensures caller provides correct number of arguments)
+  - Out/Ref/Mut parameter modes not yet implemented (error if used)
 - Copy type detection:
   - `is_copy_type()`: checks if value is u32 or Bool (copy types)
   - Int and String are linear types (move on use)
@@ -990,7 +998,7 @@ pub enum InterpError {
   - Uses `harness = false` for ExampleTestRunner
 
 **Test results**:
-- 20 tests passing with zero memory leaks:
+- 24 tests passing with zero memory leaks:
   - 01_empty_script (expected error: NoOutputVariable)
   - 02_function_def (expected error: NoOutputVariable)
   - 03_u32_literal (@42)
@@ -1011,6 +1019,10 @@ pub enum InterpError {
   - 18_fun_call_string (zero-arg function returns String)
   - 19_fun_call_arithmetic (zero-arg function with arithmetic)
   - 20_fun_call_chained (function calling another function with local variables)
+  - 21_fun_one_param (function with single parameter)
+  - 22_fun_two_params (function with two parameters)
+  - 23_fun_param_from_var (function called with variable arguments)
+  - 24_fun_nested_call_with_params (nested function calls with parameters and local variables)
 - Full test suite: `just test` passes (282+ tests total)
 
 **Success criteria**:
@@ -1018,17 +1030,19 @@ pub enum InterpError {
 - ✅ Can read variables from script and function scope
 - ✅ Can perform arithmetic operations with automatic widening
 - ✅ Expression chaining works (let bindings + arithmetic)
-- ✅ Can call zero-argument functions from script scope
+- ✅ Can call functions with In-mode parameters
 - ✅ Functions can have local variables and return values
 - ✅ Recursive function calls work (function calling another function)
+- ✅ Arguments evaluated in correct scope (script or function)
+- ✅ Parameter values properly moved/copied based on type
 - ✅ Basic copy type detection (u32, Bool copy; Int, String linear)
 - ✅ Linear semantics enforced (use-after-move detection)
 - ✅ Zero memory leaks (verified with DATALOVE_LEAK_CHECK)
 - ⏸️ Can construct tuples - not yet implemented
-- ⏸️ Functions with parameters - not yet implemented
+- ⏸️ Out/Ref/Mut parameter modes - not yet implemented
 - ⏸️ Can read variables from slots - deferred until frame implementation
 
-**Next**: Implement function parameters, or implement remaining expression types (comparisons, tuples, try operators), or begin proper frame-based execution (Phase 1).
+**Next**: Implement remaining expression types (comparisons, tuples, try operators), or begin proper frame-based execution (Phase 1), or implement control flow (if statements).
 
 ### Phase 3: Move Semantics
 **Goal**: Implement analysis-guided move tracking.

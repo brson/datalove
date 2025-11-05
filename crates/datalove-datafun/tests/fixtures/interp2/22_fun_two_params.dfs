@@ -1,0 +1,5 @@
+fun add(x: u32, y: u32): Int
+    ret x + y
+end fun
+
+let output = add(@10, @32)
