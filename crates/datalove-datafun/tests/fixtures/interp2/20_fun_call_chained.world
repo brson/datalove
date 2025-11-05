@@ -1,0 +1,15 @@
+----------
+script
+----------
+
+fun get_value(): Int
+    ret @5
+end fun
+
+fun calc(): Int
+    let x = get_value()
+    let y = @2
+    ret x * y
+end fun
+
+let output = calc()

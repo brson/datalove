@@ -1,1 +1,13 @@
-Error: NoOutputVariable
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: "<script>",
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "NoOutputVariable",
+            ],
+        ),
+        output: "",
+    ),
+]

@@ -1,1 +1,10 @@
-@42
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: "<script>",
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@42",
+    ),
+]

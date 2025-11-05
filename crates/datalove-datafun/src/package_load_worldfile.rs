@@ -10,6 +10,31 @@ pub struct WorldfileWithScript {
     pub script: Option<String>,
 }
 
+/// A section in a worldfile.
+#[derive(Debug, Clone)]
+pub enum WorldfileSection {
+    Module {
+        library: String,
+        package: String,
+        module: String,
+        source: String,
+    },
+    ScriptUnit {
+        source: String,
+    },
+    Expr {
+        source: String,
+    },
+    Script {
+        source: String,
+    },
+}
+
+/// Result of parsing a worldfile into sections.
+pub struct ParsedWorldfile {
+    pub sections: Vec<WorldfileSection>,
+}
+
 /// Load a package world from a worldfile format byte stream.
 ///
 /// The worldfile format consists of sections separated by "----------" lines.
@@ -108,6 +133,100 @@ struct Section {
     package: String,
     module: String,
     source: String,
+}
+
+/// Parse a worldfile into sections without building a PackageWorld.
+///
+/// This is useful for testing infrastructure that needs to process
+/// all section types (module, scriptunit, expr, script) sequentially.
+pub fn parse_worldfile_sections(
+    mut reader: impl Read,
+) -> AnyResult<ParsedWorldfile> {
+    let mut content = String::new();
+    reader.read_to_string(&mut content)?;
+
+    let sections = parse_worldfile_to_sections(&content)?;
+    Ok(ParsedWorldfile { sections })
+}
+
+fn parse_worldfile_to_sections(content: &str) -> AnyResult<Vec<WorldfileSection>> {
+    let mut sections = Vec::new();
+    let lines: Vec<&str> = content.lines().collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        // Skip empty lines and find first separator.
+        while i < lines.len() && !is_separator(lines[i]) {
+            if !lines[i].trim().is_empty() {
+                bail!("expected '----------' separator at line {}, found '{}'", i + 1, lines[i]);
+            }
+            i += 1;
+        }
+
+        if i >= lines.len() {
+            break;
+        }
+
+        // Skip the first separator.
+        i += 1;
+
+        if i >= lines.len() {
+            bail!("unexpected end of file after separator");
+        }
+
+        // Read the header line.
+        let header_line = lines[i].trim();
+        if header_line.is_empty() {
+            bail!("expected section header at line {}, found empty line", i + 1);
+        }
+
+        i += 1;
+
+        if i >= lines.len() {
+            bail!("unexpected end of file after header");
+        }
+
+        // Expect second separator.
+        if !is_separator(lines[i]) {
+            bail!("expected '----------' separator at line {}, found '{}'", i + 1, lines[i]);
+        }
+
+        i += 1;
+
+        // Read source until next separator or end.
+        let mut source_lines = Vec::new();
+        while i < lines.len() && !is_separator(lines[i]) {
+            source_lines.push(lines[i]);
+            i += 1;
+        }
+
+        let source = source_lines.join("\n");
+
+        // Determine section type and create appropriate variant.
+        if header_line == "script" {
+            sections.push(WorldfileSection::Script { source });
+        } else if header_line == "scriptunit" {
+            sections.push(WorldfileSection::ScriptUnit { source });
+        } else if header_line == "expr" {
+            sections.push(WorldfileSection::Expr { source });
+        } else if let Some(path) = header_line.strip_prefix("module ") {
+            let parts: Vec<&str> = path.split('/').collect();
+            if parts.len() != 3 {
+                bail!("module path must be 'module library/package/module', got '{header_line}'");
+            }
+
+            sections.push(WorldfileSection::Module {
+                library: S(parts[0]),
+                package: S(parts[1]),
+                module: S(parts[2]),
+                source,
+            });
+        } else {
+            bail!("unknown section type '{header_line}' (expected 'module', 'scriptunit', 'expr', or 'script')");
+        }
+    }
+
+    Ok(sections)
 }
 
 fn parse_worldfile(content: &str) -> AnyResult<(Vec<Section>, Option<String>)> {

@@ -1,0 +1,9 @@
+----------
+script
+----------
+
+fun calculate(): Int
+    ret @10 + @20
+end fun
+
+let output = calculate()

@@ -1,0 +1,13 @@
+----------
+script
+----------
+
+fun add(x: u32, y: u32): Int
+    ret x + y
+end fun
+
+fun calc(a: u32): Int
+    ret add(a, @10)
+end fun
+
+let output = calc(@11)

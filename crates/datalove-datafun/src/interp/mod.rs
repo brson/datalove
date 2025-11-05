@@ -16,23 +16,23 @@ pub struct InterpContext<'db> {
     runtime: datalove_rt::rust::Runtime,
     package_world: PackageWorld,
     script: Option<crate::script::Script>,
-    script_scope: ScriptScope<'db>,
+    pub script_scope: ScriptScope<'db>,
     tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
 }
 
 /// Script-level scope for REPL incremental execution.
 pub struct ScriptScope<'db> {
     /// Script-level let bindings with move tracking.
-    variables: HashMap<InternedText<'db>, ScriptVariable>,
+    pub variables: HashMap<InternedText<'db>, ScriptVariable>,
     /// Script-level functions.
-    functions: HashMap<InternedText<'db>, StmtFun<'db>>,
+    pub functions: HashMap<InternedText<'db>, StmtFun<'db>>,
 }
 
 /// Script-level variable with move tracking for linear semantics.
 pub struct ScriptVariable {
-    value: Value,
-    state: ScriptVarState,
-    is_copy: bool,  // Cached from type analysis.
+    pub value: Value,
+    pub state: ScriptVarState,
+    pub is_copy: bool,  // Cached from type analysis.
 }
 
 /// Move state for script-level variables.

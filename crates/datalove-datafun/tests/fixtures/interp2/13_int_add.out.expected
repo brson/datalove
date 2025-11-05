@@ -1,1 +1,10 @@
-@8000000000
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: "<script>",
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@8000000000",
+    ),
+]

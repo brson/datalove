@@ -23,6 +23,9 @@ pub mod import_demands;
 pub mod package_resolve;
 pub mod script_world;
 
+// Worldfile testing infrastructure.
+pub mod worldfile_analysis;
+
 pub use datalove_datalit as datalit;
 
 // Re-export Db trait for external use.
