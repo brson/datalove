@@ -989,10 +989,12 @@ pub enum InterpError {
   - Copy types are cloned when read multiple times
   - Linear types are moved on first read, error on subsequent reads
 - Test infrastructure:
-  - Converted `interp_tests.rs` to example-based testing (like `old_interp_tests.rs`)
-  - Created `tests/fixtures/interp2/` directory with 20 test cases
+  - Uses worldfile format (`.world` files) for flexible testing
+  - Structured RON output (`.ron.expected` files) for analysis verification
+  - Supports module sections, scriptunit sections, expr sections
+  - Each section produces analysis: AST, typecheck, type+value
+  - Created `tests/fixtures/interp2/` directory with 24 test cases
   - `pretty_print_value()`: formats values using runtime pretty printer
-  - Expected error handling: NoOutputVariable returns Ok() with error message
 - Integration with `crates/datalove-datafun/Cargo.toml`:
   - Added `[[test]]` configuration for `interp_tests`
   - Uses `harness = false` for ExampleTestRunner
@@ -1278,6 +1280,187 @@ end fun
 }
 ```
 
+### Worldfile Test Format
+
+The interpreter uses worldfile format for flexible, comprehensive testing. Each worldfile can contain multiple sections that are processed in order, with each section producing structured analysis output serialized to RON format.
+
+#### Section Types
+
+**1. `module` sections**:
+- Define modules in package world
+- Format: `module library/package/module` (e.g., `module sys/std/int`)
+- Analyzed: AST, typecheck results, exported functions
+- Multiple modules allowed per worldfile
+
+**2. `scriptunit` sections**:
+- Execute statements that build interpreter state
+- Processed sequentially (REPL-style)
+- For now: only `let` statements executed (functions filtered out)
+- Analyzed: AST, typecheck results, state changes (variables added)
+- Multiple scriptunits allowed, each builds on previous state
+
+**3. `expr` sections**:
+- Evaluate single expression in current context
+- Analyzed: inferred type, computed value
+- Multiple expr sections allowed
+- Each uses state from previous scriptunits
+- Future: needed by REPL to show type+value
+
+**4. `script` section** (backward compat):
+- Single monolithic script
+- Optional, for legacy compatibility with old tests
+
+#### Analysis Output Format
+
+Each section produces `SectionAnalysis` serialized to RON:
+
+```rust
+#[derive(Debug, Serialize, Deserialize)]
+pub enum SectionAnalysis {
+    Module(ModuleAnalysis),
+    ScriptUnit(ScriptUnitAnalysis),
+    Expr(ExprAnalysis),
+    Script(ScriptAnalysis),
+}
+
+pub struct ExprAnalysis {
+    pub type_: String,      // Inferred type (e.g., "Int")
+    pub value: String,      // Pretty-printed value (e.g., "@42")
+}
+
+pub struct ScriptUnitAnalysis {
+    pub ast: String,           // AST dump
+    pub typecheck: TypecheckResult,
+    pub state_changes: Vec<String>,  // Variables/functions added
+}
+
+pub struct ModuleAnalysis {
+    pub ast: String,
+    pub typecheck: TypecheckResult,
+    pub exports: Vec<String>,  // Exported functions
+}
+```
+
+#### Test Execution Flow
+
+1. Parse worldfile into sections
+2. Build PackageWorld from module sections
+3. Create InterpContext once
+4. Process each section in order:
+   - Parse section content
+   - Typecheck
+   - Execute (for scriptunit/expr)
+   - Collect analysis
+5. Serialize all analyses to RON
+6. Compare against `.ron.expected` file
+
+#### Example Worldfiles
+
+**Simple expression test**:
+```
+----------
+expr
+----------
+@42 + @10
+```
+
+Expected output (`test.ron.expected`):
+```ron
+[
+  Expr(ExprAnalysis(
+    type_: "Int",
+    value: "@52",
+  ))
+]
+```
+
+**REPL-style state building**:
+```
+----------
+scriptunit
+----------
+let x = @21
+
+----------
+expr
+----------
+x + x
+```
+
+Expected output:
+```ron
+[
+  ScriptUnit(ScriptUnitAnalysis(
+    ast: "...",
+    typecheck: Ok,
+    state_changes: ["x"],
+  )),
+  Expr(ExprAnalysis(
+    type_: "Int",
+    value: "@42",
+  ))
+]
+```
+
+**With module definitions**:
+```
+----------
+module sys/std/math
+----------
+fun double(x: u32): Int
+    ret x + x
+end fun
+
+----------
+scriptunit
+----------
+require module sys/std/math
+import math.double
+
+----------
+expr
+----------
+double(@21)
+```
+
+Expected output:
+```ron
+[
+  Module(ModuleAnalysis(
+    ast: "...",
+    typecheck: Ok,
+    exports: ["double"],
+  )),
+  ScriptUnit(ScriptUnitAnalysis(
+    ast: "...",
+    typecheck: Ok,
+    state_changes: [],
+  )),
+  Expr(ExprAnalysis(
+    type_: "Int",
+    value: "@42",
+  ))
+]
+```
+
+#### Benefits
+
+- **Comprehensive testing**: Parse, typecheck, and execution in one test
+- **Structured output**: RON format is human-readable and diffable
+- **REPL simulation**: scriptunit sections build state incrementally
+- **Expression testing**: Direct expression evaluation without wrapper code
+- **Module integration**: Test with package world modules
+- **Fine-grained verification**: Each section produces inspectable analysis
+- **Future-ready**: expr sections already emit type+value for REPL
+
+#### Migration Plan
+
+Phase 2 tests will be converted from `.dfs` to `.world` format:
+- Current: 24 `.dfs` files with `.out.expected` (plain text)
+- New: 24 `.world` files with `.ron.expected` (structured RON)
+- Test runner: `tests/interp_tests.rs` updated to use worldfile loader
+- Worldfile parser extended to support `scriptunit` and `expr` sections
+
 ## Script vs Function Execution Boundary
 
 ### Key Design Decisions
@@ -1504,10 +1687,10 @@ Implementation complete when:
   - Output formatting: pretty_print_value()
 
 **Test files:**
-- `crates/datalove-datafun/tests/interp_tests.rs` - Example-based integration tests (~50 lines)
+- `crates/datalove-datafun/tests/interp_tests.rs` - Worldfile-based integration tests
 - `crates/datalove-datafun/tests/fixtures/interp2/` - Test fixtures directory
-  - 11 `.dfs` script files
-  - 11 `.out.expected` expected output files
+  - 24 `.world` files (worldfile format)
+  - 24 `.ron.expected` files (structured analysis output)
 
 **Modified files:**
 - `crates/datalove-datafun/src/lib.rs` - Added `pub mod interp;` declaration
@@ -1532,7 +1715,7 @@ Implementation complete when:
 - TyDescTable type descriptor management
 - Runtime lifetime management via ScriptResult (includes tydesc_table)
 - Pretty-printing values for test output
-- Example-based testing infrastructure
+- Worldfile-based testing infrastructure with RON output
 
 **Not yet implemented:**
 - Remaining expression types (Comparison, FunctionCall, Tuple, UnaryOp, Try operators)
@@ -1544,19 +1727,11 @@ Implementation complete when:
 
 **Test results:**
 - All existing tests pass (136 datafun tests + 93 datalit tests + others)
-- 11 new interp_tests pass with zero memory leaks:
-  - 01_empty_script
-  - 02_function_def
-  - 03_u32_literal
-  - 04_bool_true
-  - 05_bool_false
-  - 06_string_literal
-  - 07_u32_add
-  - 08_u32_sub
-  - 09_u32_mul
-  - 10_u32_div
-  - 11_expression_chain
+- 24 new interp_tests pass with zero memory leaks (current `.dfs` format, to be converted to `.world`):
+  - 01_empty_script through 24_fun_nested_call_with_params
+  - Tests cover: literals, arithmetic, function calls with parameters, state building
 - Full test suite: `just test` passes (282+ tests total)
+- Migration to worldfile format planned (will add RON-based analysis output)
 
 ## References
 
