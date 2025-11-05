@@ -112,6 +112,7 @@ pub enum InterpError {
     // Control flow.
     ReturnOutsideFunction,
     IfOutsideFunction,
+    FunctionReturn(Value),  // Used internally to propagate return values.
 
     // Result type.
     NoOutputVariable,
@@ -338,9 +339,8 @@ fn execute_let_statement<'db>(
     // Evaluate the expression.
     let value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db))?;
 
-    // Determine if the type is copy (for now, assume non-copy).
-    // TODO: Use actual type analysis to determine if copy.
-    let is_copy = false;
+    // Determine if the type is copy (basic detection).
+    let is_copy = is_copy_type(value);
 
     // Bind to script-level variable.
     let name = let_stmt.name(ctx.db);
@@ -379,9 +379,9 @@ fn eval_expression_in_script_scope<'db>(
             // Evaluate datalit expression (literals, tuples, etc.).
             eval_datalit_expression(ctx, datalit_expr)
         }
-        ast::ExprFunKind::FunctionCall(_) => {
-            // TODO: Implement function calls.
-            Err(InterpError::InvalidExpression("Function calls not yet implemented".to_string()))
+        ast::ExprFunKind::FunctionCall(call_expr) => {
+            // Evaluate function call.
+            eval_function_call(ctx, call_expr)
         }
         ast::ExprFunKind::BinOp(binop_expr) => {
             // Evaluate binary operations.
@@ -454,6 +454,180 @@ fn eval_datalit_expression<'db>(
         _ => Err(InterpError::InvalidExpression(
             "Datalit expression type not yet implemented".to_string()
         )),
+    }
+}
+
+/// Evaluate a function call.
+fn eval_function_call<'db>(
+    ctx: &mut InterpContext<'db>,
+    call_expr: ast::ExprFunctionCall<'db>,
+) -> Result<Value, InterpError> {
+    let name = call_expr.name(ctx.db);
+    let args = call_expr.args(ctx.db);
+
+    // Look up the function in script scope.
+    let func = ctx.script_scope.functions.get(&name)
+        .ok_or_else(|| InterpError::FunctionNotFound(name.text(ctx.db).to_string()))?;
+
+    // For now, only support zero-argument functions.
+    let params = func.params(ctx.db);
+    if !params.is_empty() {
+        return Err(InterpError::InvalidExpression(
+            format!("Function calls with parameters not yet implemented (function '{}' has {} parameters)",
+                name.text(ctx.db), params.len())
+        ));
+    }
+
+    if !args.is_empty() {
+        return Err(InterpError::InvalidExpression(
+            format!("Function '{}' expects 0 arguments but {} provided",
+                name.text(ctx.db), args.len())
+        ));
+    }
+
+    // Execute the function body.
+    execute_function_body(ctx, *func)
+}
+
+/// Execute a function body and return its result.
+///
+/// This is a simplified implementation that doesn't use frames or analysis.
+/// It will be replaced with proper frame-based execution in Phase 6.
+fn execute_function_body<'db>(
+    ctx: &mut InterpContext<'db>,
+    func: ast::StmtFun<'db>,
+) -> Result<Value, InterpError> {
+    // Create a local variable scope for the function.
+    let mut local_variables: HashMap<InternedText<'db>, ScriptVariable> = HashMap::new();
+
+    // Execute each statement in the function body.
+    for stmt in func.body(ctx.db) {
+        match execute_function_statement(ctx, &mut local_variables, stmt) {
+            Ok(()) => continue,
+            Err(InterpError::FunctionReturn(value)) => {
+                // Return statement encountered - clean up locals and return.
+                cleanup_local_variables(ctx, local_variables);
+                return Ok(value);
+            }
+            Err(e) => {
+                // Error occurred - clean up locals before propagating.
+                cleanup_local_variables(ctx, local_variables);
+                return Err(e);
+            }
+        }
+    }
+
+    // If we reach here, the function didn't have an explicit return.
+    cleanup_local_variables(ctx, local_variables);
+    Err(InterpError::RuntimeError(
+        format!("Function '{}' did not return a value", func.name(ctx.db).text(ctx.db))
+    ))
+}
+
+/// Execute a statement within a function body.
+fn execute_function_statement<'db>(
+    ctx: &mut InterpContext<'db>,
+    local_variables: &mut HashMap<InternedText<'db>, ScriptVariable>,
+    stmt: &ast::Statement<'db>,
+) -> Result<(), InterpError> {
+    match stmt {
+        ast::Statement::Let(let_stmt) => {
+            // Evaluate expression in function scope.
+            let value = eval_expression_in_function_scope(ctx, local_variables, let_stmt.value(ctx.db))?;
+
+            // Bind to local variable.
+            let is_copy = is_copy_type(value);
+            let name = let_stmt.name(ctx.db);
+            local_variables.insert(name, ScriptVariable {
+                value,
+                state: ScriptVarState::Available,
+                is_copy,
+            });
+            Ok(())
+        }
+        ast::Statement::Ret(ret_stmt) => {
+            // Evaluate the return expression and signal return.
+            let value = eval_expression_in_function_scope(ctx, local_variables, ret_stmt.value(ctx.db))?;
+            Err(InterpError::FunctionReturn(value))
+        }
+        ast::Statement::If(_) => {
+            Err(InterpError::InvalidExpression("If statements in functions not yet implemented".to_string()))
+        }
+        ast::Statement::Fun(_) => {
+            Err(InterpError::InvalidExpression("Nested functions not yet implemented".to_string()))
+        }
+        ast::Statement::Require(_) | ast::Statement::Import(_) => {
+            // These are handled at the module level.
+            Ok(())
+        }
+        ast::Statement::ParseError(_) => {
+            Err(InterpError::InvalidExpression("Parse error in function".to_string()))
+        }
+    }
+}
+
+/// Evaluate an expression in function scope (can access local variables).
+fn eval_expression_in_function_scope<'db>(
+    ctx: &mut InterpContext<'db>,
+    local_variables: &mut HashMap<InternedText<'db>, ScriptVariable>,
+    expr: ast::ExprFun<'db>,
+) -> Result<Value, InterpError> {
+    match expr.expr(ctx.db) {
+        ast::ExprFunKind::Name(name) => {
+            // First check local variables, then script variables.
+            if let Some(var) = local_variables.get(&name) {
+                if var.state == ScriptVarState::Moved {
+                    return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
+                }
+                let value = var.value;
+                let is_copy = var.is_copy;
+
+                if is_copy {
+                    Ok(clone_value(ctx, value))
+                } else {
+                    local_variables.get_mut(&name).unwrap().state = ScriptVarState::Moved;
+                    Ok(value)
+                }
+            } else {
+                // Fall back to script scope.
+                read_script_variable(ctx, name)
+            }
+        }
+        ast::ExprFunKind::Datalit(datalit_expr) => {
+            eval_datalit_expression(ctx, datalit_expr)
+        }
+        ast::ExprFunKind::FunctionCall(call_expr) => {
+            eval_function_call(ctx, call_expr)
+        }
+        ast::ExprFunKind::BinOp(binop_expr) => {
+            let lhs = eval_expression_in_function_scope(ctx, local_variables, binop_expr.lhs(ctx.db))?;
+            let rhs = eval_expression_in_function_scope(ctx, local_variables, binop_expr.rhs(ctx.db))?;
+            execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs)
+        }
+        ast::ExprFunKind::Tuple(_) => {
+            Err(InterpError::InvalidExpression("Tuples not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::UnaryOp(_) => {
+            Err(InterpError::InvalidExpression("Unary operations not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::TryOption(_) | ast::ExprFunKind::TryResult(_) => {
+            Err(InterpError::InvalidExpression("Try operators not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::ParseError(_) => {
+            Err(InterpError::InvalidExpression("Parse error in expression".to_string()))
+        }
+    }
+}
+
+/// Clean up local variables by destroying their values.
+fn cleanup_local_variables<'db>(
+    ctx: &mut InterpContext<'db>,
+    local_variables: HashMap<InternedText<'db>, ScriptVariable>,
+) {
+    for (_, var) in local_variables {
+        if var.state == ScriptVarState::Available {
+            destroy_value(ctx, var.value);
+        }
     }
 }
 
@@ -631,6 +805,20 @@ fn is_u32_value(value: Value) -> bool {
 fn is_int_value(value: Value) -> bool {
     unsafe {
         (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::Int
+    }
+}
+
+/// Check if a value is a copy type.
+///
+/// For now, we consider u32 and Bool as copy types.
+/// Int, String and other types are non-copy (linear).
+fn is_copy_type(value: Value) -> bool {
+    unsafe {
+        use datalove_rt::rtdt::TyTag;
+        match (*value.tydesc).type_tag {
+            TyTag::U32 | TyTag::Bool => true,
+            _ => false,
+        }
     }
 }
 

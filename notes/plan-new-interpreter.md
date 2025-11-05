@@ -12,7 +12,7 @@
 - [ ] Phase 7: Module Integration
 - [ ] Phase 8: Testing & Validation
 
-**Current Status**: Phase 2 completed with literals and binary arithmetic operations. Implemented automatic u32→Int widening for bare operators (+, -, *, /). Converted to example-based testing pattern. Fixed memory management issues (ScriptResult Drop, destroy_value). All 11 interp tests passing with zero memory leaks. Ready for next expression types (comparisons, function calls, tuples).
+**Current Status**: Phase 2 completed with literals, binary arithmetic operations, and zero-argument function calls. Implemented automatic u32→Int widening for bare operators (+, -, *, /). Added function call support for script-level zero-argument functions with proper local variable scoping and return value handling. Implemented basic copy type detection (u32, Bool are copy; Int, String are linear). Converted to example-based testing pattern. Fixed memory management issues (ScriptResult Drop, destroy_value). All 20 interp tests passing with zero memory leaks. Ready for function parameters and remaining expression types (comparisons, tuples).
 
 ## Overview
 
@@ -934,18 +934,20 @@ pub enum InterpError {
 - Slot states track initialization correctly
 - No memory leaks in frame allocation tests
 
-### Phase 2: Expression Evaluation - ✅ COMPLETED (literals and binary ops)
+### Phase 2: Expression Evaluation - ✅ COMPLETED (literals, binary ops, and zero-arg function calls)
 
-**Goal**: Evaluate simple expressions without function calls.
+**Goal**: Evaluate expressions including zero-argument function calls.
 
-**Status**: Completed literals and binary operations with automatic type widening
+**Status**: Completed literals, binary operations, and zero-argument function calls with automatic type widening
 
 **Tasks**:
 1. ✅ Implement literal evaluation
-2. ✅ Implement variable reference (Name expressions) - in script scope
+2. ✅ Implement variable reference (Name expressions) - in script and function scope
 3. ✅ Implement BinOp evaluation (arithmetic with automatic u32→Int widening)
-4. ⏸️ Implement Tuple construction - deferred
-5. ✅ Add tests for expression evaluation
+4. ✅ Implement zero-argument function calls
+5. ✅ Implement basic copy type detection (u32, Bool)
+6. ⏸️ Implement Tuple construction - deferred
+7. ✅ Add tests for expression evaluation
 
 **What was implemented**:
 - Binary operation infrastructure:
@@ -966,9 +968,21 @@ pub enum InterpError {
   - `ScriptResult::Drop`: cleans up output value before runtime shutdown
   - Destroy original u32 values after widening in all arithmetic operations
   - Fixed all 8 mixed-type branches (u32-Int and Int-u32) in add/sub/mul/div
+- Function call infrastructure:
+  - `eval_function_call()`: looks up function in script scope, validates zero arguments
+  - `execute_function_body()`: executes function statements with local variable scope
+  - `execute_function_statement()`: handles let, ret statements in functions
+  - `eval_expression_in_function_scope()`: evaluates expressions with access to local and script variables
+  - `cleanup_local_variables()`: properly destroys local variables on return
+  - FunctionReturn error type: used to propagate return values up the call stack
+- Copy type detection:
+  - `is_copy_type()`: checks if value is u32 or Bool (copy types)
+  - Int and String are linear types (move on use)
+  - Copy types are cloned when read multiple times
+  - Linear types are moved on first read, error on subsequent reads
 - Test infrastructure:
   - Converted `interp_tests.rs` to example-based testing (like `old_interp_tests.rs`)
-  - Created `tests/fixtures/interp2/` directory with 11 test cases
+  - Created `tests/fixtures/interp2/` directory with 20 test cases
   - `pretty_print_value()`: formats values using runtime pretty printer
   - Expected error handling: NoOutputVariable returns Ok() with error message
 - Integration with `crates/datalove-datafun/Cargo.toml`:
@@ -976,7 +990,7 @@ pub enum InterpError {
   - Uses `harness = false` for ExampleTestRunner
 
 **Test results**:
-- 11 tests passing with zero memory leaks:
+- 20 tests passing with zero memory leaks:
   - 01_empty_script (expected error: NoOutputVariable)
   - 02_function_def (expected error: NoOutputVariable)
   - 03_u32_literal (@42)
@@ -988,18 +1002,33 @@ pub enum InterpError {
   - 09_u32_mul (@6 * @7 = @42)
   - 10_u32_div (@84 / @2 = @42)
   - 11_expression_chain (let a = @5 + @10; a * @2 = @30)
+  - 12_int_literal (@42 as Int)
+  - 13_int_add (@10 + @20 = @30 as Int)
+  - 14_int_sub (@50 - @20 = @30 as Int)
+  - 15_int_mul (@6 * @7 = @42 as Int)
+  - 16_int_div (@84 / @2 = @42 as Int)
+  - 17_fun_call_simple (zero-arg function returns u32)
+  - 18_fun_call_string (zero-arg function returns String)
+  - 19_fun_call_arithmetic (zero-arg function with arithmetic)
+  - 20_fun_call_chained (function calling another function with local variables)
 - Full test suite: `just test` passes (282+ tests total)
 
 **Success criteria**:
 - ✅ Can evaluate literals (u32, bool, string)
-- ✅ Can read variables from script scope
+- ✅ Can read variables from script and function scope
 - ✅ Can perform arithmetic operations with automatic widening
 - ✅ Expression chaining works (let bindings + arithmetic)
+- ✅ Can call zero-argument functions from script scope
+- ✅ Functions can have local variables and return values
+- ✅ Recursive function calls work (function calling another function)
+- ✅ Basic copy type detection (u32, Bool copy; Int, String linear)
+- ✅ Linear semantics enforced (use-after-move detection)
 - ✅ Zero memory leaks (verified with DATALOVE_LEAK_CHECK)
 - ⏸️ Can construct tuples - not yet implemented
+- ⏸️ Functions with parameters - not yet implemented
 - ⏸️ Can read variables from slots - deferred until frame implementation
 
-**Next**: Implement remaining expression types (comparisons, function calls, tuples, try operators) or begin frame implementation for Phase 1.
+**Next**: Implement function parameters, or implement remaining expression types (comparisons, tuples, try operators), or begin proper frame-based execution (Phase 1).
 
 ### Phase 3: Move Semantics
 **Goal**: Implement analysis-guided move tracking.
