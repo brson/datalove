@@ -51,18 +51,46 @@ pub struct Value {
 
 /// Result of script execution containing the value and runtime.
 ///
-/// The runtime must be kept alive for the value pointer to remain valid.
-pub struct ScriptResult {
+/// The runtime and tydesc_table must be kept alive for the value pointer to remain valid.
+pub struct ScriptResult<'db> {
     pub value: Value,
     pub runtime: datalove_rt::rust::Runtime,
+    pub tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
 }
 
-impl std::fmt::Debug for ScriptResult {
+impl std::fmt::Debug for ScriptResult<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ScriptResult")
             .field("value", &self.value)
             .field("runtime", &"<Runtime>")
+            .field("tydesc_table", &"<TyDescTable>")
             .finish()
+    }
+}
+
+impl Drop for ScriptResult<'_> {
+    fn drop(&mut self) {
+        // Destroy the value before dropping the runtime.
+        // First destroy the contents (for complex types like Int, String).
+        // Then free the value's memory allocation.
+        unsafe {
+            let rt_handle = self.runtime.handle();
+
+            // Destroy contents.
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                rt_handle,
+                self.value.ptr,
+                self.value.tydesc,
+            );
+
+            // Free the allocation.
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt_handle,
+                self.value.tydesc,
+                1,
+                self.value.ptr,
+            );
+        }
     }
 }
 
@@ -128,7 +156,7 @@ pub fn execute_script<'db>(
     db: &'db dyn crate::Db,
     script: crate::script::Script,
     package_world: PackageWorld,
-) -> Result<ScriptResult, InterpError> {
+) -> Result<ScriptResult<'db>, InterpError> {
     // Create interpreter context.
     let mut ctx = InterpContext::new(db, package_world, Some(script));
 
@@ -142,16 +170,95 @@ pub fn execute_script<'db>(
     }
 
     // Return the output variable if present.
+    // Remove it from the HashMap to avoid double-free.
     let output_name = bct::text::InternedText::new(db, "output");
-    let value = ctx.script_scope.variables.get(&output_name)
+    let value = ctx.script_scope.variables.remove(&output_name)
         .ok_or(InterpError::NoOutputVariable)?
         .value;
 
-    // Return both the value and the runtime (which keeps the memory alive).
+    // Clean up any remaining variables before moving out runtime and tydesc_table.
+    let remaining_vars: Vec<_> = ctx.script_scope.variables.drain().map(|(_, var)| var.value).collect();
+    for value in remaining_vars {
+        destroy_value(&mut ctx, value);
+    }
+
+    // Return the value, runtime, and tydesc_table (which keeps the memory alive).
     Ok(ScriptResult {
         value,
         runtime: ctx.runtime,
+        tydesc_table: ctx.tydesc_table,
     })
+}
+
+/// Pretty-print a value using the runtime pretty printer.
+///
+/// Returns a string representation in valid datalit syntax.
+pub fn pretty_print_value<'db>(
+    script_result: &mut ScriptResult<'db>,
+) -> Result<String, InterpError> {
+    use datalove_rt as rt;
+    use datalove_rt::rtdt;
+
+    unsafe {
+        // Get runtime handle.
+        let rt_handle = script_result.runtime.handle();
+
+        // Get string type descriptor from the tydesc_table.
+        let string_tydesc = script_result.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::String);
+
+        // Create output string.
+        let mut output_string = std::mem::MaybeUninit::<rtdt::String>::uninit();
+        let status = rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            output_string.as_mut_ptr() as *mut u8,
+            string_tydesc,
+        );
+
+        if status != rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError(
+                "Failed to create output string".to_string(),
+            ));
+        }
+
+        let mut output_string = output_string.assume_init();
+
+        // Pretty-print value.
+        let status = rt::c::dtlv_rti_pretty_print_local(
+            rt_handle,
+            script_result.value.ptr,
+            script_result.value.tydesc,
+            &mut output_string as *mut rtdt::String as *mut u8,
+            string_tydesc,
+        );
+
+        if status != rt::c::RtStatus::Ok {
+            rt::c::dtlv_rti_string_destroy_local(
+                rt_handle,
+                &mut output_string as *mut rtdt::String as *mut u8,
+                string_tydesc,
+            );
+            return Err(InterpError::RuntimeError(
+                "Failed to pretty-print value".to_string(),
+            ));
+        }
+
+        // Extract string contents.
+        let result = if output_string.data.is_null() || output_string.size == 0 {
+            String::new()
+        } else {
+            let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
+            String::from_utf8_lossy(bytes).to_string()
+        };
+
+        // Cleanup.
+        rt::c::dtlv_rti_string_destroy_local(
+            rt_handle,
+            &mut output_string as *mut rtdt::String as *mut u8,
+            string_tydesc,
+        );
+
+        Ok(result)
+    }
 }
 
 /// Execute a single script unit in REPL mode.
@@ -597,10 +704,21 @@ fn destroy_value<'db>(
     value: Value,
 ) {
     unsafe {
+        let rt_handle = ctx.runtime.handle();
+
+        // First destroy the contents (for complex types like Int, String).
         datalove_rt::c::dtlv_rti_any_destroy_local(
-            ctx.runtime.handle(),
+            rt_handle,
             value.ptr,
             value.tydesc,
+        );
+
+        // Then free the value's memory allocation.
+        datalove_rt::c::dtlv_rti_mem_free_local(
+            rt_handle,
+            value.tydesc,
+            1,
+            value.ptr,
         );
     }
 }
@@ -615,6 +733,10 @@ fn eval_add<'db>(
     if is_u32_value(lhs) && is_u32_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
         let rhs_int = widen_u32_to_int(ctx, rhs)?;
+
+        // Destroy the original u32 values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
 
         // Allocate result Int.
         let result_int = allocate_bigint(ctx)?;
@@ -667,6 +789,7 @@ fn eval_add<'db>(
     // Mixed u32 and Int: widen u32 side.
     else if is_u32_value(lhs) && is_int_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        destroy_value(ctx, lhs);  // Destroy original u32.
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -691,6 +814,8 @@ fn eval_add<'db>(
     }
     else if is_int_value(lhs) && is_u32_value(rhs) {
         let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, rhs);  // Destroy original u32.
+
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -730,6 +855,11 @@ fn eval_sub<'db>(
     if is_u32_value(lhs) && is_u32_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
         let rhs_int = widen_u32_to_int(ctx, rhs)?;
+
+        // Destroy the original u32 values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -778,6 +908,7 @@ fn eval_sub<'db>(
     // Mixed cases.
     else if is_u32_value(lhs) && is_int_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        destroy_value(ctx, lhs);  // Destroy original u32.
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -802,6 +933,8 @@ fn eval_sub<'db>(
     }
     else if is_int_value(lhs) && is_u32_value(rhs) {
         let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, rhs);  // Destroy original u32.
+
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -841,6 +974,11 @@ fn eval_mul<'db>(
     if is_u32_value(lhs) && is_u32_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
         let rhs_int = widen_u32_to_int(ctx, rhs)?;
+
+        // Destroy the original u32 values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -889,6 +1027,9 @@ fn eval_mul<'db>(
     // Mixed cases.
     else if is_u32_value(lhs) && is_int_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        destroy_value(ctx, lhs);  // Destroy original u32.
+        destroy_value(ctx, lhs);  // Destroy original u32.
+
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -913,6 +1054,8 @@ fn eval_mul<'db>(
     }
     else if is_int_value(lhs) && is_u32_value(rhs) {
         let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, rhs);  // Destroy original u32.
+
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -952,6 +1095,11 @@ fn eval_div<'db>(
     if is_u32_value(lhs) && is_u32_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
         let rhs_int = widen_u32_to_int(ctx, rhs)?;
+
+        // Destroy the original u32 values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -1000,6 +1148,7 @@ fn eval_div<'db>(
     // Mixed cases.
     else if is_u32_value(lhs) && is_int_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        destroy_value(ctx, lhs);  // Destroy original u32.
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
@@ -1024,6 +1173,8 @@ fn eval_div<'db>(
     }
     else if is_int_value(lhs) && is_u32_value(rhs) {
         let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, rhs);  // Destroy original u32.
+
         let result_int = allocate_bigint(ctx)?;
 
         let status = unsafe {
