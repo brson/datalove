@@ -518,7 +518,7 @@ fn allocate_bool<'db>(
 
 /// Allocate an integer value.
 ///
-/// For now, we default to u32 since we don't have type information yet.
+/// For now, we only support u32 literals.
 fn allocate_int<'db>(
     ctx: &mut InterpContext<'db>,
     int_expr: &crate::datalit::ast::ExprInt<'db>,
@@ -1027,7 +1027,6 @@ fn eval_mul<'db>(
     // Mixed cases.
     else if is_u32_value(lhs) && is_int_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        destroy_value(ctx, lhs);  // Destroy original u32.
         destroy_value(ctx, lhs);  // Destroy original u32.
 
         let result_int = allocate_bigint(ctx)?;
