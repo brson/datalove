@@ -4,7 +4,7 @@
 
 - [x] Phase 0: Script Execution Infrastructure - **COMPLETED**
 - [ ] Phase 1: Core Infrastructure (Frame Management)
-- [ ] Phase 2: Expression Evaluation - **IN PROGRESS** (literals done)
+- [x] Phase 2: Expression Evaluation - **COMPLETED** (literals and binary ops)
 - [ ] Phase 3: Move Semantics
 - [ ] Phase 4: Control Flow
 - [ ] Phase 5: Drop Execution
@@ -12,7 +12,7 @@
 - [ ] Phase 7: Module Integration
 - [ ] Phase 8: Testing & Validation
 
-**Current Status**: Phase 0 completed with basic literal evaluation working. Fixed critical dangling pointer bug in TyDescTable and runtime lifetime bug in execute_script. All 5 interp tests passing (empty script, function definition, u32/bool/string literals). Ready to continue implementing remaining expression types.
+**Current Status**: Phase 2 completed with literals and binary arithmetic operations. Implemented automatic u32→Int widening for bare operators (+, -, *, /). Converted to example-based testing pattern. Fixed memory management issues (ScriptResult Drop, destroy_value). All 11 interp tests passing with zero memory leaks. Ready for next expression types (comparisons, function calls, tuples).
 
 ## Overview
 
@@ -934,21 +934,72 @@ pub enum InterpError {
 - Slot states track initialization correctly
 - No memory leaks in frame allocation tests
 
-### Phase 2: Expression Evaluation
+### Phase 2: Expression Evaluation - ✅ COMPLETED (literals and binary ops)
+
 **Goal**: Evaluate simple expressions without function calls.
 
+**Status**: Completed literals and binary operations with automatic type widening
+
 **Tasks**:
-1. Implement literal evaluation
-2. Implement variable reference (Name expressions)
-3. Implement BinOp evaluation (arithmetic)
-4. Implement Tuple construction
-5. Add tests for expression evaluation
+1. ✅ Implement literal evaluation
+2. ✅ Implement variable reference (Name expressions) - in script scope
+3. ✅ Implement BinOp evaluation (arithmetic with automatic u32→Int widening)
+4. ⏸️ Implement Tuple construction - deferred
+5. ✅ Add tests for expression evaluation
+
+**What was implemented**:
+- Binary operation infrastructure:
+  - `execute_binop()`: dispatcher for binary operations
+  - `eval_add()`, `eval_sub()`, `eval_mul()`, `eval_div()`: arithmetic with automatic widening
+  - Handles u32+u32, Int+Int, u32+Int, Int+u32 (all cases)
+  - Automatic widening: u32 operands converted to Int before operation
+  - Results are always Int (bigint) for bare operators
+- Type checking helpers:
+  - `is_u32_value()`: check if value is u32 type
+  - `is_int_value()`: check if value is Int (bigint) type
+- Value allocation:
+  - `allocate_bigint()`: allocates Int values
+  - `widen_u32_to_int()`: converts u32 to Int with proper limb allocation
+- Memory management fixes:
+  - `destroy_value()`: properly destroys both contents AND allocation
+  - `ScriptResult` includes `tydesc_table` to keep type descriptors alive
+  - `ScriptResult::Drop`: cleans up output value before runtime shutdown
+  - Destroy original u32 values after widening in all arithmetic operations
+  - Fixed all 8 mixed-type branches (u32-Int and Int-u32) in add/sub/mul/div
+- Test infrastructure:
+  - Converted `interp_tests.rs` to example-based testing (like `old_interp_tests.rs`)
+  - Created `tests/fixtures/interp2/` directory with 11 test cases
+  - `pretty_print_value()`: formats values using runtime pretty printer
+  - Expected error handling: NoOutputVariable returns Ok() with error message
+- Integration with `crates/datalove-datafun/Cargo.toml`:
+  - Added `[[test]]` configuration for `interp_tests`
+  - Uses `harness = false` for ExampleTestRunner
+
+**Test results**:
+- 11 tests passing with zero memory leaks:
+  - 01_empty_script (expected error: NoOutputVariable)
+  - 02_function_def (expected error: NoOutputVariable)
+  - 03_u32_literal (@42)
+  - 04_bool_true (@true)
+  - 05_bool_false (@false)
+  - 06_string_literal (@"hello")
+  - 07_u32_add (@10 + @20 = @30)
+  - 08_u32_sub (@50 - @20 = @30)
+  - 09_u32_mul (@6 * @7 = @42)
+  - 10_u32_div (@84 / @2 = @42)
+  - 11_expression_chain (let a = @5 + @10; a * @2 = @30)
+- Full test suite: `just test` passes (282+ tests total)
 
 **Success criteria**:
-- Can evaluate literals (u32, bool, etc.)
-- Can read variables from slots
-- Can perform arithmetic operations
-- Can construct tuples
+- ✅ Can evaluate literals (u32, bool, string)
+- ✅ Can read variables from script scope
+- ✅ Can perform arithmetic operations with automatic widening
+- ✅ Expression chaining works (let bindings + arithmetic)
+- ✅ Zero memory leaks (verified with DATALOVE_LEAK_CHECK)
+- ⏸️ Can construct tuples - not yet implemented
+- ⏸️ Can read variables from slots - deferred until frame implementation
+
+**Next**: Implement remaining expression types (comparisons, function calls, tuples, try operators) or begin frame implementation for Phase 1.
 
 ### Phase 3: Move Semantics
 **Goal**: Implement analysis-guided move tracking.
@@ -1396,20 +1447,28 @@ Implementation complete when:
 
 ## Implementation Notes
 
-### Files Created (Phase 0)
+### Files Created (Phases 0-2)
 
 **New interpreter module:**
-- `crates/datalove-datafun/src/interp/mod.rs` - Core interpreter implementation (~410 lines)
-  - Data structures: InterpContext, ScriptScope, ScriptVariable, ScriptVarState, Value, InterpError
+- `crates/datalove-datafun/src/interp/mod.rs` - Core interpreter implementation (~1200 lines)
+  - Data structures: InterpContext, ScriptScope, ScriptVariable, ScriptVarState, Value, ScriptResult, InterpError
   - Entry points: execute_script(), execute_script_unit()
   - Execution: execute_unit(), execute_statement(), execute_let_statement(), execute_fun_statement()
-  - Expressions: eval_expression_in_script_scope(), read_script_variable(), clone_value(), eval_datalit_expression()
+  - Expression evaluation: eval_expression_in_script_scope(), read_script_variable(), clone_value(), eval_datalit_expression()
+  - Binary operations: execute_binop(), eval_add(), eval_sub(), eval_mul(), eval_div()
+  - Type helpers: is_u32_value(), is_int_value()
+  - Value operations: allocate_bool(), allocate_int(), allocate_bigint(), allocate_string(), widen_u32_to_int(), destroy_value()
+  - Output formatting: pretty_print_value()
 
 **Test files:**
-- `crates/datalove-datafun/tests/interp_tests.rs` - Basic integration tests
+- `crates/datalove-datafun/tests/interp_tests.rs` - Example-based integration tests (~50 lines)
+- `crates/datalove-datafun/tests/fixtures/interp2/` - Test fixtures directory
+  - 11 `.dfs` script files
+  - 11 `.out.expected` expected output files
 
 **Modified files:**
 - `crates/datalove-datafun/src/lib.rs` - Added `pub mod interp;` declaration
+- `crates/datalove-datafun/Cargo.toml` - Added `[[test]]` configuration for interp_tests
 
 ### Current State
 
@@ -1420,14 +1479,20 @@ Implementation complete when:
 - Variable binding infrastructure
 - Linear semantics enforcement (use-after-move detection)
 - REPL state accumulation infrastructure
-- Basic literal evaluation (u32, bool, string)
-- Runtime value allocation (allocate_bool, allocate_int, allocate_string)
+- Literal evaluation (u32, bool, string)
+- Binary arithmetic operations (+, -, *, /) with automatic u32→Int widening
+- Expression chaining (let bindings + arithmetic)
+- Runtime value allocation (allocate_bool, allocate_int, allocate_bigint, allocate_string)
+- Type widening (widen_u32_to_int)
 - Value cloning using runtime
+- Value destruction (destroy_value) - both contents and allocation
 - TyDescTable type descriptor management
-- Runtime lifetime management via ScriptResult
+- Runtime lifetime management via ScriptResult (includes tydesc_table)
+- Pretty-printing values for test output
+- Example-based testing infrastructure
 
 **Not yet implemented:**
-- Remaining expression types (BinOp, FunctionCall, Tuple, UnaryOp, Try operators)
+- Remaining expression types (Comparison, FunctionCall, Tuple, UnaryOp, Try operators)
 - PackageWorld integration (temporarily disabled)
 - Type analysis integration for copy detection
 - Function execution with stack frames
@@ -1435,14 +1500,20 @@ Implementation complete when:
 - Drop insertion
 
 **Test results:**
-- All existing tests pass (136 datafun tests + 93 datalit tests + 5 rt-tests + others)
-- 5 new interp_tests pass:
-  - test_interp_empty_script
-  - test_interp_function_definition
-  - test_interp_u32_literal
-  - test_interp_bool_literals
-  - test_interp_string_literal
-- Full test suite: 282 tests passing
+- All existing tests pass (136 datafun tests + 93 datalit tests + others)
+- 11 new interp_tests pass with zero memory leaks:
+  - 01_empty_script
+  - 02_function_def
+  - 03_u32_literal
+  - 04_bool_true
+  - 05_bool_false
+  - 06_string_literal
+  - 07_u32_add
+  - 08_u32_sub
+  - 09_u32_mul
+  - 10_u32_div
+  - 11_expression_chain
+- Full test suite: `just test` passes (282+ tests total)
 
 ## References
 
