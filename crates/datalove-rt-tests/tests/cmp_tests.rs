@@ -1550,6 +1550,11 @@ use proptest::prelude::*;
 use datalove_datalit::ast_gen::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_iters: 0,
+        ..ProptestConfig::default()
+    })]
+
     /// Property: Transitivity - if cmp(x,y)=Less and cmp(y,z)=Less then cmp(x,z)=Less.
     #[test]
     fn proptest_cmp_transitivity(seed1 in any::<u64>(), seed2 in any::<u64>(), seed3 in any::<u64>()) {

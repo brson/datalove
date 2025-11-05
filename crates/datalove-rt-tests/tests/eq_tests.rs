@@ -2495,6 +2495,11 @@ use proptest::prelude::*;
 use datalove_datalit::ast_gen::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_iters: 0,
+        ..ProptestConfig::default()
+    })]
+
     /// Property: Reflexivity - for all x, eq(x, x) = Equals.
     #[test]
     fn proptest_eq_reflexive(seed in any::<u64>()) {

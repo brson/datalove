@@ -1123,6 +1123,11 @@ use proptest::prelude::*;
 use datalove_datalit::ast_gen::*;
 
 proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_iters: 0,
+        ..ProptestConfig::default()
+    })]
+
     /// Property: Destroy moderate structures with 100-200 elements, depth 3-4.
     #[test]
     fn proptest_destroy_moderate_structures(seed in any::<u64>()) {
