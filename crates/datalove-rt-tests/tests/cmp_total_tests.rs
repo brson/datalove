@@ -11,7 +11,7 @@ use datalove_rt::impls::rt_local::RtLocal;
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
     let parsed = parse_result.expr;
-    let resolved = datalove_datalit::resolve::resolve_names(db, parsed, parse_result.expr_spans);
+    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed);
     datalove_datalit::tycheck::type_check(db, parsed, resolved)
 }
 

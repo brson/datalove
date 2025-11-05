@@ -20,6 +20,7 @@ use bct::{
     bracer,
     lines,
 };
+use salsa::Accumulator;
 
 use crate::ast;
 use crate::datalit;
@@ -59,8 +60,6 @@ fn parse_bracer<'db>(
     let mut parser = Parser {
         db,
         bracer,
-        expr_spans: Vec::new(),
-        datalit_expr_spans: Vec::new(),
     };
 
     // Get line iterator - newlines inside balanced braces don't count as line breaks.
@@ -95,7 +94,7 @@ fn parse_bracer<'db>(
 
     let statements = parser.parse_statements(lines);
     let script = ast::Script::new(db, statements);
-    ast::ParseResult::new(db, script, parser.expr_spans, parser.datalit_expr_spans)
+    ast::ParseResult::new(db, script)
 }
 
 /// Check if a token acts as a line separator.
@@ -111,8 +110,6 @@ fn is_line_separator<'db>(db: &'db dyn crate::Db, token: Token<'db>) -> bool {
 struct Parser<'db> {
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
-    expr_spans: Vec<(ast::ExprFun<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
-    datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
 }
 
 impl<'db> Parser<'db> {
@@ -665,15 +662,8 @@ impl<'db> Parser<'db> {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> ast::ExprFun<'db> {
-        // Capture span before parsing.
-        let (text, span) = self.peek_text_span(tokens);
-
-        let expr = self.parse_expr_binop(tokens, 0);
-
-        // Record span for this expression.
-        self.record_expr_span(expr, text, span);
-
-        expr
+        // Note: span recording now happens in create_expr for each expression.
+        self.parse_expr_binop(tokens, 0)
     }
 
     // Parse binary operations with precedence climbing algorithm.
@@ -871,6 +861,8 @@ impl<'db> Parser<'db> {
                                 }
                                 _ => {
                                     // It's a datafun name or function call.
+                                    // Capture span before consuming token.
+                                    let (text, start_span) = self.peek_text_span(tokens);
                                     tokens.next(); // consume the token
                                     let name = InternedText::new(self.db, word.S());
 
@@ -882,17 +874,20 @@ impl<'db> Parser<'db> {
                                             _ => unreachable!(),
                                         };
                                         let args = self.parse_function_call_args(args_iter);
-                                        ast::ExprFun::new(
-                                            self.db,
+                                        // For function calls, span should include the parens, but for now just use the name span.
+                                        self.create_expr(
                                             ast::ExprFunKind::FunctionCall(
                                                 ast::ExprFunctionCall::new(self.db, name, args)
-                                            )
+                                            ),
+                                            text,
+                                            start_span
                                         )
                                     } else {
                                         // It's just a variable name.
-                                        ast::ExprFun::new(
-                                            self.db,
-                                            ast::ExprFunKind::Name(name)
+                                        self.create_expr(
+                                            ast::ExprFunKind::Name(name),
+                                            text,
+                                            start_span
                                         )
                                     }
                                 }
@@ -1021,8 +1016,15 @@ impl<'db> Parser<'db> {
         let parse_result = datalit::parser::parse_from_tokens(self.db, datalit_tokens);
         let datalit_expr = parse_result.expr;
 
-        // Save datalit expr_spans for later use in type checking.
-        self.datalit_expr_spans.extend(parse_result.expr_spans);
+        // Emit datalit expression spans as accumulators.
+        for (expr, text, span) in &parse_result.expr_spans {
+            use salsa::plumbing::AsId;
+            crate::spans::DatalitSpanAccumulator {
+                expr_id: expr.as_id(),
+                text_id: text.as_id(),
+                span: span.clone(),
+            }.accumulate(self.db);
+        }
 
         ast::ExprFun::new(
             self.db,
@@ -1217,9 +1219,17 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Record an expression's source location for diagnostic emission.
-    fn record_expr_span(&mut self, expr: ast::ExprFun<'db>, text: bct::text::Text<'db>, span: datalove_diagnostic::ByteSpan) {
-        self.expr_spans.push((expr, text, span));
+    /// Create an expression and emit its span as accumulator.
+    fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, text: bct::text::Text<'db>, span: datalove_diagnostic::ByteSpan) -> ast::ExprFun<'db> {
+        use salsa::plumbing::AsId;
+        let expr = ast::ExprFun::new(self.db, kind);
+        // Emit span as accumulator.
+        crate::spans::DatafunSpanAccumulator {
+            expr_id: expr.as_id(),
+            text_id: text.as_id(),
+            span,
+        }.accumulate(self.db);
+        expr
     }
 }
 

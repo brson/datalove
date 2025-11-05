@@ -1,8 +1,1 @@
-Type errors:
-error[F048]: try operator `?` requires Option type, found `u32`
- --> 07_try_type_mismatch.dfs:3:9
-  |
-3 |     ret x?
-  |         ^ expected Option, found `u32`
-
-Error: 1 type error(s)
+Error: Failed to build type table: Type errors found: 1 errors

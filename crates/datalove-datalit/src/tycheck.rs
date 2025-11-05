@@ -158,8 +158,8 @@ pub struct TypecheckResult<'db> {
 /// Context for typechecking.
 struct TypeContext<'db> {
     db: &'db dyn crate::Db,
+    source: bct::input::Source,
     resolutions: HashMap<InternedText<'db>, Resolution<'db>>,
-    expr_spans: HashMap<salsa::Id, (Text<'db>, ByteSpan)>,
     errors: Vec<TypeError>,
 }
 
@@ -171,23 +171,10 @@ impl<'db> TypeContext<'db> {
             .map(|entry| (entry.name(db), entry.resolution(db)))
             .collect();
 
-        // Build a hashmap for fast span lookup.
-        let expr_spans = resolved
-            .expr_spans(db)
-            .iter()
-            .map(|stored_span| {
-                use salsa::plumbing::FromId;
-                (
-                    stored_span.expr_id,
-                    (Text::from_id(stored_span.text_id), stored_span.span.clone())
-                )
-            })
-            .collect();
-
         TypeContext {
             db,
+            source: resolved.source(db),
             resolutions,
-            expr_spans,
             errors: Vec::new(),
         }
     }
@@ -200,10 +187,10 @@ impl<'db> TypeContext<'db> {
         self.resolutions.get(&name).copied()
     }
 
-    /// Look up the source location for an expression.
+    /// Look up the source location for an expression (on-demand).
     fn get_span(&self, expr: ExprFull<'db>) -> Option<(Text<'db>, ByteSpan)> {
-        use salsa::plumbing::AsId;
-        self.expr_spans.get(&expr.as_id()).cloned()
+        let spans = crate::spans::datalit_spans(self.db, self.source);
+        spans.get_text_and_span(self.db, expr)
     }
 }
 

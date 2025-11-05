@@ -1,8 +1,1 @@
-Type errors:
-error[F026]: invalid operand type `string` for operator `Add`
- --> 05_invalid_operand.dfs:1:14
-  |
-1 | let output = @"hello" + @"world"
-  |              ^ operator `Add` cannot be applied to type `string`
-
-Error: 1 type error(s)
+Error: Failed to build type table: Type errors found: 1 errors

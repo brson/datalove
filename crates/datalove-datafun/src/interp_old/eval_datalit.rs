@@ -28,7 +28,8 @@ fn typecheck_datalit<'db>(
     expr: datalit::ast::ExprFull<'db>,
     expected: Option<datalit::tycheck::TypeAndHeap<'db>>,
 ) -> datalit::tycheck::TypecheckResult<'db> {
-    let resolved = datalit::resolve::resolve_names(db, expr, vec![]);
+    let dummy_source = bct::input::Source::new(db, String::new());
+    let resolved = datalit::resolve::resolve_names(db, dummy_source, expr);
     datalit::tycheck::type_check_with_expected(db, expr, resolved, expected)
 }
 

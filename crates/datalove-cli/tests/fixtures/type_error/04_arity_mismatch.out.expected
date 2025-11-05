@@ -1,14 +1,8 @@
 Type errors:
-error[F016]: mismatched types: expected `u32`, found `int`
- --> 04_arity_mismatch.dfs:2:9
-  |
-2 |     ret x + y
-  |         ^ type mismatch
-
 error[F045]: this function takes 2 arguments but 3 were supplied
  --> 04_arity_mismatch.dfs:5:14
   |
 5 | let output = add(@1, @2, @3)
   |              ^^^ expected 2 arguments
 
-Error: 2 type error(s)
+Error: 1 type error(s)

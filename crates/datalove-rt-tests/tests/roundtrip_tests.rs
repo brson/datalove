@@ -126,7 +126,7 @@ fn compile<'db>(
 ) -> (datalit::ast::ExprFull<'db>, datalit::resolve::ResolvedExpr<'db>, datalit::tycheck::TypecheckResult<'db>) {
     let parse_result = datalit::parser::parse(db, source);
     let parsed = parse_result.expr;
-    let resolved = datalit::resolve::resolve_names(db, parsed, parse_result.expr_spans);
+    let resolved = datalit::resolve::resolve_names(db, source, parsed);
     let typechecked = datalit::tycheck::type_check(db, parsed, resolved);
     (parsed, resolved, typechecked)
 }

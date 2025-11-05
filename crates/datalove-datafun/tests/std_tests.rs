@@ -53,12 +53,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     }
 
     // Typecheck the script with package world context.
-    // TODO: Pass actual spans once available
     let script_typecheck = datafun::tycheck::type_check_with_package_world(
         &db,
+        source,
         script,
-        vec![],
-        vec![],
         package_world,
         typecheck_result,
     );

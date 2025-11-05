@@ -19,7 +19,7 @@ fn test_nested_named_types_should_resolve() {
 
     let source = bct::input::Source::new(&db, source_text.into());
     let parsed = datalove_datalit::parser::parse_integration_test(&db, source);
-    let resolved = datalove_datalit::resolve::resolve_names(&db, parsed, vec![]);
+    let resolved = datalove_datalit::resolve::resolve_names(&db, source, parsed);
     let typechecked = datalove_datalit::tycheck::type_check(&db, parsed, resolved);
 
     let has_errors = !typechecked.errors(&db).is_empty();
@@ -101,7 +101,9 @@ fn test_generated_exprs_typecheck() {
     for seed in 0..100 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
 
-        let resolved = datalove_datalit::resolve::resolve_names(&db, expr_full, vec![]);
+        // Generated ASTs don't have a real source, use empty source.
+        let dummy_source = bct::input::Source::new(&db, String::new());
+        let resolved = datalove_datalit::resolve::resolve_names(&db, dummy_source, expr_full);
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr_full, resolved);
 
         let has_errors = !typechecked.errors(&db).is_empty();
@@ -126,8 +128,10 @@ fn test_pretty_print_roundtrip() {
         let source = bct::input::Source::new(&db, pretty.into());
         let parsed = datalove_datalit::parser::parse_integration_test(&db, source);
 
-        let resolved_orig = datalove_datalit::resolve::resolve_names(&db, expr_full, vec![]);
-        let resolved_parsed = datalove_datalit::resolve::resolve_names(&db, parsed, vec![]);
+        // Generated ASTs don't have a real source, use empty source.
+        let dummy_source = bct::input::Source::new(&db, String::new());
+        let resolved_orig = datalove_datalit::resolve::resolve_names(&db, dummy_source, expr_full);
+        let resolved_parsed = datalove_datalit::resolve::resolve_names(&db, source, parsed);
 
         let typechecked_orig = datalove_datalit::tycheck::type_check(&db, expr_full, resolved_orig);
         let typechecked_parsed = datalove_datalit::tycheck::type_check(&db, parsed, resolved_parsed);

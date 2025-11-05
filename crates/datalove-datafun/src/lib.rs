@@ -9,6 +9,7 @@ pub mod parser;
 pub mod resolution;
 pub mod tycheck;
 pub mod function_analysis;
+pub mod spans;
 
 // Old interpreter module.
 pub mod interp_old;

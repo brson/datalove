@@ -1,8 +1,1 @@
-Type errors:
-error[F047]: try operator `?` can only be used inside a function
- --> 06_try_outside_function.dfs:1:14
-  |
-1 | let output = some(@42)?
-  |              ^^^^ try operator here
-
-Error: 1 type error(s)
+Error: Failed to build type table: Type errors found: 1 errors

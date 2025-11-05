@@ -91,11 +91,11 @@ pub fn execute_script_with_package_world<'db>(
     }
 
     // Typecheck the script with package world context.
+    let dummy_source = bct::input::Source::new(db, String::new());
     let script_typecheck = crate::tycheck::type_check_with_package_world(
         db,
+        dummy_source,
         script,
-        vec![], // No spans available in this API
-        vec![], // No datalit spans available
         package_world,
         typecheck_result,
     );

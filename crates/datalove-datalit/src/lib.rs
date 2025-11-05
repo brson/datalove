@@ -11,6 +11,7 @@ pub mod tydesc_table;
 pub mod instantiate2;
 pub mod pretty;
 pub mod ast_gen;
+pub mod spans;
 
 pub use datalove_rtdt as rtdt;
 

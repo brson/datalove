@@ -179,7 +179,7 @@ impl LitTycheckCommand {
         let ast = parse_result.expr;
 
         // Resolve names.
-        let resolved = datalit::resolve::resolve_names(&db, ast, parse_result.expr_spans);
+        let resolved = datalit::resolve::resolve_names(&db, source, ast);
 
         // Type check.
         let result = datalit::tycheck::type_check(&db, ast, resolved);
@@ -262,10 +262,10 @@ impl LitOpCommand {
         let expr2 = parse_result2.expr;
 
         // Resolve and type check.
-        let resolved1 = datalit::resolve::resolve_names(&db, expr1, parse_result1.expr_spans);
+        let resolved1 = datalit::resolve::resolve_names(&db, source1, expr1);
         let typechecked1 = datalit::tycheck::type_check(&db, expr1, resolved1);
 
-        let resolved2 = datalit::resolve::resolve_names(&db, expr2, parse_result2.expr_spans);
+        let resolved2 = datalit::resolve::resolve_names(&db, source2, expr2);
         let typechecked2 = datalit::tycheck::type_check(&db, expr2, resolved2);
 
         // Check for type errors.

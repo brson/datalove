@@ -14,23 +14,17 @@ pub struct Script<'db> {
 /// Result of parsing containing the script and span side table.
 ///
 /// Note: This must be a regular struct, not #[salsa::tracked], because
-/// tracked structs cannot contain Vec of tuples with non-tracked types.
+/// Parse result containing only the Script.
+/// Spans are now accessed via accumulators instead of being stored in this struct.
 #[derive(Clone, PartialEq, Eq)]
 pub struct ParseResult<'db> {
     pub script: Script<'db>,
-    pub expr_spans: Vec<(ExprFun<'db>, Text<'db>, ByteSpan)>,
-    pub datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, Text<'db>, ByteSpan)>,
 }
 
 impl<'db> ParseResult<'db> {
-    pub fn new(
-        db: &'db dyn salsa::Database,
-        script: Script<'db>,
-        expr_spans: Vec<(ExprFun<'db>, Text<'db>, ByteSpan)>,
-        datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, Text<'db>, ByteSpan)>,
-    ) -> Self {
+    pub fn new(db: &'db dyn salsa::Database, script: Script<'db>) -> Self {
         let _ = db; // Unused but needed for compatibility
-        ParseResult { script, expr_spans, datalit_expr_spans }
+        ParseResult { script }
     }
 }
 

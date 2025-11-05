@@ -63,8 +63,8 @@ pub struct ResolvedExpr<'db> {
     /// List of resolution errors.
     pub errors: Vec<ResolutionErrorEntry<'db>>,
 
-    /// Expression span table from parsing (for diagnostic emission).
-    pub expr_spans: Vec<StoredSpan>,
+    /// Source for on-demand span lookup.
+    pub source: bct::input::Source,
 }
 
 /// Main entry point: resolve all names in an expression.
@@ -77,8 +77,8 @@ pub struct ResolvedExpr<'db> {
 #[salsa::tracked]
 pub fn resolve_names<'db>(
     db: &'db dyn crate::Db,
+    source: bct::input::Source,
     expr: ExprFull<'db>,
-    expr_spans: Vec<(ExprFull<'db>, Text<'db>, ByteSpan)>,
 ) -> ResolvedExpr<'db> {
     let mut scope = Scope::new();
     let mut next_id = 0u32;
@@ -105,20 +105,7 @@ pub fn resolve_names<'db>(
         .map(|(name, error)| ResolutionErrorEntry::new(db, name, error))
         .collect();
 
-    // Convert expr_spans to StoredSpan for salsa storage.
-    let stored_spans = expr_spans
-        .into_iter()
-        .map(|(expr, text, span)| {
-            use salsa::plumbing::AsId;
-            StoredSpan {
-                expr_id: expr.as_id(),
-                text_id: text.as_id(),
-                span,
-            }
-        })
-        .collect();
-
-    ResolvedExpr::new(db, expr, resolutions, errors, stored_spans)
+    ResolvedExpr::new(db, expr, resolutions, errors, source)
 }
 
 /// Scope tracking during resolution.
@@ -415,7 +402,7 @@ mod tests {
             S(": @struct Point { x: @u32, y: @u32 } / @struct Point { x = @1, y = @2 }")
         );
         let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, ast, vec![]);
+        let resolved = resolve_names(db, source, ast);
 
         // Should have one resolution for "Point".
         assert_eq!(resolved.resolutions(db).len(), 1);
@@ -439,7 +426,7 @@ mod tests {
             S(": @struct Outer { inner: @struct Inner { x: @u32 } } / @struct Outer { inner = @struct Inner { x = @1 } }")
         );
         let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, ast, vec![]);
+        let resolved = resolve_names(db, source, ast);
 
         // Should have resolution for "Outer" (inner struct definition is in type hint, not referenced in expr).
         assert_eq!(resolved.resolutions(db).len(), 1);
@@ -457,7 +444,7 @@ mod tests {
             S(": @tuple Pair (@u32, @u32) / @tuple Pair (@1, @2)")
         );
         let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, ast, vec![]);
+        let resolved = resolve_names(db, source, ast);
 
         // Should have one resolution for "Pair".
         assert_eq!(resolved.resolutions(db).len(), 1);
@@ -475,7 +462,7 @@ mod tests {
             S(": @enum Result { Ok: @u32, Err: @string } / @enum Result.Ok(@42)")
         );
         let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, ast, vec![]);
+        let resolved = resolve_names(db, source, ast);
 
         // Should have one resolution for "Result".
         assert_eq!(resolved.resolutions(db).len(), 1);

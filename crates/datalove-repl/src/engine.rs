@@ -272,7 +272,8 @@ impl<'db> Engine<'db> {
             //todo check resolution
 
             // Type check the script.
-            let tycheck_result = datafun::tycheck::type_check(db, parsed_script, vec![], vec![]);
+            let dummy_source = bct::input::Source::new(db, String::new());
+            let tycheck_result = datafun::tycheck::type_check(db, dummy_source, parsed_script);
             if !tycheck_result.errors(db).is_empty() {
                 let errors: Vec<_> = tycheck_result.errors(db)
                     .iter()
@@ -283,7 +284,8 @@ impl<'db> Engine<'db> {
         }
 
         // Build type table for the full script.
-        let tycheck_result = datafun::tycheck::type_check(db, parsed_script, vec![], vec![]);
+        let dummy_source = bct::input::Source::new(db, String::new());
+        let tycheck_result = datafun::tycheck::type_check(db, dummy_source, parsed_script);
         let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(db);
         let type_table = match datafun::interp_old::type_table::TypeTable::build(db, parsed_script, tycheck_result, &mut tydesc_table) {
             Ok(table) => table,
@@ -358,7 +360,8 @@ impl<'db> Engine<'db> {
         );
 
         let parsed_script = parse_full_script(db, new_script);
-        let tycheck_result = datafun::tycheck::type_check(db, parsed_script, vec![], vec![]);
+        let dummy_source = bct::input::Source::new(db, String::new());
+        let tycheck_result = datafun::tycheck::type_check(db, dummy_source, parsed_script);
         if !tycheck_result.errors(db).is_empty() {
             let errors: Vec<_> = tycheck_result.errors(db)
                 .iter()

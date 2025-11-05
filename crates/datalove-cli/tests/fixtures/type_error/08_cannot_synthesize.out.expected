@@ -1,8 +1,1 @@
-Type errors:
-error[F011]: cannot infer return type
- --> 08_cannot_synthesize.dfs:1:5
-  |
-1 | ret @42
-  |     ^ cannot infer type
-
-Error: 1 type error(s)
+Error: Failed to build type table: Type errors found: 1 errors

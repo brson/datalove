@@ -255,7 +255,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let source = bct::input::Source::new(&db, source_text.S());
 
     let ast = datalove_datalit::parser::parse_integration_test(&db, source);
-    let resolved = datalove_datalit::resolve::resolve_names(&db, ast, vec![]);
+    let resolved = datalove_datalit::resolve::resolve_names(&db, source, ast);
     let typechecked = datalove_datalit::tycheck::type_check(&db, ast, resolved);
 
     // Convert AST to serde format.

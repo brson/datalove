@@ -703,7 +703,7 @@ mod tests {
     fn parse_and_typecheck<'db>(db: &'db dyn crate::Db, source_code: &str) -> (StmtFun<'db>, crate::tycheck::TypecheckResult<'db>) {
         let source = Source::new(db, S(source_code));
         let script = crate::parser::parse_for_diagnostics(db, source);
-        let tycheck_result = crate::tycheck::type_check(db, script, vec![], vec![]);
+        let tycheck_result = crate::tycheck::type_check(db, source, script);
         let statements = script.statements(db);
 
         // Find the first function statement.

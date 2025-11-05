@@ -442,7 +442,8 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
         // Then, get the type for this expression from the typechecker.
         // For now, we need to run the typechecker on this expression.
         // This is a bit inefficient, but works for initial implementation.
-        let resolved = datalit::resolve::resolve_names(self.db, expr, vec![]);
+        let dummy_source = bct::input::Source::new(self.db, String::new());
+        let resolved = datalit::resolve::resolve_names(self.db, dummy_source, expr);
         let tycheck_result = datalit::tycheck::type_check(self.db, expr, resolved);
 
         if let Some(root_type) = tycheck_result.root_type(self.db) {
@@ -564,7 +565,7 @@ mod tests {
     ) -> (Script<'db>, crate::tycheck::TypecheckResult<'db>) {
         let source = Source::new(db, source_text.as_str(db).S());
         let parse_result = crate::parser::parse(db, source);
-        let tycheck_result = crate::tycheck::type_check(db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans);
+        let tycheck_result = crate::tycheck::type_check(db, source, parse_result.script);
         (parse_result.script, tycheck_result)
     }
 

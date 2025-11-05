@@ -1959,9 +1959,8 @@ mod tests {
         let parse_result = crate::parser::parse(db, source);
         let tycheck_result = crate::tycheck::type_check(
             db,
+            source,
             parse_result.script,
-            parse_result.expr_spans,
-            parse_result.datalit_expr_spans
         );
         (parse_result.script, tycheck_result)
     }

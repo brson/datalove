@@ -99,6 +99,7 @@ pub struct PackageWorldTypecheckResult<'db> {
 /// Context for typechecking.
 pub struct TypeContext<'db> {
     db: &'db dyn crate::Db,
+    source: bct::input::Source,
     /// Variable bindings (name -> type).
     variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
     /// Function signatures (name -> function type).
@@ -108,34 +109,21 @@ pub struct TypeContext<'db> {
     errors: Vec<TypeError>,
     /// Expression types, indexed by ExprFun ID.
     expr_types: Vec<Option<TypeAndHeap<'db>>>,
-    /// Expression spans for datafun expressions (for diagnostic emission).
-    expr_spans: HashMap<salsa::Id, (bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
-    /// Expression spans for datalit expressions (passed to datalit type checker).
-    datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
 }
 
 impl<'db> TypeContext<'db> {
     pub fn new(
         db: &'db dyn crate::Db,
-        expr_spans: Vec<(ExprFun<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
-        datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
+        source: bct::input::Source,
     ) -> Self {
-        // Convert expr_spans Vec to HashMap for fast lookup.
-        use salsa::plumbing::AsId;
-        let expr_spans_map = expr_spans
-            .into_iter()
-            .map(|(expr, text, span)| (expr.as_id(), (text, span)))
-            .collect();
-
         TypeContext {
             db,
+            source,
             variables: HashMap::new(),
             functions: HashMap::new(),
             expected_return_type: None,
             errors: Vec::new(),
             expr_types: Vec::new(),
-            expr_spans: expr_spans_map,
-            datalit_expr_spans,
         }
     }
 
@@ -311,9 +299,16 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Look up the source location for an expression.
+    /// Look up span for a datafun expression (on-demand).
     fn get_span(&self, expr: ExprFun<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
-        use salsa::plumbing::AsId;
-        self.expr_spans.get(&expr.as_id()).cloned()
+        let spans = crate::spans::datafun_spans(self.db, self.source);
+        spans.lookup(self.db, expr).map(|entry| entry.to_text_and_span(self.db))
+    }
+
+    /// Look up span for a datalit expression (on-demand).
+    fn get_datalit_span(&self, expr: datalit::ast::ExprFull<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
+        let spans = crate::spans::datalit_spans(self.db, self.source);
+        spans.lookup(self.db, expr).map(|entry| entry.to_text_and_span(self.db))
     }
 
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
@@ -358,11 +353,10 @@ impl<'db> TypeContext<'db> {
 #[salsa::tracked]
 pub fn type_check<'db>(
     db: &'db dyn crate::Db,
+    source: bct::input::Source,
     script: Script<'db>,
-    expr_spans: Vec<(ExprFun<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
-    datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
 ) -> TypecheckResult<'db> {
-    let mut ctx = TypeContext::new(db, expr_spans, datalit_expr_spans);
+    let mut ctx = TypeContext::new(db, source);
 
     // First pass: collect all function signatures.
     for statement in script.statements(db) {
@@ -394,8 +388,8 @@ pub fn type_check_for_diagnostics<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
 ) -> TypecheckResult<'db> {
-    let parse_result = crate::parser::parse(db, source);
-    type_check(db, parse_result.script, parse_result.expr_spans, parse_result.datalit_expr_spans)
+    let script = crate::parser::parse_for_diagnostics(db, source);
+    type_check(db, source, script)
 }
 
 /// Typecheck a script with package world for diagnostic emission.
@@ -408,12 +402,11 @@ pub fn type_check_with_package_world_for_diagnostics<'db>(
     package_world: crate::package::PackageWorld,
     package_world_typecheck: PackageWorldTypecheckResult<'db>,
 ) -> TypecheckResult<'db> {
-    let parse_result = crate::parser::parse(db, source);
+    let script = crate::parser::parse_for_diagnostics(db, source);
     type_check_with_package_world(
         db,
-        parse_result.script,
-        parse_result.expr_spans,
-        parse_result.datalit_expr_spans,
+        source,
+        script,
         package_world,
         package_world_typecheck,
     )
@@ -426,13 +419,12 @@ pub fn type_check_with_package_world_for_diagnostics<'db>(
 #[salsa::tracked]
 pub fn type_check_with_package_world<'db>(
     db: &'db dyn crate::Db,
+    source: bct::input::Source,
     script: Script<'db>,
-    expr_spans: Vec<(ExprFun<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
-    datalit_expr_spans: Vec<(datalit::ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
     package_world: crate::package::PackageWorld,
     package_world_typecheck: PackageWorldTypecheckResult<'db>,
 ) -> TypecheckResult<'db> {
-    let mut ctx = TypeContext::new(db, expr_spans, datalit_expr_spans);
+    let mut ctx = TypeContext::new(db, source);
 
     // Build module alias map from require statements.
     let graph = package_world_typecheck.graph(db);
@@ -506,7 +498,9 @@ pub fn lookup_variable_type<'db>(
     script: Script<'db>,
     name: InternedText<'db>,
 ) -> Option<TypeAndHeap<'db>> {
-    let mut ctx = TypeContext::new(db, vec![], vec![]);
+    // Create a dummy source since we don't have one available here.
+    let dummy_source = bct::input::Source::new(db, String::new());
+    let mut ctx = TypeContext::new(db, dummy_source);
 
     // First pass: collect all function signatures.
     for statement in script.statements(db) {
@@ -556,7 +550,7 @@ pub fn typecheck_package_world<'db>(
         let alias_map = build_module_alias_map(db, script, graph, module);
 
         // Create type context for this module.
-        let mut ctx = TypeContext::new(db, parse_result.expr_spans.to_vec(), parse_result.datalit_expr_spans.to_vec());
+        let mut ctx = TypeContext::new(db, source);
 
         // Add imported functions to context.
         // Scan for import statements and resolve them.
@@ -920,8 +914,7 @@ fn synthesize_expr<'db>(
     match expr_kind {
         ExprFunKind::Datalit(datalit_expr) => {
             // Delegate to datalit type checker.
-            // Pass datalit expr_spans collected during parsing for diagnostic emission.
-            let resolved = datalit::resolve::resolve_names(db, datalit_expr, ctx.datalit_expr_spans.clone());
+            let resolved = datalit::resolve::resolve_names(db, ctx.source, datalit_expr);
             let tycheck_result = datalit::tycheck::type_check(db, datalit_expr, resolved);
 
             // Check for errors.
@@ -1525,7 +1518,7 @@ fn check_expr<'db>(
                 );
 
                 // Resolve names and type check with expected type.
-                let resolved = datalit::resolve::resolve_names(db, datalit_expr, vec![]);
+                let resolved = datalit::resolve::resolve_names(db, ctx.source, datalit_expr);
                 let tycheck_result = datalit::tycheck::type_check_with_expected(
                     db,
                     datalit_expr,
@@ -1890,9 +1883,8 @@ mod tests {
         let parse_result = crate::parser::parse(db, source);
         type_check(
             db,
-            parse_result.script,
-            parse_result.expr_spans,
-            parse_result.datalit_expr_spans
+            source,
+            parse_result.script
         )
     }
 

@@ -14,8 +14,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let script = datafun::parser::parse_for_diagnostics(&db, source);
 
     // Type check the script.
-    // TODO: Pass actual spans once available
-    let tycheck_result = datafun::tycheck::type_check(&db, script, vec![], vec![]);
+    let tycheck_result = datafun::tycheck::type_check(&db, source, script);
     if !tycheck_result.errors(&db).is_empty() {
         return Err(format!("Type check errors: {} error(s)", tycheck_result.errors(&db).len()));
     }

@@ -16,6 +16,26 @@ use std::ops::Range;
 
 pub type ByteSpan = Range<usize>;
 
+/// Single span entry for efficient lookup.
+///
+/// Stores a text ID and byte span for on-demand conversion to typed references.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct SpanEntry {
+    pub text_id: salsa::Id,
+    pub span: ByteSpan,
+}
+
+impl SpanEntry {
+    pub fn new(text_id: salsa::Id, span: ByteSpan) -> Self {
+        SpanEntry { text_id, span }
+    }
+
+    pub fn to_text_and_span<'db>(&self, db: &'db dyn salsa::Database) -> (Text<'db>, ByteSpan) {
+        use salsa::plumbing::FromId;
+        (Text::from_id(self.text_id), self.span.clone())
+    }
+}
+
 /// Diagnostic severity level.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(salsa::Update)]

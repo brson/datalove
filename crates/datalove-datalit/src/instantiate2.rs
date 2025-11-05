@@ -617,7 +617,8 @@ fn instantiate_result<'db>(
         let payload_dest = unsafe { dest_ptr.add(layout.payload_offset as usize) };
 
         // Instantiate the error payload (which is an Error type).
-        let resolved = crate::resolve::resolve_names(db, err_payload, vec![]);
+        let dummy_source = bct::input::Source::new(db, String::new());
+        let resolved = crate::resolve::resolve_names(db, dummy_source, err_payload);
         let typechecked = crate::tycheck::type_check(db, err_payload, resolved);
 
         let inner_type = typechecked.root_type(db)
@@ -650,7 +651,7 @@ fn instantiate_data<'db>(
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let source = bct::input::Source::new(db, "".to_string());
-    let resolved = crate::resolve::resolve_names(db, inner_expr, vec![]);
+    let resolved = crate::resolve::resolve_names(db, source, inner_expr);
     let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
 
     let inner_type = typechecked.root_type(db)
@@ -680,7 +681,8 @@ fn instantiate_error<'db>(
     dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let resolved = crate::resolve::resolve_names(db, inner_expr, vec![]);
+    let dummy_source = bct::input::Source::new(db, String::new());
+    let resolved = crate::resolve::resolve_names(db, dummy_source, inner_expr);
     let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
 
     let inner_type = typechecked.root_type(db)
@@ -1004,7 +1006,7 @@ mod tests {
     fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<TypecheckResult<'db>> {
         let source = bct::input::Source::new(db, source_text.to_string());
         let parsed = crate::parser::parse_for_test(db, source);
-        let resolved = crate::resolve::resolve_names(db, parsed, vec![]);
+        let resolved = crate::resolve::resolve_names(db, source, parsed);
         let typechecked = crate::tycheck::type_check(db, parsed, resolved);
         Ok(typechecked)
     }
