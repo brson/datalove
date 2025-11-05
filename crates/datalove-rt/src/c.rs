@@ -40,13 +40,13 @@ pub enum RtOrdering {
 
 /// May return null.
 #[unsafe(no_mangle)]
-pub extern "C" fn dtlv_rti_init() -> LocalRtHandle {
+pub extern "C-unwind" fn dtlv_rti_init() -> LocalRtHandle {
     let rt = rt_local::RtLocal::new();
     Box::into_raw(rt) as *mut u8
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_shutdown(
+pub unsafe extern "C-unwind" fn dtlv_rti_shutdown(
     rt: LocalRtHandle,
 ) -> RtStatus {
     if rt.is_null() {
@@ -63,7 +63,7 @@ pub unsafe extern "C" fn dtlv_rti_shutdown(
 
 /// Low-level allocator access.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_mem_alloc_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_mem_alloc_local(
     rt: LocalRtHandle,
     // The type of the element being allocated (not the container).
     tydesc: *const rtdt::TyDesc,
@@ -82,7 +82,7 @@ pub unsafe extern "C" fn dtlv_rti_mem_alloc_local(
 
 /// Raw memory allocation without requiring a type descriptor.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_mem_alloc_raw_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_mem_alloc_raw_local(
     rt: LocalRtHandle,
     size: u32,
     align: u32,
@@ -100,7 +100,7 @@ pub unsafe extern "C" fn dtlv_rti_mem_alloc_raw_local(
 
 /// Low-level allocator access.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_mem_free_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_mem_free_local(
     rt: LocalRtHandle,
     tydesc: *const rtdt::TyDesc,
     count: u32,
@@ -125,7 +125,7 @@ pub unsafe extern "C" fn dtlv_rti_mem_free_local(
 /// at the `value_out` location - we just need to allocate
 /// any needed buffers.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_clone_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_clone_local(
     rt: LocalRtHandle,
     value_in: *const u8,
     tydesc_in: *const rtdt::TyDesc,
@@ -140,7 +140,7 @@ pub unsafe extern "C" fn dtlv_rti_clone_local(
 ///
 /// Floats have weird cases.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_eq(
+pub unsafe extern "C-unwind" fn dtlv_rti_eq(
     _rt: LocalRtHandle,
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -161,7 +161,7 @@ pub unsafe extern "C" fn dtlv_rti_eq(
 /// This is primarily useful for keying hash tables.
 /// Not yet clear whether Datalove wants this.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_eq_unique(
+pub unsafe extern "C-unwind" fn dtlv_rti_eq_unique(
     _rt: LocalRtHandle,
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -178,7 +178,7 @@ pub unsafe extern "C" fn dtlv_rti_eq_unique(
 /// This is probably not actually useful. Just experimenting.
 /// NaN's have total order; float zeros are equal.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_cmp(
+pub unsafe extern "C-unwind" fn dtlv_rti_cmp(
     _rt: LocalRtHandle,
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -196,7 +196,7 @@ pub unsafe extern "C" fn dtlv_rti_cmp(
 ///
 /// > -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_cmp_total(
+pub unsafe extern "C-unwind" fn dtlv_rti_cmp_total(
     _rt: LocalRtHandle,
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -214,7 +214,7 @@ pub unsafe extern "C" fn dtlv_rti_cmp_total(
 
 /// Add two bigints: a + b.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_add(
+pub unsafe extern "C-unwind" fn dtlv_rti_int_add(
     rt: LocalRtHandle,
     a_in: *const u8,
     a_tydesc: *const rtdt::TyDesc,
@@ -235,7 +235,7 @@ pub unsafe extern "C" fn dtlv_rti_int_add(
 
 /// Subtract two bigints: a - b.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_sub(
+pub unsafe extern "C-unwind" fn dtlv_rti_int_sub(
     rt: LocalRtHandle,
     a_in: *const u8,
     a_tydesc: *const rtdt::TyDesc,
@@ -256,7 +256,7 @@ pub unsafe extern "C" fn dtlv_rti_int_sub(
 
 /// Multiply two bigints: a * b.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_mul(
+pub unsafe extern "C-unwind" fn dtlv_rti_int_mul(
     rt: LocalRtHandle,
     a_in: *const u8,
     a_tydesc: *const rtdt::TyDesc,
@@ -277,7 +277,7 @@ pub unsafe extern "C" fn dtlv_rti_int_mul(
 
 /// Negate a bigint: -a.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_neg(
+pub unsafe extern "C-unwind" fn dtlv_rti_int_neg(
     rt: LocalRtHandle,
     a_in: *const u8,
     a_tydesc: *const rtdt::TyDesc,
@@ -297,7 +297,7 @@ pub unsafe extern "C" fn dtlv_rti_int_neg(
 /// Divide two bigints: a / b.
 /// Returns RtStatus::Error if b is zero.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_div_checked(
+pub unsafe extern "C-unwind" fn dtlv_rti_int_div_checked(
     rt: LocalRtHandle,
     a_in: *const u8,
     a_tydesc: *const rtdt::TyDesc,
@@ -318,7 +318,7 @@ pub unsafe extern "C" fn dtlv_rti_int_div_checked(
 
 /// Destroys any type of value, freeing allocations recursively.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_any_destroy_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_any_destroy_local(
     rt: LocalRtHandle,
     value_in: *mut u8,
     tydesc: *const rtdt::TyDesc,
@@ -329,7 +329,7 @@ pub unsafe extern "C" fn dtlv_rti_any_destroy_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_string_create_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_string_create_local(
     rt: LocalRtHandle,
     // Destination will be overwritten.
     value_out: *mut u8,
@@ -341,7 +341,7 @@ pub unsafe extern "C" fn dtlv_rti_string_create_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_string_destroy_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_string_destroy_local(
     rt: LocalRtHandle,
     // Pointer will be freed.
     value_in: *mut u8,
@@ -353,7 +353,7 @@ pub unsafe extern "C" fn dtlv_rti_string_destroy_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_string_push_bytes_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_string_push_bytes_local(
     rt: LocalRtHandle,
     string_value_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -366,7 +366,7 @@ pub unsafe extern "C" fn dtlv_rti_string_push_bytes_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_string_clear_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_string_clear_local(
     rt: LocalRtHandle,
     string_value_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
@@ -377,7 +377,7 @@ pub unsafe extern "C" fn dtlv_rti_string_clear_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_pretty_print_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_pretty_print_local(
     rt: LocalRtHandle,
     arg_value_ref: *const u8,
     arg_tydesc_ref: *const rtdt::TyDesc,
@@ -391,7 +391,7 @@ pub unsafe extern "C" fn dtlv_rti_pretty_print_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreemap_create_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_create_local(
     rt: LocalRtHandle,
     // Destination will be overwritten.
     value_out: *mut u8,
@@ -410,7 +410,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_create_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreemap_clone_from_slice_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clone_from_slice_local(
     rt: LocalRtHandle,
     // Destination will be overwritten.
     btreemap_value_out: *mut u8,
@@ -441,7 +441,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clone_from_slice_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreemap_destroy_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_destroy_local(
     rt: LocalRtHandle,
     // Pointer will be freed.
     value_in: *mut u8,
@@ -460,7 +460,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_destroy_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreemap_insert_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_local(
     rt: LocalRtHandle,
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: *const rtdt::TyDesc,
@@ -494,7 +494,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_insert_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreemap_remove_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_remove_local(
     rt: LocalRtHandle,
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: *const rtdt::TyDesc,
@@ -520,7 +520,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_remove_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreemap_get(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get(
     rt: LocalRtHandle,
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: *const rtdt::TyDesc,
@@ -555,7 +555,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreemap_get_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_local(
     rt: LocalRtHandle,
     btreemap_value_ref: *const u8,
     btreemap_tydesc: *const rtdt::TyDesc,
@@ -588,7 +588,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_get_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clear_local(
     rt: LocalRtHandle,
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: *const rtdt::TyDesc,
@@ -606,7 +606,7 @@ pub unsafe extern "C" fn dtlv_rti_btreemap_clear_local(
 // BTreeSet operations.
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreeset_create_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_create_local(
     rt: LocalRtHandle,
     // Destination will be overwritten.
     value_out: *mut u8,
@@ -624,7 +624,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_create_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreeset_destroy_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_destroy_local(
     rt: LocalRtHandle,
     btreeset_value_in: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
@@ -640,7 +640,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_destroy_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreeset_insert_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_insert_local(
     rt: LocalRtHandle,
     btreeset_value_mut: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
@@ -668,7 +668,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_insert_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreeset_remove_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_remove_local(
     rt: LocalRtHandle,
     btreeset_value_mut: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
@@ -695,7 +695,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_remove_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreeset_contains_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_contains_local(
     rt: LocalRtHandle,
     btreeset_value_ref: *const u8,
     btreeset_tydesc: *const rtdt::TyDesc,
@@ -722,7 +722,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_contains_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreeset_clear_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clear_local(
     rt: LocalRtHandle,
     btreeset_value_mut: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
@@ -738,7 +738,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_clear_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_btreeset_clone_from_slice_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clone_from_slice_local(
     rt: LocalRtHandle,
     btreeset_value_out: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
@@ -768,7 +768,7 @@ pub unsafe extern "C" fn dtlv_rti_btreeset_clone_from_slice_local(
 // ============================================================================
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_create_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_create_local(
     rt: LocalRtHandle,
     value_out: *mut u8,
     tydesc: *const rtdt::TyDesc,
@@ -785,7 +785,7 @@ pub unsafe extern "C" fn dtlv_rti_list_create_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_create_from_slice_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_create_from_slice_local(
     rt: LocalRtHandle,
     slice_ptr_ref: *const u8,
     slice_len: u32,
@@ -814,7 +814,7 @@ pub unsafe extern "C" fn dtlv_rti_list_create_from_slice_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_destroy_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_destroy_local(
     rt: LocalRtHandle,
     value_in: *mut u8,
     tydesc: *const rtdt::TyDesc,
@@ -831,7 +831,7 @@ pub unsafe extern "C" fn dtlv_rti_list_destroy_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_clear_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_clear_local(
     rt: LocalRtHandle,
     value_mut: *mut u8,
     tydesc: *const rtdt::TyDesc,
@@ -848,7 +848,7 @@ pub unsafe extern "C" fn dtlv_rti_list_clear_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_get(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_get(
     rt: LocalRtHandle,
     list_value_ref: *const u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -877,7 +877,7 @@ pub unsafe extern "C" fn dtlv_rti_list_get(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_set_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_set_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -906,7 +906,7 @@ pub unsafe extern "C" fn dtlv_rti_list_set_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_push_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_push_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -933,7 +933,7 @@ pub unsafe extern "C" fn dtlv_rti_list_push_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_pop_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_pop_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -960,7 +960,7 @@ pub unsafe extern "C" fn dtlv_rti_list_pop_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_insert_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_insert_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -989,7 +989,7 @@ pub unsafe extern "C" fn dtlv_rti_list_insert_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_remove_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_remove_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -1018,7 +1018,7 @@ pub unsafe extern "C" fn dtlv_rti_list_remove_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_reserve_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_reserve_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -1041,7 +1041,7 @@ pub unsafe extern "C" fn dtlv_rti_list_reserve_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_shrink_to_fit_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_shrink_to_fit_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -1062,7 +1062,7 @@ pub unsafe extern "C" fn dtlv_rti_list_shrink_to_fit_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_list_extend_from_slice_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_extend_from_slice_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -1095,7 +1095,7 @@ pub unsafe extern "C" fn dtlv_rti_list_extend_from_slice_local(
 // ============================================================================
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_tensor_create_from_slice_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_create_from_slice_local(
     rt: LocalRtHandle,
     slice_ptr_ref: *const u8,
     slice_len: u32,
@@ -1132,7 +1132,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_create_from_slice_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_tensor_destroy_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_destroy_local(
     rt: LocalRtHandle,
     tensor_value_in: *mut u8,
     tensor_tydesc: *const rtdt::TyDesc,
@@ -1149,7 +1149,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_destroy_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_tensor_get_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_get_local(
     rt: LocalRtHandle,
     tensor_value_ref: *const u8,
     tensor_tydesc: *const rtdt::TyDesc,
@@ -1175,7 +1175,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_get_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_tensor_set_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
     rt: LocalRtHandle,
     tensor_value_ref: *mut u8,
     tensor_tydesc: *const rtdt::TyDesc,
@@ -1201,7 +1201,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_set_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_tensor_transpose_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_transpose_local(
     rt: LocalRtHandle,
     tensor_value_in: *mut u8,
     tensor_tydesc: *const rtdt::TyDesc,
@@ -1227,7 +1227,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_transpose_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_tensor_slice_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_slice_local(
     rt: LocalRtHandle,
     tensor_value_in: *mut u8,
     tensor_tydesc: *const rtdt::TyDesc,
@@ -1256,7 +1256,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_slice_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_tensor_reshape_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_reshape_local(
     rt: LocalRtHandle,
     tensor_value_in: *mut u8,
     tensor_tydesc: *const rtdt::TyDesc,
@@ -1291,7 +1291,7 @@ pub unsafe extern "C" fn dtlv_rti_tensor_reshape_local(
 /// Compare two bigints: a cmp b.
 /// Returns: -1 if a < b, 0 if a == b, 1 if a > b.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dtlv_rti_int_cmp(
+pub unsafe extern "C-unwind" fn dtlv_rti_int_cmp(
     _rt: LocalRtHandle,
     a_ref: *const u8,
     _a_tydesc: *const rtdt::TyDesc,
