@@ -35,3 +35,8 @@ harness = false
 name = "error_tests"
 path = "tests/error_tests.rs"
 harness = false
+
+[[test]]
+name = "type_error_tests"
+path = "tests/type_error_tests.rs"
+harness = false

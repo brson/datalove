@@ -1,0 +1,8 @@
+Type errors:
+error[F050]: TypeMismatch { expected: "u32", actual: "string" }
+ --> 03_type_mismatch.dfs:1:14
+  |
+1 | let x: u32 = @"hello"
+  |              ^ type error in datalit expression
+
+Error: 1 type error(s)

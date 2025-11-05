@@ -1,0 +1,8 @@
+Type errors:
+error[F002]: cannot find function `unknown_func` in this scope
+ --> 02_undefined_function.dfs:1:14
+  |
+1 | let output = unknown_func(@42)
+  |              ^^^^^^^^^^^^ not found in this scope
+
+Error: 1 type error(s)

@@ -1,0 +1,4 @@
+fun get_value(): ?u32
+    let x = @42
+    ret x?
+end fun
