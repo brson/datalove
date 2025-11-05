@@ -594,6 +594,11 @@ use datalove_datalit::ast_gen::*;
 use datalove_rt::rust::Runtime;
 
 proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_iters: 0,
+        ..ProptestConfig::default()
+    })]
+
     /// Property: Clone equals original - for all x, eq(x, clone(x)) = Equals.
     #[test]
     fn proptest_clone_equals_original(seed in any::<u64>()) {
