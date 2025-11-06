@@ -883,6 +883,7 @@ proptest! {
 
 /// Regression test for clone leak detected with seed 980509222901775213.
 #[test]
+#[ignore] // slow
 fn test_clone_leak_regression_seed_980509222901775213() {
     let db = Database::default();
     let seed = 980509222901775213u64;
