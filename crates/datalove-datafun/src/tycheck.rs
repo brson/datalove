@@ -81,6 +81,20 @@ pub struct ModuleExports<'db> {
     pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
 }
 
+/// Imported functions for a module.
+#[salsa::tracked]
+pub struct ModuleImports<'db> {
+    /// Package module this is for.
+    pub package_module: bct::package2::PackageModule,
+
+    /// Imported functions as a vector of (local_name, source_module, source_name) tuples.
+    /// local_name: the name used in this module to call the function
+    /// source_module: the module where the function is defined
+    /// source_name: the name of the function in the source module
+    #[returns(ref)]
+    pub functions: Vec<(InternedText<'db>, bct::package2::PackageModule, InternedText<'db>)>,
+}
+
 /// Result of typechecking an entire package world.
 #[salsa::tracked]
 pub struct PackageWorldTypecheckResult<'db> {
@@ -94,6 +108,10 @@ pub struct PackageWorldTypecheckResult<'db> {
     /// Module exports, per module.
     #[returns(ref)]
     pub module_exports: BTreeMap<bct::package2::PackageModule, ModuleExports<'db>>,
+
+    /// Module imports, per module.
+    #[returns(ref)]
+    pub module_imports: BTreeMap<bct::package2::PackageModule, ModuleImports<'db>>,
 }
 
 /// Context for typechecking.
@@ -528,6 +546,7 @@ pub fn typecheck_package_world<'db>(
 ) -> PackageWorldTypecheckResult<'db> {
     let mut module_errors: BTreeMap<bct::package2::PackageModule, Vec<TypeError>> = BTreeMap::new();
     let mut module_exports_map: BTreeMap<bct::package2::PackageModule, ModuleExports<'db>> = BTreeMap::new();
+    let mut module_imports_map: BTreeMap<bct::package2::PackageModule, ModuleImports<'db>> = BTreeMap::new();
 
     // Sort modules in dependency order.
     let sorted_modules = match topological_sort_modules(db, graph) {
@@ -552,6 +571,9 @@ pub fn typecheck_package_world<'db>(
         // Create type context for this module.
         let mut ctx = TypeContext::new(db, source);
 
+        // Track imports for this module.
+        let mut module_import_functions: Vec<(InternedText<'db>, bct::package2::PackageModule, InternedText<'db>)> = Vec::new();
+
         // Add imported functions to context.
         // Scan for import statements and resolve them.
         for statement in script.statements(db) {
@@ -571,6 +593,8 @@ pub fn typecheck_package_world<'db>(
                         if let Some(func_type) = func_opt {
                             // Add the function to the context.
                             ctx.add_function(item_name, func_type);
+                            // Track this import: (local_name, source_module, source_name).
+                            module_import_functions.push((item_name, imported_module, item_name));
                         } else {
                             ctx.add_error(TypeError::UnresolvedName(
                                 format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
@@ -612,9 +636,13 @@ pub fn typecheck_package_world<'db>(
         let exports_functions = collect_module_exports(db, script);
         let exports = ModuleExports::new(db, module, exports_functions);
         module_exports_map.insert(module, exports);
+
+        // Collect imports for this module.
+        let imports = ModuleImports::new(db, module, module_import_functions);
+        module_imports_map.insert(module, imports);
     }
 
-    PackageWorldTypecheckResult::new(db, graph, module_errors, module_exports_map)
+    PackageWorldTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map)
 }
 
 /// Collect function signature without checking body (first pass).
