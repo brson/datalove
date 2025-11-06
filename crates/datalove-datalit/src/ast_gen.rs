@@ -358,9 +358,16 @@ pub fn gen_type_hint<'db, R: Rng>(
         }
         20 => {
             let count = rng.gen_range(0..=config.max_collection_size);
+            let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
-                    let name = InternedText::new(db, &gen_field_name(rng));
+                    // Generate unique field name.
+                    let name = loop {
+                        let candidate = gen_field_name(rng);
+                        if used_names.insert(candidate.clone()) {
+                            break InternedText::new(db, &candidate);
+                        }
+                    };
                     let type_hint = gen_type_hint_and_heap(db, rng, config, depth + 1);
                     TypeHintNamedField::new(db, name, type_hint)
                 })
@@ -370,9 +377,16 @@ pub fn gen_type_hint<'db, R: Rng>(
         21 => {
             let name = InternedText::new(db, &gen_identifier(rng));
             let count = rng.gen_range(0..=config.max_collection_size);
+            let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
-                    let field_name = InternedText::new(db, &gen_field_name(rng));
+                    // Generate unique field name.
+                    let field_name = loop {
+                        let candidate = gen_field_name(rng);
+                        if used_names.insert(candidate.clone()) {
+                            break InternedText::new(db, &candidate);
+                        }
+                    };
                     let type_hint = gen_type_hint_and_heap(db, rng, config, depth + 1);
                     TypeHintNamedField::new(db, field_name, type_hint)
                 })
@@ -381,9 +395,16 @@ pub fn gen_type_hint<'db, R: Rng>(
         }
         22 => {
             let count = rng.gen_range(1..=config.max_collection_size.max(1));
+            let mut used_names = std::collections::HashSet::new();
             let variants: Vec<_> = (0..count)
                 .map(|_| {
-                    let variant_name = InternedText::new(db, &gen_identifier(rng));
+                    // Generate unique variant name.
+                    let variant_name = loop {
+                        let candidate = gen_identifier(rng);
+                        if used_names.insert(candidate.clone()) {
+                            break InternedText::new(db, &candidate);
+                        }
+                    };
                     let has_payload = rng.gen_bool(0.5);
                     let payload = if has_payload {
                         Some(gen_type_hint_and_heap(db, rng, config, depth + 1))
@@ -398,9 +419,16 @@ pub fn gen_type_hint<'db, R: Rng>(
         23 => {
             let name = InternedText::new(db, &gen_identifier(rng));
             let count = rng.gen_range(1..=config.max_collection_size.max(1));
+            let mut used_names = std::collections::HashSet::new();
             let variants: Vec<_> = (0..count)
                 .map(|_| {
-                    let variant_name = InternedText::new(db, &gen_identifier(rng));
+                    // Generate unique variant name.
+                    let variant_name = loop {
+                        let candidate = gen_identifier(rng);
+                        if used_names.insert(candidate.clone()) {
+                            break InternedText::new(db, &candidate);
+                        }
+                    };
                     let has_payload = rng.gen_bool(0.5);
                     let payload = if has_payload {
                         Some(gen_type_hint_and_heap(db, rng, config, depth + 1))
@@ -430,11 +458,223 @@ pub fn gen_type_hint_and_heap<'db, R: Rng>(
     TypeHintAndHeap::new(db, heap, type_hint)
 }
 
+/// Generate a TypeHint with a fixed heap for all nested types.
+fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &AstGenConfig,
+    heap: Heap,
+    depth: usize,
+) -> TypeHint<'db> {
+    let weights = if depth >= config.max_depth {
+        let mut leaf = TypeWeights::leaf_only();
+        if config.type_weights.bool_type == 0 { leaf.bool_type = 0; }
+        if config.type_weights.u8_type == 0 { leaf.u8_type = 0; }
+        if config.type_weights.i8_type == 0 { leaf.i8_type = 0; }
+        if config.type_weights.u16_type == 0 { leaf.u16_type = 0; }
+        if config.type_weights.i16_type == 0 { leaf.i16_type = 0; }
+        if config.type_weights.u32_type == 0 { leaf.u32_type = 0; }
+        if config.type_weights.i32_type == 0 { leaf.i32_type = 0; }
+        if config.type_weights.u64_type == 0 { leaf.u64_type = 0; }
+        if config.type_weights.i64_type == 0 { leaf.i64_type = 0; }
+        if config.type_weights.f32_type == 0 { leaf.f32_type = 0; }
+        if config.type_weights.int_type == 0 { leaf.int_type = 0; }
+        if config.type_weights.string_type == 0 { leaf.string_type = 0; }
+        leaf
+    } else {
+        config.type_weights.clone()
+    };
+
+    let mut choices = Vec::new();
+    let mut add_choice = |weight: u32, idx: usize| {
+        for _ in 0..weight {
+            choices.push(idx);
+        }
+    };
+
+    add_choice(weights.bool_type, 0);
+    add_choice(weights.u8_type, 1);
+    add_choice(weights.i8_type, 2);
+    add_choice(weights.u16_type, 3);
+    add_choice(weights.i16_type, 4);
+    add_choice(weights.u32_type, 5);
+    add_choice(weights.i32_type, 6);
+    add_choice(weights.u64_type, 7);
+    add_choice(weights.i64_type, 8);
+    add_choice(weights.f32_type, 9);
+    add_choice(weights.int_type, 10);
+    add_choice(weights.string_type, 11);
+    add_choice(weights.list_type, 12);
+    add_choice(weights.map_type, 13);
+    add_choice(weights.set_type, 14);
+    add_choice(weights.option_type, 15);
+    add_choice(weights.result_type, 16);
+    add_choice(weights.tensor_type, 17);
+    add_choice(weights.anon_tuple_type, 18);
+    add_choice(weights.named_tuple_type, 19);
+    add_choice(weights.anon_struct_type, 20);
+    add_choice(weights.named_struct_type, 21);
+    add_choice(weights.anon_enum_type, 22);
+    add_choice(weights.named_enum_type, 23);
+    add_choice(weights.data_type, 24);
+    add_choice(weights.error_type, 25);
+
+    if choices.is_empty() {
+        return TypeHint::Bool;
+    }
+
+    let choice = choices[rng.gen_range(0..choices.len())];
+
+    match choice {
+        0 => TypeHint::Bool,
+        1 => TypeHint::U8,
+        2 => TypeHint::I8,
+        3 => TypeHint::U16,
+        4 => TypeHint::I16,
+        5 => TypeHint::U32,
+        6 => TypeHint::I32,
+        7 => TypeHint::U64,
+        8 => TypeHint::I64,
+        9 => TypeHint::F32,
+        10 => TypeHint::Int,
+        11 => TypeHint::String,
+        12 => {
+            let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+            TypeHint::List(TypeHintList::new(db, element_type))
+        }
+        13 => {
+            let key_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+            let value_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+            TypeHint::Map(TypeHintMap::new(db, key_type, value_type))
+        }
+        14 => {
+            let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+            TypeHint::Set(TypeHintSet::new(db, element_type))
+        }
+        15 => {
+            let inner_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+            TypeHint::Option(TypeHintOption::new(db, inner_type))
+        }
+        16 => {
+            let inner_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+            TypeHint::Result(TypeHintResult::new(db, inner_type))
+        }
+        17 => {
+            let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+            let rank = rng.gen_range(1..=config.tensor_config.max_rank);
+            TypeHint::Tensor(TypeHintTensor::new(db, element_type, rank))
+        }
+        18 => {
+            let count = rng.gen_range(0..=config.max_collection_size);
+            let fields: Vec<_> = (0..count)
+                .map(|_| TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
+                .collect();
+            TypeHint::AnonTuple(TypeHintAnonTuple::new(db, fields))
+        }
+        19 => {
+            let name = InternedText::new(db, &gen_identifier(rng));
+            let count = rng.gen_range(0..=config.max_collection_size);
+            let fields: Vec<_> = (0..count)
+                .map(|_| TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
+                .collect();
+            TypeHint::NamedTuple(TypeHintNamedTuple::new(db, name, fields))
+        }
+        20 => {
+            let count = rng.gen_range(0..=config.max_collection_size);
+            let mut used_names = std::collections::HashSet::new();
+            let fields: Vec<_> = (0..count)
+                .map(|_| {
+                    // Generate unique field name.
+                    let name = loop {
+                        let candidate = gen_field_name(rng);
+                        if used_names.insert(candidate.clone()) {
+                            break InternedText::new(db, &candidate);
+                        }
+                    };
+                    let type_hint = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+                    TypeHintNamedField::new(db, name, type_hint)
+                })
+                .collect();
+            TypeHint::AnonStruct(TypeHintAnonStruct::new(db, fields))
+        }
+        21 => {
+            let name = InternedText::new(db, &gen_identifier(rng));
+            let count = rng.gen_range(0..=config.max_collection_size);
+            let mut used_names = std::collections::HashSet::new();
+            let fields: Vec<_> = (0..count)
+                .map(|_| {
+                    // Generate unique field name.
+                    let name = loop {
+                        let candidate = gen_field_name(rng);
+                        if used_names.insert(candidate.clone()) {
+                            break InternedText::new(db, &candidate);
+                        }
+                    };
+                    let type_hint = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+                    TypeHintNamedField::new(db, name, type_hint)
+                })
+                .collect();
+            TypeHint::NamedStruct(TypeHintNamedStruct::new(db, name, fields))
+        }
+        22 => {
+            let count = rng.gen_range(1..=config.max_collection_size.max(1));
+            let mut used_names = std::collections::HashSet::new();
+            let variants: Vec<_> = (0..count)
+                .map(|_| {
+                    // Generate unique variant name.
+                    let variant_name = loop {
+                        let candidate = gen_identifier(rng);
+                        if used_names.insert(candidate.clone()) {
+                            break InternedText::new(db, &candidate);
+                        }
+                    };
+                    let has_payload = rng.gen_bool(0.5);
+                    let payload = if has_payload {
+                        Some(TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
+                    } else {
+                        None
+                    };
+                    TypeHintEnumVariant::new(db, variant_name, payload)
+                })
+                .collect();
+            TypeHint::AnonEnum(TypeHintAnonEnum::new(db, variants))
+        }
+        23 => {
+            let name = InternedText::new(db, &gen_identifier(rng));
+            let count = rng.gen_range(1..=config.max_collection_size.max(1));
+            let mut used_names = std::collections::HashSet::new();
+            let variants: Vec<_> = (0..count)
+                .map(|_| {
+                    // Generate unique variant name.
+                    let variant_name = loop {
+                        let candidate = gen_identifier(rng);
+                        if used_names.insert(candidate.clone()) {
+                            break InternedText::new(db, &candidate);
+                        }
+                    };
+                    let has_payload = rng.gen_bool(0.5);
+                    let payload = if has_payload {
+                        Some(TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
+                    } else {
+                        None
+                    };
+                    TypeHintEnumVariant::new(db, variant_name, payload)
+                })
+                .collect();
+            TypeHint::NamedEnum(TypeHintNamedEnum::new(db, name, variants))
+        }
+        24 => TypeHint::Data,
+        25 => TypeHint::Error,
+        _ => TypeHint::Bool,
+    }
+}
+
 /// Generate a value matching the given type hint.
 pub fn gen_expr_matching_type<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     type_hint: TypeHint<'db>,
+    heap: Heap,
     config: &AstGenConfig,
     depth: usize,
 ) -> Expr<'db> {
@@ -592,7 +832,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             if rng.gen_bool(0.5) {
                 Expr::None
             } else {
-                gen_expr_matching_type(db, rng, inner_type, config, depth + 1)
+                gen_expr_matching_type(db, rng, inner_type, inner_heap, config, depth + 1)
             }
         }
         TypeHint::Result(th) => {
@@ -601,14 +841,15 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let inner_heap = inner_type_and_heap.heap(db);
             if rng.gen_bool(0.5) {
                 // Success case: just generate the inner value directly
-                gen_expr_matching_type(db, rng, inner_type, config, depth + 1)
+                gen_expr_matching_type(db, rng, inner_type, inner_heap, config, depth + 1)
             } else {
                 // Error case: generate error with an arbitrary value (respecting config).
                 let error_type = gen_type_hint(db, rng, config, depth + 1);
-                let error_value = gen_expr_matching_type(db, rng, error_type, config, depth + 1);
+                let error_value = gen_expr_matching_type(db, rng, error_type.clone(), Heap::Omitted, config, depth + 1);
+                let error_type_hint = TypeHintAndHeap::new(db, Heap::Omitted, error_type);
                 let error_expr_full = ExprFull::new(
                     db,
-                    None,
+                    Some(error_type_hint),
                     ExprAndHeap::new(db, Heap::Omitted, error_value),
                 );
                 Expr::Err(ExprErr::new(db, error_expr_full))
@@ -619,20 +860,40 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let element_type = element_type_and_heap.type_hint(db);
             let element_heap = element_type_and_heap.heap(db);
             let rank = th.rank(db);
-            let shape: Vec<u32> = (0..rank)
-                .map(|_| rng.gen_range(1..=config.tensor_config.max_dim_size))
-                .collect();
-            let total_elements: usize = shape.iter().map(|&d| d as usize).product();
-            // Respect max_collection_size for tensor elements.
-            let capped_elements = total_elements.min(config.max_collection_size);
-            let elements: Vec<_> = (0..capped_elements)
+            // Generate shape ensuring total elements don't exceed max_collection_size.
+            let mut shape: Vec<u32> = Vec::with_capacity(rank as usize);
+            let mut total_elements = 1usize;
+            for i in 0..rank {
+                let remaining_dims = rank - i;
+                let max_dim = if remaining_dims == 1 {
+                    // Last dimension: use all remaining budget
+                    config.max_collection_size / total_elements.max(1)
+                } else {
+                    // Not last: leave room for other dimensions
+                    config.tensor_config.max_dim_size as usize
+                };
+                let dim_size = rng.gen_range(1..=max_dim.min(config.tensor_config.max_dim_size as usize).max(1)) as u32;
+                shape.push(dim_size);
+                total_elements *= dim_size as usize;
+                // If we've hit the limit, make remaining dimensions size 1
+                if total_elements >= config.max_collection_size {
+                    for _ in (i + 1)..rank {
+                        shape.push(1);
+                    }
+                    total_elements = shape.iter().map(|&d| d as usize).product();
+                    break;
+                }
+            }
+            // Generate exactly the number of elements dictated by the shape.
+            let elements: Vec<_> = (0..total_elements)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
             Expr::Tensor(ExprTensor::new(db, shape, elements))
         }
         TypeHint::Data => {
             let inner_type = gen_type_hint(db, rng, config, depth + 1);
-            let value = gen_expr_full_matching_type(db, rng, inner_type, config, depth + 1);
+            // Use the same heap as the parent Data value to maintain heap consistency.
+            let value = gen_expr_full_with_heap(db, rng, inner_type, heap, config, depth + 1);
             Expr::Data(ExprData::new(db, value))
         }
         TypeHint::Error => {
@@ -750,13 +1011,15 @@ fn gen_f32_expr<'db, R: Rng>(
             let choices = vec![
                 "0.0".to_string(),
                 "-0.0".to_string(),
-                f32::MIN.to_string(),
-                f32::MAX.to_string(),
+                // f32::MIN and f32::MAX excluded because their to_string() representation
+                // lacks decimal points and parser rejects scientific notation.
                 // FIXME: NaN and infinity excluded because parser doesn't support them yet.
                 // When hex float syntax is added, include:
                 // - NaN (various bit patterns)
                 // - f32::INFINITY
                 // - f32::NEG_INFINITY
+                // - f32::MIN
+                // - f32::MAX
                 "1.0".to_string(),
                 "-1.0".to_string(),
                 "123.456".to_string(),
@@ -778,8 +1041,7 @@ fn gen_f32_expr<'db, R: Rng>(
                 let choices = vec![
                     "0.0".to_string(),
                     "-0.0".to_string(),
-                    f32::MIN.to_string(),
-                    f32::MAX.to_string(),
+                    // f32::MIN and f32::MAX excluded - see CornerCases comment above.
                     // FIXME: NaN and infinity excluded because parser doesn't support them yet.
                     "1.0".to_string(),
                     "-1.0".to_string(),
@@ -832,7 +1094,7 @@ fn gen_expr_full_with_heap<'db, R: Rng>(
     config: &AstGenConfig,
     depth: usize,
 ) -> ExprFull<'db> {
-    let expr = gen_expr_matching_type(db, rng, type_hint.clone(), config, depth);
+    let expr = gen_expr_matching_type(db, rng, type_hint.clone(), heap, config, depth);
     let expr_and_heap = ExprAndHeap::new(db, heap, expr);
 
     // Always include type hints for types that cannot be synthesized.
@@ -877,13 +1139,40 @@ pub fn gen_expr_full<'db, R: Rng>(
     gen_expr_full_matching_type(db, rng, type_hint, config, 0)
 }
 
+/// Generate an ExprFull with a fixed heap for the entire expression tree.
+fn gen_expr_full_with_fixed_heap<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &AstGenConfig,
+    heap: Heap,
+) -> ExprFull<'db> {
+    let type_hint = gen_type_hint_with_fixed_heap(db, rng, config, heap, 0);
+    // Use the existing gen_expr_full_with_heap but ensure we pass the fixed heap.
+    gen_expr_full_with_heap(db, rng, type_hint, heap, config, 0)
+}
+
 /// Generate a tracked ExprFull with a seed for deterministic generation.
+///
+/// Named types (named tuples, structs, enums) are always disabled for seeded generation
+/// because they require external type definitions for name resolution, which standalone
+/// expressions don't have.
 #[salsa::tracked]
 pub fn gen_expr_full_seeded<'db>(
     db: &'db dyn salsa::Database,
     seed: u64,
     config: AstGenConfig,
 ) -> ExprFull<'db> {
+    // Disable named types since they require external type definitions for name resolution.
+    let mut adjusted_config = config.clone();
+    adjusted_config.type_weights.named_tuple_type = 0;
+    adjusted_config.type_weights.named_struct_type = 0;
+    adjusted_config.type_weights.named_enum_type = 0;
+
+    // Use separate RNG for heap to avoid shifting the main random sequence.
+    let mut heap_rng = rand::rngs::StdRng::seed_from_u64(seed.wrapping_mul(0x9e3779b97f4a7c15));
+    let heap = gen_heap(&mut heap_rng, &adjusted_config);
+
+    // Main RNG for type and value generation preserves original sequence.
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    gen_expr_full(db, &mut rng, &config)
+    gen_expr_full_with_fixed_heap(db, &mut rng, &adjusted_config, heap)
 }

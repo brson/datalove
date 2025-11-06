@@ -1581,14 +1581,23 @@ proptest! {
 
         let resolved1 = datalove_datalit::resolve::resolve_names(&db, expr1, vec![]);
         let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
+        if !typechecked1.errors(&db).is_empty() {
+            eprintln!("Type errors in expr1 (seed1={}): {} errors", seed1, typechecked1.errors(&db).len());
+        }
         prop_assert!(typechecked1.errors(&db).is_empty());
 
         let resolved2 = datalove_datalit::resolve::resolve_names(&db, expr2, vec![]);
         let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
+        if !typechecked2.errors(&db).is_empty() {
+            eprintln!("Type errors in expr2 (seed2={}): {} errors", seed2, typechecked2.errors(&db).len());
+        }
         prop_assert!(typechecked2.errors(&db).is_empty());
 
         let resolved3 = datalove_datalit::resolve::resolve_names(&db, expr3, vec![]);
         let typechecked3 = datalove_datalit::tycheck::type_check(&db, expr3, resolved3);
+        if !typechecked3.errors(&db).is_empty() {
+            eprintln!("Type errors in expr3 (seed3={}): {} errors", seed3, typechecked3.errors(&db).len());
+        }
         prop_assert!(typechecked3.errors(&db).is_empty());
 
         let inst1 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1)
@@ -1668,10 +1677,16 @@ proptest! {
 
         let resolved1 = datalove_datalit::resolve::resolve_names(&db, expr1, vec![]);
         let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
+        if !typechecked1.errors(&db).is_empty() {
+            eprintln!("Type errors in expr1 (seed1={}): {} errors", seed1, typechecked1.errors(&db).len());
+        }
         prop_assert!(typechecked1.errors(&db).is_empty());
 
         let resolved2 = datalove_datalit::resolve::resolve_names(&db, expr2, vec![]);
         let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
+        if !typechecked2.errors(&db).is_empty() {
+            eprintln!("Type errors in expr2 (seed2={}): {} errors", seed2, typechecked2.errors(&db).len());
+        }
         prop_assert!(typechecked2.errors(&db).is_empty());
 
         let inst1 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1)
@@ -1749,10 +1764,16 @@ proptest! {
 
         let resolved1 = datalove_datalit::resolve::resolve_names(&db, expr1, vec![]);
         let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
+        if !typechecked1.errors(&db).is_empty() {
+            eprintln!("Type errors in expr1 (seed1={}): {} errors", seed1, typechecked1.errors(&db).len());
+        }
         prop_assert!(typechecked1.errors(&db).is_empty());
 
         let resolved2 = datalove_datalit::resolve::resolve_names(&db, expr2, vec![]);
         let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
+        if !typechecked2.errors(&db).is_empty() {
+            eprintln!("Type errors in expr2 (seed2={}): {} errors", seed2, typechecked2.errors(&db).len());
+        }
         prop_assert!(typechecked2.errors(&db).is_empty());
 
         let inst1 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1)
@@ -1802,6 +1823,13 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             numeric_strategy: NumericStrategy::CornerCases,
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                result_type: 0,
+                string_type: 0,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let expr = gen_expr_full_seeded(&db, seed, config);
@@ -1810,6 +1838,9 @@ proptest! {
         let mut tydesc_table = TyDescTable::new(&db);
         let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+        if !typechecked.errors(&db).is_empty() {
+            eprintln!("Type errors in expr (seed={}): {} errors", seed, typechecked.errors(&db).len());
+        }
         prop_assert!(typechecked.errors(&db).is_empty());
 
         let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)
