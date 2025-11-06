@@ -1,0 +1,421 @@
+[
+    ModuleAnalysis(
+        type: "Module",
+        path: "sys/test/mixed",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "process_u32",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                        FunParam(
+                            name: "y",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: AddChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "x",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "y",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "process_int",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: ParseError(TypeHintParseError(
+                            message: "unknown type hint in DynParser",
+                        )),
+                    )),
+                    body: [
+                        StmtLet(
+                            kind: "Let",
+                            name: "a",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: MulChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "x",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "100",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: Mul,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "1000",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "process_string",
+                    params: [
+                        FunParam(
+                            name: "s",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: ParseError(TypeHintParseError(
+                                    message: "unknown type hint in DynParser",
+                                )),
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: ParseError(TypeHintParseError(
+                            message: "unknown type hint in DynParser",
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "s",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "combined",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: ParseError(TypeHintParseError(
+                            message: "unknown type hint in DynParser",
+                        )),
+                    )),
+                    body: [
+                        StmtLet(
+                            kind: "Let",
+                            name: "a",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprFunctionCall(
+                                    kind: "FunctionCall",
+                                    name: "process_u32",
+                                    args: [
+                                        ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Name",
+                                                name: "x",
+                                            ),
+                                        ),
+                                        ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "10",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                        StmtLet(
+                            kind: "Let",
+                            name: "b",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprFunctionCall(
+                                    kind: "FunctionCall",
+                                    name: "process_int",
+                                    args: [
+                                        ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Name",
+                                                name: "a",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "b",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        exports: [],
+    ),
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtRequireModule(
+                    kind: "Require",
+                    variant: "Module",
+                    import_space: "sys",
+                    package_alias: "test",
+                    module_alias: "mixed",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "mixed",
+                    item_name: "process_u32",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "mixed",
+                    item_name: "process_int",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "mixed",
+                    item_name: "process_string",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "mixed",
+                    item_name: "combined",
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "a",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "process_u32",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "5",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "3",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "b",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "process_int",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "7",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "c",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "process_string",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Omitted,
+                                                expr: String(ExprString(
+                                                    value: "\"test\"",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "combined",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "2",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@1200000",
+    ),
+]

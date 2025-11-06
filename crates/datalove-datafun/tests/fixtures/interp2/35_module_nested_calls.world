@@ -1,0 +1,34 @@
+----------
+module sys/test/calc
+----------
+
+fun base(x: u32): u32
+    ret x *! @2
+end fun
+
+fun level1(x: u32): u32
+    let a = base(x)
+    let b = base(a)
+    ret b
+end fun
+
+fun level2(x: u32): u32
+    let a = level1(x)
+    let b = level1(@3)
+    ret a +! b
+end fun
+
+fun top(x: u32): u32
+    let a = level2(x)
+    let b = level1(@1)
+    ret a +! b
+end fun
+
+----------
+script
+----------
+
+require module sys/test/calc
+import calc.top
+
+let output = top(@5)

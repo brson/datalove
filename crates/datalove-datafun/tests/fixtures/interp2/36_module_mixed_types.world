@@ -1,0 +1,37 @@
+----------
+module sys/test/mixed
+----------
+
+fun process_u32(x: u32, y: u32): u32
+    ret x +! y
+end fun
+
+fun process_int(x: u32): Int
+    let a = x *! @100
+    ret a * @1000
+end fun
+
+fun process_string(s: String): String
+    ret s
+end fun
+
+fun combined(x: u32): Int
+    let a = process_u32(x, @10)
+    let b = process_int(a)
+    ret b
+end fun
+
+----------
+script
+----------
+
+require module sys/test/mixed
+import mixed.process_u32
+import mixed.process_int
+import mixed.process_string
+import mixed.combined
+
+let a = process_u32(@5, @3)
+let b = process_int(@7)
+let c = process_string("test")
+let output = combined(@2)

@@ -1,0 +1,354 @@
+[
+    ModuleAnalysis(
+        type: "Module",
+        path: "sys/test/calc",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "base",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: MulChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "x",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "2",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "level1",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtLet(
+                            kind: "Let",
+                            name: "a",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprFunctionCall(
+                                    kind: "FunctionCall",
+                                    name: "base",
+                                    args: [
+                                        ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Name",
+                                                name: "x",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                        StmtLet(
+                            kind: "Let",
+                            name: "b",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprFunctionCall(
+                                    kind: "FunctionCall",
+                                    name: "base",
+                                    args: [
+                                        ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Name",
+                                                name: "a",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "b",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "level2",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtLet(
+                            kind: "Let",
+                            name: "a",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprFunctionCall(
+                                    kind: "FunctionCall",
+                                    name: "level1",
+                                    args: [
+                                        ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Name",
+                                                name: "x",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                        StmtLet(
+                            kind: "Let",
+                            name: "b",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprFunctionCall(
+                                    kind: "FunctionCall",
+                                    name: "level1",
+                                    args: [
+                                        ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "3",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: AddChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "b",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "top",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtLet(
+                            kind: "Let",
+                            name: "a",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprFunctionCall(
+                                    kind: "FunctionCall",
+                                    name: "level2",
+                                    args: [
+                                        ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Name",
+                                                name: "x",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                        StmtLet(
+                            kind: "Let",
+                            name: "b",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprFunctionCall(
+                                    kind: "FunctionCall",
+                                    name: "level1",
+                                    args: [
+                                        ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "1",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: AddChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "b",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        exports: [],
+    ),
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtRequireModule(
+                    kind: "Require",
+                    variant: "Module",
+                    import_space: "sys",
+                    package_alias: "test",
+                    module_alias: "calc",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "calc",
+                    item_name: "top",
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "top",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "5",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@36",
+    ),
+]

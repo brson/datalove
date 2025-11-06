@@ -1,0 +1,32 @@
+----------
+module sys/test/base
+----------
+
+fun increment(x: u32): u32
+    ret x +! @1
+end fun
+
+----------
+module sys/test/derived
+----------
+
+require module sys/test/base
+import base.increment
+
+fun add_five(x: u32): u32
+    let a = increment(x)
+    let b = increment(a)
+    let c = increment(b)
+    let d = increment(c)
+    let e = increment(d)
+    ret e
+end fun
+
+----------
+script
+----------
+
+require module sys/test/derived
+import derived.add_five
+
+let output = add_five(@10)
