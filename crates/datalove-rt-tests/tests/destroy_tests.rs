@@ -1142,7 +1142,7 @@ proptest! {
         let rt = datalove_rt::c::dtlv_rti_init();
         prop_assert!(!rt.is_null());
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr);
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
@@ -1195,7 +1195,7 @@ proptest! {
         let rt = datalove_rt::c::dtlv_rti_init();
         prop_assert!(!rt.is_null());
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr);
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
@@ -1240,7 +1240,7 @@ proptest! {
         let rt = datalove_rt::c::dtlv_rti_init();
         prop_assert!(!rt.is_null());
         let mut tydesc_table = TyDescTable::new(&db);
-        let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr);
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
