@@ -3,7 +3,6 @@ default:
 
 test:
     cargo test --all
-    cargo check -p datalove-repl-egui
     just check-wasm
 
 # Sanitizer Testing
@@ -69,9 +68,7 @@ check:
     just check-wasm
 
 check-wasm:
-    env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo check -p datalove-repl-egui --target=wasm32-unknown-unknown
-    env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo check -p datalove-repl-egui --target=wasm32-unknown-unknown
-    cd crates/datalove-web && trunk build
+    cd crates/datalove-web && trunk check
 
 build-wasm-repl:
     cd crates/datalove-repl-worker && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk build --release
