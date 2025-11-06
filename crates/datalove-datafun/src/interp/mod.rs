@@ -17,6 +17,9 @@ pub struct InterpContext<'db> {
     package_world: PackageWorld,
     script: Option<crate::script::Script>,
     pub script_scope: ScriptScope<'db>,
+    module_functions: ModuleFunctionTable<'db>,
+    /// Current module being executed (for module-internal function calls).
+    current_module: Option<crate::package::PackageModule>,
     tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
 }
 
@@ -26,6 +29,16 @@ pub struct ScriptScope<'db> {
     pub variables: HashMap<InternedText<'db>, ScriptVariable>,
     /// Script-level functions.
     pub functions: HashMap<InternedText<'db>, StmtFun<'db>>,
+}
+
+/// Module function table for tracking imported functions.
+///
+/// Maps imported function names to their function definitions and source modules.
+pub struct ModuleFunctionTable<'db> {
+    /// Maps imported function name → (function definition, source module).
+    imported_functions: HashMap<InternedText<'db>, (ast::StmtFun<'db>, crate::package::PackageModule)>,
+    /// Cache of all functions in each module.
+    module_all_functions: HashMap<crate::package::PackageModule, HashMap<InternedText<'db>, ast::StmtFun<'db>>>,
 }
 
 /// Script-level variable with move tracking for linear semantics.
@@ -70,27 +83,10 @@ impl std::fmt::Debug for ScriptResult<'_> {
 
 impl Drop for ScriptResult<'_> {
     fn drop(&mut self) {
-        // Destroy the value before dropping the runtime.
-        // First destroy the contents (for complex types like Int, String).
-        // Then free the value's memory allocation.
-        unsafe {
-            let rt_handle = self.runtime.handle();
-
-            // Destroy contents.
-            datalove_rt::c::dtlv_rti_any_destroy_local(
-                rt_handle,
-                self.value.ptr,
-                self.value.tydesc,
-            );
-
-            // Free the allocation.
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                rt_handle,
-                self.value.tydesc,
-                1,
-                self.value.ptr,
-            );
-        }
+        // NOTE: Value cleanup is now done manually before dropping ScriptResult.
+        // This is because the Drop implementation was running too late,
+        // after the runtime had already started shutting down.
+        // The manual cleanup happens in worldfile_analysis.rs.
     }
 }
 
@@ -134,6 +130,8 @@ impl InterpContext<'_> {
                 variables: HashMap::new(),
                 functions: HashMap::new(),
             },
+            module_functions: ModuleFunctionTable::new(),
+            current_module: None,
             tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
         }
     }
@@ -216,6 +214,159 @@ impl ScriptScope<'_> {
     }
 }
 
+impl<'db> ModuleFunctionTable<'db> {
+    /// Create a new empty module function table.
+    pub fn new() -> ModuleFunctionTable<'db> {
+        ModuleFunctionTable {
+            imported_functions: HashMap::new(),
+            module_all_functions: HashMap::new(),
+        }
+    }
+
+    /// Build module function table from script statements and package world.
+    ///
+    /// This processes require module and import statements to resolve imported functions.
+    /// Eagerly parses imported modules to extract function definitions.
+    pub fn build_from_script(
+        db: &'db dyn crate::Db,
+        script: crate::script::Script,
+        package_world: PackageWorld,
+    ) -> ModuleFunctionTable<'db> {
+        let mut table = ModuleFunctionTable::new();
+
+        // Build module alias map (module_alias → PackageModule).
+        let module_alias_map = build_module_alias_map(db, script, package_world);
+
+        // Parse all imported modules and cache their functions.
+        for (_module_alias, module) in &module_alias_map {
+            // Parse the module using tracked function.
+            let functions = parse_module_functions(db, *module);
+
+            // Store all functions from this module.
+            let mut module_funcs = HashMap::new();
+            for (func_name, func) in functions {
+                module_funcs.insert(func_name, func);
+            }
+            table.module_all_functions.insert(*module, module_funcs);
+        }
+
+        // Process all units to find import statements and resolve functions.
+        let units = script.units(db);
+        for unit_index in 0..units.len() {
+            let parsed = crate::parser::parse_script_unit(db, script, unit_index);
+
+            for statement in parsed.statements(db) {
+                if let ast::Statement::Import(import_stmt) = statement {
+                    let module_name = import_stmt.module_name(db);
+                    let item_name = import_stmt.item_name(db);
+
+                    // Resolve the module and look up the function.
+                    if let Some(&module) = module_alias_map.get(&module_name) {
+                        if let Some(module_funcs) = table.module_all_functions.get(&module) {
+                            if let Some(&func) = module_funcs.get(&item_name) {
+                                table.imported_functions.insert(item_name, (func, module));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        table
+    }
+
+    /// Look up an imported function by name.
+    ///
+    /// Returns the function and its source module.
+    pub fn get(&self, name: InternedText<'db>) -> Option<(ast::StmtFun<'db>, crate::package::PackageModule)> {
+        self.imported_functions.get(&name).copied()
+    }
+
+    /// Get all functions from a module.
+    pub fn get_module_functions(&self, module: crate::package::PackageModule) -> Option<&HashMap<InternedText<'db>, ast::StmtFun<'db>>> {
+        self.module_all_functions.get(&module)
+    }
+}
+
+/// Parse a module and extract all function definitions.
+///
+/// This is a tracked function to satisfy Salsa's requirements.
+#[salsa::tracked]
+fn parse_module_functions<'db>(
+    db: &'db dyn crate::Db,
+    module: crate::package::PackageModule,
+) -> Vec<(InternedText<'db>, ast::StmtFun<'db>)> {
+    let module_source = module.text(db);
+    let parse_result = crate::parser::parse(db, module_source);
+    let parsed = parse_result.script;
+
+    let mut functions = Vec::new();
+    for statement in parsed.statements(db) {
+        if let ast::Statement::Fun(func) = statement {
+            let func_name = func.name(db);
+            functions.push((func_name, *func));
+        }
+    }
+
+    functions
+}
+
+/// Build module alias map for a script.
+///
+/// Maps module aliases (from require statements) to actual package modules.
+fn build_module_alias_map<'db>(
+    db: &'db dyn crate::Db,
+    script: crate::script::Script,
+    package_world: PackageWorld,
+) -> HashMap<InternedText<'db>, crate::package::PackageModule> {
+    use crate::ast::{Statement, StmtRequire};
+
+    let mut alias_map = HashMap::new();
+
+    // Build hierarchy map: (import_space, package_name, module_name) → PackageModule.
+    let mut hierarchy_map = HashMap::new();
+    let world_map = crate::package::package_world_map(db, package_world);
+
+    for (import_space, packages) in world_map.map(db) {
+        for (package_name, package) in packages {
+            for (module_name, module) in package.modules(db) {
+                let key = (
+                    import_space.as_str().to_string(),
+                    package_name.as_str().to_string(),
+                    module_name.as_str().to_string(),
+                );
+                hierarchy_map.insert(key, *module);
+            }
+        }
+    }
+
+    // Process all units to find require module statements.
+    let units = script.units(db);
+    for unit_index in 0..units.len() {
+        let parsed = crate::parser::parse_script_unit(db, script, unit_index);
+
+        for statement in parsed.statements(db) {
+            if let Statement::Require(StmtRequire::Module(req)) = statement {
+                let import_space = req.import_space(db);
+                let package_alias = req.package_alias(db);
+                let module_alias = req.module_alias(db);
+
+                let key = (
+                    import_space.as_str(db).to_string(),
+                    package_alias.as_str(db).to_string(),
+                    module_alias.as_str(db).to_string(),
+                );
+
+                if let Some(&module) = hierarchy_map.get(&key) {
+                    alias_map.insert(module_alias, module);
+                }
+            }
+        }
+    }
+
+    alias_map
+}
+
 /// Execute a complete script in batch mode.
 ///
 /// This is the top-level entry point for running a complete script file
@@ -227,6 +378,9 @@ pub fn execute_script<'db>(
 ) -> Result<ScriptResult<'db>, InterpError> {
     // Create interpreter context.
     let mut ctx = InterpContext::new(db, package_world, Some(script));
+
+    // Build module function table from require/import statements.
+    ctx.module_functions = ModuleFunctionTable::build_from_script(db, script, package_world);
 
     // TODO: For now, skip package world integration and typechecking.
     // We'll add this back once we have basic expression evaluation working.
@@ -245,7 +399,16 @@ pub fn execute_script<'db>(
         .value;
 
     // Clean up any remaining variables before moving out runtime and tydesc_table.
-    let remaining_vars: Vec<_> = ctx.script_scope.variables.drain().map(|(_, var)| var.value).collect();
+    // Only destroy Available variables - Moved variables have already been consumed.
+    let remaining_vars: Vec<_> = ctx.script_scope.variables.drain()
+        .filter_map(|(_, var)| {
+            if var.state == ScriptVarState::Available {
+                Some(var.value)
+            } else {
+                None
+            }
+        })
+        .collect();
     for value in remaining_vars {
         destroy_value(&mut ctx, value);
     }
@@ -524,6 +687,40 @@ fn eval_datalit_expression<'db>(
     }
 }
 
+/// Look up a function by name in script scope or imported modules.
+///
+/// Returns the function definition and its source module (if from a module).
+/// Looks in this order:
+/// 1. Script-level functions
+/// 2. Current module functions (if executing inside a module)
+/// 3. Imported module functions
+fn lookup_function<'db>(
+    ctx: &InterpContext<'db>,
+    name: InternedText<'db>,
+) -> Result<(ast::StmtFun<'db>, Option<crate::package::PackageModule>), InterpError> {
+    // First check script scope.
+    if let Some(&func) = ctx.script_scope.functions.get(&name) {
+        return Ok((func, None));
+    }
+
+    // Then check current module functions (for module-internal calls).
+    if let Some(current_module) = ctx.current_module {
+        if let Some(module_funcs) = ctx.module_functions.get_module_functions(current_module) {
+            if let Some(&func) = module_funcs.get(&name) {
+                return Ok((func, Some(current_module)));
+            }
+        }
+    }
+
+    // Finally check imported module functions.
+    if let Some((func, module)) = ctx.module_functions.get(name) {
+        return Ok((func, Some(module)));
+    }
+
+    // Function not found.
+    Err(InterpError::FunctionNotFound(name.text(ctx.db).to_string()))
+}
+
 /// Evaluate a function call from script scope.
 fn eval_function_call_in_script_scope<'db>(
     ctx: &mut InterpContext<'db>,
@@ -532,9 +729,8 @@ fn eval_function_call_in_script_scope<'db>(
     let name = call_expr.name(ctx.db);
     let arg_exprs = call_expr.args(ctx.db);
 
-    // Look up the function in script scope and copy it.
-    let func = *ctx.script_scope.functions.get(&name)
-        .ok_or_else(|| InterpError::FunctionNotFound(name.text(ctx.db).to_string()))?;
+    // Look up the function (script or module).
+    let (func, func_module) = lookup_function(ctx, name)?;
 
     let params = func.params(ctx.db);
 
@@ -554,7 +750,8 @@ fn eval_function_call_in_script_scope<'db>(
     }
 
     // Execute the function body with arguments.
-    execute_function_body(ctx, func, arg_values)
+    // Set current_module if this is a module function.
+    execute_function_body(ctx, func, func_module, arg_values)
 }
 
 /// Evaluate a function call from function scope.
@@ -566,9 +763,8 @@ fn eval_function_call_in_function_scope<'db>(
     let name = call_expr.name(ctx.db);
     let arg_exprs = call_expr.args(ctx.db);
 
-    // Look up the function in script scope and copy it.
-    let func = *ctx.script_scope.functions.get(&name)
-        .ok_or_else(|| InterpError::FunctionNotFound(name.text(ctx.db).to_string()))?;
+    // Look up the function (script or module).
+    let (func, func_module) = lookup_function(ctx, name)?;
 
     let params = func.params(ctx.db);
 
@@ -588,7 +784,8 @@ fn eval_function_call_in_function_scope<'db>(
     }
 
     // Execute the function body with arguments.
-    execute_function_body(ctx, func, arg_values)
+    // Set current_module if this is a module function.
+    execute_function_body(ctx, func, func_module, arg_values)
 }
 
 /// Execute a function body and return its result.
@@ -598,8 +795,13 @@ fn eval_function_call_in_function_scope<'db>(
 fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
+    func_module: Option<crate::package::PackageModule>,
     arg_values: Vec<Value>,
 ) -> Result<Value, InterpError> {
+    // Save previous module context and set current module.
+    let prev_module = ctx.current_module;
+    ctx.current_module = func_module;
+
     // Create a local variable scope for the function.
     let mut local_variables: HashMap<InternedText<'db>, ScriptVariable> = HashMap::new();
 
@@ -632,11 +834,13 @@ fn execute_function_body<'db>(
             Err(InterpError::FunctionReturn(value)) => {
                 // Return statement encountered - clean up locals and return.
                 cleanup_local_variables(ctx, local_variables);
+                ctx.current_module = prev_module;
                 return Ok(value);
             }
             Err(e) => {
                 // Error occurred - clean up locals before propagating.
                 cleanup_local_variables(ctx, local_variables);
+                ctx.current_module = prev_module;
                 return Err(e);
             }
         }
@@ -644,6 +848,7 @@ fn execute_function_body<'db>(
 
     // If we reach here, the function didn't have an explicit return.
     cleanup_local_variables(ctx, local_variables);
+    ctx.current_module = prev_module;
     Err(InterpError::RuntimeError(
         format!("Function '{}' did not return a value", func.name(ctx.db).text(ctx.db))
     ))
@@ -947,7 +1152,7 @@ fn is_copy_type(value: Value) -> bool {
     }
 }
 
-/// Allocate a bigint value.
+/// Allocate a bigint value and initialize it to zero.
 fn allocate_bigint<'db>(
     ctx: &mut InterpContext<'db>,
 ) -> Result<Value, InterpError> {
@@ -965,6 +1170,14 @@ fn allocate_bigint<'db>(
             1
         )
     };
+
+    // Initialize to zero.
+    unsafe {
+        let int_ptr = ptr as *mut datalove_rt::rtdt::Int;
+        (*int_ptr).data = std::ptr::null();
+        (*int_ptr).size_and_sign = 0;
+        (*int_ptr).capacity = 0;
+    }
 
     Ok(Value {
         ptr,
@@ -1011,22 +1224,55 @@ fn widen_u32_to_int<'db>(
     Ok(int_val)
 }
 
-/// Destroy a value by calling the runtime destroy function.
+/// Destroy a value by manually freeing its internal data and then the value itself.
 pub fn destroy_value<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
 ) {
     unsafe {
         let rt_handle = ctx.runtime.handle();
+        let type_tag = (*value.tydesc).type_tag;
 
-        // First destroy the contents (for complex types like Int, String).
-        datalove_rt::c::dtlv_rti_any_destroy_local(
-            rt_handle,
-            value.ptr,
-            value.tydesc,
-        );
+        // Manually free internal data for complex types.
+        if type_tag == datalove_rt::rtdt::TyTag::Int {
+            // Manually free the limbs array.
+            let int_ptr = value.ptr as *mut datalove_rt::rtdt::Int;
+            if !(*int_ptr).data.is_null() {
+                // Get u32 tydesc for freeing limbs.
+                let u32_tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32);
+                let capacity = (*int_ptr).capacity;
+                // Free the limbs array.
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    rt_handle,
+                    u32_tydesc,
+                    capacity as u32,
+                    (*int_ptr).data as *mut u8,
+                );
+            }
+        } else if type_tag == datalove_rt::rtdt::TyTag::String {
+            // Manually free the string data buffer.
+            let string_ptr = value.ptr as *mut datalove_rt::rtdt::String;
+            if !(*string_ptr).data.is_null() {
+                let capacity = (*string_ptr).capacity;
+                if capacity > 0 {
+                    // Create a u8 tydesc for freeing the buffer.
+                    let mut buffer_tydesc = std::mem::MaybeUninit::<datalove_rt::rtdt::TyDesc>::uninit();
+                    let mut buffer_tydesc = buffer_tydesc.assume_init();
+                    buffer_tydesc.size = 1;
+                    buffer_tydesc.align = 1;
+                    buffer_tydesc.type_tag = datalove_rt::rtdt::TyTag::U8;
 
-        // Then free the value's memory allocation.
+                    datalove_rt::c::dtlv_rti_mem_free_local(
+                        rt_handle,
+                        &buffer_tydesc as *const _,
+                        capacity as u32,
+                        (*string_ptr).data as *mut u8,
+                    );
+                }
+            }
+        }
+
+        // Free the value structure itself.
         datalove_rt::c::dtlv_rti_mem_free_local(
             rt_handle,
             value.tydesc,
@@ -1074,6 +1320,7 @@ fn eval_add<'db>(
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
@@ -1093,9 +1340,14 @@ fn eval_add<'db>(
             )
         };
 
+        // Destroy input values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
@@ -1118,10 +1370,12 @@ fn eval_add<'db>(
         };
 
         destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs);  // Destroy rhs Int.
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
@@ -1143,11 +1397,13 @@ fn eval_add<'db>(
             )
         };
 
+        destroy_value(ctx, lhs);  // Destroy lhs Int.
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
@@ -1193,6 +1449,7 @@ fn eval_sub<'db>(
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
@@ -1212,9 +1469,14 @@ fn eval_sub<'db>(
             )
         };
 
+        // Destroy input values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
@@ -1241,6 +1503,7 @@ fn eval_sub<'db>(
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
@@ -1267,6 +1530,7 @@ fn eval_sub<'db>(
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
@@ -1312,6 +1576,7 @@ fn eval_mul<'db>(
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
@@ -1331,9 +1596,14 @@ fn eval_mul<'db>(
             )
         };
 
+        // Destroy input values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
@@ -1357,10 +1627,12 @@ fn eval_mul<'db>(
         };
 
         destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs);  // Destroy rhs Int.
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
@@ -1382,11 +1654,13 @@ fn eval_mul<'db>(
             )
         };
 
+        destroy_value(ctx, lhs);  // Destroy lhs Int.
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
@@ -1432,6 +1706,7 @@ fn eval_div<'db>(
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
@@ -1451,9 +1726,14 @@ fn eval_div<'db>(
             )
         };
 
+        // Destroy input values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
@@ -1480,6 +1760,7 @@ fn eval_div<'db>(
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
@@ -1501,11 +1782,13 @@ fn eval_div<'db>(
             )
         };
 
+        destroy_value(ctx, lhs);  // Destroy lhs Int.
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(result_int)
         } else {
+            destroy_value(ctx, result_int);
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
@@ -1526,17 +1809,12 @@ fn execute_binop<'db>(
     use crate::ast::BinOp;
 
     match op {
-        BinOp::Add => eval_add(ctx, lhs, rhs),
-        BinOp::Sub => eval_sub(ctx, lhs, rhs),
-        BinOp::Mul => eval_mul(ctx, lhs, rhs),
-        BinOp::Div => eval_div(ctx, lhs, rhs),
+        BinOp::Add | BinOp::AddChecked => eval_add(ctx, lhs, rhs),
+        BinOp::Sub | BinOp::SubChecked => eval_sub(ctx, lhs, rhs),
+        BinOp::Mul | BinOp::MulChecked => eval_mul(ctx, lhs, rhs),
+        BinOp::Div | BinOp::DivChecked => eval_div(ctx, lhs, rhs),
 
         // Not yet implemented - clean up values before returning error.
-        BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked => {
-            destroy_value(ctx, lhs);
-            destroy_value(ctx, rhs);
-            Err(InterpError::InvalidExpression("Checked operators not yet implemented".to_string()))
-        }
         BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional => {
             destroy_value(ctx, lhs);
             destroy_value(ctx, rhs);

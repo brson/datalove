@@ -151,11 +151,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "FunctionNotFound(\"quadruple\")",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@20",
     ),
 ]

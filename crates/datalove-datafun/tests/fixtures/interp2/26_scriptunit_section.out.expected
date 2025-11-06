@@ -119,11 +119,10 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "InvalidExpression(\"Checked operators not yet implemented\")",
-            ],
+            status: "Success",
         ),
-        state_changes: [],
+        state_changes: [
+            "var:result",
+        ],
     ),
 ]
