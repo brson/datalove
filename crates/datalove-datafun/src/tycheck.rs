@@ -112,6 +112,10 @@ pub struct PackageWorldTypecheckResult<'db> {
     /// Module imports, per module.
     #[returns(ref)]
     pub module_imports: BTreeMap<bct::package2::PackageModule, ModuleImports<'db>>,
+
+    /// Function analysis results for all functions in all modules.
+    #[returns(ref)]
+    pub function_analyses: Vec<(crate::ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>)>,
 }
 
 /// Context for typechecking.
@@ -547,6 +551,7 @@ pub fn typecheck_package_world<'db>(
     let mut module_errors: BTreeMap<bct::package2::PackageModule, Vec<TypeError>> = BTreeMap::new();
     let mut module_exports_map: BTreeMap<bct::package2::PackageModule, ModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<bct::package2::PackageModule, ModuleImports<'db>> = BTreeMap::new();
+    let mut function_analyses: Vec<(crate::ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>)> = Vec::new();
 
     // Sort modules in dependency order.
     let sorted_modules = match topological_sort_modules(db, graph) {
@@ -640,9 +645,25 @@ pub fn typecheck_package_world<'db>(
         // Collect imports for this module.
         let imports = ModuleImports::new(db, module, module_import_functions);
         module_imports_map.insert(module, imports);
+
+        // Analyze all functions in this module.
+        // Create a TypecheckResult for this module to pass to analyze_function.
+        let errors = ctx
+            .errors
+            .iter()
+            .map(|e| TypeErrorEntry::new(db, e.clone()))
+            .collect();
+        let module_typecheck_result = TypecheckResult::new(db, script, errors, ctx.expr_types);
+
+        for statement in script.statements(db) {
+            if let Statement::Fun(func_stmt) = statement {
+                let analysis = crate::function_analysis::analyze_function(db, *func_stmt, module_typecheck_result);
+                function_analyses.push((*func_stmt, analysis));
+            }
+        }
     }
 
-    PackageWorldTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map)
+    PackageWorldTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, function_analyses)
 }
 
 /// Collect function signature without checking body (first pass).

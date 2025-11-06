@@ -23,6 +23,8 @@ pub struct InterpContext<'db> {
     /// Typecheck result for the package world (includes module exports).
     typecheck_result: Option<crate::tycheck::PackageWorldTypecheckResult<'db>>,
     tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
+    /// Call stack for frame-based execution.
+    call_stack: Vec<StackFrame<'db>>,
 }
 
 /// Script-level scope for REPL incremental execution.
@@ -55,6 +57,31 @@ pub struct ScriptVariable {
 pub enum ScriptVarState {
     Available,
     Moved,
+}
+
+/// Slot state for frame-based execution.
+///
+/// Tracks whether a slot is available for use or has been moved.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum SlotState {
+    /// Slot is available for reading (either reference or owned value).
+    Available,
+    /// Slot has been moved from (only applicable to non-copy types).
+    Moved,
+}
+
+/// Stack frame for function execution.
+///
+/// Contains the packed frame data buffer and per-slot state tracking.
+pub struct StackFrame<'db> {
+    /// Packed frame data containing all slot values at computed offsets.
+    pub frame_data: Vec<u8>,
+    /// Per-slot state tracking for move semantics.
+    pub slot_states: Vec<SlotState>,
+    /// Function being executed (for debugging).
+    pub func: crate::ast::StmtFun<'db>,
+    /// Frame layout providing slot offsets and types.
+    pub layout: crate::function_analysis::FrameLayout<'db>,
 }
 
 /// Value representation.
@@ -136,6 +163,7 @@ impl InterpContext<'_> {
             current_module: None,
             typecheck_result: None,
             tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
+            call_stack: Vec::new(),
         }
     }
 
@@ -897,8 +925,7 @@ fn eval_function_call_in_function_scope<'db>(
 
 /// Execute a function body and return its result.
 ///
-/// This is a simplified implementation that doesn't use frames or analysis.
-/// It will be replaced with proper frame-based execution in Phase 6.
+/// This uses frame-based execution with analysis-driven slot allocation.
 fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
@@ -909,6 +936,108 @@ fn execute_function_body<'db>(
     let prev_module = ctx.current_module;
     ctx.current_module = func_module;
 
+    // Get function analysis from typecheck result.
+    let analysis = match &ctx.typecheck_result {
+        Some(typecheck_result) => {
+            let analyses = typecheck_result.function_analyses(ctx.db);
+            match analyses.iter().find(|(f, _)| *f == func) {
+                Some((_, analysis)) => *analysis,
+                None => {
+                    // No analysis for this function - fall back to HashMap.
+                    return execute_function_body_fallback(ctx, func, prev_module, arg_values);
+                }
+            }
+        }
+        None => {
+            // No typecheck result - fall back to HashMap.
+            return execute_function_body_fallback(ctx, func, prev_module, arg_values);
+        }
+    };
+
+    // Check for analysis errors.
+    if !analysis.errors(ctx.db).is_empty() {
+        // Log analysis errors and fall back to HashMap execution.
+        eprintln!("Warning: Function '{}' has analysis errors, falling back to HashMap execution", func.name(ctx.db).text(ctx.db));
+        for error in analysis.errors(ctx.db) {
+            eprintln!("  - {:?}", error);
+        }
+        return execute_function_body_fallback(ctx, func, prev_module, arg_values);
+    }
+
+    // Get frame layout.
+    let layout = analysis.frame_layout(ctx.db);
+    let total_size = layout.total_size(ctx.db) as usize;
+    let slots = layout.slots(ctx.db);
+
+    // Allocate frame data.
+    let mut frame_data = vec![0u8; total_size];
+
+    // Initialize slot states (all Available initially).
+    let mut slot_states = vec![SlotState::Available; slots.len()];
+
+    // Initialize parameters by writing argument values to their slot offsets.
+    let params = func.params(ctx.db);
+    for (i, param) in params.iter().enumerate() {
+        // For now, only support In mode parameters.
+        if param.mode(ctx.db) != ast::ParamMode::In {
+            return Err(InterpError::InvalidExpression(
+                format!("Parameter mode {:?} not yet supported (function '{}')",
+                    param.mode(ctx.db), func.name(ctx.db).text(ctx.db))
+            ));
+        }
+
+        let param_name = param.name(ctx.db);
+        let arg_value = arg_values[i];
+
+        // Find the slot for this parameter.
+        let slot_info = slots.iter()
+            .find(|s| s.name(ctx.db) == Some(param_name))
+            .ok_or_else(|| InterpError::RuntimeError(
+                format!("Parameter '{}' not found in frame layout", param_name.text(ctx.db))
+            ))?;
+
+        let offset = slot_info.offset(ctx.db) as usize;
+
+        // Parameters are Reference slots (pointer-sized).
+        // Store the pointer to the argument value.
+        let ptr_bytes = arg_value.ptr as usize;
+        frame_data[offset..offset + std::mem::size_of::<usize>()]
+            .copy_from_slice(&ptr_bytes.to_ne_bytes());
+    }
+
+    // Create and push the stack frame.
+    let frame = StackFrame {
+        frame_data,
+        slot_states,
+        func,
+        layout,
+    };
+    ctx.call_stack.push(frame);
+
+    // Execute function body.
+    let result = execute_function_body_with_frame(ctx);
+
+    // Pop the frame.
+    let frame = ctx.call_stack.pop().unwrap();
+
+    // Clean up frame values before returning.
+    cleanup_frame(ctx, frame);
+
+    // Restore previous module.
+    ctx.current_module = prev_module;
+
+    result
+}
+
+/// Fallback implementation using HashMap-based execution.
+///
+/// Used when typecheck result is not available for analysis.
+fn execute_function_body_fallback<'db>(
+    ctx: &mut InterpContext<'db>,
+    func: ast::StmtFun<'db>,
+    prev_module: Option<crate::package::PackageModule>,
+    arg_values: Vec<Value>,
+) -> Result<Value, InterpError> {
     // Create a local variable scope for the function.
     let mut local_variables: HashMap<InternedText<'db>, ScriptVariable> = HashMap::new();
 
@@ -958,6 +1087,131 @@ fn execute_function_body<'db>(
     ctx.current_module = prev_module;
     Err(InterpError::RuntimeError(
         format!("Function '{}' did not return a value", func.name(ctx.db).text(ctx.db))
+    ))
+}
+
+/// Execute function body with frame-based execution.
+fn execute_function_body_with_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> Result<Value, InterpError> {
+    // Get the current frame (top of stack).
+    let frame_index = ctx.call_stack.len() - 1;
+
+    // Get the function from the frame.
+    let func = ctx.call_stack[frame_index].func;
+
+    // Execute each statement in the function body.
+    for stmt in func.body(ctx.db) {
+        match execute_function_statement_frame(ctx, stmt) {
+            Ok(()) => continue,
+            Err(InterpError::FunctionReturn(value)) => {
+                return Ok(value);
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+    }
+
+    // If we reach here, the function didn't have an explicit return.
+    Err(InterpError::RuntimeError(
+        format!("Function '{}' did not return a value", func.name(ctx.db).text(ctx.db))
+    ))
+}
+
+/// Clean up a stack frame by destroying all Available (non-moved) values.
+fn cleanup_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    frame: StackFrame<'db>,
+) {
+    let layout = frame.layout;
+    let slots = layout.slots(ctx.db);
+
+    for (slot_index, slot_info) in slots.iter().enumerate() {
+        // Only destroy if the slot is still Available (not moved).
+        if frame.slot_states[slot_index] == SlotState::Available {
+            // Skip Reference slots (parameters) - caller owns the data.
+            if slot_info.kind(ctx.db) == crate::function_analysis::SlotKind::Reference {
+                continue;
+            }
+
+            // Destroy Local and Temporary slots.
+            let offset = slot_info.offset(ctx.db) as usize;
+            let slot_ptr = unsafe { frame.frame_data.as_ptr().add(offset) as *mut u8 };
+
+            // Get the type descriptor for this slot.
+            let ty = slot_info.ty(ctx.db);
+            let datalit_ty = match ty.ty(ctx.db) {
+                crate::tycheck::Type::Datalit(dt) => dt.clone(),
+                _ => {
+                    // Skip non-datalit types for now.
+                    continue;
+                }
+            };
+            let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+
+            // Destroy the value.
+            let value = Value {
+                ptr: slot_ptr,
+                tydesc,
+            };
+            destroy_value(ctx, value);
+        }
+    }
+}
+
+/// Execute a statement within a function body using frame-based execution.
+fn execute_function_statement_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    stmt: &ast::Statement<'db>,
+) -> Result<(), InterpError> {
+    match stmt {
+        ast::Statement::Let(let_stmt) => {
+            // Evaluate expression and store in frame slot.
+            execute_let_statement_frame(ctx, *let_stmt)
+        }
+        ast::Statement::Ret(ret_stmt) => {
+            // Evaluate the return expression and signal return.
+            let value = eval_expression_frame(ctx, ret_stmt.value(ctx.db))?;
+            Err(InterpError::FunctionReturn(value))
+        }
+        ast::Statement::If(_) => {
+            Err(InterpError::InvalidExpression("If statements in functions not yet implemented".to_string()))
+        }
+        ast::Statement::Fun(_) => {
+            Err(InterpError::InvalidExpression("Nested functions not yet implemented".to_string()))
+        }
+        ast::Statement::Require(_) | ast::Statement::Import(_) => {
+            // These are handled at the module level.
+            Ok(())
+        }
+        ast::Statement::ParseError(_) => {
+            Err(InterpError::InvalidExpression("Parse error in function".to_string()))
+        }
+    }
+}
+
+/// Execute a let statement in frame-based mode.
+fn execute_let_statement_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    let_stmt: ast::StmtLet<'db>,
+) -> Result<(), InterpError> {
+    // For now, just fall back to error.
+    // This will be implemented in the next step.
+    Err(InterpError::InvalidExpression(
+        "Frame-based let statements not yet fully implemented".to_string()
+    ))
+}
+
+/// Evaluate an expression in frame-based mode.
+fn eval_expression_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    expr: ast::ExprFun<'db>,
+) -> Result<Value, InterpError> {
+    // For now, just fall back to error.
+    // This will be implemented in the next step.
+    Err(InterpError::InvalidExpression(
+        "Frame-based expression evaluation not yet fully implemented".to_string()
     ))
 }
 
