@@ -718,12 +718,27 @@ Successfully integrated AST generator with property-based testing using proptest
 
 ### Bugs Discovered and Fixed
 
-#### Bug 1: Unimplemented eq/cmp for Error and Data types
+#### Bug 1: Unimplemented eq_value for Error and Data types
 **Status:** Not fixed (workaround in place)
-- **Location:** crates/datalove-rt/src/impls/cmp.rs:623
-- **Error:** `not implemented: eq_value for Error`
+- **Location:** crates/datalove-rt/src/impls/cmp.rs:621-623
+- **Error:** `not implemented: eq_value for Error` (and Data)
+- **Details:**
+  - `cmp_value` IS implemented for Data (lines 1172-1234) and Error (lines 1236-1289)
+  - `eq_value` is NOT implemented - panics with `unimplemented!` for both types
+  - Property tests need both cmp and eq to work (e.g., proptest_cmp_consistency_with_eq)
 - **Workaround:** Disabled `data_type: 0` and `error_type: 0` in test configs
-- **Fix Required:** Implement eq_value and cmp_value for Error and Data types
+- **Fix Required:** Implement eq_value for Error and Data types (can reuse anypack comparison logic from cmp_value)
+
+#### Bug 1a: Result type instantiation not implemented
+**Status:** Not fixed (workaround in place)
+- **Location:** crates/datalove-datalit/src/instantiate2.rs
+- **Error:** "Result type instantiation not yet implemented"
+- **Details:**
+  - cmp_value (lines 1005-1046) and eq_value (lines 452-484) ARE fully implemented for Result
+  - Instantiation is the blocker - cannot create runtime Result values
+  - Multiple manual tests for Result are ignored (cmp_tests.rs:891-1080)
+- **Workaround:** Disabled `result_type: 0` in property test configs
+- **Fix Required:** Implement instantiate_value for Result type
 
 #### Bug 2: Result error generation bypassing type configuration (FIXED)
 **Status:** ✅ FIXED
@@ -775,13 +790,23 @@ let weights = if depth >= config.max_depth {
 1. **Fixed critical AST generator bugs:**
    - Result error generation now respects type configuration
    - Type weights properly respected at all nesting depths
-2. **Discovered runtime limitation:** eq/cmp not implemented for Data/Error types
-3. **Validated property-based testing approach** - found bugs hardcoded tests missed
-4. **Established infrastructure** for future property-based testing expansion
+   - Fixed duplicate field/variant names in struct/enum generation
+   - Fixed heap mismatches with separate RNG for heap selection
+   - Disabled named types in seeded generation (require external type definitions)
+2. **Discovered runtime limitations:**
+   - eq_value not implemented for Data/Error types (cmp_value works)
+   - Result type instantiation not implemented (cmp/eq work)
+3. **Re-enabled string comparisons:** Strings work correctly in all property tests (was unnecessarily disabled)
+4. **Validated property-based testing approach** - found bugs hardcoded tests missed
+5. **Established infrastructure** for future property-based testing expansion
 
 ### Next Steps
 
-1. **Fix Data/Error eq/cmp** (optional): Implement comparison for Data and Error types to enable full type coverage
-2. **Address typecheck failures** (optional): Refine max-depth generation to avoid invalid combinations
-3. **Expand coverage** (future): Add property tests for cmp_total, eq_unique, and other operations
-4. **Enable more types** (future): Test with named types once other issues are resolved
+1. **Fix Data/Error eq_value** (high priority): Implement eq_value for Data and Error types (cmp_value already works)
+   - Can reuse the anypack comparison logic from existing cmp_value implementation
+   - Would enable data_type and error_type in property tests
+2. **Fix Result instantiation** (high priority): Implement instantiate_value for Result type
+   - cmp_value and eq_value already work for Result
+   - Would enable result_type in property tests and un-ignore Result manual tests
+3. **Address typecheck failures** (optional): Refine max-depth generation to avoid invalid combinations
+4. **Expand coverage** (future): Add property tests for cmp_total, eq_unique, and other operations
