@@ -808,3 +808,74 @@ proptest! {
         }
     }
 }
+
+/// Regression test for clone leak detected with seed 980509222901775213.
+#[test]
+fn test_clone_leak_regression_seed_980509222901775213() {
+    let db = Database::default();
+    let seed = 980509222901775213u64;
+
+    let config = AstGenConfig {
+        max_collection_size: 150,
+        max_depth: 3,
+        type_weights: TypeWeights {
+            data_type: 0,
+            error_type: 0,
+            result_type: 0,
+            named_tuple_type: 0,
+            named_struct_type: 0,
+            named_enum_type: 0,
+            string_type: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let expr = gen_expr_full_seeded(&db, seed, config);
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let resolved = datalove_datalit::resolve::resolve_names(&db, expr, vec![]);
+    let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
+    assert!(typechecked.errors(&db).is_empty(), "Type checking failed for seed {}", seed);
+
+    let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
+        Ok(v) => v,
+        Err(e) => {
+            println!("Instantiation failed for seed {}: {:?}", seed, e);
+            return;
+        }
+    };
+
+    // Clone the moderate-sized container.
+    let tydesc = inst.tydesc.as_ref();
+    let mut clone_buffer = vec![0u8; tydesc.size as usize];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_clone_local(
+            rt.handle(),
+            inst.ptr,
+            inst.tydesc.as_ptr(),
+            clone_buffer.as_mut_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Test equality.
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_eq(
+            std::ptr::null_mut(),
+            inst.ptr,
+            inst.tydesc.as_ptr(),
+            clone_buffer.as_ptr(),
+            inst.tydesc.as_ptr(),
+        )
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals),
+        "Cloned moderate container should equal original");
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
+    }
+}

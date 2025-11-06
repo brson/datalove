@@ -450,7 +450,19 @@ fn instantiate_tuple<'db>(
     for (i, (elem, field_ty)) in elements.iter().zip(field_types.iter()).enumerate() {
         let field_offset = layout.field_offsets[i];
         let field_dest = unsafe { dest_ptr.add(field_offset as usize) };
-        instantiate_expr_into(db, rt, *elem, field_ty.ty(db), tydesc_table, field_dest)?;
+        if let Err(e) = instantiate_expr_into(db, rt, *elem, field_ty.ty(db), tydesc_table, field_dest) {
+            // Destroy successfully instantiated fields.
+            for j in 0..i {
+                let prev_field_ty = &field_types[j];
+                let prev_field_tydesc = tydesc_table.get_or_create(prev_field_ty.ty(db));
+                let prev_field_offset = layout.field_offsets[j];
+                let prev_field_dest = unsafe { dest_ptr.add(prev_field_offset as usize) };
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, prev_field_dest, prev_field_tydesc);
+                }
+            }
+            return Err(e);
+        }
     }
 
     Ok(dest_ptr as *const u8)
@@ -485,7 +497,19 @@ fn instantiate_struct<'db>(
 
             let field_offset = layout.field_offsets[i];
             let field_dest = unsafe { dest_ptr.add(field_offset as usize) };
-            instantiate_expr_into(db, rt, field_expr, field_ty.ty(db), tydesc_table, field_dest)?;
+            if let Err(e) = instantiate_expr_into(db, rt, field_expr, field_ty.ty(db), tydesc_table, field_dest) {
+                // Destroy successfully instantiated fields.
+                for j in 0..i {
+                    let prev_field_ty = type_fields[j].ty(db);
+                    let prev_field_tydesc = tydesc_table.get_or_create(prev_field_ty.ty(db));
+                    let prev_field_offset = layout.field_offsets[j];
+                    let prev_field_dest = unsafe { dest_ptr.add(prev_field_offset as usize) };
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, prev_field_dest, prev_field_tydesc);
+                    }
+                }
+                return Err(e);
+            }
         }
     } else {
         // HashMap for large structs.
@@ -504,7 +528,19 @@ fn instantiate_struct<'db>(
 
             let field_offset = layout.field_offsets[i];
             let field_dest = unsafe { dest_ptr.add(field_offset as usize) };
-            instantiate_expr_into(db, rt, *field_expr, field_ty.ty(db), tydesc_table, field_dest)?;
+            if let Err(e) = instantiate_expr_into(db, rt, *field_expr, field_ty.ty(db), tydesc_table, field_dest) {
+                // Destroy successfully instantiated fields.
+                for j in 0..i {
+                    let prev_field_ty = type_fields[j].ty(db);
+                    let prev_field_tydesc = tydesc_table.get_or_create(prev_field_ty.ty(db));
+                    let prev_field_offset = layout.field_offsets[j];
+                    let prev_field_dest = unsafe { dest_ptr.add(prev_field_offset as usize) };
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, prev_field_dest, prev_field_tydesc);
+                    }
+                }
+                return Err(e);
+            }
         }
     }
 

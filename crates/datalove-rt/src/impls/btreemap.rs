@@ -1894,7 +1894,7 @@ unsafe fn clone_tree_recursive(
                 let key_size = key_tydesc.size() as usize;
                 let value_size = value_tydesc.size() as usize;
 
-                // Clone all keys and values.
+                // Clone all keys first.
                 for i in 0..len as usize {
                     let key_src = keys_ptr.add(i * key_size);
                     let key_dst = new_keys_ptr.add(i * key_size);
@@ -1905,21 +1905,19 @@ unsafe fn clone_tree_recursive(
                             let key_slot = new_keys_ptr.add(j * key_size);
                             let _ = crate::impls::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc.as_ptr());
                         }
-                        // Destroy already-cloned values.
-                        for j in 0..i {
-                            let value_slot = new_values_ptr.add(j * value_size);
-                            let _ = crate::impls::destroy::any_destroy_local(rt_handle, value_slot, value_tydesc.as_ptr());
-                        }
                         free_node(rt, new_leaf, key_tydesc, value_tydesc);
                         return std::ptr::null_mut();
                     }
+                }
 
+                // Clone all values.
+                for i in 0..len as usize {
                     let value_src = values_ptr.add(i * value_size);
                     let value_dst = new_values_ptr.add(i * value_size);
                     let status = crate::impls::clone::clone_value(rt_handle, value_src, value_tydesc.as_ptr(), value_dst);
                     if status != RtStatus::Ok {
-                        // Destroy already-cloned keys (including current one).
-                        for j in 0..=i {
+                        // Destroy all cloned keys.
+                        for j in 0..len as usize {
                             let key_slot = new_keys_ptr.add(j * key_size);
                             let _ = crate::impls::destroy::any_destroy_local(rt_handle, key_slot, key_tydesc.as_ptr());
                         }
