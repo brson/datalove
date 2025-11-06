@@ -1004,7 +1004,7 @@ pub enum InterpError {
   - Uses `harness = false` for ExampleTestRunner
 
 **Test results**:
-- 24 tests passing with zero memory leaks:
+- 29 tests passing with zero memory leaks:
   - 01_empty_script (expected error: NoOutputVariable)
   - 02_function_def (expected error: NoOutputVariable)
   - 03_u32_literal (@42)
@@ -1029,7 +1029,12 @@ pub enum InterpError {
   - 22_fun_two_params (function with two parameters)
   - 23_fun_param_from_var (function called with variable arguments)
   - 24_fun_nested_call_with_params (nested function calls with parameters and local variables)
-- Full test suite: `just test` passes (282+ tests total)
+  - 25_module_section (module definition with two functions)
+  - 26_scriptunit_section (scriptunit with let binding)
+  - 27_expr_section (expression evaluation)
+  - 28_multi_section (module + scriptunit + expr + script sections)
+  - 29_module_internal_call (module with function calling another function in same module; awaiting module integration)
+- Full test suite: `just test` passes (287+ tests total)
 
 **Success criteria**:
 - ✅ Can evaluate literals (u32, bool, string)
