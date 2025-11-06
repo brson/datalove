@@ -718,16 +718,18 @@ Successfully integrated AST generator with property-based testing using proptest
 
 ### Bugs Discovered and Fixed
 
-#### Bug 1: Unimplemented eq_value for Error and Data types
+#### Bug 1: Clone not implemented for Error and Data types
 **Status:** Not fixed (workaround in place)
-- **Location:** crates/datalove-rt/src/impls/cmp.rs:621-623
-- **Error:** `not implemented: eq_value for Error` (and Data)
+- **Location:** crates/datalove-rt/src/impls/clone.rs:434-443
+- **Error:** `free() called on untracked pointer` when cloning nested Data/Error types
 - **Details:**
-  - `cmp_value` IS implemented for Data (lines 1172-1234) and Error (lines 1236-1289)
-  - `eq_value` is NOT implemented - panics with `unimplemented!` for both types
-  - Property tests need both cmp and eq to work (e.g., proptest_cmp_consistency_with_eq)
+  - `eq_value` and `cmp_value` ARE fully implemented for Data (cmp.rs:629-678, 1276-1400) and Error (cmp.rs:679-728)
+  - Clone implementation only does shallow copy via `std::ptr::copy_nonoverlapping`
+  - For nested types like `data(data(u64))`, both original and clone share pointers to inner data
+  - When both are destroyed, second destroy tries to free already-freed pointer
+  - Property tests with leak checking enabled catch this: test seed 7631147988393530901 generates `data(data(u64))`
 - **Workaround:** Disabled `data_type: 0` and `error_type: 0` in test configs
-- **Fix Required:** Implement eq_value for Error and Data types (can reuse anypack comparison logic from cmp_value)
+- **Fix Required:** Implement deep clone for Error and Data types (recursively clone anypack contents)
 
 #### Bug 1a: Result type instantiation not implemented
 **Status:** Not fixed (workaround in place)
@@ -810,7 +812,7 @@ let weights = if depth >= config.max_depth {
    - Fixed heap mismatches with separate RNG for heap selection
    - Disabled named types in seeded generation (require external type definitions)
 2. **Discovered runtime limitations:**
-   - eq_value not implemented for Data/Error types (cmp_value works)
+   - Clone not implemented for Data/Error types (shallow copy causes double-free)
    - Result type instantiation not implemented (cmp/eq work)
    - Map/Set instantiation limited to 11 elements (single B-tree leaf node)
 3. **Re-enabled string comparisons:** Strings work correctly in all property tests (was unnecessarily disabled)
@@ -819,9 +821,11 @@ let weights = if depth >= config.max_depth {
 
 ### Next Steps
 
-1. **Fix Data/Error eq_value** (high priority): Implement eq_value for Data and Error types (cmp_value already works)
-   - Can reuse the anypack comparison logic from existing cmp_value implementation
+1. **Fix Data/Error clone** (high priority): Implement deep clone for Data and Error types
+   - Current implementation only does shallow copy via `std::ptr::copy_nonoverlapping`
+   - Need to recursively clone anypack contents (TwoPointers case allocates new memory, others can shallow copy)
    - Would enable data_type and error_type in property tests
+   - Test case: seed 7631147988393530901 generates `data(data(u64))` which triggers double-free
 2. **Fix Result instantiation** (high priority): Implement instantiate_value for Result type
    - cmp_value and eq_value already work for Result
    - Would enable result_type in property tests and un-ignore Result manual tests
@@ -831,3 +835,18 @@ let weights = if depth >= config.max_depth {
    - Runtime already supports multi-node trees, just instantiation is incomplete
 4. **Address typecheck failures** (optional): Refine max-depth generation to avoid invalid combinations
 5. **Expand coverage** (future): Add property tests for cmp_total, eq_unique, and other operations
+
+### Investigation Notes (2025-11-06)
+
+Attempted to re-enable data_type and error_type in property tests based on documentation claiming eq_value was not implemented. Investigation revealed:
+
+1. **eq_value and cmp_value ARE fully implemented** for Data and Error types (cmp.rs:629-728, 1276-1400+)
+2. **The real bug is in clone implementation** (clone.rs:434-443)
+   - Only does shallow copy of Data/Error structures
+   - Nested types like `data(data(u64))` cause double-free when both original and clone are destroyed
+   - Leak checker correctly catches this: `free() called on untracked pointer`
+3. **This demonstrates why leak checking should be enabled by default**
+   - The bug was hidden when tests ran with `DATALOVE_LEAK_CHECK=ignore`
+   - Property-based testing with leak checking enabled immediately found the issue
+
+The types were correctly disabled in property tests, but for the wrong documented reason.
