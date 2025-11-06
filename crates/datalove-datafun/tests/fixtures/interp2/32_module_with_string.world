@@ -1,0 +1,23 @@
+----------
+module sys/test/text
+----------
+
+fun greet(name: String): String
+    ret name
+end fun
+
+fun make_message(prefix: String, suffix: String): String
+    ret prefix
+end fun
+
+----------
+script
+----------
+
+require module sys/test/text
+import text.greet
+import text.make_message
+
+let name = greet("World")
+let msg = make_message("Hello", "!")
+let output = name

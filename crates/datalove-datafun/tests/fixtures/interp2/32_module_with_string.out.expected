@@ -1,0 +1,197 @@
+[
+    ModuleAnalysis(
+        type: "Module",
+        path: "sys/test/text",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "greet",
+                    params: [
+                        FunParam(
+                            name: "name",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: ParseError(TypeHintParseError(
+                                    message: "unknown type hint in DynParser",
+                                )),
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: ParseError(TypeHintParseError(
+                            message: "unknown type hint in DynParser",
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "name",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "make_message",
+                    params: [
+                        FunParam(
+                            name: "prefix",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: ParseError(TypeHintParseError(
+                                    message: "unknown type hint in DynParser",
+                                )),
+                            ),
+                        ),
+                        FunParam(
+                            name: "suffix",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: ParseError(TypeHintParseError(
+                                    message: "unknown type hint in DynParser",
+                                )),
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: ParseError(TypeHintParseError(
+                            message: "unknown type hint in DynParser",
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "prefix",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        exports: [],
+    ),
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtRequireModule(
+                    kind: "Require",
+                    variant: "Module",
+                    import_space: "sys",
+                    package_alias: "test",
+                    module_alias: "text",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "text",
+                    item_name: "greet",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "text",
+                    item_name: "make_message",
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "name",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "greet",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Omitted,
+                                                expr: String(ExprString(
+                                                    value: "\"World\"",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "msg",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "make_message",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Omitted,
+                                                expr: String(ExprString(
+                                                    value: "\"Hello\"",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Omitted,
+                                                expr: String(ExprString(
+                                                    value: "\"!\"",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Name",
+                            name: "name",
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@\"World\"",
+    ),
+]
