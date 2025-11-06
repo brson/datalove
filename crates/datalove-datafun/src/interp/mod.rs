@@ -1191,16 +1191,102 @@ fn execute_function_statement_frame<'db>(
     }
 }
 
+// ============================================================================
+// Frame-based execution helpers
+// ============================================================================
+
+/// Find a slot by variable name in the frame layout.
+fn find_slot_by_name<'db>(
+    db: &'db dyn crate::Db,
+    layout: crate::function_analysis::FrameLayout<'db>,
+    name: InternedText<'db>,
+) -> Option<crate::function_analysis::SlotInfo<'db>> {
+    layout.slots(db).iter()
+        .find(|s| s.name(db) == Some(name))
+        .copied()
+}
+
+/// Read a pointer value from a Reference slot (parameter).
+fn read_reference_slot<'db>(
+    frame: &StackFrame<'db>,
+    slot_info: crate::function_analysis::SlotInfo<'db>,
+    db: &'db dyn crate::Db,
+) -> *mut u8 {
+    let offset = slot_info.offset(db) as usize;
+    let ptr_bytes = &frame.frame_data[offset..offset + std::mem::size_of::<usize>()];
+    let ptr_value = usize::from_ne_bytes(ptr_bytes.try_into().unwrap());
+    ptr_value as *mut u8
+}
+
+/// Read a value from a Local or Temporary slot.
+fn read_value_from_slot<'db>(
+    frame: &StackFrame<'db>,
+    slot_info: crate::function_analysis::SlotInfo<'db>,
+    tydesc_table: &mut datalove_datalit::tydesc_table::TyDescTable<'db>,
+    db: &'db dyn crate::Db,
+) -> Result<Value, InterpError> {
+    let offset = slot_info.offset(db) as usize;
+    let ptr = unsafe { frame.frame_data.as_ptr().add(offset) as *mut u8 };
+
+    // Get the type descriptor from the slot's type.
+    let ty = slot_info.ty(db);
+    let datalit_ty = match ty.ty(db) {
+        crate::tycheck::Type::Datalit(dt) => dt.clone(),
+        _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
+    };
+    let tydesc = tydesc_table.get_or_create(&datalit_ty);
+
+    Ok(Value { ptr, tydesc })
+}
+
+/// Write a value to a Local or Temporary slot.
+fn write_value_to_slot<'db>(
+    frame: &mut StackFrame<'db>,
+    slot_info: crate::function_analysis::SlotInfo<'db>,
+    value: Value,
+    db: &'db dyn crate::Db,
+) -> Result<(), InterpError> {
+    let offset = slot_info.offset(db) as usize;
+    let size = unsafe { (*value.tydesc).size as usize };
+
+    unsafe {
+        // Copy the actual value bytes into the slot.
+        std::ptr::copy_nonoverlapping(
+            value.ptr,
+            frame.frame_data.as_mut_ptr().add(offset),
+            size
+        );
+    }
+
+    Ok(())
+}
+
 /// Execute a let statement in frame-based mode.
 fn execute_let_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
     let_stmt: ast::StmtLet<'db>,
 ) -> Result<(), InterpError> {
-    // For now, just fall back to error.
-    // This will be implemented in the next step.
-    Err(InterpError::InvalidExpression(
-        "Frame-based let statements not yet fully implemented".to_string()
-    ))
+    // Evaluate RHS expression.
+    let value = eval_expression_frame(ctx, let_stmt.value(ctx.db))?;
+
+    // Find destination slot.
+    let frame_index = ctx.call_stack.len() - 1;
+    let name = let_stmt.name(ctx.db);
+    let layout = ctx.call_stack[frame_index].layout;
+    let slot_info = find_slot_by_name(ctx.db, layout, name)
+        .ok_or_else(|| InterpError::RuntimeError(
+            format!("Let binding '{}' not found in frame", name.text(ctx.db))
+        ))?;
+
+    let slot_id = slot_info.slot_id(ctx.db);
+
+    // Write value to slot.
+    write_value_to_slot(&mut ctx.call_stack[frame_index], slot_info, value, ctx.db)?;
+
+    // Mark slot as Available.
+    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+
+    Ok(())
 }
 
 /// Evaluate an expression in frame-based mode.
@@ -1208,11 +1294,72 @@ fn eval_expression_frame<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
 ) -> Result<Value, InterpError> {
-    // For now, just fall back to error.
-    // This will be implemented in the next step.
-    Err(InterpError::InvalidExpression(
-        "Frame-based expression evaluation not yet fully implemented".to_string()
-    ))
+    let frame_index = ctx.call_stack.len() - 1;
+
+    match expr.expr(ctx.db) {
+        ast::ExprFunKind::Name(name) => {
+            // Find slot by name.
+            let layout = ctx.call_stack[frame_index].layout;
+            let slot_info = find_slot_by_name(ctx.db, layout, name)
+                .ok_or_else(|| InterpError::VariableNotFound(name.text(ctx.db).to_string()))?;
+
+            let slot_id = slot_info.slot_id(ctx.db);
+
+            // Check slot state.
+            if ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] == SlotState::Moved {
+                return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
+            }
+
+            // Check copyability.
+            let ty = slot_info.ty(ctx.db);
+            let is_copy = crate::function_analysis::is_copy_type(ctx.db, ty);
+
+            // Read value from slot.
+            let kind = slot_info.kind(ctx.db);
+            let value = if kind == crate::function_analysis::SlotKind::Reference {
+                // Reference slot: read pointer.
+                let ptr = read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db);
+                let tydesc = unsafe { (*ptr as *const datalove_rt::rtdt::TyDesc).read() };
+                Value { ptr, tydesc: &tydesc as *const _ }
+            } else {
+                // Local/Temporary slot: read actual value.
+                read_value_from_slot(&ctx.call_stack[frame_index], slot_info, &mut ctx.tydesc_table, ctx.db)?
+            };
+
+            if is_copy {
+                // Clone the value.
+                Ok(clone_value(ctx, value))
+            } else {
+                // Move: mark as moved.
+                ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
+                Ok(value)
+            }
+        }
+
+        ast::ExprFunKind::Datalit(datalit_expr) => {
+            // Allocate literals on heap (as currently done).
+            eval_datalit_expression(ctx, datalit_expr)
+        }
+
+        ast::ExprFunKind::BinOp(binop_expr) => {
+            // Evaluate operands.
+            let lhs = eval_expression_frame(ctx, binop_expr.lhs(ctx.db))?;
+            let rhs = eval_expression_frame(ctx, binop_expr.rhs(ctx.db))?;
+
+            // Execute operation.
+            execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs)
+        }
+
+        ast::ExprFunKind::FunctionCall(call_expr) => {
+            // Use existing function call infrastructure.
+            // This creates a new frame internally via execute_function_body.
+            eval_function_call_in_function_scope(ctx, &mut HashMap::new(), call_expr)
+        }
+
+        _ => Err(InterpError::InvalidExpression(
+            "Expression type not yet implemented in frame mode".to_string()
+        ))
+    }
 }
 
 /// Execute a statement within a function body.

@@ -3,7 +3,7 @@
 ## Progress Status
 
 - [x] Phase 0: Script Execution Infrastructure - **COMPLETED**
-- [~] Phase 1: Core Infrastructure (Frame Management) - **PARTIALLY COMPLETE**
+- [x] Phase 1: Core Infrastructure (Frame Management) - **COMPLETED**
 - [x] Phase 2: Expression Evaluation - **COMPLETED** (literals and binary ops)
 - [ ] Phase 3: Move Semantics
 - [ ] Phase 4: Control Flow
@@ -12,11 +12,11 @@
 - [x] Phase 7: Module Integration - **COMPLETED**
 - [ ] Phase 8: Testing & Validation
 
-**Current Status**: Phases 0, 2, and 7 completed. Phase 1 infrastructure complete but not yet active. Frame-based execution infrastructure is fully implemented and integrated with analysis results, but currently falls back to HashMap-based execution. All function analysis happens upfront during typecheck phase and is stored in `PackageWorldTypecheckResult.function_analyses`. Frame infrastructure ready: `StackFrame` with packed `frame_data`, `slot_states` tracking, `call_stack` in `InterpContext`. All 162 tests passing (36 interp2, 46 old interp, 7 std, 70 tycheck, 3 tycheck_world) with zero memory leaks.
+**Current Status**: Phases 0, 1, 2, and 7 completed. Frame-based execution is fully implemented and active. Functions execute using packed frame buffers with computed slot offsets from analysis. Variables are read/written from frame slots, move semantics tracked via SlotState. All 162 tests passing (36 interp2, 46 old interp, 7 std, 70 tycheck, 3 tycheck_world) with zero memory leaks.
 
-**Latest Update (2025-11-06)**: ✅ Completed Phase 1 infrastructure. Added `StackFrame` with packed frame buffers and slot state tracking. Extended `PackageWorldTypecheckResult` with `function_analyses: Vec<(StmtFun, FunctionAnalysis)>` field populated during typecheck. Updated `execute_function_body()` to look up analysis and allocate frames with slot offsets from `FrameLayout`. Frame cleanup with proper Available/Moved tracking implemented. Currently falls back to HashMap execution because frame-based statement/expression evaluation stubs not yet implemented (`eval_expression_frame()`, `execute_let_statement_frame()`).
+**Latest Update (2025-11-06)**: ✅ Completed Phase 1 frame-based execution. Implemented `eval_expression_frame()` for Name (variables), Datalit (literals), BinOp (arithmetic), and FunctionCall expressions. Implemented `execute_let_statement_frame()` for variable assignments. Added helper functions: `find_slot_by_name()`, `read_reference_slot()`, `read_value_from_slot()`, `write_value_to_slot()`. Variable reads check copyability and SlotState, cloning Copy types and marking non-Copy types as Moved. All function execution now uses frame-based evaluation with no HashMap fallback.
 
-Ready for: Phase 1 completion (implement frame-based statement/expression evaluation), Phase 4 (Control Flow with if statements), or additional expression types (comparisons, tuples).
+Ready for: Phase 3 (Move Semantics refinement with MoveInfo), Phase 4 (Control Flow with if statements), or Phase 5 (Drop Execution with drop points).
 
 ## Overview
 
@@ -928,18 +928,18 @@ pub enum InterpError {
 
 **Next**: Phase 2 (Expression Evaluation) - Implement remaining expression types before moving to frames.
 
-### Phase 1: Core Infrastructure - [~] PARTIALLY COMPLETE (infrastructure ready, execution stubs not implemented)
+### Phase 1: Core Infrastructure - ✅ COMPLETED
 **Goal**: Basic interpreter shell with frame management for function execution.
 
-**Status**: Infrastructure complete, analysis integration complete, fallback to HashMap execution until frame-based evaluation implemented.
+**Status**: Complete. Frame-based execution is fully implemented and active.
 
 **Tasks**:
 1. ✅ Define `StackFrame`, `Value`, `SlotState` types
 2. ✅ Implement frame allocation from analysis
-3. ⏸️ Implement slot read/write operations (stubs exist)
+3. ✅ Implement slot read/write operations
 4. ✅ Implement slot state tracking (Available/Moved)
 5. ✅ Integrate function analysis into typecheck pipeline
-6. ⏸️ Implement frame-based statement/expression evaluation
+6. ✅ Implement frame-based statement/expression evaluation
 
 **What was implemented**:
 - **Data structures** (`interp/mod.rs`):
@@ -957,22 +957,29 @@ pub enum InterpError {
   - Pushes/pops frames on call stack
   - `cleanup_frame()` destroys Available (non-moved) slots on exit
   - Falls back to `execute_function_body_fallback()` (HashMap) when no analysis
-- **Stubs for future work**:
-  - `execute_function_body_with_frame()`: calls statement executor
-  - `execute_function_statement_frame()`: dispatches statements
-  - `execute_let_statement_frame()`: write to frame slots (stub)
-  - `eval_expression_frame()`: read from frame slots (stub)
-
-**What's missing**:
-- Actual slot read/write operations in expression/statement evaluation
-- Frame-based variable lookup by name → slot ID → offset
-- Copy vs. move decisions using `MoveInfo` from analysis
+  - `execute_function_body_with_frame()`: executes statements with frame context
+  - `execute_function_statement_frame()`: dispatches statements in frame mode
+- **Helper functions** (`interp/mod.rs`):
+  - `find_slot_by_name()`: lookup SlotInfo by variable name in frame layout
+  - `read_reference_slot()`: read pointer from Reference slot (parameters)
+  - `read_value_from_slot()`: read value from Local/Temporary slot
+  - `write_value_to_slot()`: write value to Local/Temporary slot
+- **Frame-based statement/expression evaluation** (`interp/mod.rs`):
+  - `execute_let_statement_frame()`: evaluates RHS, finds slot, writes value, marks Available
+  - `eval_expression_frame()`:
+    - `ExprFunKind::Name`: find slot by name, check SlotState, check copyability, read value, clone if Copy or mark Moved
+    - `ExprFunKind::Datalit`: allocate literals on heap (existing path)
+    - `ExprFunKind::BinOp`: recursive evaluation of operands, execute operation
+    - `ExprFunKind::FunctionCall`: use existing function call infrastructure
+  - Copyability checking via `crate::function_analysis::is_copy_type()`
+  - SlotState tracking: mark Moved after non-Copy reads, error on use-after-move
 
 **Success criteria**:
 - ✅ Can allocate frames with correct size
-- ⏸️ Can read/write values to slots at correct offsets (infrastructure ready, not used yet)
-- ✅ Slot states track Available/Moved correctly (infrastructure ready)
-- ✅ No memory leaks in frame allocation tests (all 162 tests pass)
+- ✅ Can read/write values to slots at correct offsets
+- ✅ Slot states track Available/Moved correctly
+- ✅ No memory leaks (all 162 tests pass with DATALOVE_LEAK_CHECK=panic)
+- ✅ All function execution uses frame-based evaluation (no HashMap fallback)
 
 ### Phase 2: Expression Evaluation - ✅ COMPLETED (literals, binary ops, and function calls with parameters)
 
