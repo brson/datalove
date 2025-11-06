@@ -1224,53 +1224,21 @@ fn widen_u32_to_int<'db>(
     Ok(int_val)
 }
 
-/// Destroy a value by manually freeing its internal data and then the value itself.
+/// Destroy a value using the runtime's destroy function.
 pub fn destroy_value<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
 ) {
     unsafe {
         let rt_handle = ctx.runtime.handle();
-        let type_tag = (*value.tydesc).type_tag;
 
-        // Manually free internal data for complex types.
-        if type_tag == datalove_rt::rtdt::TyTag::Int {
-            // Manually free the limbs array.
-            let int_ptr = value.ptr as *mut datalove_rt::rtdt::Int;
-            if !(*int_ptr).data.is_null() {
-                // Get u32 tydesc for freeing limbs.
-                let u32_tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32);
-                let capacity = (*int_ptr).capacity;
-                // Free the limbs array.
-                datalove_rt::c::dtlv_rti_mem_free_local(
-                    rt_handle,
-                    u32_tydesc,
-                    capacity as u32,
-                    (*int_ptr).data as *mut u8,
-                );
-            }
-        } else if type_tag == datalove_rt::rtdt::TyTag::String {
-            // Manually free the string data buffer.
-            let string_ptr = value.ptr as *mut datalove_rt::rtdt::String;
-            if !(*string_ptr).data.is_null() {
-                let capacity = (*string_ptr).capacity;
-                if capacity > 0 {
-                    // Create a u8 tydesc for freeing the buffer.
-                    let mut buffer_tydesc = std::mem::MaybeUninit::<datalove_rt::rtdt::TyDesc>::uninit();
-                    let mut buffer_tydesc = buffer_tydesc.assume_init();
-                    buffer_tydesc.size = 1;
-                    buffer_tydesc.align = 1;
-                    buffer_tydesc.type_tag = datalove_rt::rtdt::TyTag::U8;
-
-                    datalove_rt::c::dtlv_rti_mem_free_local(
-                        rt_handle,
-                        &buffer_tydesc as *const _,
-                        capacity as u32,
-                        (*string_ptr).data as *mut u8,
-                    );
-                }
-            }
-        }
+        // Destroy contents using runtime's type-specific destroy logic.
+        // This handles Int limbs, String buffers, and other complex types.
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt_handle,
+            value.ptr,
+            value.tydesc,
+        );
 
         // Free the value structure itself.
         datalove_rt::c::dtlv_rti_mem_free_local(

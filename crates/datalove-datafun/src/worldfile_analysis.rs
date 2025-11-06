@@ -304,59 +304,18 @@ fn analyze_script_section(
             let output = crate::interp::pretty_print_value(&mut result)
                 .unwrap_or_else(|e| format!("Error: {:?}", e));
 
-            // Manually destroy the value before dropping the result.
-            // For Int and String types, we need to manually free internal data.
+            // Destroy the value using the runtime's destroy function.
+            // This must happen before the result is dropped to ensure the runtime is still active.
             unsafe {
                 let rt_handle = result.runtime.handle();
-                let tydesc = result.value.tydesc;
-                let type_tag = (*tydesc).type_tag;
-
-                // Check if this is an Int type.
-                if type_tag == datalove_rt::rtdt::TyTag::Int {
-                    // Manually free the limbs array.
-                    let int_ptr = result.value.ptr as *mut datalove_rt::rtdt::Int;
-                    if !(*int_ptr).data.is_null() {
-                        // Get u32 tydesc for freeing limbs.
-                        let u32_tydesc = result.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32);
-                        let capacity = (*int_ptr).capacity;
-                        // Free the limbs array.
-                        datalove_rt::c::dtlv_rti_mem_free_local(
-                            rt_handle,
-                            u32_tydesc,
-                            capacity as u32,
-                            (*int_ptr).data as *mut u8,
-                        );
-                    }
-                } else if type_tag == datalove_rt::rtdt::TyTag::String {
-                    // Manually free the string data buffer.
-                    let string_ptr = result.value.ptr as *mut datalove_rt::rtdt::String;
-                    if !(*string_ptr).data.is_null() {
-                        // Get u8 tydesc for freeing string data.
-                        // String data is stored as bytes.
-                        let capacity = (*string_ptr).capacity;
-                        if capacity > 0 {
-                            // Allocate a dummy u8 tydesc for freeing the buffer.
-                            // The buffer was allocated as raw bytes.
-                            let buffer_tydesc = std::mem::MaybeUninit::<datalove_rt::rtdt::TyDesc>::uninit();
-                            let mut buffer_tydesc = buffer_tydesc.assume_init();
-                            buffer_tydesc.size = 1;
-                            buffer_tydesc.align = 1;
-                            buffer_tydesc.type_tag = datalove_rt::rtdt::TyTag::U8;
-
-                            datalove_rt::c::dtlv_rti_mem_free_local(
-                                rt_handle,
-                                &buffer_tydesc as *const _,
-                                capacity as u32,
-                                (*string_ptr).data as *mut u8,
-                            );
-                        }
-                    }
-                }
-
-                // Free the value structure itself.
+                datalove_rt::c::dtlv_rti_any_destroy_local(
+                    rt_handle,
+                    result.value.ptr,
+                    result.value.tydesc,
+                );
                 datalove_rt::c::dtlv_rti_mem_free_local(
                     rt_handle,
-                    tydesc,
+                    result.value.tydesc,
                     1,
                     result.value.ptr,
                 );
