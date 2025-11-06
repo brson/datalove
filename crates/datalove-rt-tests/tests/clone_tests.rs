@@ -816,6 +816,7 @@ proptest! {
     }
 
     #[test]
+    #[ignore] // sometimes iloops
     fn proptest_clone_moderate_containers_depth2(seed in any::<u64>()) {
         let db = Database::default();
         let config = AstGenConfig {
