@@ -68,7 +68,7 @@ check:
     just check-wasm
 
 check-wasm:
-    cd crates/datalove-web && trunk check
+    cd crates/datalove-web && trunk build
 
 build-wasm-repl:
     cd crates/datalove-repl-worker && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk build --release
