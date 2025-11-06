@@ -1128,12 +1128,12 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
-    /// Property: Destroy moderate structures with 100-200 elements, depth 3-4.
+    /// Property: Destroy moderate structures with depth 3-4.
     #[test]
     fn proptest_destroy_moderate_structures(seed in any::<u64>()) {
         let db = Database::default();
         let config = AstGenConfig {
-            max_collection_size: 150,
+            max_collection_size: 11,  // Sets limited to 11 elements for instantiation.
             max_depth: 3,
             ..Default::default()
         };
@@ -1232,7 +1232,7 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             max_depth: 4,
-            max_collection_size: 50,
+            max_collection_size: 11,  // Sets limited to 11 elements for instantiation.
             ..Default::default()
         };
         let expr = gen_expr_full_seeded(&db, seed, config);

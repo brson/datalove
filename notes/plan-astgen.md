@@ -740,6 +740,22 @@ Successfully integrated AST generator with property-based testing using proptest
 - **Workaround:** Disabled `result_type: 0` in property test configs
 - **Fix Required:** Implement instantiate_value for Result type
 
+#### Bug 1b: Map and Set instantiation limited to 11 elements
+**Status:** Not fixed (workaround in place)
+- **Location:** crates/datalove-datalit/src/instantiate2.rs:799, 916
+- **Error:** "Set instantiation limited to 11 elements" / "Map instantiation limited to 11 entries"
+- **Details:**
+  - Maps and Sets are implemented as B-trees with branching factor B=6
+  - Each B-tree node can hold CAPACITY = 2*B-1 = 11 elements (rtdt/lib.rs:129, 169)
+  - instantiate_map_value and instantiate_set_value only create a single leaf node
+  - Cannot instantiate maps/sets with more than 11 elements
+  - The runtime supports larger maps/sets (insertion/deletion work correctly)
+- **Workaround:** Set `max_collection_size: 11` in all property test configs
+- **Fix Required:** Implement proper B-tree building in instantiation to support multi-node maps/sets
+- **Constants:**
+  - MAP_NODE_B = 6, MAP_NODE_CAPACITY = 11 (rtdt/lib.rs:123, 129)
+  - SET_NODE_B = 6, SET_NODE_CAPACITY = 11 (rtdt/lib.rs:163, 169)
+
 #### Bug 2: Result error generation bypassing type configuration (FIXED)
 **Status:** ✅ FIXED
 - **Location:** crates/datalove-datalit/src/ast_gen.rs:606-614
@@ -796,6 +812,7 @@ let weights = if depth >= config.max_depth {
 2. **Discovered runtime limitations:**
    - eq_value not implemented for Data/Error types (cmp_value works)
    - Result type instantiation not implemented (cmp/eq work)
+   - Map/Set instantiation limited to 11 elements (single B-tree leaf node)
 3. **Re-enabled string comparisons:** Strings work correctly in all property tests (was unnecessarily disabled)
 4. **Validated property-based testing approach** - found bugs hardcoded tests missed
 5. **Established infrastructure** for future property-based testing expansion
@@ -808,5 +825,9 @@ let weights = if depth >= config.max_depth {
 2. **Fix Result instantiation** (high priority): Implement instantiate_value for Result type
    - cmp_value and eq_value already work for Result
    - Would enable result_type in property tests and un-ignore Result manual tests
-3. **Address typecheck failures** (optional): Refine max-depth generation to avoid invalid combinations
-4. **Expand coverage** (future): Add property tests for cmp_total, eq_unique, and other operations
+3. **Fix Map/Set instantiation limit** (high priority): Implement proper B-tree building for maps/sets >11 elements
+   - Currently only creates single leaf node, need to build multi-level B-trees
+   - Would enable testing with realistic collection sizes (100s or 1000s of elements)
+   - Runtime already supports multi-node trees, just instantiation is incomplete
+4. **Address typecheck failures** (optional): Refine max-depth generation to avoid invalid combinations
+5. **Expand coverage** (future): Add property tests for cmp_total, eq_unique, and other operations
