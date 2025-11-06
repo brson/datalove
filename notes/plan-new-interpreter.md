@@ -1123,19 +1123,212 @@ pub enum InterpError {
 ### Phase 7: Module Integration
 **Goal**: Full integration with PackageWorld and scripts.
 
-**Tasks**:
-1. Implement module resolution via package world
-2. Implement function lookup in modules
-3. Integrate import demands from script
-4. Handle multi-unit scripts (REPL history)
-5. Add tests with module system
+**Status**: Not yet started (research complete)
 
-**Success criteria**:
-- Can resolve functions from sys/std modules
-- Imports work correctly from script
-- Module-scoped execution works
-- REPL can accumulate functions across units
-- Scripts can execute against package world
+#### Module System Architecture
+
+The module system has a well-defined three-tier architecture already implemented:
+
+**Tier 1: Loading** (`package_load.rs`)
+- Loads `.dfm` files from filesystem into `PackageWorld` structure
+- Two libraries: `pkglib_system` (sys/) and `pkglib_local` (local/)
+- Structure: Library → Package → Module
+- Example: `sys/std/int` = system library, std package, int module
+
+**Tier 2: Resolution** (`package_resolve.rs`)
+- Parses each module to extract `require module` statements
+- Builds dependency graph via `ImportDemandMap`
+- Resolves import paths to actual `PackageModule` instances
+- Returns `PackageWorldModuleGraph` with resolved dependencies
+
+**Tier 3: Typechecking** (`tycheck.rs`)
+- Processes modules in topological order
+- Builds `module_alias_map` (module alias → PackageModule)
+- Processes `import` statements to add function signatures
+- Returns `PackageWorldTypecheckResult` with module exports
+
+**Key Data Structures:**
+```rust
+// Already exists in package.rs
+pub struct PackageWorld {
+    pub pkglib_system: BTreeMap<PackageName, Package>,
+    pub pkglib_local: BTreeMap<PackageName, Package>,
+}
+
+// From tycheck.rs
+pub struct PackageWorldTypecheckResult<'db> {
+    pub graph: PackageWorldModuleGraph<'db>,
+    pub module_errors: BTreeMap<PackageModule, Vec<TypeError>>,
+    pub module_exports: BTreeMap<PackageModule, ModuleExports<'db>>,
+}
+
+pub struct ModuleExports<'db> {
+    pub package_module: PackageModule,
+    pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+}
+```
+
+#### Design Recommendations
+
+**Add ModuleFunctionTable to InterpContext:**
+```rust
+pub struct ModuleFunctionTable<'db> {
+    // Maps imported function name → (PackageModule, original_function_name)
+    imported_functions: HashMap<InternedText<'db>, (PackageModule, InternedText<'db>)>,
+}
+```
+
+**Function Lookup Strategy:**
+1. Check script-level functions (local definitions)
+2. Check imported module functions (via ModuleFunctionTable)
+3. Check module-local functions (when executing in module context)
+
+**Lazy Parsing Strategy:**
+- Only parse module files when their functions are first called
+- Salsa memoization ensures modules parsed once and cached
+- Avoids old interpreter's eager parsing of all modules upfront
+
+**Key Advantages Over Old Interpreter:**
+- ✅ Leverages typecheck exports (don't re-discover functions)
+- ✅ Lazy parsing (only parse when needed, Salsa-memoized)
+- ✅ Clear separation (script vs imported vs module-internal)
+- ❌ No eager module parsing (old interpreter parses all modules upfront)
+- ❌ No function copying (old interpreter copies to local table)
+- ❌ No redundant storage (old interpreter stores same functions multiple ways)
+
+#### Implementation Tasks
+
+**Task 1: Add ModuleFunctionTable** (~80 lines)
+- Location: `crates/datalove-datafun/src/interp/mod.rs`
+- Define `ModuleFunctionTable` struct
+- Add `module_function_table` field to `InterpContext`
+- Implement `build_module_function_table()`:
+  - Takes parsed script, alias_map, and module_exports
+  - Scans `import` statements
+  - Builds name → (module, function) mapping
+  - Validates functions exist in module exports
+
+**Task 2: Update Script Execution** (~50 lines)
+- Location: `crates/datalove-datafun/src/interp/mod.rs` - `execute_script()`
+- Replace TODO at line 231 with:
+  1. Resolve package world imports → `PackageWorldModuleGraph`
+  2. Typecheck package world → `PackageWorldTypecheckResult`
+  3. Check for module errors, fail if any
+  4. Build script module alias map (`build_script_module_alias_map`)
+  5. Process imports to build `ModuleFunctionTable`
+  6. Pass to `InterpContext::new_with_modules()`
+
+**Task 3: Module Function Lookup** (~60 lines)
+- Update `eval_function_call_in_script_scope()`:
+  - After checking script functions, check `module_function_table`
+  - If found, call new `call_module_function()`
+- Implement `call_module_function()`:
+  - Lazy parse module (Salsa-memoized via `parse()`)
+  - Find function definition in module AST
+  - Evaluate arguments in caller's scope
+  - Call `execute_module_function_body()`
+
+**Task 4: Module-Internal Function Calls** (~80 lines)
+- Implement `execute_module_function_body()`:
+  - Parse module to build local function table (all functions in module)
+  - This allows `quadruple` to call `double` without imports
+  - Execute function with module-local scope
+- Update function execution to check module-local functions:
+  - Add optional `module_functions` parameter to execution context
+  - Check module_functions before script_scope.functions
+
+**Task 5: Cross-Module Calls Support** (~30 lines)
+- Handle modules importing from other modules:
+  - Build module alias map for the current module
+  - Process module's `require`/`import` statements
+  - Allow module functions to call imported functions
+  - Store import context per-module
+
+**Total Code Additions:** ~250-300 lines
+
+#### Comprehensive Test Suite
+
+**Port existing tests** (interp_with_package → interp2):
+1. `30_import_simple.world` - Basic import and call (port of 01_simple_import)
+2. `31_import_multiple.world` - Multiple imports from same module (port of 02_multiple_imports)
+3. `32_import_recursive.world` - Recursive module function (port of 13_recursion_factorial)
+
+**New comprehensive tests:**
+4. `33_module_cross_call.world` - Module A imports function from Module B
+   ```datafun
+   module sys/std/u32: add(x, y)
+   module sys/util/math: sum_three(a,b,c) calls add
+   script: imports sum_three, expects @6
+   ```
+
+5. `34_module_helper_chain.world` - Module with multiple helpers calling each other
+   ```datafun
+   module: helper1 → helper2 → helper3
+   script: imports only final function
+   ```
+
+6. `35_import_multiple_modules.world` - Script imports from 2+ different modules
+
+7. `36_module_import_error.world` - Error case: function not found in module
+
+**Update existing test:**
+- `29_module_internal_call.world` - Should now pass with output `@20`
+  - Module defines `double` and `quadruple` (calls double twice)
+  - Script imports and calls `quadruple(@5)`
+
+**Expected:** 29 existing + 7 new = 36 total tests
+
+#### Key Code Locations Reference
+
+**Package System:**
+- Loading: `crates/datalove-datafun/src/package_load.rs`
+- Salsa types: `crates/datalove-datafun/src/package.rs`
+- Resolution: `crates/datalove-datafun/src/package_resolve.rs`
+- Import demands: `crates/datalove-datafun/src/import_demands.rs`
+
+**Typechecking:**
+- Main: `crates/datalove-datafun/src/tycheck.rs`
+  - `typecheck_package_world` - Line ~570
+  - `type_check_with_package_world` - Line ~660
+  - `build_script_module_alias_map` - Line ~1050
+  - `build_module_alias_map` - Line ~990
+
+**Interpreter:**
+- New: `crates/datalove-datafun/src/interp/mod.rs`
+  - `execute_script` - Line 223 (TODO at line 231)
+  - `eval_function_call_in_script_scope` - Line 528
+  - `execute_function_body` - Line 594
+
+**Test Fixtures:**
+- New tests: `crates/datalove-datafun/tests/fixtures/interp2/`
+- Old module tests: `crates/datalove-datafun/tests/fixtures/interp_with_package/`
+- Typecheck tests: `crates/datalove-datafun/tests/fixtures/tycheck_world/`
+
+#### Success Criteria
+
+**Basic Module Integration:**
+- ✅ Can resolve functions from sys/std modules
+- ✅ Imports work correctly from script
+- ✅ Module functions can call other functions in same module (no import)
+- ✅ Module functions can call imported functions from other modules
+
+**Advanced Features:**
+- ✅ Lazy parsing verified (only parse on first call)
+- ✅ Salsa memoization working (modules cached after parse)
+- ✅ REPL can accumulate functions across units
+- ✅ Scripts can execute against package world
+
+**Error Handling:**
+- ✅ Module not found errors caught
+- ✅ Function not found in module errors caught
+- ✅ Module typecheck errors prevent execution
+- ✅ Circular dependencies detected
+
+**Test Coverage:**
+- ✅ All 7 new module tests pass
+- ✅ Test 29 passes with correct output
+- ✅ Old interp_with_package tests ported and passing
+- ✅ Zero memory leaks verified
 
 ### Phase 8: Testing & Validation
 **Goal**: Comprehensive test coverage.
