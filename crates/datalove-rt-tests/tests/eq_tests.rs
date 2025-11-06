@@ -2735,7 +2735,7 @@ proptest! {
     fn proptest_eq_moderate_structures(seed in any::<u64>()) {
         let db = Database::default();
         let config = AstGenConfig {
-            max_collection_size: 150,
+            max_collection_size: 11,  // Maps/Sets limited to 11 elements for instantiation.
             max_depth: 3,
             ..Default::default()
         };

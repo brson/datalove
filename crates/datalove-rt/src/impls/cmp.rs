@@ -361,6 +361,14 @@ unsafe fn eq_value(
                 let str_a = &*(value_a as *const rtdt::String);
                 let str_b = &*(value_b as *const rtdt::String);
 
+                // Handle empty strings (size 0, data can be null).
+                if str_a.size == 0 && str_b.size == 0 {
+                    return true;
+                }
+                if str_a.size != str_b.size {
+                    return false;
+                }
+
                 let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size as usize);
                 let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size as usize);
                 bytes_a == bytes_b
@@ -618,9 +626,105 @@ unsafe fn eq_value(
                     eq_value(elem_a, elem_b, element_ty, float_policy)
                 }
             }
-            rtdt::TyTag::Data | rtdt::TyTag::Error => {
-                // Not yet implemented.
-                unimplemented!("eq_value for {:?}", td.type_tag())
+            rtdt::TyTag::Data => {
+                // Compare Data values.
+                // Data uses a tagged encoding that can store values in three ways.
+                let data_a = &*(value_a as *const rtdt::Data);
+                let data_b = &*(value_b as *const rtdt::Data);
+
+                // First check if types match.
+                let tytag_a = data_a.tytag();
+                let tytag_b = data_b.tytag();
+                if tytag_a != tytag_b {
+                    return false;
+                }
+
+                // Same type - compare based on encoding.
+                match data_a.tag() {
+                    rtdt::anypack::Tag::TwoPointers => {
+                        // Heap-allocated values (Int, String, List, etc.).
+                        // Recursively compare the inner values.
+                        let tydesc_a = data_a.tydesc();
+                        let tydesc_b = data_b.tydesc();
+                        if tydesc_a != tydesc_b {
+                            return false;
+                        }
+                        let inner_value_a = data_a.value_ptr();
+                        let inner_value_b = data_b.value_ptr();
+                        eq_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
+                    }
+                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
+                        // For same type, compare the Data structures field-wise.
+                        // This works because each type has a consistent encoding.
+                        // Data is repr(C) with two u64 fields: (primary, secondary).
+                        if std::ptr::eq(data_a, data_b) {
+                            true
+                        } else {
+                            // Read Data as two u64 values and compare.
+                            let data_a_bytes = std::ptr::read(data_a);
+                            let data_b_bytes = std::ptr::read(data_b);
+
+                            // Compare using transmute to [u64; 2] for consistent equality.
+                            let a_words: [u64; 2] = std::mem::transmute(data_a_bytes);
+                            let b_words: [u64; 2] = std::mem::transmute(data_b_bytes);
+
+                            a_words == b_words
+                        }
+                    }
+                    _ => {
+                        panic!("invalid Data tag: {:?}", data_a.tag());
+                    }
+                }
+            }
+            rtdt::TyTag::Error => {
+                // Compare Error values.
+                // Error uses same encoding as Data.
+                let err_a = &*(value_a as *const rtdt::Error);
+                let err_b = &*(value_b as *const rtdt::Error);
+                let as_data_a = &*(value_a as *const rtdt::Data);
+                let as_data_b = &*(value_b as *const rtdt::Data);
+
+                // First check if types match.
+                let tytag_a = as_data_a.tytag();
+                let tytag_b = as_data_b.tytag();
+                if tytag_a != tytag_b {
+                    return false;
+                }
+
+                // Same type - compare based on encoding.
+                match as_data_a.tag() {
+                    rtdt::anypack::Tag::TwoPointers => {
+                        // Heap-allocated error values.
+                        // Recursively compare the inner values.
+                        let tydesc_a = err_a.tydesc();
+                        let tydesc_b = err_b.tydesc();
+                        if tydesc_a != tydesc_b {
+                            return false;
+                        }
+                        let inner_value_a = err_a.value_ptr();
+                        let inner_value_b = err_b.value_ptr();
+                        eq_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
+                    }
+                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
+                        // For same type, compare the Error structures field-wise.
+                        if std::ptr::eq(err_a, err_b) {
+                            true
+                        } else {
+                            // Read Error as two u64 values and compare.
+                            let err_a_bytes = std::ptr::read(as_data_a);
+                            let err_b_bytes = std::ptr::read(as_data_b);
+
+                            // Compare using transmute to [u64; 2] for consistent equality.
+                            let a_words: [u64; 2] = std::mem::transmute(err_a_bytes);
+                            let b_words: [u64; 2] = std::mem::transmute(err_b_bytes);
+
+                            a_words == b_words
+                        }
+                    }
+                    _ => {
+                        panic!("invalid Error tag: {:?}", as_data_a.tag());
+                    }
+                }
             }
         }
     }
