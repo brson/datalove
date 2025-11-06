@@ -1,0 +1,18 @@
+----------
+module sys/test/bigmath
+----------
+
+fun compute_large(x: u32, y: u32): Int
+    let a = x + y
+    let b = a * @1000000
+    ret b
+end fun
+
+----------
+script
+----------
+
+require module sys/test/bigmath
+import bigmath.compute_large
+
+let output = compute_large(@42, @58)

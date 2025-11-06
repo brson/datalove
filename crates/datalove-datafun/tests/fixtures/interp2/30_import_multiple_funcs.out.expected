@@ -1,0 +1,301 @@
+[
+    ModuleAnalysis(
+        type: "Module",
+        path: "sys/test/math",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "add",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                        FunParam(
+                            name: "y",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: AddChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "x",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "y",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "sub",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                        FunParam(
+                            name: "y",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: SubChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "x",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "y",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "mul",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                        FunParam(
+                            name: "y",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: MulChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "x",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "y",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        exports: [],
+    ),
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtRequireModule(
+                    kind: "Require",
+                    variant: "Module",
+                    import_space: "sys",
+                    package_alias: "test",
+                    module_alias: "math",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "math",
+                    item_name: "add",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "math",
+                    item_name: "sub",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "math",
+                    item_name: "mul",
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "a",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "add",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "10",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "5",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "b",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "sub",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "20",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "8",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "mul",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "a",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "b",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@180",
+    ),
+]

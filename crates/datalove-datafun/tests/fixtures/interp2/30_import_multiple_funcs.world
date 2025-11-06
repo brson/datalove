@@ -1,0 +1,28 @@
+----------
+module sys/test/math
+----------
+
+fun add(x: u32, y: u32): u32
+    ret x +! y
+end fun
+
+fun sub(x: u32, y: u32): u32
+    ret x -! y
+end fun
+
+fun mul(x: u32, y: u32): u32
+    ret x *! y
+end fun
+
+----------
+script
+----------
+
+require module sys/test/math
+import math.add
+import math.sub
+import math.mul
+
+let a = add(@10, @5)
+let b = sub(@20, @8)
+let output = mul(a, b)
