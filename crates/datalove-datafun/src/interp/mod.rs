@@ -20,6 +20,8 @@ pub struct InterpContext<'db> {
     module_functions: ModuleFunctionTable<'db>,
     /// Current module being executed (for module-internal function calls).
     current_module: Option<crate::package::PackageModule>,
+    /// Typecheck result for the package world (includes module exports).
+    typecheck_result: Option<crate::tycheck::PackageWorldTypecheckResult<'db>>,
     tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
 }
 
@@ -132,6 +134,7 @@ impl InterpContext<'_> {
             },
             module_functions: ModuleFunctionTable::new(),
             current_module: None,
+            typecheck_result: None,
             tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
         }
     }
@@ -382,8 +385,28 @@ pub fn execute_script<'db>(
     // Build module function table from require/import statements.
     ctx.module_functions = ModuleFunctionTable::build_from_script(db, script, package_world);
 
-    // TODO: For now, skip package world integration and typechecking.
-    // We'll add this back once we have basic expression evaluation working.
+    // Resolve imports and typecheck the package world.
+    let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
+    let graph_result = resolution.result(db);
+
+    // If resolution succeeds, run typecheck and store the result.
+    if let Ok(graph) = graph_result {
+        let typecheck_result = crate::tycheck::typecheck_package_world(db, graph);
+
+        // Check for typecheck errors (but don't fail - just log them for now).
+        // The interpreter can work without perfect types as long as the AST is valid.
+        let module_errors = typecheck_result.module_errors(db);
+        if !module_errors.is_empty() {
+            // Just log errors, don't fail execution.
+            // This allows tests with minor type mismatches to still run.
+            eprintln!("Note: typecheck found errors (continuing anyway): {} errors", module_errors.len());
+        }
+
+        ctx.typecheck_result = Some(typecheck_result);
+    } else {
+        // Resolution failed - continue without typecheck (will fail at lookup if needed).
+        // This allows simple scripts without module imports to still work.
+    }
 
     // Execute all script units.
     let units = script.units(db);
@@ -687,6 +710,94 @@ fn eval_datalit_expression<'db>(
     }
 }
 
+/// Look up a function that a module imported from another module.
+///
+/// Parses the module's import statements and resolves them against the package world.
+#[salsa::tracked]
+fn lookup_module_import<'db>(
+    db: &'db dyn crate::Db,
+    current_module: crate::package::PackageModule,
+    function_name: InternedText<'db>,
+    package_world: PackageWorld,
+) -> Option<(ast::StmtFun<'db>, crate::package::PackageModule)> {
+    use crate::ast::{Statement, StmtRequire};
+
+    // Parse the current module to get its import statements.
+    let module_source = current_module.text(db);
+    let parse_result = crate::parser::parse(db, module_source);
+    let parsed = parse_result.script;
+
+    // Build a map of module aliases to actual modules for this module's requires.
+    let mut module_alias_map = HashMap::new();
+    let world_map = crate::package::package_world_map(db, package_world);
+
+    // Build hierarchy map for resolving module paths.
+    let mut hierarchy_map = HashMap::new();
+    for (import_space, packages) in world_map.map(db) {
+        for (package_name, package) in packages {
+            for (module_name, module_item) in package.modules(db) {
+                let key = (
+                    import_space.as_str().to_string(),
+                    package_name.as_str().to_string(),
+                    module_name.as_str().to_string(),
+                );
+                hierarchy_map.insert(key, *module_item);
+            }
+        }
+    }
+
+    // Process require statements to build module alias map.
+    for statement in parsed.statements(db) {
+        if let Statement::Require(StmtRequire::Module(req)) = statement {
+            let import_space = req.import_space(db);
+            let package_alias = req.package_alias(db);
+            let module_alias = req.module_alias(db);
+
+            let key = (
+                import_space.as_str(db).to_string(),
+                package_alias.as_str(db).to_string(),
+                module_alias.as_str(db).to_string(),
+            );
+
+            if let Some(&resolved_module) = hierarchy_map.get(&key) {
+                module_alias_map.insert(module_alias, resolved_module);
+            }
+        }
+    }
+
+    // Process import statements to find the function.
+    for statement in parsed.statements(db) {
+        if let ast::Statement::Import(import_stmt) = statement {
+            let item_name = import_stmt.item_name(db);
+
+            // Check if this is the function we're looking for.
+            if item_name == function_name {
+                let module_name = import_stmt.module_name(db);
+
+                // Resolve the module alias.
+                if let Some(&source_module) = module_alias_map.get(&module_name) {
+                    // Parse the source module to get its functions.
+                    let source_module_text = source_module.text(db);
+                    let source_parse_result = crate::parser::parse(db, source_module_text);
+                    let source_parsed = source_parse_result.script;
+
+                    // Look up the function in the source module.
+                    for statement in source_parsed.statements(db) {
+                        if let ast::Statement::Fun(func) = statement {
+                            if func.name(db) == function_name {
+                                return Some((*func, source_module));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Function not found in imports.
+    None
+}
+
 /// Look up a function by name in script scope or imported modules.
 ///
 /// Returns the function definition and its source module (if from a module).
@@ -710,9 +821,20 @@ fn lookup_function<'db>(
                 return Ok((func, Some(current_module)));
             }
         }
+
+        // Check what the current module imported from other modules.
+        // Parse the module's import statements and resolve them.
+        if let Some((func_ast, source_module)) = lookup_module_import(
+            ctx.db,
+            current_module,
+            name,
+            ctx.package_world,
+        ) {
+            return Ok((func_ast, Some(source_module)));
+        }
     }
 
-    // Finally check imported module functions.
+    // Finally check imported module functions (script-level imports).
     if let Some((func, module)) = ctx.module_functions.get(name) {
         return Ok((func, Some(module)));
     }

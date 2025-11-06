@@ -254,11 +254,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "FunctionNotFound(\"increment\")",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@15",
     ),
 ]
