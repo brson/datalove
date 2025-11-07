@@ -22,6 +22,8 @@ pub struct InterpContext<'db> {
     current_module: Option<crate::package::PackageModule>,
     /// Typecheck result for the package world (includes module exports).
     typecheck_result: Option<crate::tycheck::PackageWorldTypecheckResult<'db>>,
+    /// Script-level function analyses (for functions defined in the script).
+    script_function_analyses: HashMap<ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>>,
     tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
     /// Call stack for frame-based execution.
     call_stack: Vec<StackFrame<'db>>,
@@ -162,6 +164,7 @@ impl InterpContext<'_> {
             module_functions: ModuleFunctionTable::new(),
             current_module: None,
             typecheck_result: None,
+            script_function_analyses: HashMap::new(),
             tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
             call_stack: Vec::new(),
         }
@@ -495,6 +498,30 @@ pub fn execute_script<'db>(
 
         // Also populate script-level imports.
         ctx.module_functions.populate_script_imports(db, script, package_world);
+
+        // Typecheck and analyze script-level functions.
+        let units = script.units(db);
+        for unit_index in 0..units.len() {
+            let parsed_unit = crate::parser::parse_script_unit(db, script, unit_index);
+            let unit_source = units[unit_index].source(db);
+
+            // Typecheck the script unit with package world context.
+            let unit_typecheck = crate::tycheck::type_check_with_package_world(
+                db,
+                unit_source,
+                parsed_unit,
+                package_world,
+                typecheck_result,
+            );
+
+            // Analyze each function in the unit.
+            for statement in parsed_unit.statements(db) {
+                if let crate::ast::Statement::Fun(func_stmt) = statement {
+                    let analysis = crate::function_analysis::analyze_function(db, *func_stmt, unit_typecheck);
+                    ctx.script_function_analyses.insert(*func_stmt, analysis);
+                }
+            }
+        }
     } else {
         // Resolution failed - continue without typecheck (will fail at lookup if needed).
         // This allows simple scripts without module imports to still work.
@@ -732,7 +759,14 @@ fn eval_expression_in_script_scope<'db>(
         ast::ExprFunKind::BinOp(binop_expr) => {
             // Evaluate binary operations.
             let lhs = eval_expression_in_script_scope(ctx, binop_expr.lhs(ctx.db))?;
-            let rhs = eval_expression_in_script_scope(ctx, binop_expr.rhs(ctx.db))?;
+            let rhs = match eval_expression_in_script_scope(ctx, binop_expr.rhs(ctx.db)) {
+                Ok(v) => v,
+                Err(e) => {
+                    // Clean up lhs on error.
+                    destroy_value(ctx, lhs);
+                    return Err(e);
+                }
+            };
             execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs)
         }
         ast::ExprFunKind::Tuple(_) => {
@@ -880,7 +914,16 @@ fn eval_function_call_in_script_scope<'db>(
     // Evaluate all arguments in script scope.
     let mut arg_values = Vec::new();
     for arg_expr in arg_exprs {
-        let value = eval_expression_in_script_scope(ctx, *arg_expr)?;
+        let value = match eval_expression_in_script_scope(ctx, *arg_expr) {
+            Ok(v) => v,
+            Err(e) => {
+                // Clean up previously evaluated arguments on error.
+                for val in arg_values {
+                    destroy_value(ctx, val);
+                }
+                return Err(e);
+            }
+        };
         arg_values.push(value);
     }
 
@@ -914,7 +957,16 @@ fn eval_function_call_in_function_scope<'db>(
     // Evaluate all arguments in function scope (can access local variables).
     let mut arg_values = Vec::new();
     for arg_expr in arg_exprs {
-        let value = eval_expression_in_function_scope(ctx, local_variables, *arg_expr)?;
+        let value = match eval_expression_in_function_scope(ctx, local_variables, *arg_expr) {
+            Ok(v) => v,
+            Err(e) => {
+                // Clean up previously evaluated arguments on error.
+                for val in arg_values {
+                    destroy_value(ctx, val);
+                }
+                return Err(e);
+            }
+        };
         arg_values.push(value);
     }
 
@@ -936,32 +988,36 @@ fn execute_function_body<'db>(
     let prev_module = ctx.current_module;
     ctx.current_module = func_module;
 
-    // Get function analysis from typecheck result.
-    let analysis = match &ctx.typecheck_result {
-        Some(typecheck_result) => {
-            let analyses = typecheck_result.function_analyses(ctx.db);
-            match analyses.iter().find(|(f, _)| *f == func) {
-                Some((_, analysis)) => *analysis,
-                None => {
-                    // No analysis for this function - fall back to HashMap.
-                    return execute_function_body_fallback(ctx, func, prev_module, arg_values);
-                }
-            }
-        }
-        None => {
-            // No typecheck result - fall back to HashMap.
-            return execute_function_body_fallback(ctx, func, prev_module, arg_values);
-        }
+    // Get function analysis.
+    // First check script-level function analyses, then module analyses.
+    let analysis = if let Some(analysis) = ctx.script_function_analyses.get(&func) {
+        *analysis
+    } else if let Some(typecheck_result) = &ctx.typecheck_result {
+        let analyses = typecheck_result.function_analyses(ctx.db);
+        analyses.iter()
+            .find(|(f, _)| *f == func)
+            .map(|(_, a)| *a)
+            .ok_or_else(|| InterpError::RuntimeError(
+                format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
+            ))?
+    } else {
+        return Err(InterpError::RuntimeError(
+            "No typecheck result available - cannot execute function".to_string()
+        ));
     };
 
-    // Check for analysis errors.
-    if !analysis.errors(ctx.db).is_empty() {
-        // Log analysis errors and fall back to HashMap execution.
-        eprintln!("Warning: Function '{}' has analysis errors, falling back to HashMap execution", func.name(ctx.db).text(ctx.db));
-        for error in analysis.errors(ctx.db) {
-            eprintln!("  - {:?}", error);
-        }
-        return execute_function_body_fallback(ctx, func, prev_module, arg_values);
+    // Check for critical analysis errors (ignore warnings like ValueNotUsed).
+    let critical_errors: Vec<_> = analysis.errors(ctx.db)
+        .iter()
+        .filter(|e| !matches!(e, crate::function_analysis::AnalysisError::ValueNotUsed { .. }))
+        .collect();
+
+    if !critical_errors.is_empty() {
+        return Err(InterpError::RuntimeError(
+            format!("Function '{}' has analysis errors: {:?}",
+                func.name(ctx.db).text(ctx.db),
+                critical_errors)
+        ));
     }
 
     // Get frame layout.
@@ -1023,71 +1079,20 @@ fn execute_function_body<'db>(
     // Clean up frame values before returning.
     cleanup_frame(ctx, frame);
 
+    // Clean up Copy-type arguments.
+    // These were heap-allocated when cloned for passing to the function.
+    // Reference slots don't own the data, so we must free it here.
+    for arg_value in arg_values {
+        if is_copy_type(arg_value) {
+            // Copy types have no sub-allocations, just free the structure.
+            free_value_structure(ctx, arg_value);
+        }
+    }
+
     // Restore previous module.
     ctx.current_module = prev_module;
 
     result
-}
-
-/// Fallback implementation using HashMap-based execution.
-///
-/// Used when typecheck result is not available for analysis.
-fn execute_function_body_fallback<'db>(
-    ctx: &mut InterpContext<'db>,
-    func: ast::StmtFun<'db>,
-    prev_module: Option<crate::package::PackageModule>,
-    arg_values: Vec<Value>,
-) -> Result<Value, InterpError> {
-    // Create a local variable scope for the function.
-    let mut local_variables: HashMap<InternedText<'db>, ScriptVariable> = HashMap::new();
-
-    // Initialize parameters from arguments.
-    let params = func.params(ctx.db);
-    for (i, param) in params.iter().enumerate() {
-        // For now, only support In mode parameters.
-        if param.mode(ctx.db) != ast::ParamMode::In {
-            return Err(InterpError::InvalidExpression(
-                format!("Parameter mode {:?} not yet supported (function '{}')",
-                    param.mode(ctx.db), func.name(ctx.db).text(ctx.db))
-            ));
-        }
-
-        let param_name = param.name(ctx.db);
-        let param_value = arg_values[i];
-        let is_copy = is_copy_type(param_value);
-
-        local_variables.insert(param_name, ScriptVariable {
-            value: param_value,
-            state: ScriptVarState::Available,
-            is_copy,
-        });
-    }
-
-    // Execute each statement in the function body.
-    for stmt in func.body(ctx.db) {
-        match execute_function_statement(ctx, &mut local_variables, stmt) {
-            Ok(()) => continue,
-            Err(InterpError::FunctionReturn(value)) => {
-                // Return statement encountered - clean up locals and return.
-                cleanup_local_variables(ctx, local_variables);
-                ctx.current_module = prev_module;
-                return Ok(value);
-            }
-            Err(e) => {
-                // Error occurred - clean up locals before propagating.
-                cleanup_local_variables(ctx, local_variables);
-                ctx.current_module = prev_module;
-                return Err(e);
-            }
-        }
-    }
-
-    // If we reach here, the function didn't have an explicit return.
-    cleanup_local_variables(ctx, local_variables);
-    ctx.current_module = prev_module;
-    Err(InterpError::RuntimeError(
-        format!("Function '{}' did not return a value", func.name(ctx.db).text(ctx.db))
-    ))
 }
 
 /// Execute function body with frame-based execution.
@@ -1150,12 +1155,13 @@ fn cleanup_frame<'db>(
             };
             let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-            // Destroy the value.
+            // Destroy the value contents only (not the structure itself).
+            // The memory is part of the frame buffer and will be freed with the frame.
             let value = Value {
                 ptr: slot_ptr,
                 tydesc,
             };
-            destroy_value(ctx, value);
+            destroy_value_contents_only(ctx, value);
         }
     }
 }
@@ -1219,24 +1225,50 @@ fn read_reference_slot<'db>(
 }
 
 /// Read a value from a Local or Temporary slot.
+///
+/// This allocates heap memory and copies the value from the frame,
+/// since the value will outlive the frame (being moved out).
 fn read_value_from_slot<'db>(
-    frame: &StackFrame<'db>,
+    ctx: &mut InterpContext<'db>,
+    frame_index: usize,
     slot_info: crate::function_analysis::SlotInfo<'db>,
-    tydesc_table: &mut datalove_datalit::tydesc_table::TyDescTable<'db>,
-    db: &'db dyn crate::Db,
 ) -> Result<Value, InterpError> {
-    let offset = slot_info.offset(db) as usize;
-    let ptr = unsafe { frame.frame_data.as_ptr().add(offset) as *mut u8 };
+    let offset = slot_info.offset(ctx.db) as usize;
+    let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) };
 
     // Get the type descriptor from the slot's type.
-    let ty = slot_info.ty(db);
-    let datalit_ty = match ty.ty(db) {
+    let ty = slot_info.ty(ctx.db);
+    let datalit_ty = match ty.ty(ctx.db) {
         crate::tycheck::Type::Datalit(dt) => dt.clone(),
         _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
     };
-    let tydesc = tydesc_table.get_or_create(&datalit_ty);
+    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-    Ok(Value { ptr, tydesc })
+    // Allocate heap memory for the value.
+    let size = unsafe { (*tydesc).size as usize };
+    let align = unsafe { (*tydesc).align as usize };
+
+    unsafe {
+        let rt_handle = ctx.runtime.handle();
+        let heap_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(
+            rt_handle,
+            tydesc,
+            1,
+        );
+
+        if heap_ptr.is_null() {
+            return Err(InterpError::RuntimeError("Failed to allocate memory".to_string()));
+        }
+
+        // Copy data from frame to heap.
+        std::ptr::copy_nonoverlapping(
+            frame_ptr,
+            heap_ptr,
+            size
+        );
+
+        Ok(Value { ptr: heap_ptr, tydesc })
+    }
 }
 
 /// Write a value to a Local or Temporary slot.
@@ -1273,15 +1305,30 @@ fn execute_let_statement_frame<'db>(
     let frame_index = ctx.call_stack.len() - 1;
     let name = let_stmt.name(ctx.db);
     let layout = ctx.call_stack[frame_index].layout;
-    let slot_info = find_slot_by_name(ctx.db, layout, name)
-        .ok_or_else(|| InterpError::RuntimeError(
-            format!("Let binding '{}' not found in frame", name.text(ctx.db))
-        ))?;
+    let slot_info = match find_slot_by_name(ctx.db, layout, name) {
+        Some(s) => s,
+        None => {
+            // Clean up value on error.
+            destroy_value(ctx, value);
+            return Err(InterpError::RuntimeError(
+                format!("Let binding '{}' not found in frame", name.text(ctx.db))
+            ));
+        }
+    };
 
     let slot_id = slot_info.slot_id(ctx.db);
 
     // Write value to slot.
-    write_value_to_slot(&mut ctx.call_stack[frame_index], slot_info, value, ctx.db)?;
+    if let Err(e) = write_value_to_slot(&mut ctx.call_stack[frame_index], slot_info, value, ctx.db) {
+        // Clean up value on error.
+        destroy_value(ctx, value);
+        return Err(e);
+    }
+
+    // Free the heap-allocated value structure after copying to frame.
+    // For Copy types: just free the structure (no sub-allocations to destroy).
+    // For Move types: free only the structure, not contents (frame owns pointers).
+    free_value_structure(ctx, value);
 
     // Mark slot as Available.
     ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
@@ -1316,23 +1363,41 @@ fn eval_expression_frame<'db>(
 
             // Read value from slot.
             let kind = slot_info.kind(ctx.db);
-            let value = if kind == crate::function_analysis::SlotKind::Reference {
+
+            if kind == crate::function_analysis::SlotKind::Reference {
                 // Reference slot: read pointer.
                 let ptr = read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db);
                 let tydesc = unsafe { (*ptr as *const datalove_rt::rtdt::TyDesc).read() };
-                Value { ptr, tydesc: &tydesc as *const _ }
-            } else {
-                // Local/Temporary slot: read actual value.
-                read_value_from_slot(&ctx.call_stack[frame_index], slot_info, &mut ctx.tydesc_table, ctx.db)?
-            };
+                let value = Value { ptr, tydesc: &tydesc as *const _ };
 
-            if is_copy {
-                // Clone the value.
-                Ok(clone_value(ctx, value))
+                if is_copy {
+                    Ok(clone_value(ctx, value))
+                } else {
+                    // Move from reference (mark as moved to prevent reuse).
+                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
+                    Ok(value)
+                }
             } else {
-                // Move: mark as moved.
-                ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
-                Ok(value)
+                // Local/Temporary slot.
+                if is_copy {
+                    // For Copy types, clone directly from frame without allocating.
+                    let offset = slot_info.offset(ctx.db) as usize;
+                    let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
+
+                    let datalit_ty = match ty.ty(ctx.db) {
+                        crate::tycheck::Type::Datalit(dt) => dt.clone(),
+                        _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
+                    };
+                    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+
+                    let temp_value = Value { ptr: frame_ptr, tydesc };
+                    Ok(clone_value(ctx, temp_value))
+                } else {
+                    // For Move types, allocate and copy from frame, then mark as moved.
+                    let value = read_value_from_slot(ctx, frame_index, slot_info)?;
+                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
+                    Ok(value)
+                }
             }
         }
 
@@ -1344,7 +1409,14 @@ fn eval_expression_frame<'db>(
         ast::ExprFunKind::BinOp(binop_expr) => {
             // Evaluate operands.
             let lhs = eval_expression_frame(ctx, binop_expr.lhs(ctx.db))?;
-            let rhs = eval_expression_frame(ctx, binop_expr.rhs(ctx.db))?;
+            let rhs = match eval_expression_frame(ctx, binop_expr.rhs(ctx.db)) {
+                Ok(v) => v,
+                Err(e) => {
+                    // Clean up lhs on error.
+                    destroy_value(ctx, lhs);
+                    return Err(e);
+                }
+            };
 
             // Execute operation.
             execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs)
@@ -1439,7 +1511,14 @@ fn eval_expression_in_function_scope<'db>(
         }
         ast::ExprFunKind::BinOp(binop_expr) => {
             let lhs = eval_expression_in_function_scope(ctx, local_variables, binop_expr.lhs(ctx.db))?;
-            let rhs = eval_expression_in_function_scope(ctx, local_variables, binop_expr.rhs(ctx.db))?;
+            let rhs = match eval_expression_in_function_scope(ctx, local_variables, binop_expr.rhs(ctx.db)) {
+                Ok(v) => v,
+                Err(e) => {
+                    // Clean up lhs on error.
+                    destroy_value(ctx, lhs);
+                    return Err(e);
+                }
+            };
             execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs)
         }
         ast::ExprFunKind::Tuple(_) => {
@@ -1733,6 +1812,32 @@ fn widen_u32_to_int<'db>(
 }
 
 /// Destroy a value using the runtime's destroy function.
+/// Destroy only the contents of a value without freeing its memory.
+///
+/// Use this for values stored inline in frame buffers, where the memory
+/// is owned by the frame Vec<u8> and should not be freed individually.
+pub fn destroy_value_contents_only<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+) {
+    unsafe {
+        let rt_handle = ctx.runtime.handle();
+
+        // Destroy contents using runtime's type-specific destroy logic.
+        // This handles Int limbs, String buffers, and other complex types.
+        // Does NOT free the value structure itself.
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt_handle,
+            value.ptr,
+            value.tydesc,
+        );
+    }
+}
+
+/// Destroy a heap-allocated value.
+///
+/// This destroys the value's contents AND frees the memory structure.
+/// Only use this for values allocated on the heap (not frame-local values).
 pub fn destroy_value<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
@@ -1758,6 +1863,29 @@ pub fn destroy_value<'db>(
     }
 }
 
+/// Free only the value structure without destroying contents.
+///
+/// Use this when a value's bytes have been copied to a frame slot,
+/// and the frame now owns the pointers. This frees the temporary
+/// heap-allocated structure but leaves sub-allocations intact.
+pub fn free_value_structure<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+) {
+    unsafe {
+        let rt_handle = ctx.runtime.handle();
+
+        // Free only the structure memory, not the contents.
+        // The frame slot now owns any pointers in the structure.
+        datalove_rt::c::dtlv_rti_mem_free_local(
+            rt_handle,
+            value.tydesc,
+            1,
+            value.ptr,
+        );
+    }
+}
+
 /// Evaluate addition with automatic widening to int.
 fn eval_add<'db>(
     ctx: &mut InterpContext<'db>,
@@ -1767,14 +1895,31 @@ fn eval_add<'db>(
     // Both u32: widen to Int and add.
     if is_u32_value(lhs) && is_u32_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        let rhs_int = match widen_u32_to_int(ctx, rhs) {
+            Ok(v) => v,
+            Err(e) => {
+                // Clean up lhs_int on error.
+                destroy_value(ctx, lhs_int);
+                destroy_value(ctx, lhs);
+                destroy_value(ctx, rhs);
+                return Err(e);
+            }
+        };
 
         // Destroy the original u32 values.
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
 
         // Allocate result Int.
-        let result_int = allocate_bigint(ctx)?;
+        let result_int = match allocate_bigint(ctx) {
+            Ok(v) => v,
+            Err(e) => {
+                // Clean up widened values on error.
+                destroy_value(ctx, lhs_int);
+                destroy_value(ctx, rhs_int);
+                return Err(e);
+            }
+        };
 
         // Perform bigint addition.
         let status = unsafe {
@@ -1884,6 +2029,9 @@ fn eval_add<'db>(
         }
     }
     else {
+        // Clean up values before returning error.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression(
             "Unsupported types for addition".to_string()
         ))
@@ -2011,6 +2159,9 @@ fn eval_sub<'db>(
         }
     }
     else {
+        // Clean up values before returning error.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression(
             "Unsupported types for subtraction".to_string()
         ))
@@ -2141,6 +2292,9 @@ fn eval_mul<'db>(
         }
     }
     else {
+        // Clean up values before returning error.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression(
             "Unsupported types for multiplication".to_string()
         ))
@@ -2269,6 +2423,9 @@ fn eval_div<'db>(
         }
     }
     else {
+        // Clean up values before returning error.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression(
             "Unsupported types for division".to_string()
         ))
