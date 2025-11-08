@@ -2697,6 +2697,11 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             numeric_strategy: NumericStrategy::CornerCases,
+            type_weights: TypeWeights {
+                data_type: 0,
+                error_type: 0,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let expr = gen_expr_full_seeded(&db, seed, config);

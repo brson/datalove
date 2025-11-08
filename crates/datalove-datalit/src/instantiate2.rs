@@ -687,6 +687,10 @@ fn instantiate_result<'db>(
         let resolved = crate::resolve::resolve_names(db, dummy_source, err_payload);
         let typechecked = crate::tycheck::type_check(db, err_payload, resolved);
 
+        if !typechecked.errors(db).is_empty() {
+            return Err(anyhow!("Type errors in result error payload ({} errors)", typechecked.errors(db).len()));
+        }
+
         let inner_type = typechecked.root_type(db)
             .ok_or_else(|| anyhow!("Cannot determine type of error value"))?;
 
@@ -720,6 +724,10 @@ fn instantiate_data<'db>(
     let resolved = crate::resolve::resolve_names(db, source, inner_expr);
     let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
 
+    if !typechecked.errors(db).is_empty() {
+        return Err(anyhow!("Type errors in data value ({} errors)", typechecked.errors(db).len()));
+    }
+
     let inner_type = typechecked.root_type(db)
         .ok_or_else(|| anyhow!("Cannot determine type of data value"))?;
 
@@ -750,6 +758,10 @@ fn instantiate_error<'db>(
     let dummy_source = bct::input::Source::new(db, String::new());
     let resolved = crate::resolve::resolve_names(db, dummy_source, inner_expr);
     let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
+
+    if !typechecked.errors(db).is_empty() {
+        return Err(anyhow!("Type errors in error value ({} errors)", typechecked.errors(db).len()));
+    }
 
     let inner_type = typechecked.root_type(db)
         .ok_or_else(|| anyhow!("Cannot determine type of error value"))?;
