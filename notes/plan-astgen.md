@@ -743,17 +743,15 @@ Successfully integrated AST generator with property-based testing using proptest
 - **Fix Required:** Implement instantiate_value for Result type
 
 #### Bug 1b: Map and Set instantiation limited to 11 elements
-**Status:** Not fixed (workaround in place)
-- **Location:** crates/datalove-datalit/src/instantiate2.rs:799, 916
-- **Error:** "Set instantiation limited to 11 elements" / "Map instantiation limited to 11 entries"
-- **Details:**
-  - Maps and Sets are implemented as B-trees with branching factor B=6
-  - Each B-tree node can hold CAPACITY = 2*B-1 = 11 elements (rtdt/lib.rs:129, 169)
-  - instantiate_map_value and instantiate_set_value only create a single leaf node
-  - Cannot instantiate maps/sets with more than 11 elements
-  - The runtime supports larger maps/sets (insertion/deletion work correctly)
-- **Workaround:** Set `max_collection_size: 11` in all property test configs
-- **Fix Required:** Implement proper B-tree building in instantiation to support multi-node maps/sets
+**Status:** ✅ FIXED (2025-11-24)
+- **Location:** crates/datalove-datalit/src/instantiate2.rs (instantiate_set, instantiate_map)
+- **Original Error:** "Set instantiation limited to 11 elements" / "Map instantiation limited to 11 entries"
+- **Fix Applied:** Moved B-tree bulk building to runtime, instantiate2 now uses runtime APIs
+  - Added `btreeset_build_from_sorted_slice` in set.rs
+  - Added `btreemap_build_from_sorted_slices` in btreemap.rs
+  - Added C API wrappers: `dtlv_rti_btreeset_build_from_sorted_slice_local`, `dtlv_rti_btreemap_build_from_sorted_slices_local`
+  - Removed duplicate B-tree building code from instantiate2.rs
+- **Result:** Maps and Sets can now be instantiated with arbitrary sizes
 - **Constants:**
   - MAP_NODE_B = 6, MAP_NODE_CAPACITY = 11 (rtdt/lib.rs:123, 129)
   - SET_NODE_B = 6, SET_NODE_CAPACITY = 11 (rtdt/lib.rs:163, 169)
@@ -829,10 +827,7 @@ let weights = if depth >= config.max_depth {
 2. **Fix Result instantiation** (high priority): Implement instantiate_value for Result type
    - cmp_value and eq_value already work for Result
    - Would enable result_type in property tests and un-ignore Result manual tests
-3. **Fix Map/Set instantiation limit** (high priority): Implement proper B-tree building for maps/sets >11 elements
-   - Currently only creates single leaf node, need to build multi-level B-trees
-   - Would enable testing with realistic collection sizes (100s or 1000s of elements)
-   - Runtime already supports multi-node trees, just instantiation is incomplete
+3. ~~**Fix Map/Set instantiation limit**~~ ✅ FIXED: B-tree bulk building moved to runtime
 4. **Address typecheck failures** (optional): Refine max-depth generation to avoid invalid combinations
 5. **Expand coverage** (future): Add property tests for cmp_total, eq_unique, and other operations
 
@@ -865,3 +860,25 @@ The types were correctly disabled in property tests, but for the wrong documente
    - `crates/datalove-rt/src/impls/btreemap.rs` - Map clone now links leaves
 
 **Result:** All clone tests pass including property-based tests with `max_collection_size: 50`. The Set/Map B-tree instantiation limit of 11 elements was previously a workaround for this bug - now larger collections can be cloned and compared correctly.
+
+### Refactoring (2025-11-24): Move B-tree Building to Runtime
+
+**Problem:** B-tree construction code was duplicated in instantiate2.rs. This code should live in the runtime where other B-tree operations are implemented.
+
+**Changes:**
+1. **Added to runtime (datalove-rt):**
+   - `btreeset_build_from_sorted_slice` in set.rs - O(n) bulk B-tree construction from sorted elements
+   - `btreemap_build_from_sorted_slices` in btreemap.rs - O(n) bulk B-tree construction from sorted key/value arrays
+   - C API wrappers for external access
+
+2. **Updated instantiate2.rs:**
+   - `instantiate_set` now allocates a buffer, instantiates all elements, calls the runtime's bulk build function
+   - `instantiate_map` does the same for maps with separate key/value buffers
+   - Removed ~400 lines of duplicate B-tree building code (old `build_set_btree`, `build_map_btree`, cleanup helpers)
+
+3. **API difference from existing `clone_from_slice`:**
+   - New functions take ownership of pre-sorted data (O(n) bulk load)
+   - Old `clone_from_slice` clones from unsorted data with deduplication (O(n log n) via repeated insertion)
+   - Both APIs remain available for different use cases
+
+**Result:** B-tree construction logic is now consolidated in the runtime. Maps and Sets can be instantiated with arbitrary sizes.
