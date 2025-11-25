@@ -68,9 +68,7 @@
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: ParseError(TypeHintParseError(
-                            message: "unknown type hint in DynParser",
-                        )),
+                        type_hint: Int,
                     )),
                     body: [
                         StmtLet(
@@ -144,17 +142,13 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: ParseError(TypeHintParseError(
-                                    message: "unknown type hint in DynParser",
-                                )),
+                                type_hint: String,
                             ),
                         ),
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: ParseError(TypeHintParseError(
-                            message: "unknown type hint in DynParser",
-                        )),
+                        type_hint: String,
                     )),
                     body: [
                         StmtRet(
@@ -183,9 +177,7 @@
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: ParseError(TypeHintParseError(
-                            message: "unknown type hint in DynParser",
-                        )),
+                        type_hint: Int,
                     )),
                     body: [
                         StmtLet(
@@ -414,8 +406,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "RuntimeError(\"No analysis found for function \'process_u32\'\")",
+            ],
         ),
-        output: "@1200000",
+        output: "",
     ),
 ]

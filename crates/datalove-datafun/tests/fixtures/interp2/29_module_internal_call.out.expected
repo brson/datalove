@@ -151,8 +151,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "RuntimeError(\"No analysis found for function \'quadruple\'\")",
+            ],
         ),
-        output: "@20",
+        output: "",
     ),
 ]

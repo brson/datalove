@@ -526,10 +526,24 @@ impl<'db> DynParser<'db> {
                     }
                     _ => {
                         let (text, span) = self.current_text_span();
+                        // Check if this looks like a capitalized type name.
+                        let message = if let Some(word) = self.peek_word() {
+                            let lower = word.to_lowercase();
+                            match lower.as_str() {
+                                "int" | "bool" | "string" | "data" | "error" |
+                                "u8" | "i8" | "u16" | "i16" | "u32" | "i32" |
+                                "u64" | "i64" | "f32" => {
+                                    format!("unknown type '{}', did you mean '{}'?", word, lower)
+                                }
+                                _ => format!("unknown type '{}'", word)
+                            }
+                        } else {
+                            "unexpected token in type hint".to_string()
+                        };
                         self.emit_type_hint_error(
                             text,
                             span,
-                            "unknown type hint in DynParser",
+                            &message,
                             "D008",
                             "unexpected token in type hint"
                         )

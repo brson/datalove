@@ -294,8 +294,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "RuntimeError(\"No analysis found for function \'add\'\")",
+            ],
         ),
-        output: "@180",
+        output: "",
     ),
 ]

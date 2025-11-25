@@ -9,9 +9,7 @@
                     params: [],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: ParseError(TypeHintParseError(
-                            message: "unknown type hint in DynParser",
-                        )),
+                        type_hint: Int,
                     )),
                     body: [
                         StmtRet(

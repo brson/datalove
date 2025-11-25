@@ -13,17 +13,13 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: ParseError(TypeHintParseError(
-                                    message: "unknown type hint in DynParser",
-                                )),
+                                type_hint: String,
                             ),
                         ),
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: ParseError(TypeHintParseError(
-                            message: "unknown type hint in DynParser",
-                        )),
+                        type_hint: String,
                     )),
                     body: [
                         StmtRet(
@@ -46,9 +42,7 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: ParseError(TypeHintParseError(
-                                    message: "unknown type hint in DynParser",
-                                )),
+                                type_hint: String,
                             ),
                         ),
                         FunParam(
@@ -56,17 +50,13 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: ParseError(TypeHintParseError(
-                                    message: "unknown type hint in DynParser",
-                                )),
+                                type_hint: String,
                             ),
                         ),
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: ParseError(TypeHintParseError(
-                            message: "unknown type hint in DynParser",
-                        )),
+                        type_hint: String,
                     )),
                     body: [
                         StmtRet(
@@ -190,8 +180,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "RuntimeError(\"No analysis found for function \'greet\'\")",
+            ],
         ),
-        output: "@\"World\"",
+        output: "",
     ),
 ]

@@ -2,7 +2,7 @@
 module sys/test/bigmath
 ----------
 
-fun compute_large(x: u32, y: u32): Int
+fun compute_large(x: u32, y: u32): int
     let a = x + y
     let b = a * @1000000
     ret b

@@ -1,8 +1,8 @@
-fun get_value(): Int
+fun get_value(): int
     ret @5
 end fun
 
-fun calc(): Int
+fun calc(): int
     let x = get_value()
     let y = @2
     ret x * y

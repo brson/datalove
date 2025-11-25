@@ -984,6 +984,44 @@ fn execute_function_body<'db>(
     func_module: Option<crate::package::PackageModule>,
     arg_values: Vec<Value>,
 ) -> Result<Value, InterpError> {
+    // Helper to clean up arguments on early error (before frame execution).
+    // All arguments must be destroyed since they were never used.
+    fn cleanup_args_on_error(ctx: &mut InterpContext<'_>, arg_values: Vec<Value>) {
+        for arg_value in arg_values {
+            destroy_value(ctx, arg_value);
+        }
+    }
+
+    // Helper to clean up arguments after successful frame execution.
+    // For copy types: free the original structure (function cloned it).
+    // For non-copy types: check if the slot was moved (ownership transferred).
+    fn cleanup_args_after_frame(
+        ctx: &mut InterpContext<'_>,
+        arg_values: Vec<Value>,
+        slot_states: &[SlotState],
+        slots: &[crate::function_analysis::SlotInfo<'_>],
+        params: &[ast::FunParam<'_>],
+        db: &dyn crate::Db,
+    ) {
+        for (i, arg_value) in arg_values.into_iter().enumerate() {
+            if is_copy_type(arg_value) {
+                // Copy types were cloned by the function, free the original structure.
+                free_value_structure(ctx, arg_value);
+            } else {
+                // Non-copy types: check if they were moved (consumed by function).
+                let param_name = params[i].name(db);
+                if let Some(slot_info) = slots.iter().find(|s| s.name(db) == Some(param_name)) {
+                    let slot_id = slot_info.slot_id(db);
+                    if slot_states[slot_id.0 as usize] != SlotState::Moved {
+                        // Slot was never read/moved, so destroy the argument.
+                        destroy_value(ctx, arg_value);
+                    }
+                    // If Moved, ownership was transferred, don't free.
+                }
+            }
+        }
+    }
+
     // Save previous module context and set current module.
     let prev_module = ctx.current_module;
     ctx.current_module = func_module;
@@ -994,13 +1032,19 @@ fn execute_function_body<'db>(
         *analysis
     } else if let Some(typecheck_result) = &ctx.typecheck_result {
         let analyses = typecheck_result.function_analyses(ctx.db);
-        analyses.iter()
-            .find(|(f, _)| *f == func)
-            .map(|(_, a)| *a)
-            .ok_or_else(|| InterpError::RuntimeError(
-                format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
-            ))?
+        match analyses.iter().find(|(f, _)| *f == func).map(|(_, a)| *a) {
+            Some(a) => a,
+            None => {
+                ctx.current_module = prev_module;
+                cleanup_args_on_error(ctx, arg_values);
+                return Err(InterpError::RuntimeError(
+                    format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
+                ));
+            }
+        }
     } else {
+        ctx.current_module = prev_module;
+        cleanup_args_on_error(ctx, arg_values);
         return Err(InterpError::RuntimeError(
             "No typecheck result available - cannot execute function".to_string()
         ));
@@ -1013,6 +1057,8 @@ fn execute_function_body<'db>(
         .collect();
 
     if !critical_errors.is_empty() {
+        ctx.current_module = prev_module;
+        cleanup_args_on_error(ctx, arg_values);
         return Err(InterpError::RuntimeError(
             format!("Function '{}' has analysis errors: {:?}",
                 func.name(ctx.db).text(ctx.db),
@@ -1036,6 +1082,8 @@ fn execute_function_body<'db>(
     for (i, param) in params.iter().enumerate() {
         // For now, only support In mode parameters.
         if param.mode(ctx.db) != ast::ParamMode::In {
+            ctx.current_module = prev_module;
+            cleanup_args_on_error(ctx, arg_values);
             return Err(InterpError::InvalidExpression(
                 format!("Parameter mode {:?} not yet supported (function '{}')",
                     param.mode(ctx.db), func.name(ctx.db).text(ctx.db))
@@ -1046,11 +1094,16 @@ fn execute_function_body<'db>(
         let arg_value = arg_values[i];
 
         // Find the slot for this parameter.
-        let slot_info = slots.iter()
-            .find(|s| s.name(ctx.db) == Some(param_name))
-            .ok_or_else(|| InterpError::RuntimeError(
-                format!("Parameter '{}' not found in frame layout", param_name.text(ctx.db))
-            ))?;
+        let slot_info = match slots.iter().find(|s| s.name(ctx.db) == Some(param_name)) {
+            Some(s) => s,
+            None => {
+                ctx.current_module = prev_module;
+                cleanup_args_on_error(ctx, arg_values);
+                return Err(InterpError::RuntimeError(
+                    format!("Parameter '{}' not found in frame layout", param_name.text(ctx.db))
+                ));
+            }
+        };
 
         let offset = slot_info.offset(ctx.db) as usize;
 
@@ -1073,21 +1126,15 @@ fn execute_function_body<'db>(
     // Execute function body.
     let result = execute_function_body_with_frame(ctx);
 
-    // Pop the frame.
+    // Pop the frame and capture slot states for argument cleanup.
     let frame = ctx.call_stack.pop().unwrap();
+    let final_slot_states = frame.slot_states.clone();
 
     // Clean up frame values before returning.
     cleanup_frame(ctx, frame);
 
-    // Clean up Copy-type arguments.
-    // These were heap-allocated when cloned for passing to the function.
-    // Reference slots don't own the data, so we must free it here.
-    for arg_value in arg_values {
-        if is_copy_type(arg_value) {
-            // Copy types have no sub-allocations, just free the structure.
-            free_value_structure(ctx, arg_value);
-        }
-    }
+    // Clean up arguments based on their final slot states.
+    cleanup_args_after_frame(ctx, arg_values, &final_slot_states, slots, params, ctx.db);
 
     // Restore previous module.
     ctx.current_module = prev_module;
@@ -1245,9 +1292,6 @@ fn read_value_from_slot<'db>(
     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
     // Allocate heap memory for the value.
-    let size = unsafe { (*tydesc).size as usize };
-    let align = unsafe { (*tydesc).align as usize };
-
     unsafe {
         let rt_handle = ctx.runtime.handle();
         let heap_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(
@@ -1260,11 +1304,12 @@ fn read_value_from_slot<'db>(
             return Err(InterpError::RuntimeError("Failed to allocate memory".to_string()));
         }
 
-        // Copy data from frame to heap.
-        std::ptr::copy_nonoverlapping(
-            frame_ptr,
+        // Clone data from frame to heap (deep copy for types with sub-allocations).
+        datalove_rt::c::dtlv_rti_clone_local(
+            rt_handle,
+            frame_ptr as *mut u8,
+            tydesc,
             heap_ptr,
-            size
         );
 
         Ok(Value { ptr: heap_ptr, tydesc })
@@ -1365,10 +1410,17 @@ fn eval_expression_frame<'db>(
             let kind = slot_info.kind(ctx.db);
 
             if kind == crate::function_analysis::SlotKind::Reference {
-                // Reference slot: read pointer.
+                // Reference slot: read pointer to caller's value.
                 let ptr = read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db);
-                let tydesc = unsafe { (*ptr as *const datalove_rt::rtdt::TyDesc).read() };
-                let value = Value { ptr, tydesc: &tydesc as *const _ };
+
+                // Get tydesc from slot's type info (not from the data pointer).
+                let datalit_ty = match ty.ty(ctx.db) {
+                    crate::tycheck::Type::Datalit(dt) => dt.clone(),
+                    _ => return Err(InterpError::RuntimeError("Non-datalit type in reference slot".to_string())),
+                };
+                let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+
+                let value = Value { ptr, tydesc };
 
                 if is_copy {
                     Ok(clone_value(ctx, value))

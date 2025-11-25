@@ -2,11 +2,11 @@
 script
 ----------
 
-fun add(x: u32, y: u32): Int
+fun add(x: u32, y: u32): int
     ret x + y
 end fun
 
-fun calc(a: u32): Int
+fun calc(a: u32): int
     ret add(a, @10)
 end fun
 

@@ -2,7 +2,7 @@
 script
 ----------
 
-fun calculate(): Int
+fun calculate(): int
     ret @10 + @20
 end fun
 

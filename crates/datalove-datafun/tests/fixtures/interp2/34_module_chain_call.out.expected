@@ -254,8 +254,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "RuntimeError(\"No analysis found for function \'add_five\'\")",
+            ],
         ),
-        output: "@15",
+        output: "",
     ),
 ]

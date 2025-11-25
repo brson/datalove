@@ -1,4 +1,4 @@
-fun multiply(x: u32, y: u32): Int
+fun multiply(x: u32, y: u32): int
     ret x * y
 end fun
 

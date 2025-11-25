@@ -5,11 +5,13 @@
             statements: [
                 StmtFun(
                     kind: "Fun",
-                    name: "greet",
+                    name: "test",
                     params: [],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: String,
+                        type_hint: ParseError(TypeHintParseError(
+                            message: "unknown type \'Int\', did you mean \'int\'?",
+                        )),
                     )),
                     body: [
                         StmtRet(
@@ -20,9 +22,9 @@
                                     value: ExprFull(
                                         type_hint: None,
                                         expr: ExprAndHeap(
-                                            heap: Omitted,
-                                            expr: String(ExprString(
-                                                value: "\"hello\"",
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "5",
                                             )),
                                         ),
                                     ),
@@ -38,7 +40,7 @@
                     value: ExprFun(
                         expr: ExprFunctionCall(
                             kind: "FunctionCall",
-                            name: "greet",
+                            name: "test",
                             args: [],
                         ),
                     ),
@@ -48,6 +50,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "@\"hello\"",
+        output: "@5",
     ),
 ]

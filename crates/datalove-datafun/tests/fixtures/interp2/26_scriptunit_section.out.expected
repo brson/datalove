@@ -119,10 +119,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "RuntimeError(\"No typecheck result available - cannot execute function\")",
+            ],
         ),
-        state_changes: [
-            "var:result",
-        ],
+        state_changes: [],
     ),
 ]

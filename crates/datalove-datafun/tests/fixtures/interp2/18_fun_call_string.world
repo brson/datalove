@@ -2,7 +2,7 @@
 script
 ----------
 
-fun greet(): String
+fun greet(): string
     ret "hello"
 end fun
 

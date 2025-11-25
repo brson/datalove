@@ -6,16 +6,16 @@ fun process_u32(x: u32, y: u32): u32
     ret x +! y
 end fun
 
-fun process_int(x: u32): Int
+fun process_int(x: u32): int
     let a = x *! @100
     ret a * @1000
 end fun
 
-fun process_string(s: String): String
+fun process_string(s: string): string
     ret s
 end fun
 
-fun combined(x: u32): Int
+fun combined(x: u32): int
     let a = process_u32(x, @10)
     let b = process_int(a)
     ret b

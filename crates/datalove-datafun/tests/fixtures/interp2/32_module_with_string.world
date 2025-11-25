@@ -2,11 +2,11 @@
 module sys/test/text
 ----------
 
-fun greet(name: String): String
+fun greet(name: string): string
     ret name
 end fun
 
-fun make_message(prefix: String, suffix: String): String
+fun make_message(prefix: string, suffix: string): string
     ret prefix
 end fun
 
