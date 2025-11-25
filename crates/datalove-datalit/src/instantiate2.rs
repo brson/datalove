@@ -786,6 +786,210 @@ fn instantiate_error<'db>(
 // Map instantiation
 // ============================================================================
 
+/// Build a B-tree from sorted map entries (supports any number of entries).
+///
+/// Returns the root node pointer and updates total_len with the number of entries.
+unsafe fn build_map_btree<'db>(
+    db: &'db dyn crate::Db,
+    rt: datalove_rt::c::LocalRtHandle,
+    entries: &[ExprMapEntry<'db>],
+    key_type: TypeAndHeap<'db>,
+    value_type: TypeAndHeap<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    key_tydesc: *const rtdt::TyDesc,
+    value_tydesc: *const rtdt::TyDesc,
+) -> AnyResult<*const rtdt::MapNode> {
+    let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+    let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
+    let key_size = key_tydesc_ref.size() as usize;
+    let value_size = value_tydesc_ref.size() as usize;
+
+    // Step 1: Build all leaf nodes.
+    let num_leaves = (entries.len() + rtdt::MAP_NODE_CAPACITY as usize - 1) / rtdt::MAP_NODE_CAPACITY as usize;
+    let mut leaves = Vec::with_capacity(num_leaves);
+
+    let leaf_layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc_ref, value_tydesc_ref);
+
+    let entries_per_leaf = (entries.len() + num_leaves - 1) / num_leaves;
+    let mut entry_idx = 0;
+
+    for _ in 0..num_leaves {
+        let leaf_entries = entries_per_leaf.min(entries.len() - entry_idx);
+
+        // Allocate leaf node.
+        let leaf_node = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, leaf_layout.size, leaf_layout.align, 1);
+
+        // Initialize node header: tag = Leaf (2), len = leaf_entries.
+        *leaf_node = rtdt::MapNodeTag::Leaf as u8;
+        *(leaf_node.add(4) as *mut u32) = leaf_entries as u32;
+
+        // Initialize next_leaf pointer to null (we'll link them next).
+        let next_leaf_ptr = leaf_node.add(leaf_layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+        *next_leaf_ptr = std::ptr::null_mut();
+
+        // Get pointers to keys and values arrays.
+        let keys_array = leaf_node.add(leaf_layout.keys_offset as usize);
+        let values_array = leaf_node.add(leaf_layout.values_offset as usize);
+
+        // Instantiate and copy each key-value pair.
+        for i in 0..leaf_entries {
+            let entry = &entries[entry_idx + i];
+            let key_expr = entry.key(db);
+            let value_expr = entry.value(db);
+
+            let key_dest = keys_array.add(i * key_size);
+            let value_dest = values_array.add(i * value_size);
+
+            // Try to instantiate key.
+            if let Err(e) = instantiate_expr_into(db, rt, key_expr, key_type.ty(db), tydesc_table, key_dest) {
+                // Clean up this leaf's already instantiated entries.
+                for j in 0..i {
+                    let key_to_destroy = keys_array.add(j * key_size);
+                    let value_to_destroy = values_array.add(j * value_size);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_to_destroy, key_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
+                }
+                // Free this leaf node.
+                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node);
+                // Clean up all previously created leaves.
+                cleanup_map_leaves(&leaves, rt, key_tydesc, value_tydesc, &leaf_layout);
+                return Err(e);
+            }
+
+            // Try to instantiate value.
+            if let Err(e) = instantiate_expr_into(db, rt, value_expr, value_type.ty(db), tydesc_table, value_dest) {
+                // Destroy the key we just instantiated.
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_dest, key_tydesc);
+                // Clean up this leaf's already instantiated entries.
+                for j in 0..i {
+                    let key_to_destroy = keys_array.add(j * key_size);
+                    let value_to_destroy = values_array.add(j * value_size);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_to_destroy, key_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
+                }
+                // Free this leaf node.
+                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node);
+                // Clean up all previously created leaves.
+                cleanup_map_leaves(&leaves, rt, key_tydesc, value_tydesc, &leaf_layout);
+                return Err(e);
+            }
+        }
+
+        leaves.push(leaf_node as *mut rtdt::MapNode);
+        entry_idx += leaf_entries;
+    }
+
+    // Link leaf nodes via next_leaf pointers.
+    for i in 0..leaves.len() - 1 {
+        let next_leaf_ptr = (leaves[i] as *mut u8).add(leaf_layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
+        *next_leaf_ptr = leaves[i + 1];
+    }
+
+    // If only one leaf, it's the root.
+    if leaves.len() == 1 {
+        return Ok(leaves[0] as *const rtdt::MapNode);
+    }
+
+    // Step 2: Build internal levels bottom-up.
+    let mut current_level = leaves;
+
+    loop {
+        let num_nodes = current_level.len();
+        if num_nodes == 1 {
+            return Ok(current_level[0] as *const rtdt::MapNode);
+        }
+
+        // Build next level of internal nodes.
+        let capacity_plus_one = (rtdt::MAP_NODE_CAPACITY + 1) as usize;
+        let num_parents = (num_nodes + capacity_plus_one - 1) / capacity_plus_one;
+        let mut parents = Vec::with_capacity(num_parents);
+
+        let internal_layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc_ref);
+        let children_per_parent = (num_nodes + num_parents - 1) / num_parents;
+
+        let mut child_idx = 0;
+
+        for _ in 0..num_parents {
+            let num_children = children_per_parent.min(num_nodes - child_idx);
+
+            // Allocate internal node.
+            let internal_node = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, internal_layout.size, internal_layout.align, 1);
+
+            // Initialize node header: tag = Internal (1), len = num_children - 1 (number of keys).
+            *internal_node = rtdt::MapNodeTag::Internal as u8;
+            *(internal_node.add(4) as *mut u32) = (num_children - 1) as u32;
+
+            // Get pointers to keys and child_ptrs arrays.
+            let keys_array = internal_node.add(internal_layout.keys_offset as usize);
+            let child_ptrs_array = internal_node.add(internal_layout.child_ptrs_offset as usize) as *mut *mut rtdt::MapNode;
+
+            // Set child pointers.
+            for i in 0..num_children {
+                *child_ptrs_array.add(i) = current_level[child_idx + i];
+            }
+
+            // Extract separator keys (first key from each child except the first).
+            for i in 1..num_children {
+                let child_node = current_level[child_idx + i];
+                let child_is_leaf = *(child_node as *const u8) == rtdt::MapNodeTag::Leaf as u8;
+
+                let first_key_src = if child_is_leaf {
+                    (child_node as *const u8).add(leaf_layout.keys_offset as usize)
+                } else {
+                    (child_node as *const u8).add(internal_layout.keys_offset as usize)
+                };
+
+                let key_dest = keys_array.add((i - 1) * key_size);
+                // Clone the key to properly duplicate heap-allocated data.
+                let status = datalove_rt::c::dtlv_rti_clone_local(rt, first_key_src, key_tydesc, key_dest);
+                if status != datalove_rt::c::RtStatus::Ok {
+                    // TODO: Clean up partially constructed internal node and any previously cloned keys.
+                    return Err(anyhow!("Failed to clone key for internal node"));
+                }
+            }
+
+            parents.push(internal_node as *mut rtdt::MapNode);
+            child_idx += num_children;
+        }
+
+        current_level = parents;
+    }
+}
+
+/// Helper to clean up partially constructed map leaves.
+unsafe fn cleanup_map_leaves(
+    leaves: &[*mut rtdt::MapNode],
+    rt: datalove_rt::c::LocalRtHandle,
+    key_tydesc: *const rtdt::TyDesc,
+    value_tydesc: *const rtdt::TyDesc,
+    leaf_layout: &rtdt::MapNodeLeafLayout,
+) {
+    let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+    let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
+    let key_size = key_tydesc_ref.size() as usize;
+    let value_size = value_tydesc_ref.size() as usize;
+
+    for &leaf_node in leaves {
+        let len = *((leaf_node as *const u8).add(4) as *const u32) as usize;
+        let keys_array = (leaf_node as *mut u8).add(leaf_layout.keys_offset as usize);
+        let values_array = (leaf_node as *mut u8).add(leaf_layout.values_offset as usize);
+
+        // Destroy all entries in this leaf.
+        for i in 0..len {
+            let key_to_destroy = keys_array.add(i * key_size);
+            let value_to_destroy = values_array.add(i * value_size);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_to_destroy, key_tydesc);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
+        }
+
+        // Free the leaf node.
+        let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+        rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node as *mut u8);
+    }
+}
+
 fn instantiate_map<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
@@ -808,92 +1012,26 @@ fn instantiate_map<'db>(
         return Ok(map_ptr as *const u8);
     }
 
-    // Non-empty map: build a single leaf node.
-    if entries.len() > rtdt::MAP_NODE_CAPACITY as usize {
-        bail!("Map instantiation limited to {} entries", rtdt::MAP_NODE_CAPACITY);
-    }
-
-    // Get type descriptors.
+    // Non-empty map: build B-tree (supports any number of entries).
     let key_tydesc = tydesc_table.get_or_create(key_type.ty(db));
     let value_tydesc = tydesc_table.get_or_create(value_type.ty(db));
-    let key_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(key_tydesc) };
-    let value_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(value_tydesc) };
 
-    // Compute leaf node layout.
-    let leaf_layout = unsafe { rtdt::layout::compute_map_leaf_node_layout(key_tydesc_ref, value_tydesc_ref) };
-
-    // Allocate leaf node.
-    let leaf_node = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, leaf_layout.size, leaf_layout.align, 1)
+    let root = unsafe {
+        build_map_btree(
+            db,
+            rt,
+            entries,
+            key_type,
+            value_type,
+            tydesc_table,
+            key_tydesc,
+            value_tydesc,
+        )?
     };
-
-    // Initialize node header: tag = Leaf (2), len = entries.len().
-    unsafe {
-        *leaf_node = rtdt::MapNodeTag::Leaf as u8;  // tag at offset 0
-        *(leaf_node.add(4) as *mut u32) = entries.len() as u32;  // len at offset 4
-    }
-
-    // Initialize next_leaf pointer to null.
-    unsafe {
-        let next_leaf_ptr = leaf_node.add(leaf_layout.next_leaf_offset as usize) as *mut *mut rtdt::MapNode;
-        *next_leaf_ptr = std::ptr::null_mut();
-    }
-
-    // Get pointers to keys and values arrays.
-    let keys_array = unsafe { leaf_node.add(leaf_layout.keys_offset as usize) };
-    let values_array = unsafe { leaf_node.add(leaf_layout.values_offset as usize) };
-
-    let key_size = key_tydesc_ref.size() as usize;
-    let value_size = value_tydesc_ref.size() as usize;
-
-    // Instantiate and copy each key-value pair.
-    for (i, entry) in entries.iter().enumerate() {
-        let key_expr = entry.key(db);
-        let value_expr = entry.value(db);
-
-        let key_dest = unsafe { keys_array.add(i * key_size) };
-        let value_dest = unsafe { values_array.add(i * value_size) };
-
-        // Try to instantiate key. If it fails, clean up.
-        if let Err(e) = instantiate_expr_into(db, rt, key_expr, key_type.ty(db), tydesc_table, key_dest) {
-            // Destroy all successfully instantiated entries before this one.
-            unsafe {
-                for j in 0..i {
-                    let key_to_destroy = keys_array.add(j * key_size);
-                    let value_to_destroy = values_array.add(j * value_size);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_to_destroy, key_tydesc);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
-                }
-                // Free the leaf node.
-                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node);
-            }
-            return Err(e);
-        }
-
-        // Try to instantiate value. If it fails, clean up key and previous entries.
-        if let Err(e) = instantiate_expr_into(db, rt, value_expr, value_type.ty(db), tydesc_table, value_dest) {
-            unsafe {
-                // Destroy the key we just instantiated.
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_dest, key_tydesc);
-                // Destroy all successfully instantiated entries before this one.
-                for j in 0..i {
-                    let key_to_destroy = keys_array.add(j * key_size);
-                    let value_to_destroy = values_array.add(j * value_size);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_to_destroy, key_tydesc);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
-                }
-                // Free the leaf node.
-                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node);
-            }
-            return Err(e);
-        }
-    }
 
     // Initialize Map struct.
     unsafe {
-        (*map_ptr).root = leaf_node as *const rtdt::MapNode;
+        (*map_ptr).root = root;
         (*map_ptr).len = entries.len() as u32;
     }
 
@@ -903,6 +1041,175 @@ fn instantiate_map<'db>(
 // ============================================================================
 // Set instantiation
 // ============================================================================
+
+/// Build a B-tree from sorted set elements (supports any number of elements).
+///
+/// Returns the root node pointer.
+unsafe fn build_set_btree<'db>(
+    db: &'db dyn crate::Db,
+    rt: datalove_rt::c::LocalRtHandle,
+    elements: &[ExprFull<'db>],
+    element_type: TypeAndHeap<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    element_tydesc: *const rtdt::TyDesc,
+) -> AnyResult<*const rtdt::SetNode> {
+    let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
+    let element_size = element_tydesc_ref.size() as usize;
+
+    // Step 1: Build all leaf nodes.
+    let num_leaves = (elements.len() + rtdt::SET_NODE_CAPACITY as usize - 1) / rtdt::SET_NODE_CAPACITY as usize;
+    let mut leaves = Vec::with_capacity(num_leaves);
+
+    let leaf_layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc_ref);
+
+    let elements_per_leaf = (elements.len() + num_leaves - 1) / num_leaves;
+    let mut element_idx = 0;
+
+    for _ in 0..num_leaves {
+        let leaf_elements = elements_per_leaf.min(elements.len() - element_idx);
+
+        // Allocate leaf node.
+        let leaf_node = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, leaf_layout.size, leaf_layout.align, 1);
+
+        // Initialize node header: tag = Leaf (2), len = leaf_elements.
+        *leaf_node = rtdt::SetNodeTag::Leaf as u8;
+        *(leaf_node.add(4) as *mut u32) = leaf_elements as u32;
+
+        // Initialize next_leaf pointer to null (will be linked later).
+        let next_leaf_ptr = leaf_node.add(leaf_layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+        *next_leaf_ptr = std::ptr::null_mut();
+
+        // Get pointer to keys array.
+        let keys_array = leaf_node.add(leaf_layout.keys_offset as usize);
+
+        // Instantiate and copy each element.
+        for i in 0..leaf_elements {
+            let elem_expr = elements[element_idx + i];
+
+            let elem_dest = keys_array.add(i * element_size);
+
+            // Try to instantiate element.
+            if let Err(e) = instantiate_expr_into(db, rt, elem_expr, element_type.ty(db), tydesc_table, elem_dest) {
+                // Clean up this leaf's already instantiated elements.
+                for j in 0..i {
+                    let elem_to_destroy = keys_array.add(j * element_size);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
+                }
+                // Free this leaf node.
+                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node);
+                // Clean up all previously created leaves.
+                cleanup_set_leaves(&leaves, rt, element_tydesc, &leaf_layout);
+                return Err(e);
+            }
+        }
+
+        leaves.push(leaf_node as *mut rtdt::SetNode);
+        element_idx += leaf_elements;
+    }
+
+    // Link leaf nodes via next_leaf pointers (for B+ tree).
+    for i in 0..leaves.len() - 1 {
+        let next_leaf_ptr = (leaves[i] as *mut u8).add(leaf_layout.next_leaf_offset as usize) as *mut *mut rtdt::SetNode;
+        *next_leaf_ptr = leaves[i + 1];
+    }
+
+    // If only one leaf, it's the root.
+    if leaves.len() == 1 {
+        return Ok(leaves[0] as *const rtdt::SetNode);
+    }
+
+    // Step 2: Build internal levels bottom-up.
+    let mut current_level = leaves;
+
+    loop {
+        let num_nodes = current_level.len();
+        if num_nodes == 1 {
+            return Ok(current_level[0] as *const rtdt::SetNode);
+        }
+
+        // Build next level of internal nodes.
+        let capacity_plus_one = (rtdt::SET_NODE_CAPACITY + 1) as usize;
+        let num_parents = (num_nodes + capacity_plus_one - 1) / capacity_plus_one;
+        let mut parents = Vec::with_capacity(num_parents);
+
+        let internal_layout = rtdt::layout::compute_set_internal_node_layout(element_tydesc_ref);
+        let children_per_parent = (num_nodes + num_parents - 1) / num_parents;
+
+        let mut child_idx = 0;
+
+        for _ in 0..num_parents {
+            let num_children = children_per_parent.min(num_nodes - child_idx);
+
+            // Allocate internal node.
+            let internal_node = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, internal_layout.size, internal_layout.align, 1);
+
+            // Initialize node header: tag = Internal (1), len = num_children - 1 (number of keys).
+            *internal_node = rtdt::SetNodeTag::Internal as u8;
+            *(internal_node.add(4) as *mut u32) = (num_children - 1) as u32;
+
+            // Get pointers to keys and child_ptrs arrays.
+            let keys_array = internal_node.add(internal_layout.keys_offset as usize);
+            let child_ptrs_array = internal_node.add(internal_layout.child_ptrs_offset as usize) as *mut *mut rtdt::SetNode;
+
+            // Set child pointers.
+            for i in 0..num_children {
+                *child_ptrs_array.add(i) = current_level[child_idx + i];
+            }
+
+            // Extract separator keys (first key from each child except the first).
+            for i in 1..num_children {
+                let child_node = current_level[child_idx + i];
+                let child_is_leaf = *(child_node as *const u8) == rtdt::SetNodeTag::Leaf as u8;
+
+                let first_key_src = if child_is_leaf {
+                    (child_node as *const u8).add(leaf_layout.keys_offset as usize)
+                } else {
+                    (child_node as *const u8).add(internal_layout.keys_offset as usize)
+                };
+
+                let key_dest = keys_array.add((i - 1) * element_size);
+                // Clone the key to properly duplicate heap-allocated data.
+                let status = datalove_rt::c::dtlv_rti_clone_local(rt, first_key_src, element_tydesc, key_dest);
+                if status != datalove_rt::c::RtStatus::Ok {
+                    // TODO: Clean up partially constructed internal node and any previously cloned keys.
+                    return Err(anyhow!("Failed to clone element for internal node"));
+                }
+            }
+
+            parents.push(internal_node as *mut rtdt::SetNode);
+            child_idx += num_children;
+        }
+
+        current_level = parents;
+    }
+}
+
+/// Helper to clean up partially constructed set leaves.
+unsafe fn cleanup_set_leaves(
+    leaves: &[*mut rtdt::SetNode],
+    rt: datalove_rt::c::LocalRtHandle,
+    element_tydesc: *const rtdt::TyDesc,
+    leaf_layout: &rtdt::SetNodeLeafLayout,
+) {
+    let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
+    let element_size = element_tydesc_ref.size() as usize;
+
+    for &leaf_node in leaves {
+        let len = (*(leaf_node as *const rtdt::SetNode)).len as usize;
+        let keys_array = (leaf_node as *mut u8).add(leaf_layout.keys_offset as usize);
+
+        // Destroy all elements in this leaf.
+        for i in 0..len {
+            let elem_to_destroy = keys_array.add(i * element_size);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
+        }
+
+        // Free the leaf node.
+        let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
+        rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node as *mut u8);
+    }
+}
 
 fn instantiate_set<'db>(
     db: &'db dyn crate::Db,
@@ -925,57 +1232,23 @@ fn instantiate_set<'db>(
         return Ok(set_ptr as *const u8);
     }
 
-    // Non-empty set: build a single leaf node.
-    if elements.len() > rtdt::SET_NODE_CAPACITY as usize {
-        bail!("Set instantiation limited to {} elements", rtdt::SET_NODE_CAPACITY);
-    }
-
-    // Get type descriptor.
+    // Non-empty set: build B-tree (supports any number of elements).
     let element_tydesc = tydesc_table.get_or_create(element_type.ty(db));
-    let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
 
-    // Compute leaf node layout.
-    let leaf_layout = unsafe { rtdt::layout::compute_set_leaf_node_layout(element_tydesc_ref) };
-
-    // Allocate leaf node.
-    let leaf_node = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, leaf_layout.size, leaf_layout.align, 1)
+    let root = unsafe {
+        build_set_btree(
+            db,
+            rt,
+            elements,
+            element_type,
+            tydesc_table,
+            element_tydesc,
+        )?
     };
-
-    // Initialize node header (SetNode struct).
-    unsafe {
-        let set_node_ptr = leaf_node as *mut rtdt::SetNode;
-        (*set_node_ptr).tag = rtdt::SetNodeTag::Leaf;
-        (*set_node_ptr).len = elements.len() as u32;
-    }
-
-    // Get pointer to keys array.
-    let keys_array = unsafe { leaf_node.add(leaf_layout.keys_offset as usize) };
-
-    let element_size = element_tydesc_ref.size() as usize;
-
-    // Instantiate and copy each element.
-    for (i, elem_expr) in elements.iter().enumerate() {
-        let elem_dest = unsafe { keys_array.add(i * element_size) };
-        // Try to instantiate element. If it fails, clean up.
-        if let Err(e) = instantiate_expr_into(db, rt, *elem_expr, element_type.ty(db), tydesc_table, elem_dest) {
-            // Destroy all successfully instantiated elements before this one.
-            unsafe {
-                for j in 0..i {
-                    let elem_to_destroy = keys_array.add(j * element_size);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
-                }
-                // Free the leaf node.
-                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt_ref.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node);
-            }
-            return Err(e);
-        }
-    }
 
     // Initialize Set struct.
     unsafe {
-        (*set_ptr).root = leaf_node as *const rtdt::SetNode;
+        (*set_ptr).root = root;
         (*set_ptr).len = elements.len() as u32;
     }
 

@@ -176,11 +176,12 @@ unsafe fn destroy_tree_recursive(
     }
 }
 
-/// Recursively clone a set subtree.
+/// Recursively clone a set subtree, collecting leaf nodes in order.
 unsafe fn clone_tree_recursive(
     rt: &mut RtLocal,
     node: *const SetNode,
     key_tydesc: *const TyDesc,
+    leaves: &mut Vec<*mut SetNode>,
 ) -> *mut SetNode {
     unsafe {
         if node.is_null() {
@@ -236,7 +237,7 @@ unsafe fn clone_tree_recursive(
 
                 for i in 0..=(len as usize) {
                     let child = *children_ptr.add(i);
-                    let new_child = clone_tree_recursive(rt, child, key_tydesc);
+                    let new_child = clone_tree_recursive(rt, child, key_tydesc, leaves);
                     // Store the cloned child pointer immediately so error handling can access it.
                     *new_children_ptr.add(i) = new_child;
                     if new_child.is_null() && !child.is_null() {
@@ -290,8 +291,12 @@ unsafe fn clone_tree_recursive(
                     }
                 }
 
-                // Note: We don't clone next_leaf pointers here.
-                // The cloned tree will have its own leaf chain that needs to be rebuilt.
+                // Initialize next_leaf to null; will be linked after tree is cloned.
+                let next_leaf_ptr = (new_leaf as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut SetNode;
+                *next_leaf_ptr = std::ptr::null_mut();
+
+                // Collect this leaf in order (left-to-right traversal).
+                leaves.push(new_leaf);
 
                 new_leaf
             }
@@ -306,7 +311,21 @@ pub unsafe fn set_clone_tree(
     key_tydesc: *const TyDesc,
 ) -> *mut SetNode {
     unsafe {
-        clone_tree_recursive(rt, root, key_tydesc)
+        let mut leaves = Vec::new();
+        let new_root = clone_tree_recursive(rt, root, key_tydesc, &mut leaves);
+
+        // Link leaf nodes via next_leaf pointers.
+        if !leaves.is_empty() {
+            let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+            let layout = rtdt::layout::compute_set_leaf_node_layout(key_tydesc_ref);
+
+            for i in 0..leaves.len() - 1 {
+                let next_leaf_ptr = (leaves[i] as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut SetNode;
+                *next_leaf_ptr = leaves[i + 1];
+            }
+        }
+
+        new_root
     }
 }
 

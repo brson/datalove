@@ -1798,12 +1798,13 @@ pub unsafe fn btreemap_remove_impl(
     }
 }
 
-/// Recursively clone a map subtree.
+/// Recursively clone a map subtree, collecting leaf nodes in order.
 unsafe fn clone_tree_recursive(
     rt: &mut RtLocal,
     node: *const MapNode,
     key_tydesc: rtdt::TyDescRef,
     value_tydesc: rtdt::TyDescRef,
+    leaves: &mut Vec<*mut MapNode>,
 ) -> *mut MapNode {
     unsafe {
         if node.is_null() {
@@ -1855,7 +1856,7 @@ unsafe fn clone_tree_recursive(
 
                 for i in 0..=(len as usize) {
                     let child = *children_ptr.add(i);
-                    let new_child = clone_tree_recursive(rt, child, key_tydesc, value_tydesc);
+                    let new_child = clone_tree_recursive(rt, child, key_tydesc, value_tydesc, leaves);
                     // Store the cloned child pointer immediately so error handling can access it.
                     *new_children_ptr.add(i) = new_child;
                     if new_child.is_null() && !child.is_null() {
@@ -1931,9 +1932,8 @@ unsafe fn clone_tree_recursive(
                     }
                 }
 
-                // Note: We don't clone next_leaf pointers here.
-                // The cloned tree will have its own leaf chain that needs to be rebuilt.
-                // For now, leave next_leaf as null (initialized by alloc_leaf_node).
+                // Collect this leaf in order (left-to-right traversal).
+                leaves.push(new_leaf);
 
                 new_leaf
             }
@@ -1949,7 +1949,20 @@ pub unsafe fn btreemap_clone_tree(
     value_tydesc: rtdt::TyDescRef,
 ) -> *mut MapNode {
     unsafe {
-        clone_tree_recursive(rt, root, key_tydesc, value_tydesc)
+        let mut leaves = Vec::new();
+        let new_root = clone_tree_recursive(rt, root, key_tydesc, value_tydesc, &mut leaves);
+
+        // Link leaf nodes via next_leaf pointers.
+        if !leaves.is_empty() {
+            let layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+
+            for i in 0..leaves.len() - 1 {
+                let next_leaf_ptr = (leaves[i] as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut MapNode;
+                *next_leaf_ptr = leaves[i + 1];
+            }
+        }
+
+        new_root
     }
 }
 

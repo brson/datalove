@@ -416,41 +416,173 @@ unsafe fn clone_impl(
                 };
             }
 
-            // For Err, we need to know the Error layout.
-            // For now, just copy the error bytes.
-            let err_size = std::mem::size_of::<rtdt::Error>() as u32;
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    value_in.add(payload_offset as usize),
-                    value_out.add(payload_offset as usize),
-                    err_size as usize
-                );
-            }
+            // For Err, deep clone the Error value.
+            // Error uses same encoding as Data, so interpret as Data.
+            let error_in_ptr = unsafe { value_in.add(payload_offset as usize) };
+            let error_out_ptr = unsafe { value_out.add(payload_offset as usize) };
 
-            RtStatus::Ok
+            let data_in = unsafe { &*(error_in_ptr as *const rtdt::Data) };
+            let data_out = unsafe { &mut *(error_out_ptr as *mut rtdt::Data) };
+
+            match data_in.tag() {
+                rtdt::anypack::Tag::TwoPointers => {
+                    // Deep clone: allocate new memory and recursively clone inner value.
+                    let inner_tydesc = data_in.tydesc();
+                    let inner_value_in = data_in.value_ptr();
+
+                    if inner_tydesc.is_null() || inner_value_in.is_null() {
+                        return RtStatus::Error;
+                    }
+
+                    let inner_ty = unsafe { rtdt::TyDescRef::from_ptr(inner_tydesc) };
+                    let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
+                    let inner_value_out = rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1);
+
+                    if inner_value_out.is_null() {
+                        return RtStatus::Error;
+                    }
+
+                    // Recursively clone the inner value.
+                    let status = unsafe { clone_impl(rt, inner_value_in, inner_ty, inner_value_out) };
+                    if status != RtStatus::Ok {
+                        rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out);
+                        return status;
+                    }
+
+                    // Write the new Error with cloned pointers (write as Data).
+                    unsafe {
+                        std::ptr::write(data_out, rtdt::Data::from_pointers(inner_tydesc, inner_value_out));
+                    }
+
+                    RtStatus::Ok
+                }
+                rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
+                    // Value is inline or immediate, just copy the bytes.
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            error_in_ptr,
+                            error_out_ptr,
+                            std::mem::size_of::<rtdt::Error>()
+                        );
+                    }
+                    RtStatus::Ok
+                }
+                _ => {
+                    // Unknown/reserved tag.
+                    RtStatus::Error
+                }
+            }
         }
 
-        // Data/Error - copy the wrapper.
+        // Data - deep clone the wrapped value.
         TyTag::Data => {
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    value_in,
-                    value_out,
-                    std::mem::size_of::<rtdt::Data>()
-                );
+            let data_in = unsafe { &*(value_in as *const rtdt::Data) };
+            let data_out = unsafe { &mut *(value_out as *mut rtdt::Data) };
+
+            match data_in.tag() {
+                rtdt::anypack::Tag::TwoPointers => {
+                    // Deep clone: allocate new memory and recursively clone inner value.
+                    let inner_tydesc = data_in.tydesc();
+                    let inner_value_in = data_in.value_ptr();
+
+                    if inner_tydesc.is_null() || inner_value_in.is_null() {
+                        return RtStatus::Error;
+                    }
+
+                    let inner_ty = unsafe { rtdt::TyDescRef::from_ptr(inner_tydesc) };
+                    let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
+                    let inner_value_out = rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1);
+
+                    if inner_value_out.is_null() {
+                        return RtStatus::Error;
+                    }
+
+                    // Recursively clone the inner value.
+                    let status = unsafe { clone_impl(rt, inner_value_in, inner_ty, inner_value_out) };
+                    if status != RtStatus::Ok {
+                        rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out);
+                        return status;
+                    }
+
+                    // Write the new Data with cloned pointers.
+                    unsafe {
+                        std::ptr::write(data_out, rtdt::Data::from_pointers(inner_tydesc, inner_value_out));
+                    }
+
+                    RtStatus::Ok
+                }
+                rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
+                    // Value is inline or immediate, just copy the bytes.
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            value_in,
+                            value_out,
+                            std::mem::size_of::<rtdt::Data>()
+                        );
+                    }
+                    RtStatus::Ok
+                }
+                _ => {
+                    // Unknown/reserved tag.
+                    RtStatus::Error
+                }
             }
-            RtStatus::Ok
         }
 
+        // Error - deep clone the wrapped value.
+        // Error uses same encoding as Data, so interpret as Data.
         TyTag::Error => {
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    value_in,
-                    value_out,
-                    std::mem::size_of::<rtdt::Error>()
-                );
+            let data_in = unsafe { &*(value_in as *const rtdt::Data) };
+            let data_out = unsafe { &mut *(value_out as *mut rtdt::Data) };
+
+            match data_in.tag() {
+                rtdt::anypack::Tag::TwoPointers => {
+                    // Deep clone: allocate new memory and recursively clone inner value.
+                    let inner_tydesc = data_in.tydesc();
+                    let inner_value_in = data_in.value_ptr();
+
+                    if inner_tydesc.is_null() || inner_value_in.is_null() {
+                        return RtStatus::Error;
+                    }
+
+                    let inner_ty = unsafe { rtdt::TyDescRef::from_ptr(inner_tydesc) };
+                    let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
+                    let inner_value_out = rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1);
+
+                    if inner_value_out.is_null() {
+                        return RtStatus::Error;
+                    }
+
+                    // Recursively clone the inner value.
+                    let status = unsafe { clone_impl(rt, inner_value_in, inner_ty, inner_value_out) };
+                    if status != RtStatus::Ok {
+                        rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out);
+                        return status;
+                    }
+
+                    // Write the new Error with cloned pointers (write as Data).
+                    unsafe {
+                        std::ptr::write(data_out, rtdt::Data::from_pointers(inner_tydesc, inner_value_out));
+                    }
+
+                    RtStatus::Ok
+                }
+                rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
+                    // Value is inline or immediate, just copy the bytes.
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            value_in,
+                            value_out,
+                            std::mem::size_of::<rtdt::Error>()
+                        );
+                    }
+                    RtStatus::Ok
+                }
+                _ => {
+                    // Unknown/reserved tag.
+                    RtStatus::Error
+                }
             }
-            RtStatus::Ok
         }
     }
 }

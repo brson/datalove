@@ -850,3 +850,18 @@ Attempted to re-enable data_type and error_type in property tests based on docum
    - Property-based testing with leak checking enabled immediately found the issue
 
 The types were correctly disabled in property tests, but for the wrong documented reason.
+
+### Bug Fix (2025-11-24): Set/Map Clone next_leaf Linking
+
+**Problem:** Clone operations on Sets and Maps with >11 elements were failing equality checks. The cloned value wouldn't compare equal to the original.
+
+**Root Cause:** The B-tree clone implementations (`set_clone_tree` in set.rs and `btreemap_clone_tree` in btreemap.rs) were cloning tree structure and node contents, but not linking leaf nodes via `next_leaf` pointers. The equality check (`eq_set_trees`, `eq_map_trees`) relies on traversing the leaf chain to compare elements in sorted order.
+
+**Fix Applied:**
+1. Modified `clone_tree_recursive` in both set.rs and btreemap.rs to accept a `&mut Vec<*mut Node>` parameter to collect leaf nodes during cloning
+2. After tree cloning completes, link collected leaves via `next_leaf` pointers
+3. Files modified:
+   - `crates/datalove-rt/src/impls/set.rs` - Set clone now links leaves
+   - `crates/datalove-rt/src/impls/btreemap.rs` - Map clone now links leaves
+
+**Result:** All clone tests pass including property-based tests with `max_collection_size: 50`. The Set/Map B-tree instantiation limit of 11 elements was previously a workaround for this bug - now larger collections can be cloned and compared correctly.
