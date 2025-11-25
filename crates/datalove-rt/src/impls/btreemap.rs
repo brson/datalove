@@ -1966,6 +1966,203 @@ pub unsafe fn btreemap_clone_tree(
     }
 }
 
+/// Build a Map B-tree from sorted slices of already-instantiated keys and values.
+///
+/// Takes ownership of the keys and values by moving them from the input buffers
+/// into the tree structure. The input buffers should not be used after this call.
+/// Keys must already be sorted.
+pub unsafe fn btreemap_build_from_sorted_slices(
+    rt: &mut RtLocal,
+    map_out: *mut Map,
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
+    keys_ptr: *mut u8,
+    values_ptr: *mut u8,
+    num_entries: u32,
+) -> RtStatus {
+    unsafe {
+        if map_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Handle empty case.
+        if num_entries == 0 || keys_ptr.is_null() || values_ptr.is_null() {
+            (*map_out).root = std::ptr::null();
+            (*map_out).len = 0;
+            return RtStatus::Ok;
+        }
+
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
+        let leaf_layout = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
+
+        // Step 1: Build all leaf nodes.
+        let num_entries_usize = num_entries as usize;
+        let num_leaves = (num_entries_usize + MAP_NODE_CAPACITY as usize - 1) / MAP_NODE_CAPACITY as usize;
+        let mut leaves: Vec<*mut MapNode> = Vec::with_capacity(num_leaves);
+
+        let entries_per_leaf = (num_entries_usize + num_leaves - 1) / num_leaves;
+        let mut entry_idx = 0usize;
+
+        for _ in 0..num_leaves {
+            let leaf_entries = entries_per_leaf.min(num_entries_usize - entry_idx);
+
+            // Allocate leaf node.
+            let leaf_node = rt.alloc.alloc(leaf_layout.size, leaf_layout.align, 1);
+            if leaf_node.is_null() {
+                // Cleanup already-created leaves.
+                cleanup_map_leaves_internal(rt, &leaves, key_tydesc, value_tydesc, &leaf_layout);
+                return RtStatus::Error;
+            }
+
+            // Initialize node header.
+            *leaf_node = MapNodeTag::Leaf as u8;
+            *(leaf_node.add(4) as *mut u32) = leaf_entries as u32;
+
+            // Initialize next_leaf pointer to null (will be linked later).
+            let next_leaf_ptr = leaf_node.add(leaf_layout.next_leaf_offset as usize) as *mut *mut MapNode;
+            *next_leaf_ptr = std::ptr::null_mut();
+
+            // Move keys and values from input buffers to leaf.
+            let keys_array = leaf_node.add(leaf_layout.keys_offset as usize);
+            let values_array = leaf_node.add(leaf_layout.values_offset as usize);
+            for i in 0..leaf_entries {
+                let key_src = keys_ptr.add((entry_idx + i) * key_size);
+                let key_dst = keys_array.add(i * key_size);
+                std::ptr::copy_nonoverlapping(key_src, key_dst, key_size);
+
+                let value_src = values_ptr.add((entry_idx + i) * value_size);
+                let value_dst = values_array.add(i * value_size);
+                std::ptr::copy_nonoverlapping(value_src, value_dst, value_size);
+            }
+
+            leaves.push(leaf_node as *mut MapNode);
+            entry_idx += leaf_entries;
+        }
+
+        // Link leaf nodes via next_leaf pointers.
+        for i in 0..leaves.len() - 1 {
+            let next_leaf_ptr = (leaves[i] as *mut u8).add(leaf_layout.next_leaf_offset as usize) as *mut *mut MapNode;
+            *next_leaf_ptr = leaves[i + 1];
+        }
+
+        // If only one leaf, it's the root.
+        if leaves.len() == 1 {
+            (*map_out).root = leaves[0] as *const MapNode;
+            (*map_out).len = num_entries;
+            return RtStatus::Ok;
+        }
+
+        // Step 2: Build internal levels bottom-up.
+        let internal_layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
+        let mut current_level = leaves;
+
+        loop {
+            let num_nodes = current_level.len();
+            if num_nodes == 1 {
+                (*map_out).root = current_level[0] as *const MapNode;
+                (*map_out).len = num_entries;
+                return RtStatus::Ok;
+            }
+
+            // Build next level of internal nodes.
+            let capacity_plus_one = (MAP_NODE_CAPACITY + 1) as usize;
+            let num_parents = (num_nodes + capacity_plus_one - 1) / capacity_plus_one;
+            let mut parents: Vec<*mut MapNode> = Vec::with_capacity(num_parents);
+
+            let children_per_parent = (num_nodes + num_parents - 1) / num_parents;
+            let mut child_idx = 0usize;
+
+            for _ in 0..num_parents {
+                let num_children = children_per_parent.min(num_nodes - child_idx);
+
+                // Allocate internal node.
+                let internal_node = rt.alloc.alloc(internal_layout.size, internal_layout.align, 1);
+                if internal_node.is_null() {
+                    // TODO: proper cleanup of partial tree
+                    return RtStatus::Error;
+                }
+
+                // Initialize node header: tag = Internal, len = num_children - 1 (number of keys).
+                *internal_node = MapNodeTag::Internal as u8;
+                *(internal_node.add(4) as *mut u32) = (num_children - 1) as u32;
+
+                // Get pointers to keys and child_ptrs arrays.
+                let keys_array = internal_node.add(internal_layout.keys_offset as usize);
+                let child_ptrs_array = internal_node.add(internal_layout.child_ptrs_offset as usize) as *mut *mut MapNode;
+
+                // Set child pointers.
+                for i in 0..num_children {
+                    *child_ptrs_array.add(i) = current_level[child_idx + i];
+                }
+
+                // Extract separator keys (first key from each child except the first).
+                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+                for i in 1..num_children {
+                    let child_node = current_level[child_idx + i];
+                    let child_is_leaf = *(child_node as *const u8) == MapNodeTag::Leaf as u8;
+
+                    let first_key_src = if child_is_leaf {
+                        (child_node as *const u8).add(leaf_layout.keys_offset as usize)
+                    } else {
+                        (child_node as *const u8).add(internal_layout.keys_offset as usize)
+                    };
+
+                    let key_dest = keys_array.add((i - 1) * key_size);
+                    // Clone the key for the internal node.
+                    let status = crate::impls::clone::clone_value(
+                        rt_handle,
+                        first_key_src,
+                        key_tydesc.as_ptr(),
+                        key_dest,
+                    );
+                    if status != RtStatus::Ok {
+                        // TODO: proper cleanup of partial tree
+                        return RtStatus::Error;
+                    }
+                }
+
+                parents.push(internal_node as *mut MapNode);
+                child_idx += num_children;
+            }
+
+            current_level = parents;
+        }
+    }
+}
+
+/// Helper to clean up partially constructed map leaves.
+unsafe fn cleanup_map_leaves_internal(
+    rt: &mut RtLocal,
+    leaves: &[*mut MapNode],
+    key_tydesc: rtdt::TyDescRef,
+    value_tydesc: rtdt::TyDescRef,
+    leaf_layout: &rtdt::MapNodeLeafLayout,
+) {
+    unsafe {
+        let key_size = key_tydesc.size() as usize;
+        let value_size = value_tydesc.size() as usize;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+
+        for &leaf_node in leaves {
+            let len = (*(leaf_node as *const MapNode)).len as usize;
+            let keys_array = (leaf_node as *mut u8).add(leaf_layout.keys_offset as usize);
+            let values_array = (leaf_node as *mut u8).add(leaf_layout.values_offset as usize);
+
+            // Destroy all entries in this leaf.
+            for i in 0..len {
+                let key_to_destroy = keys_array.add(i * key_size);
+                let value_to_destroy = values_array.add(i * value_size);
+                crate::impls::destroy::any_destroy_local(rt_handle, key_to_destroy, key_tydesc.as_ptr());
+                crate::impls::destroy::any_destroy_local(rt_handle, value_to_destroy, value_tydesc.as_ptr());
+            }
+
+            // Free the leaf node.
+            rt.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node as *mut u8);
+        }
+    }
+}
+
 /// Create a BTreeMap from a slice of key-value pairs.
 ///
 /// Takes a slice of (K, V) tuples and creates a map by cloning and inserting each pair.

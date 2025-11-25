@@ -329,6 +329,192 @@ pub unsafe fn set_clone_tree(
     }
 }
 
+/// Build a Set B-tree from a sorted slice of already-instantiated elements.
+///
+/// Takes ownership of the elements by moving them from the input buffer into
+/// the tree structure. The input buffer should not be used after this call.
+/// Elements must already be sorted.
+pub unsafe fn btreeset_build_from_sorted_slice(
+    rt: &mut RtLocal,
+    set_out: *mut Set,
+    element_tydesc: *const TyDesc,
+    elements_ptr: *mut u8,
+    num_elements: u32,
+) -> RtStatus {
+    unsafe {
+        if set_out.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Handle empty case.
+        if num_elements == 0 || elements_ptr.is_null() {
+            (*set_out).root = std::ptr::null();
+            (*set_out).len = 0;
+            return RtStatus::Ok;
+        }
+
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
+        let element_size = element_tydesc_ref.size() as usize;
+        let leaf_layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc_ref);
+
+        // Step 1: Build all leaf nodes.
+        let num_elements_usize = num_elements as usize;
+        let num_leaves = (num_elements_usize + SET_NODE_CAPACITY as usize - 1) / SET_NODE_CAPACITY as usize;
+        let mut leaves: Vec<*mut SetNode> = Vec::with_capacity(num_leaves);
+
+        let elements_per_leaf = (num_elements_usize + num_leaves - 1) / num_leaves;
+        let mut element_idx = 0usize;
+
+        for _ in 0..num_leaves {
+            let leaf_elements = elements_per_leaf.min(num_elements_usize - element_idx);
+
+            // Allocate leaf node.
+            let leaf_node = rt.alloc.alloc(leaf_layout.size, leaf_layout.align, 1);
+            if leaf_node.is_null() {
+                // Cleanup already-created leaves.
+                cleanup_set_leaves_internal(rt, &leaves, element_tydesc, &leaf_layout);
+                return RtStatus::Error;
+            }
+
+            // Initialize node header.
+            *leaf_node = SetNodeTag::Leaf as u8;
+            *(leaf_node.add(4) as *mut u32) = leaf_elements as u32;
+
+            // Initialize next_leaf pointer to null (will be linked later).
+            let next_leaf_ptr = leaf_node.add(leaf_layout.next_leaf_offset as usize) as *mut *mut SetNode;
+            *next_leaf_ptr = std::ptr::null_mut();
+
+            // Move elements from input buffer to leaf.
+            let keys_array = leaf_node.add(leaf_layout.keys_offset as usize);
+            for i in 0..leaf_elements {
+                let src = elements_ptr.add((element_idx + i) * element_size);
+                let dst = keys_array.add(i * element_size);
+                std::ptr::copy_nonoverlapping(src, dst, element_size);
+            }
+
+            leaves.push(leaf_node as *mut SetNode);
+            element_idx += leaf_elements;
+        }
+
+        // Link leaf nodes via next_leaf pointers.
+        for i in 0..leaves.len() - 1 {
+            let next_leaf_ptr = (leaves[i] as *mut u8).add(leaf_layout.next_leaf_offset as usize) as *mut *mut SetNode;
+            *next_leaf_ptr = leaves[i + 1];
+        }
+
+        // If only one leaf, it's the root.
+        if leaves.len() == 1 {
+            (*set_out).root = leaves[0] as *const SetNode;
+            (*set_out).len = num_elements;
+            return RtStatus::Ok;
+        }
+
+        // Step 2: Build internal levels bottom-up.
+        let internal_layout = rtdt::layout::compute_set_internal_node_layout(element_tydesc_ref);
+        let mut current_level = leaves;
+
+        loop {
+            let num_nodes = current_level.len();
+            if num_nodes == 1 {
+                (*set_out).root = current_level[0] as *const SetNode;
+                (*set_out).len = num_elements;
+                return RtStatus::Ok;
+            }
+
+            // Build next level of internal nodes.
+            let capacity_plus_one = (SET_NODE_CAPACITY + 1) as usize;
+            let num_parents = (num_nodes + capacity_plus_one - 1) / capacity_plus_one;
+            let mut parents: Vec<*mut SetNode> = Vec::with_capacity(num_parents);
+
+            let children_per_parent = (num_nodes + num_parents - 1) / num_parents;
+            let mut child_idx = 0usize;
+
+            for _ in 0..num_parents {
+                let num_children = children_per_parent.min(num_nodes - child_idx);
+
+                // Allocate internal node.
+                let internal_node = rt.alloc.alloc(internal_layout.size, internal_layout.align, 1);
+                if internal_node.is_null() {
+                    // TODO: proper cleanup of partial tree
+                    return RtStatus::Error;
+                }
+
+                // Initialize node header: tag = Internal, len = num_children - 1 (number of keys).
+                *internal_node = SetNodeTag::Internal as u8;
+                *(internal_node.add(4) as *mut u32) = (num_children - 1) as u32;
+
+                // Get pointers to keys and child_ptrs arrays.
+                let keys_array = internal_node.add(internal_layout.keys_offset as usize);
+                let child_ptrs_array = internal_node.add(internal_layout.child_ptrs_offset as usize) as *mut *mut SetNode;
+
+                // Set child pointers.
+                for i in 0..num_children {
+                    *child_ptrs_array.add(i) = current_level[child_idx + i];
+                }
+
+                // Extract separator keys (first key from each child except the first).
+                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+                for i in 1..num_children {
+                    let child_node = current_level[child_idx + i];
+                    let child_is_leaf = *(child_node as *const u8) == SetNodeTag::Leaf as u8;
+
+                    let first_key_src = if child_is_leaf {
+                        (child_node as *const u8).add(leaf_layout.keys_offset as usize)
+                    } else {
+                        (child_node as *const u8).add(internal_layout.keys_offset as usize)
+                    };
+
+                    let key_dest = keys_array.add((i - 1) * element_size);
+                    // Clone the key for the internal node.
+                    let status = crate::impls::clone::clone_value(
+                        rt_handle,
+                        first_key_src,
+                        element_tydesc,
+                        key_dest,
+                    );
+                    if status != RtStatus::Ok {
+                        // TODO: proper cleanup of partial tree
+                        return RtStatus::Error;
+                    }
+                }
+
+                parents.push(internal_node as *mut SetNode);
+                child_idx += num_children;
+            }
+
+            current_level = parents;
+        }
+    }
+}
+
+/// Helper to clean up partially constructed set leaves.
+unsafe fn cleanup_set_leaves_internal(
+    rt: &mut RtLocal,
+    leaves: &[*mut SetNode],
+    element_tydesc: *const TyDesc,
+    leaf_layout: &rtdt::SetNodeLeafLayout,
+) {
+    unsafe {
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
+        let element_size = element_tydesc_ref.size() as usize;
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+
+        for &leaf_node in leaves {
+            let len = (*(leaf_node as *const SetNode)).len as usize;
+            let keys_array = (leaf_node as *mut u8).add(leaf_layout.keys_offset as usize);
+
+            // Destroy all elements in this leaf.
+            for i in 0..len {
+                let elem_to_destroy = keys_array.add(i * element_size);
+                crate::impls::destroy::any_destroy_local(rt_handle, elem_to_destroy, element_tydesc);
+            }
+
+            // Free the leaf node.
+            rt.alloc.free(leaf_layout.size, leaf_layout.align, 1, leaf_node as *mut u8);
+        }
+    }
+}
+
 /// Creates an empty BTreeSet.
 pub unsafe fn btreeset_create_impl(
     _rt: &mut RtLocal,

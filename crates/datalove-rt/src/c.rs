@@ -440,6 +440,41 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clone_from_slice_local(
     }
 }
 
+/// Build a BTreeMap from sorted slices of already-instantiated keys and values.
+///
+/// Takes ownership of the keys and values by moving them from the input buffers
+/// into the tree structure. The input buffers should not be used after this call.
+/// Keys must already be sorted.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_build_from_sorted_slices_local(
+    rt: LocalRtHandle,
+    map_out: *mut u8,
+    key_tydesc: *const rtdt::TyDesc,
+    value_tydesc: *const rtdt::TyDesc,
+    keys_ptr: *mut u8,
+    values_ptr: *mut u8,
+    num_entries: u32,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || key_tydesc.is_null() || value_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+        let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
+        crate::impls::btreemap::btreemap_build_from_sorted_slices(
+            rt_ref,
+            map_out as *mut rtdt::Map,
+            key_tydesc_ref,
+            value_tydesc_ref,
+            keys_ptr,
+            values_ptr,
+            num_entries,
+        )
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_destroy_local(
     rt: LocalRtHandle,
@@ -759,6 +794,35 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clone_from_slice_local(
             slice_ptr_ref,
             slice_ptr_len,
             slice_element_tydesc,
+        )
+    }
+}
+
+/// Build a BTreeSet from a sorted slice of already-instantiated elements.
+///
+/// Takes ownership of the elements by moving them from the input buffer into
+/// the tree structure. The input buffer should not be used after this call.
+/// Elements must already be sorted.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_build_from_sorted_slice_local(
+    rt: LocalRtHandle,
+    set_out: *mut u8,
+    element_tydesc: *const rtdt::TyDesc,
+    elements_ptr: *mut u8,
+    num_elements: u32,
+) -> RtStatus {
+    unsafe {
+        if rt.is_null() || element_tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::set::btreeset_build_from_sorted_slice(
+            rt_ref,
+            set_out as *mut rtdt::Set,
+            element_tydesc,
+            elements_ptr,
+            num_elements,
         )
     }
 }
