@@ -568,7 +568,7 @@ pub fn typecheck_package_world<'db>(
         // Parse the module.
         let source = module.text(db);
         let parse_result = crate::parser::parse(db, source);
-        let script = parse_result.script;
+        let script = parse_result.script(db);
 
         // Build module alias map for this module.
         let alias_map = build_module_alias_map(db, script, graph, module);
@@ -1933,7 +1933,7 @@ mod tests {
         type_check(
             db,
             source,
-            parse_result.script
+            parse_result.script(db)
         )
     }
 

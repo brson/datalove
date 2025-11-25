@@ -392,7 +392,7 @@ fn parse_module_functions<'db>(
 ) -> Vec<(InternedText<'db>, ast::StmtFun<'db>)> {
     let module_source = module.text(db);
     let parse_result = crate::parser::parse(db, module_source);
-    let parsed = parse_result.script;
+    let parsed = parse_result.script(db);
 
     let mut functions = Vec::new();
     for statement in parsed.statements(db) {
@@ -528,33 +528,44 @@ pub fn execute_script<'db>(
         ctx.module_functions = ModuleFunctionTable::build_from_script(db, script, package_world);
     }
 
+    // Helper to cleanup script scope variables.
+    fn cleanup_script_scope(ctx: &mut InterpContext<'_>) {
+        let remaining_vars: Vec<_> = ctx.script_scope.variables.drain()
+            .filter_map(|(_, var)| {
+                if var.state == ScriptVarState::Available {
+                    Some(var.value)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for value in remaining_vars {
+            destroy_value(ctx, value);
+        }
+    }
+
     // Execute all script units.
     let units = script.units(db);
     for unit_index in 0..units.len() {
-        execute_unit(&mut ctx, script, unit_index)?;
+        if let Err(e) = execute_unit(&mut ctx, script, unit_index) {
+            cleanup_script_scope(&mut ctx);
+            return Err(e);
+        }
     }
 
     // Return the output variable if present.
     // Remove it from the HashMap to avoid double-free.
     let output_name = bct::text::InternedText::new(db, "output");
-    let value = ctx.script_scope.variables.remove(&output_name)
-        .ok_or(InterpError::NoOutputVariable)?
-        .value;
+    let value = match ctx.script_scope.variables.remove(&output_name) {
+        Some(var) => var.value,
+        None => {
+            cleanup_script_scope(&mut ctx);
+            return Err(InterpError::NoOutputVariable);
+        }
+    };
 
     // Clean up any remaining variables before moving out runtime and tydesc_table.
-    // Only destroy Available variables - Moved variables have already been consumed.
-    let remaining_vars: Vec<_> = ctx.script_scope.variables.drain()
-        .filter_map(|(_, var)| {
-            if var.state == ScriptVarState::Available {
-                Some(var.value)
-            } else {
-                None
-            }
-        })
-        .collect();
-    for value in remaining_vars {
-        destroy_value(&mut ctx, value);
-    }
+    cleanup_script_scope(&mut ctx);
 
     // Return the value, runtime, and tydesc_table (which keeps the memory alive).
     Ok(ScriptResult {
@@ -1224,9 +1235,25 @@ fn execute_function_statement_frame<'db>(
             execute_let_statement_frame(ctx, *let_stmt)
         }
         ast::Statement::Ret(ret_stmt) => {
-            // Evaluate the return expression and signal return.
+            // Evaluate the return expression.
             let value = eval_expression_frame(ctx, ret_stmt.value(ctx.db))?;
-            Err(InterpError::FunctionReturn(value))
+
+            // Get the declared return type from the current function.
+            let frame_index = ctx.call_stack.len() - 1;
+            let func = ctx.call_stack[frame_index].func;
+            let narrowed_value = if let Some(ret_type_hint) = func.return_type(ctx.db) {
+                // Check if we need to narrow Int to u32.
+                let ret_type = ret_type_hint.type_hint(ctx.db);
+                if matches!(ret_type, crate::datalit::ast::TypeHint::U32) && is_int_value(value) {
+                    narrow_int_to_u32(ctx, value)?
+                } else {
+                    value
+                }
+            } else {
+                value
+            };
+
+            Err(InterpError::FunctionReturn(narrowed_value))
         }
         ast::Statement::If(_) => {
             Err(InterpError::InvalidExpression("If statements in functions not yet implemented".to_string()))
@@ -1861,6 +1888,69 @@ fn widen_u32_to_int<'db>(
     }
 
     Ok(int_val)
+}
+
+/// Narrow an Int value to u32.
+///
+/// This reads the Int value and converts it to a u32. If the Int value is
+/// too large to fit in a u32 or is negative, returns an error.
+fn narrow_int_to_u32<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_value: Value,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    // Read the Int structure.
+    let int_ptr = int_value.ptr as *const datalove_rt::rtdt::Int;
+
+    let u32_value = unsafe {
+        let size_and_sign = (*int_ptr).size_and_sign;
+        let size = size_and_sign.unsigned_abs() as usize;
+        let is_negative = size_and_sign < 0;
+
+        if is_negative {
+            return Err(InterpError::RuntimeError(
+                "Cannot narrow negative Int to u32".to_string()
+            ));
+        }
+
+        if size == 0 {
+            // Zero.
+            0u32
+        } else if size == 1 {
+            // Single limb - just read it.
+            let limb_ptr = (*int_ptr).data as *const u32;
+            *limb_ptr
+        } else {
+            // Multiple limbs - too large for u32.
+            return Err(InterpError::RuntimeError(
+                "Int value too large to fit in u32".to_string()
+            ));
+        }
+    };
+
+    // Allocate u32 result.
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
+    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tydesc_ref.size(),
+            tydesc_ref.align(),
+            1
+        )
+    };
+
+    unsafe {
+        *(ptr as *mut u32) = u32_value;
+    }
+
+    // Destroy the original Int value.
+    destroy_value(ctx, int_value);
+
+    Ok(Value { ptr, tydesc: tydesc_ptr })
 }
 
 /// Destroy a value using the runtime's destroy function.

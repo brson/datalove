@@ -1957,12 +1957,13 @@ mod tests {
         source: bct::input::Source,
     ) -> (crate::ast::Script<'db>, crate::tycheck::TypecheckResult<'db>) {
         let parse_result = crate::parser::parse(db, source);
+        let script = parse_result.script(db);
         let tycheck_result = crate::tycheck::type_check(
             db,
             source,
-            parse_result.script,
+            script,
         );
-        (parse_result.script, tycheck_result)
+        (script, tycheck_result)
     }
 
     #[test]

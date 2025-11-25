@@ -408,7 +408,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"No analysis found for function \'process_u32\'\")",
+                "RuntimeError(\"Function \'process_int\' has analysis errors: [UseAfterMove { slot: SlotId(1), use_location: ProgramPoint { stmt_id: StmtId(1), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
             ],
         ),
         output: "",

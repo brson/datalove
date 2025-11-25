@@ -349,7 +349,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"No analysis found for function \'top\'\")",
+                "VariableNotFound(\"x\")",
             ],
         ),
         output: "",

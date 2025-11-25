@@ -39,10 +39,11 @@ pub fn parse_script_unit<'db>(
     let units = &script.units(db);
     let unit = units[unit_index];
     let source = unit.source(db);
-    parse(db, source).script
+    parse(db, source).script(db)
 }
 
 /// Parse a Source into a datafun script with span information.
+#[salsa::tracked]
 pub fn parse<'db>(
     db: &'db dyn crate::Db,
     source: Source,
@@ -1239,7 +1240,7 @@ pub(crate) fn parse_for_test<'db>(
     db: &'db dyn crate::Db,
     source: Source,
 ) -> ast::Script<'db> {
-    parse(db, source).script
+    parse(db, source).script(db)
 }
 
 /// Public tracked wrapper for integration tests that returns just the Script.
@@ -1249,7 +1250,7 @@ pub fn parse_integration_test<'db>(
     db: &'db dyn crate::Db,
     source: Source,
 ) -> ast::Script<'db> {
-    parse(db, source).script
+    parse(db, source).script(db)
 }
 
 /// Public tracked wrapper for integration code to enable diagnostic accumulation.
@@ -1261,7 +1262,7 @@ pub fn parse_for_diagnostics<'db>(
     db: &'db dyn crate::Db,
     source: Source,
 ) -> ast::Script<'db> {
-    parse(db, source).script
+    parse(db, source).script(db)
 }
 
 

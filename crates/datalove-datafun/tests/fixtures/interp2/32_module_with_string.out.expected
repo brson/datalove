@@ -180,11 +180,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "RuntimeError(\"No analysis found for function \'greet\'\")",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@\"World\"",
     ),
 ]

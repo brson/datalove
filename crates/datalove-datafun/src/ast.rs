@@ -12,20 +12,11 @@ pub struct Script<'db> {
 }
 
 /// Result of parsing containing the script and span side table.
-///
-/// Note: This must be a regular struct, not #[salsa::tracked], because
 /// Parse result containing only the Script.
 /// Spans are now accessed via accumulators instead of being stored in this struct.
-#[derive(Clone, PartialEq, Eq)]
+#[salsa::tracked]
 pub struct ParseResult<'db> {
     pub script: Script<'db>,
-}
-
-impl<'db> ParseResult<'db> {
-    pub fn new(db: &'db dyn salsa::Database, script: Script<'db>) -> Self {
-        let _ = db; // Unused but needed for compatibility
-        ParseResult { script }
-    }
 }
 
 #[derive(Clone, Hash)]

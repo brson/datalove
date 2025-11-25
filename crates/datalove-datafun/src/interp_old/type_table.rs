@@ -565,8 +565,9 @@ mod tests {
     ) -> (Script<'db>, crate::tycheck::TypecheckResult<'db>) {
         let source = Source::new(db, source_text.as_str(db).S());
         let parse_result = crate::parser::parse(db, source);
-        let tycheck_result = crate::tycheck::type_check(db, source, parse_result.script);
-        (parse_result.script, tycheck_result)
+        let script = parse_result.script(db);
+        let tycheck_result = crate::tycheck::type_check(db, source, script);
+        (script, tycheck_result)
     }
 
     /// Helper to build type table (not tracked since TypeTable contains raw pointers).
@@ -676,7 +677,7 @@ mod tests {
 
     #[salsa::tracked]
     fn parse_script<'db>(db: &'db dyn crate::Db, source: Source) -> Script<'db> {
-        crate::parser::parse(db, source).script
+        crate::parser::parse(db, source).script(db)
     }
 
     #[test]

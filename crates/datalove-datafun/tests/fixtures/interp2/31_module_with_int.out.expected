@@ -164,7 +164,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"No analysis found for function \'compute_large\'\")",
+                "RuntimeError(\"Function \'compute_large\' has analysis errors: [UseAfterMove { slot: SlotId(2), use_location: ProgramPoint { stmt_id: StmtId(1), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
             ],
         ),
         output: "",

@@ -256,7 +256,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"No analysis found for function \'add_five\'\")",
+                "VariableNotFound(\"x\")",
             ],
         ),
         output: "",

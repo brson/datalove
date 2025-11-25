@@ -17,7 +17,7 @@ fn parse_module_for_interp<'db>(
     db: &'db dyn crate::Db,
     source: Source,
 ) -> Script<'db> {
-    crate::parser::parse(db, source).script
+    crate::parser::parse(db, source).script(db)
 }
 
 /// Interpreter execution result.

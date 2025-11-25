@@ -12,9 +12,11 @@
 - [x] Phase 7: Module Integration - **COMPLETED**
 - [ ] Phase 8: Testing & Validation
 
-**Current Status**: Phases 0, 1, 2, and 7 completed. Frame-based execution is fully implemented and active. Functions execute using packed frame buffers with computed slot offsets from analysis. Variables are read/written from frame slots, move semantics tracked via SlotState. All 162 tests passing (36 interp2, 46 old interp, 7 std, 70 tycheck, 3 tycheck_world) with zero memory leaks.
+**Current Status**: Phases 0, 1, 2, and 7 completed. Frame-based execution is fully implemented and active. Functions execute using packed frame buffers with computed slot offsets from analysis. Variables are read/written from frame slots, move semantics tracked via SlotState. All 37 interp2 tests passing with zero memory leaks.
 
-**Latest Update (2025-11-06)**: ✅ Completed Phase 1 frame-based execution. Implemented `eval_expression_frame()` for Name (variables), Datalit (literals), BinOp (arithmetic), and FunctionCall expressions. Implemented `execute_let_statement_frame()` for variable assignments. Added helper functions: `find_slot_by_name()`, `read_reference_slot()`, `read_value_from_slot()`, `write_value_to_slot()`. Variable reads check copyability and SlotState, cloning Copy types and marking non-Copy types as Moved. All function execution now uses frame-based evaluation with no HashMap fallback.
+**Latest Update (2025-11-25)**: Fixed type mismatch bug causing nondeterministic output in tests 30 and 33. Added `narrow_int_to_u32()` as temporary workaround. See "Known Issues" section below for the proper fix needed.
+
+**Previous Update (2025-11-06)**: ✅ Completed Phase 1 frame-based execution. Implemented `eval_expression_frame()` for Name (variables), Datalit (literals), BinOp (arithmetic), and FunctionCall expressions. Implemented `execute_let_statement_frame()` for variable assignments. Added helper functions: `find_slot_by_name()`, `read_reference_slot()`, `read_value_from_slot()`, `write_value_to_slot()`. Variable reads check copyability and SlotState, cloning Copy types and marking non-Copy types as Moved. All function execution now uses frame-based evaluation with no HashMap fallback.
 
 Ready for: Phase 3 (Move Semantics refinement with MoveInfo), Phase 4 (Control Flow with if statements), or Phase 5 (Drop Execution with drop points).
 
@@ -1955,6 +1957,54 @@ Implementation complete when:
   - Each test produces structured SectionAnalysis showing typecheck results and execution values
 - Full test suite: `just test` passes (282+ tests total)
 - Worldfile migration complete: all fixtures converted from `.dfs` to `.world`, output changed from plain text to RON-serialized analysis
+
+## Known Issues
+
+### Checked Arithmetic Operators Incorrectly Widen to Int
+
+**Status**: Band-aid fix in place, proper fix needed
+
+**Spec Reference**: `notes/typing-rules.md` lines 799-832
+
+**The Spec Says**:
+- Bare operators (`+`, `-`, `*`) → widen operands to `int`, return `int`
+- Checked operators (`+!`, `-!`, `*!`, `/!`) → preserve operand type, return same type (or `Result<T>`)
+
+**Current Implementation (WRONG)**:
+- ALL arithmetic operations widen u32 operands to Int
+- `eval_add()`, `eval_sub()`, `eval_mul()`, `eval_div()` always call `widen_u32_to_int()`
+- Returns Int even for checked operators like `+!`
+
+**Symptom**:
+- Function `add(x: u32, y: u32): u32` with body `ret x +! y` returns Int internally
+- When this Int value is passed to another function expecting u32, type mismatch occurs
+- The function reads the Int memory as if it were u32, producing garbage
+- Output shows memory addresses like `@17610401082753025536` instead of actual values
+
+**Current Workaround** (2025-11-25):
+- Added `narrow_int_to_u32()` function in `interp/mod.rs`
+- Modified return statement handling to narrow Int→u32 when declared return type is u32
+- This fixes the output but does unnecessary widening/narrowing work
+
+**Proper Fix Needed**:
+1. Modify `execute_binop()` to check operator type (bare vs checked)
+2. For checked operators (`+!`, `-!`, `*!`, `/!`):
+   - Operate directly on u32 values (no widening)
+   - Check for overflow, panic or return error if detected
+   - Return u32 (same type as operands)
+3. For bare operators (`+`, `-`, `*`):
+   - Keep current widening behavior (widen to Int, return Int)
+4. Remove the `narrow_int_to_u32()` workaround from return handling
+
+**Files to Modify**:
+- `crates/datalove-datafun/src/interp/mod.rs`:
+  - `execute_binop()` - dispatch based on operator type
+  - `eval_add()`, `eval_sub()`, `eval_mul()`, `eval_div()` - add non-widening paths
+  - Remove `narrow_int_to_u32()` call from return handling (after fix)
+
+**Test Coverage**:
+- Tests 30 (`30_import_multiple_funcs`) and 33 (`33_import_two_modules`) exercise this path
+- After proper fix, these should produce correct u32 output without narrowing
 
 ## References
 
