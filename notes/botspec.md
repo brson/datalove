@@ -135,34 +135,48 @@ Every type has an associated heap:
 
 ### 2.3 Operators
 
-**Arithmetic (panic on overflow for fixed ints):**
+#### Bare Arithmetic (`+ - * /`)
 
-| Op | Meaning |
-|----|---------|
-| `+` | Add |
-| `-` | Subtract |
-| `*` | Multiply |
-| `/` | Divide |
+| Type | `+` `-` `*` | `/` | Unary `-` |
+|------|-------------|-----|-----------|
+| **f32** | Returns f32 | Returns f32 | Returns f32 |
+| **int** (bigint) | Returns int | Not allowed (use `/!` or `/?`) | Returns int |
+| **Fixed ints** | Widens to int | Not allowed | Not allowed |
 
-**Checked arithmetic (return Result, early-return on error):**
+- Floats: All bare ops work, return same float type.
+- Bigints: Add/sub/mul and unary neg work. Division requires checked variant (div0 possible).
+- Fixed ints: Bare `+ - *` widen both operands to `int`, return `int`. No bare `/` or unary `-`.
 
-| Op | Meaning |
-|----|---------|
-| `+!` | Add checked |
-| `-!` | Subtract checked |
-| `*!` | Multiply checked |
-| `/!` | Divide checked |
+**Tycheck:** Correct per spec.
+**Interpreter:** Correct for widening behavior.
 
-**Optional arithmetic (return Option):**
+#### Checked Arithmetic (`+! -! *! /!`) - Early-return Result
 
-| Op | Meaning |
-|----|---------|
-| `+?` | Add optional |
-| `-?` | Subtract optional |
-| `*?` | Multiply optional |
-| `/?` | Divide optional |
+| Type | `+!` `-!` `*!` | `/!` | Unary `-!` |
+|------|----------------|------|------------|
+| **f32** | Not allowed | Not allowed | Not allowed |
+| **int** | Not allowed | Returns `!int` | Not allowed |
+| **Fixed ints** | Returns `!T` (same type) | Returns `!T` | Returns `!T` |
 
-**Comparison:** [NOT IMPLEMENTED in interpreter]
+These operators early-return on overflow/div0, requiring the enclosing function to return `!T`.
+
+**Tycheck:** Correct per spec.
+**Interpreter:** [DEVIATION] Treats `+!` same as `+` (widens to int instead of checked fixed-int math).
+
+#### Optional Arithmetic (`+? -? *? /?`) - Early-return Option
+
+| Type | `+?` `-?` `*?` | `/?` | Unary `-?` |
+|------|----------------|------|------------|
+| **f32** | Not allowed | Not allowed | Not allowed |
+| **int** | Not allowed | Returns `?int` | Not allowed |
+| **Fixed ints** | Returns `?T` (same type) | Returns `?T` | Signed only, returns `?T` |
+
+These operators early-return `none` on overflow/div0. `-?` disallowed for unsigned ints (footgun).
+
+**Tycheck:** Correct per spec.
+**Interpreter:** [NOT IMPLEMENTED]
+
+#### Comparison (`.<` `.>` `<=` `>=` `==` `!=`)
 
 | Op | Meaning |
 |----|---------|
@@ -172,6 +186,9 @@ Every type has an associated heap:
 | `>=` | Greater or equal |
 | `==` | Equal |
 | `!=` | Not equal |
+
+**Tycheck:** Returns `bool` for any numeric operands.
+**Interpreter:** [NOT IMPLEMENTED]
 
 ### 2.4 Function Definitions
 
