@@ -86,11 +86,21 @@ pub struct StackFrame<'db> {
     pub layout: crate::function_analysis::FrameLayout<'db>,
 }
 
+/// Where a value's memory lives.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ValueLocation {
+    /// Value lives in current stack frame (don't free structure).
+    FrameSlot,
+    /// Value is a heap allocation owned by this value (free on destroy).
+    HeapOwned,
+}
+
 /// Value representation.
 #[derive(Copy, Clone, Debug)]
 pub struct Value {
     pub ptr: *mut u8,
     pub tydesc: *const datalove_rt::rtdt::TyDesc,
+    pub location: ValueLocation,
 }
 
 /// Result of script execution containing the value and runtime.
@@ -1218,6 +1228,7 @@ fn cleanup_frame<'db>(
             let value = Value {
                 ptr: slot_ptr,
                 tydesc,
+                location: ValueLocation::FrameSlot,
             };
             destroy_value_contents_only(ctx, value);
         }
@@ -1298,17 +1309,17 @@ fn read_reference_slot<'db>(
     ptr_value as *mut u8
 }
 
-/// Read a value from a Local or Temporary slot.
+/// Read a value from a Local or Temporary slot (zero-copy move).
 ///
-/// This allocates heap memory and copies the value from the frame,
-/// since the value will outlive the frame (being moved out).
+/// Returns a Value pointing directly into the frame buffer.
+/// The slot should be marked as Moved after this call.
 fn read_value_from_slot<'db>(
     ctx: &mut InterpContext<'db>,
     frame_index: usize,
     slot_info: crate::function_analysis::SlotInfo<'db>,
 ) -> Result<Value, InterpError> {
     let offset = slot_info.offset(ctx.db) as usize;
-    let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) };
+    let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
 
     // Get the type descriptor from the slot's type.
     let ty = slot_info.ty(ctx.db);
@@ -1318,29 +1329,13 @@ fn read_value_from_slot<'db>(
     };
     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-    // Allocate heap memory for the value.
-    unsafe {
-        let rt_handle = ctx.runtime.handle();
-        let heap_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(
-            rt_handle,
-            tydesc,
-            1,
-        );
-
-        if heap_ptr.is_null() {
-            return Err(InterpError::RuntimeError("Failed to allocate memory".to_string()));
-        }
-
-        // Clone data from frame to heap (deep copy for types with sub-allocations).
-        datalove_rt::c::dtlv_rti_clone_local(
-            rt_handle,
-            frame_ptr as *mut u8,
-            tydesc,
-            heap_ptr,
-        );
-
-        Ok(Value { ptr: heap_ptr, tydesc })
-    }
+    // Return a Value pointing directly into the frame (zero-copy).
+    // The caller must mark this slot as Moved to prevent double-use.
+    Ok(Value {
+        ptr: frame_ptr,
+        tydesc,
+        location: ValueLocation::FrameSlot,
+    })
 }
 
 /// Write a value to a Local or Temporary slot.
@@ -1447,7 +1442,8 @@ fn eval_expression_frame<'db>(
                 };
                 let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-                let value = Value { ptr, tydesc };
+                // Reference points to caller's heap-owned data.
+                let value = Value { ptr, tydesc, location: ValueLocation::HeapOwned };
 
                 if is_copy {
                     Ok(clone_value(ctx, value))
@@ -1469,7 +1465,8 @@ fn eval_expression_frame<'db>(
                     };
                     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-                    let temp_value = Value { ptr: frame_ptr, tydesc };
+                    // Temporary value for cloning - location doesn't matter since we only clone from it.
+                    let temp_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::FrameSlot };
                     Ok(clone_value(ctx, temp_value))
                 } else {
                     // For Move types, allocate and copy from frame, then mark as moved.
@@ -1653,6 +1650,7 @@ fn clone_value<'db>(
     Value {
         ptr: cloned_ptr,
         tydesc: value.tydesc,
+        location: ValueLocation::HeapOwned,
     }
 }
 
@@ -1683,6 +1681,7 @@ fn allocate_bool<'db>(
     Ok(Value {
         ptr,
         tydesc: tydesc_ptr,
+        location: ValueLocation::HeapOwned,
     })
 }
 
@@ -1720,6 +1719,7 @@ fn allocate_int<'db>(
     Ok(Value {
         ptr,
         tydesc: tydesc_ptr,
+        location: ValueLocation::HeapOwned,
     })
 }
 
@@ -1787,6 +1787,7 @@ fn allocate_string<'db>(
     Ok(Value {
         ptr: string_ptr,
         tydesc: tydesc_ptr,
+        location: ValueLocation::HeapOwned,
     })
 }
 
@@ -1848,6 +1849,7 @@ fn allocate_bigint<'db>(
     Ok(Value {
         ptr,
         tydesc: tydesc_ptr,
+        location: ValueLocation::HeapOwned,
     })
 }
 
@@ -1950,7 +1952,7 @@ fn narrow_int_to_u32<'db>(
     // Destroy the original Int value.
     destroy_value(ctx, int_value);
 
-    Ok(Value { ptr, tydesc: tydesc_ptr })
+    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::HeapOwned })
 }
 
 /// Destroy a value using the runtime's destroy function.
@@ -1976,10 +1978,10 @@ pub fn destroy_value_contents_only<'db>(
     }
 }
 
-/// Destroy a heap-allocated value.
+/// Destroy a value, respecting its location.
 ///
-/// This destroys the value's contents AND frees the memory structure.
-/// Only use this for values allocated on the heap (not frame-local values).
+/// For HeapOwned values: destroys contents AND frees the memory structure.
+/// For FrameSlot values: destroys contents only (frame owns the memory).
 pub fn destroy_value<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
@@ -1995,13 +1997,16 @@ pub fn destroy_value<'db>(
             value.tydesc,
         );
 
-        // Free the value structure itself.
-        datalove_rt::c::dtlv_rti_mem_free_local(
-            rt_handle,
-            value.tydesc,
-            1,
-            value.ptr,
-        );
+        // Only free the structure for heap-owned values.
+        // Frame slot values are freed when the frame is dropped.
+        if value.location == ValueLocation::HeapOwned {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt_handle,
+                value.tydesc,
+                1,
+                value.ptr,
+            );
+        }
     }
 }
 
