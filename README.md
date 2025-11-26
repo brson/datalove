@@ -314,6 +314,12 @@ let a = 1 /! 1
 let a = -!a // yup
 ```
 
+`?` early-returns `?T` option types and `!` early-returns `!T` result types.
+
+These either result in the same type as the input types or early return -
+they do not result in option or result types. Their enclosing function
+must be the correct optionr/result type.
+
 `-?` unary op is not defined for unsigned ints -
 it has a sensible semantic but is a pure footgun.
 
