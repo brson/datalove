@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2025-01-25
+Last verified: 2025-11-25
 
 ## Overview
 
@@ -18,25 +18,28 @@ Uses Salsa for incremental compilation. REPL-first design.
 
 ### 1.1 Primitive Types
 
-| Type | Description |
-|------|-------------|
-| `bool` | Boolean |
-| `u8`, `u16`, `u32`, `u64` | Unsigned integers |
-| `i8`, `i16`, `i32`, `i64` | Signed integers |
-| `f32` | 32-bit float |
-| `int` | Arbitrary precision signed integer (bigint) |
-| `string` | UTF-8 string |
+| Type | Description | Interpreter Status |
+|------|-------------|-------------------|
+| `bool` | Boolean | Implemented |
+| `u8`, `u16`, `u64` | Unsigned integers | [NOT IMPLEMENTED] |
+| `u32` | 32-bit unsigned integer | Implemented |
+| `i8`, `i16`, `i32`, `i64` | Signed integers | [NOT IMPLEMENTED] |
+| `f32` | 32-bit float | [NOT IMPLEMENTED] |
+| `int` | Arbitrary precision signed integer (bigint) | Implemented |
+| `string` | UTF-8 string | Implemented |
 
 ### 1.2 Collection Types
 
-| Type | Syntax | Example |
-|------|--------|---------|
-| List | `[@T]` | `[1, 2, 3]` |
-| Map | `@map<@K, @V>` | `@map { 0 = 5, 2 = 2 }` |
-| Set | `@set<@T>` | `@set { 1, 2, 3 }` |
-| Tensor | `@tensor<@T, N>` | [PARTIAL: parsed but not evaluated] |
+| Type | Syntax | Example | Interpreter Status |
+|------|--------|---------|-------------------|
+| List | `[@T]` | `[1, 2, 3]` | [NOT IMPLEMENTED] |
+| Map | `@map<@K, @V>` | `@map { 0 = 5, 2 = 2 }` | [NOT IMPLEMENTED] |
+| Set | `@set<@T>` | `@set { 1, 2, 3 }` | [NOT IMPLEMENTED] |
+| Tensor | `@tensor<@T, N>` | - | [PARTIAL: parsed only] |
 
 ### 1.3 Aggregate Types
+
+**Interpreter Status:** All aggregate types are [NOT IMPLEMENTED] in the new interpreter.
 
 **Anonymous Tuple:**
 ```
@@ -72,12 +75,12 @@ Uses Salsa for incremental compilation. REPL-first design.
 
 ### 1.4 Special Types
 
-| Type | Syntax | Values |
-|------|--------|--------|
-| Option | `@?@T` | value or `@none` |
-| Result | `@!@T` | value or `@error "msg"` |
-| Data | `@data` | `@data 1`, `@data : int / 1` |
-| Error | `@error` | `@error "oops"`, `@error : int / 1` |
+| Type | Syntax | Values | Interpreter Status |
+|------|--------|--------|-------------------|
+| Option | `@?@T` | value or `@none` | [NOT IMPLEMENTED] |
+| Result | `@!@T` | value or `@error "msg"` | [NOT IMPLEMENTED] |
+| Data | `@data` | `@data 1`, `@data : int / 1` | [NOT IMPLEMENTED] |
+| Error | `@error` | `@error "oops"`, `@error : int / 1` | [NOT IMPLEMENTED] |
 
 ### 1.5 Heap Annotations
 
@@ -201,12 +204,12 @@ end fun
 
 ### 2.5 Parameter Modes
 
-| Mode | Syntax | Meaning |
-|------|--------|---------|
-| `in` | (default) | By value |
-| `out` | `param: out type` | By mut pointer |
-| `ref` | `param: ref type` | By reference |
-| `mut` | `param: mut type` | By mut reference |
+| Mode | Syntax | Meaning | Interpreter Status |
+|------|--------|---------|-------------------|
+| `in` | (default) | By value | Implemented |
+| `out` | `param: out type` | By mut pointer | [NOT IMPLEMENTED] |
+| `ref` | `param: ref type` | By reference | [NOT IMPLEMENTED] |
+| `mut` | `param: mut type` | By mut reference | [NOT IMPLEMENTED] |
 
 ### 2.6 Module System
 
