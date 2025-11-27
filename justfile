@@ -5,6 +5,20 @@ test:
     cargo test --all
     just check-wasm
 
+# Time all tests, showing only tests that take over 1 second.
+test-time:
+    env RUST_TEST_TIME_UNIT=1000,10000 \
+        RUST_TEST_TIME_INTEGRATION=1000,10000 \
+        RUST_TEST_TIME_DOCTEST=1000,10000 \
+        cargo +nightly test --all -- -Zunstable-options --report-time 2>&1 | rg '\s+<\d+\.\d+s>'
+
+# Time all tests, showing all tests with slow tests highlighted (>1s warn, >10s critical).
+test-time-all:
+    env RUST_TEST_TIME_UNIT=1000,10000 \
+        RUST_TEST_TIME_INTEGRATION=1000,10000 \
+        RUST_TEST_TIME_DOCTEST=1000,10000 \
+        cargo +nightly test --all -- -Zunstable-options --report-time
+
 # Sanitizer Testing
 # =================
 
