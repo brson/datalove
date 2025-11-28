@@ -86,13 +86,13 @@ pub struct StackFrame<'db> {
     pub layout: crate::function_analysis::FrameLayout<'db>,
 }
 
-/// Where a value's memory lives.
+/// Tracks whether a Value's memory needs freeing after use.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ValueLocation {
-    /// Value lives in current stack frame (don't free structure).
-    FrameSlot,
-    /// Value is a heap allocation owned by this value (free on destroy).
-    HeapOwned,
+    /// Points to frame buffer or caller's data via reference. Don't free.
+    Borrowed,
+    /// Temp heap allocation for expression evaluation. Free structure after use.
+    TempOwned,
 }
 
 /// Value representation.
@@ -1228,7 +1228,7 @@ fn cleanup_frame<'db>(
             let value = Value {
                 ptr: slot_ptr,
                 tydesc,
-                location: ValueLocation::FrameSlot,
+                location: ValueLocation::Borrowed,
             };
             destroy_value_contents_only(ctx, value);
         }
@@ -1334,7 +1334,7 @@ fn read_value_from_slot<'db>(
     Ok(Value {
         ptr: frame_ptr,
         tydesc,
-        location: ValueLocation::FrameSlot,
+        location: ValueLocation::Borrowed,
     })
 }
 
@@ -1442,15 +1442,14 @@ fn eval_expression_frame<'db>(
                 };
                 let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-                // Reference points to caller's heap-owned data.
-                let value = Value { ptr, tydesc, location: ValueLocation::HeapOwned };
-
                 if is_copy {
-                    Ok(clone_value(ctx, value))
+                    // Copy: clone the value. The clone is TempOwned.
+                    let borrowed = Value { ptr, tydesc, location: ValueLocation::Borrowed };
+                    Ok(clone_value(ctx, borrowed))
                 } else {
-                    // Move from reference (mark as moved to prevent reuse).
+                    // Move: take ownership. Value becomes TempOwned.
                     ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
-                    Ok(value)
+                    Ok(Value { ptr, tydesc, location: ValueLocation::TempOwned })
                 }
             } else {
                 // Local/Temporary slot.
@@ -1466,7 +1465,7 @@ fn eval_expression_frame<'db>(
                     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
                     // Temporary value for cloning - location doesn't matter since we only clone from it.
-                    let temp_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::FrameSlot };
+                    let temp_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::Borrowed };
                     Ok(clone_value(ctx, temp_value))
                 } else {
                     // For Move types, allocate and copy from frame, then mark as moved.
@@ -1650,7 +1649,7 @@ fn clone_value<'db>(
     Value {
         ptr: cloned_ptr,
         tydesc: value.tydesc,
-        location: ValueLocation::HeapOwned,
+        location: ValueLocation::TempOwned,
     }
 }
 
@@ -1681,7 +1680,7 @@ fn allocate_bool<'db>(
     Ok(Value {
         ptr,
         tydesc: tydesc_ptr,
-        location: ValueLocation::HeapOwned,
+        location: ValueLocation::TempOwned,
     })
 }
 
@@ -1719,7 +1718,7 @@ fn allocate_int<'db>(
     Ok(Value {
         ptr,
         tydesc: tydesc_ptr,
-        location: ValueLocation::HeapOwned,
+        location: ValueLocation::TempOwned,
     })
 }
 
@@ -1787,7 +1786,7 @@ fn allocate_string<'db>(
     Ok(Value {
         ptr: string_ptr,
         tydesc: tydesc_ptr,
-        location: ValueLocation::HeapOwned,
+        location: ValueLocation::TempOwned,
     })
 }
 
@@ -1849,7 +1848,7 @@ fn allocate_bigint<'db>(
     Ok(Value {
         ptr,
         tydesc: tydesc_ptr,
-        location: ValueLocation::HeapOwned,
+        location: ValueLocation::TempOwned,
     })
 }
 
@@ -1952,7 +1951,7 @@ fn narrow_int_to_u32<'db>(
     // Destroy the original Int value.
     destroy_value(ctx, int_value);
 
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::HeapOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
 }
 
 /// Destroy a value using the runtime's destroy function.
@@ -1999,7 +1998,7 @@ pub fn destroy_value<'db>(
 
         // Only free the structure for heap-owned values.
         // Frame slot values are freed when the frame is dropped.
-        if value.location == ValueLocation::HeapOwned {
+        if value.location == ValueLocation::TempOwned {
             datalove_rt::c::dtlv_rti_mem_free_local(
                 rt_handle,
                 value.tydesc,
@@ -2019,6 +2018,11 @@ pub fn free_value_structure<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
 ) {
+    // Only free temp allocations. Borrowed values point into frames.
+    if value.location != ValueLocation::TempOwned {
+        return;
+    }
+
     unsafe {
         let rt_handle = ctx.runtime.handle();
 

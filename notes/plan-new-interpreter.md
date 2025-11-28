@@ -189,24 +189,26 @@ pub enum SlotState {
 
 ```rust
 pub struct Value {
-    ptr: *mut u8,          // Pointer into frame_data or heap
-    tydesc: *const TyDesc,  // Runtime type descriptor
-    location: ValueLocation,
+    pub ptr: *mut u8,
+    pub tydesc: *const TyDesc,
+    pub location: ValueLocation,
 }
 
-#[derive(Copy, Clone)]
+/// Tracks whether a Value's memory needs freeing after use.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ValueLocation {
-    FrameSlot(SlotId),     // Lives in current frame
-    HeapOwned,             // Heap allocation owned by this value
-    Reference,             // Reference to caller's data
+    /// Points to frame buffer or caller's data via reference. Don't free.
+    Borrowed,
+    /// Temp heap allocation for expression evaluation. Free structure after use.
+    TempOwned,
 }
 ```
 
-**Key differences from old interpreter:**
-- No separate enum variants for each type
-- Explicit location tracking (frame vs heap)
-- All values use uniform representation
-- Location enum enables safe ownership tracking
+**Usage:**
+- `TempOwned`: Returned by `allocate_*()`, `clone_value()`, `widen_u32_to_int()`. After copying to a slot, call `free_value_structure()` to free the temp container.
+- `Borrowed`: Returned by `read_value_from_slot()` (points into frame buffer) or when reading reference slots (points to caller's data). Never freed by this frame.
+
+**Key insight:** The question is not "heap vs frame" but "do I need to free this container?"
 
 ### Execution Model
 
@@ -1959,6 +1961,14 @@ Implementation complete when:
 - Worldfile migration complete: all fixtures converted from `.dfs` to `.world`, output changed from plain text to RON-serialized analysis
 
 ## Known Issues
+
+### ValueLocation Design (Fixed 2025-11-27)
+
+**Previous Issue**: `HeapOwned` was used for both temp allocations AND reference slot reads. Reference slots returned `HeapOwned` but actually pointed to caller's frame. `free_value_structure` didn't check location.
+
+**Fix Applied**: Renamed to `TempOwned`/`Borrowed` for clarity. Reference slots now return `Borrowed`. Added location check in `free_value_structure`.
+
+**Future Optimization**: Destination-passing style (DPS) to eliminate temp allocations by writing directly to destination slots.
 
 ### Checked Arithmetic Operators Incorrectly Widen to Int
 
