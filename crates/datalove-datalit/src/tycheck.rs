@@ -153,6 +153,11 @@ pub struct TypecheckResult<'db> {
 
     /// Type errors encountered.
     pub errors: Vec<TypeErrorEntry<'db>>,
+
+    /// The resolved expression context.
+    ///
+    /// Preserved for instantiation of nested types like Data/Error.
+    pub resolved: ResolvedExpr<'db>,
 }
 
 /// Context for typechecking.
@@ -248,7 +253,7 @@ pub fn type_check_with_expected<'db>(
         .map(|e| TypeErrorEntry::new(db, e))
         .collect();
 
-    TypecheckResult::new(db, expr, root_type, errors)
+    TypecheckResult::new(db, expr, root_type, errors, resolved)
 }
 
 /// Synthesize a type for an expression.
