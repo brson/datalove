@@ -436,7 +436,7 @@ unsafe fn clone_impl(
 
                     let inner_ty = unsafe { rtdt::TyDescRef::from_ptr(inner_tydesc) };
                     let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                    let inner_value_out = rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1);
+                    let inner_value_out = unsafe { rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1) };
 
                     if inner_value_out.is_null() {
                         return RtStatus::Error;
@@ -445,7 +445,7 @@ unsafe fn clone_impl(
                     // Recursively clone the inner value.
                     let status = unsafe { clone_impl(rt, inner_value_in, inner_ty, inner_value_out) };
                     if status != RtStatus::Ok {
-                        rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out);
+                        unsafe { rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out) };
                         return status;
                     }
 
@@ -491,7 +491,7 @@ unsafe fn clone_impl(
 
                     let inner_ty = unsafe { rtdt::TyDescRef::from_ptr(inner_tydesc) };
                     let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                    let inner_value_out = rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1);
+                    let inner_value_out = unsafe { rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1) };
 
                     if inner_value_out.is_null() {
                         return RtStatus::Error;
@@ -500,7 +500,7 @@ unsafe fn clone_impl(
                     // Recursively clone the inner value.
                     let status = unsafe { clone_impl(rt, inner_value_in, inner_ty, inner_value_out) };
                     if status != RtStatus::Ok {
-                        rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out);
+                        unsafe { rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out) };
                         return status;
                     }
 
@@ -547,7 +547,7 @@ unsafe fn clone_impl(
 
                     let inner_ty = unsafe { rtdt::TyDescRef::from_ptr(inner_tydesc) };
                     let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                    let inner_value_out = rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1);
+                    let inner_value_out = unsafe { rt_ref.alloc.alloc(inner_ty.size(), inner_ty.align(), 1) };
 
                     if inner_value_out.is_null() {
                         return RtStatus::Error;
@@ -556,7 +556,7 @@ unsafe fn clone_impl(
                     // Recursively clone the inner value.
                     let status = unsafe { clone_impl(rt, inner_value_in, inner_ty, inner_value_out) };
                     if status != RtStatus::Ok {
-                        rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out);
+                        unsafe { rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_out) };
                         return status;
                     }
 
