@@ -1,0 +1,14 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": "F32"
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "Int": {
+        "value": "0xABABABAB"
+      }
+    }
+  }
+}

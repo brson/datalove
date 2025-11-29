@@ -1,0 +1,17 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": {
+      "Option": {
+        "inner_type": {
+          "heap": "Local",
+          "type_hint": "U32"
+        }
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": "None"
+  }
+}

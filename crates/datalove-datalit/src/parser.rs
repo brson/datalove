@@ -644,8 +644,8 @@ impl<'db> DynParser<'db> {
                         }
                         TokenKind::Word => {
                             if let Some(word) = token.word_str(self.db) {
-                                if word.chars().all(|c| c.is_ascii_digit()) {
-                                    // Bare number literal - use Omitted heap.
+                                if Self::is_numeric_literal(word) {
+                                    // Bare number literal (decimal or hex) - use Omitted heap.
                                     ast::Heap::Omitted
                                 } else if matches!(word, "data" | "error" | "tensor" | "tuple" | "struct" | "enum" | "map" | "set" | "true" | "false" | "none") {
                                     // Keywords are allowed without heap sigils.
@@ -722,11 +722,12 @@ impl<'db> DynParser<'db> {
             self.eat_sigil(Sigil::Minus);
             if let Some(TreeToken::Token(token)) = self.peek() {
                 if let Some(word) = token.word_str(self.db) {
-                    if word.chars().all(|c| c.is_ascii_digit()) {
-                        // It's a negative number! Consume the digits.
+                    if Self::is_numeric_literal(word) {
+                        // It's a negative number! Consume the literal.
                         self.next();
-                        // Check for float pattern (dot then more digits).
-                        let is_float = if self.peek_sigil(Sigil::Dot) && self.pos + 1 < self.tokens.len() {
+                        // Only check for float pattern on decimal literals (not hex).
+                        let is_hex = word.starts_with("0x") || word.starts_with("0X");
+                        let is_float = !is_hex && self.peek_sigil(Sigil::Dot) && self.pos + 1 < self.tokens.len() && {
                             if let Some(TreeToken::Token(next_token)) = self.tokens.get(self.pos + 1) {
                                 if let Some(decimal_part) = next_token.word_str(self.db) {
                                     decimal_part.chars().all(|c| c.is_ascii_digit())
@@ -736,8 +737,6 @@ impl<'db> DynParser<'db> {
                             } else {
                                 false
                             }
-                        } else {
-                            false
                         };
 
                         if is_float {
@@ -748,7 +747,7 @@ impl<'db> DynParser<'db> {
                             let value = InternedText::new(self.db, float_str.S());
                             return ast::Expr::Float(ast::ExprFloat::new(self.db, value));
                         } else {
-                            // Negative int: -number
+                            // Negative int (decimal or hex): -number
                             let int_str = format!("-{}", word);
                             let value = InternedText::new(self.db, int_str.S());
                             return ast::Expr::Int(ast::ExprInt::new(self.db, value));
@@ -1112,10 +1111,11 @@ impl<'db> DynParser<'db> {
                 match token.kind(self.db) {
                     TokenKind::Word => {
                         let word = token.word_str(self.db).X();
-                        if word.chars().all(|c| c.is_ascii_digit()) {
+                        if Self::is_numeric_literal(word) {
                             self.next();
-                            // Check for float pattern (number followed by dot and number).
-                            if self.peek_sigil(Sigil::Dot) && self.pos + 1 < self.tokens.len() {
+                            // Only check for float pattern on decimal literals (not hex).
+                            let is_hex = word.starts_with("0x") || word.starts_with("0X");
+                            if !is_hex && self.peek_sigil(Sigil::Dot) && self.pos + 1 < self.tokens.len() {
                                 if let Some(TreeToken::Token(next_token)) = self.tokens.get(self.pos + 1) {
                                     if let Some(decimal_part) = next_token.word_str(self.db) {
                                         if decimal_part.chars().all(|c| c.is_ascii_digit()) {
@@ -1129,7 +1129,7 @@ impl<'db> DynParser<'db> {
                                     }
                                 }
                             }
-                            // Not a float - all numeric literals are Expr::Int.
+                            // Not a float - store as Int (includes hex literals).
                             let value = InternedText::new(self.db, word.S());
                             ast::Expr::Int(ast::ExprInt::new(self.db, value))
                         } else {
@@ -1363,6 +1363,17 @@ impl<'db> DynParser<'db> {
                 None
             }
             _ => None,
+        }
+    }
+
+    /// Check if a word is a numeric literal (decimal or hex).
+    fn is_numeric_literal(word: &str) -> bool {
+        if word.starts_with("0x") || word.starts_with("0X") {
+            // Hex literal: 0x followed by hex digits.
+            word.len() > 2 && word[2..].chars().all(|c| c.is_ascii_hexdigit())
+        } else {
+            // Decimal literal: all digits.
+            word.chars().all(|c| c.is_ascii_digit())
         }
     }
 

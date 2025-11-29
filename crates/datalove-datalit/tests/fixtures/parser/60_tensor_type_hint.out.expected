@@ -1,0 +1,93 @@
+{
+  "type_hint": {
+    "heap": "Local",
+    "type_hint": {
+      "Tensor": {
+        "element_type": {
+          "heap": "Local",
+          "type_hint": "F32"
+        },
+        "rank": 2
+      }
+    }
+  },
+  "expr": {
+    "heap": "Local",
+    "expr": {
+      "Tensor": {
+        "shape": [
+          2,
+          3
+        ],
+        "elements": [
+          {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Float": {
+                  "value": "1.0"
+                }
+              }
+            }
+          },
+          {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Float": {
+                  "value": "2.0"
+                }
+              }
+            }
+          },
+          {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Float": {
+                  "value": "3.0"
+                }
+              }
+            }
+          },
+          {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Float": {
+                  "value": "4.0"
+                }
+              }
+            }
+          },
+          {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Float": {
+                  "value": "5.0"
+                }
+              }
+            }
+          },
+          {
+            "type_hint": null,
+            "expr": {
+              "heap": "Local",
+              "expr": {
+                "Float": {
+                  "value": "6.0"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

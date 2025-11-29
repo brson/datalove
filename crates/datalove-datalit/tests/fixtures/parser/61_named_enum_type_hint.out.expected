@@ -1,18 +1,19 @@
 {
   "type_hint": {
-    "heap": "Omitted",
+    "heap": "Local",
     "type_hint": {
-      "AnonEnum": {
+      "NamedEnum": {
+        "name": "Quux",
         "variants": [
           {
-            "name": "Ok",
+            "name": "Bar",
             "payload": {
               "heap": "Local",
               "type_hint": "U32"
             }
           },
           {
-            "name": "Err",
+            "name": "Baz",
             "payload": null
           }
         ]
@@ -22,8 +23,9 @@
   "expr": {
     "heap": "Local",
     "expr": {
-      "AnonEnum": {
-        "variant_name": "Ok",
+      "NamedEnum": {
+        "enum_name": "Quux",
+        "variant_name": "Bar",
         "payload": {
           "type_hint": null,
           "expr": {
