@@ -1152,10 +1152,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt, &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt, &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // Destroy the moderate-sized structure.
         let status = unsafe {
@@ -1203,10 +1201,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt, &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt, &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // Destroy the value.
         let status = unsafe {
@@ -1256,10 +1252,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt, &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt, &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // Destroy the deeply nested structure.
         let status = unsafe {

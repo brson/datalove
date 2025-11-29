@@ -2521,10 +2521,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty(), "Generated expression should typecheck");
 
-        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // DEBUG: Print what type we're comparing
         eprintln!("Testing seed {}, type_tag: {:?}", seed, inst.tydesc.as_ref().type_tag);
@@ -2584,24 +2582,13 @@ proptest! {
         let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
         prop_assert!(typechecked2.errors(&db).is_empty());
 
-        let inst1 = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked1) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst1 = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked1)
+            .expect("Should instantiate");
         let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
         drop(inst1);
 
-        let inst2 = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked2) {
-            Ok(v) => v,
-            Err(_) => {
-                // Clean up inst1 before returning.
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, tydesc1);
-                    datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc1, 1, ptr1 as *mut u8);
-                }
-                return Ok(());
-            }
-        };
+        let inst2 = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked2)
+            .expect("Should instantiate");
         let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
         drop(inst2);
 
@@ -2656,10 +2643,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // Clone the value into a buffer.
         let tydesc = inst.tydesc.as_ref();
@@ -2711,10 +2696,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // Test reflexivity with boundary values.
         let result = unsafe {
@@ -2753,10 +2736,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assert!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // Test reflexivity with moderate-sized structures.
         let result = unsafe {

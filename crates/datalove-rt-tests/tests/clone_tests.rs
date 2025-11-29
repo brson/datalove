@@ -620,10 +620,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assume!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // Clone the value into a buffer.
         let tydesc = inst.tydesc.as_ref();
@@ -680,10 +678,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assume!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         let tydesc = inst.tydesc.as_ref();
         let buffer_size = tydesc.size as usize;
@@ -764,10 +760,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assume!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // Clone the moderate-sized container.
         let tydesc = inst.tydesc.as_ref();
@@ -826,10 +820,8 @@ proptest! {
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
         prop_assume!(typechecked.errors(&db).is_empty());
 
-        let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
-            Ok(v) => v,
-            Err(_) => return Ok(()),
-        };
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+            .expect("Should instantiate");
 
         // Clone the moderate-sized container.
         let tydesc = inst.tydesc.as_ref();
@@ -892,13 +884,8 @@ fn test_clone_leak_regression_seed_980509222901775213() {
     let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
     assert!(typechecked.errors(&db).is_empty(), "Type checking failed for seed {}", seed);
 
-    let inst = match instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked) {
-        Ok(v) => v,
-        Err(e) => {
-            println!("Instantiation failed for seed {}: {:?}", seed, e);
-            return;
-        }
-    };
+    let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)
+        .expect("Should instantiate");
 
     // Clone the moderate-sized container.
     let tydesc = inst.tydesc.as_ref();
