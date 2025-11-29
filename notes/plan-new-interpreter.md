@@ -1996,62 +1996,33 @@ Implementation complete when:
 - Requires threading destination slot info through `eval_expression_frame()` and related functions
 - Signature change: `eval_expression_frame(ctx, expr)` → `eval_expression_frame(ctx, expr, dest_slot)`
 
-**Priority**: Fix checked arithmetic first (bigger impact, simpler change).
+**Priority**: Lower priority now that checked arithmetic is fixed.
 
-### Checked Arithmetic Operators Incorrectly Widen to Int
+### Checked Arithmetic Operators - FIXED (2025-11-28)
 
-**Status**: Band-aid fix in place, proper fix needed
+**Status**: Implemented correctly
 
-**Priority**: HIGH - fix before DPS optimization. Bigger impact, simpler change.
+**Semantics** (corrected understanding):
+- **Bare operators** (`+`, `-`, `*`): widen operands to Int, return Int
+- **Checked operators** (`+!`, `-!`, `*!`, `/!`): preserve operand type, yield element type directly, early-return on overflow
 
-**Spec Reference**: `notes/typing-rules.md` lines 799-832
+The checked operators do NOT wrap in `Result<T>` - they yield `T` directly on success, or early-return from the containing function on overflow. Functions using checked operators must have `!T` (Result) return type.
 
-**The Spec Says**:
-- Bare operators (`+`, `-`, `*`) → widen operands to `int`, return `int`
-- Checked operators (`+!`, `-!`, `*!`, `/!`) → preserve operand type, return same type (or `Result<T>`)
+**Note**: The old interpreter (`interp_old`) wraps checked operator results in `Result<T>` - this is WRONG. Do not use it as a reference for checked arithmetic semantics.
 
-**Current Implementation (WRONG)**:
-- ALL arithmetic operations widen u32 operands to Int
-- `eval_add()`, `eval_sub()`, `eval_mul()`, `eval_div()` always call `widen_u32_to_int()`
-- Returns Int even for checked operators like `+!`
+**Implementation** (2025-11-28):
+- Added `eval_add_checked()`, `eval_sub_checked()`, `eval_mul_checked()`, `eval_div_checked()` in `interp/mod.rs`
+- These functions use Rust's `checked_add()`, `checked_sub()`, etc.
+- On success: return u32 value directly (no widening)
+- On overflow: return `InterpError::Overflow` (early-return)
+- On division by zero: return `InterpError::DivisionByZero`
+- `execute_binop()` dispatches checked operators separately from bare operators
+- Removed the `narrow_int_to_u32()` workaround from return statement handling
 
 **Allocation Cost** (for `@5 +! @3` with u32 operands):
-- Current: 3 heap allocations (widen lhs, widen rhs, result Int) + narrowing on return
+- Before fix: 3 heap allocations (widen lhs, widen rhs, result Int)
 - After fix: 1 heap allocation (result u32 temp)
-- After fix + DPS: 0 heap allocations (write result directly to slot)
-
-**Symptom**:
-- Function `add(x: u32, y: u32): u32` with body `ret x +! y` returns Int internally
-- When this Int value is passed to another function expecting u32, type mismatch occurs
-- The function reads the Int memory as if it were u32, producing garbage
-- Output shows memory addresses like `@17610401082753025536` instead of actual values
-
-**Current Workaround** (2025-11-25):
-- Added `narrow_int_to_u32()` function in `interp/mod.rs`
-- Modified return statement handling to narrow Int→u32 when declared return type is u32
-- This fixes the output but does unnecessary widening/narrowing work
-
-**Proper Fix Needed**:
-1. Modify `execute_binop()` to check operator type (bare vs checked)
-2. For checked operators (`+!`, `-!`, `*!`, `/!`):
-   - Operate directly on u32 values (no widening)
-   - Use Rust's `checked_add()`, `checked_sub()`, etc.
-   - Return u32 (same type as operands)
-   - Panic or return error on overflow
-3. For bare operators (`+`, `-`, `*`):
-   - Keep current widening behavior (widen to Int, return Int)
-4. Remove the `narrow_int_to_u32()` workaround from return handling
-
-**Files to Modify**:
-- `crates/datalove-datafun/src/interp/mod.rs`:
-  - `execute_binop()` - dispatch checked vs bare operators separately
-  - Add `eval_add_checked()`, `eval_sub_checked()`, etc. for u32 operations
-  - Keep `eval_add()`, etc. for bare operators (Int widening)
-  - Remove `narrow_int_to_u32()` call from return handling (after fix)
-
-**Test Coverage**:
-- Tests 30 (`30_import_multiple_funcs`) and 33 (`33_import_two_modules`) exercise this path
-- After proper fix, these should produce correct u32 output without narrowing
+- After DPS optimization: 0 heap allocations
 
 ## References
 
@@ -2060,5 +2031,5 @@ Implementation complete when:
 - `notes/oldplans/plan-rt-refactor.md` - Runtime API refactoring
 - `notes/module-system.md` - Package world documentation
 - `crates/datalove-datafun/src/function_analysis/` - Analysis implementation
-- `crates/datalove-datafun/src/interp_old/` - Old interpreter (reference)
+- `crates/datalove-datafun/src/interp_old/` - Old interpreter (DO NOT use for checked arithmetic semantics - it incorrectly wraps in Result)
 - `crates/datalove-datafun/src/interp/` - New interpreter (in progress)

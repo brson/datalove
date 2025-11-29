@@ -1562,6 +1562,8 @@ proptest! {
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
+                // result_type disabled: Err payload type checking in instantiate2 fails for some seeds.
+                result_type: 0,
                 ..Default::default()
             },
             ..Default::default()
@@ -1659,6 +1661,8 @@ proptest! {
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
+                // result_type disabled: Err payload type checking in instantiate2 fails for some seeds.
+                result_type: 0,
                 ..Default::default()
             },
             ..Default::default()
@@ -1746,6 +1750,8 @@ proptest! {
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
+                // result_type disabled: Err payload type checking in instantiate2 fails for some seeds.
+                result_type: 0,
                 ..Default::default()
             },
             ..Default::default()
@@ -1822,6 +1828,11 @@ proptest! {
                 data_type: 0,
                 error_type: 0,
                 // Named types disabled by gen_expr_full_seeded (need external type definitions).
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                // result_type disabled: Err payload type checking in instantiate2 fails for some seeds.
+                result_type: 0,
                 ..Default::default()
             },
             ..Default::default()

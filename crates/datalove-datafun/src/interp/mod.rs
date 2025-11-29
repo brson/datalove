@@ -151,6 +151,10 @@ pub enum InterpError {
     IfOutsideFunction,
     FunctionReturn(Value),  // Used internally to propagate return values.
 
+    // Checked arithmetic overflow - triggers early return.
+    Overflow,
+    DivisionByZero,
+
     // Result type.
     NoOutputVariable,
 }
@@ -1248,23 +1252,7 @@ fn execute_function_statement_frame<'db>(
         ast::Statement::Ret(ret_stmt) => {
             // Evaluate the return expression.
             let value = eval_expression_frame(ctx, ret_stmt.value(ctx.db))?;
-
-            // Get the declared return type from the current function.
-            let frame_index = ctx.call_stack.len() - 1;
-            let func = ctx.call_stack[frame_index].func;
-            let narrowed_value = if let Some(ret_type_hint) = func.return_type(ctx.db) {
-                // Check if we need to narrow Int to u32.
-                let ret_type = ret_type_hint.type_hint(ctx.db);
-                if matches!(ret_type, crate::datalit::ast::TypeHint::U32) && is_int_value(value) {
-                    narrow_int_to_u32(ctx, value)?
-                } else {
-                    value
-                }
-            } else {
-                value
-            };
-
-            Err(InterpError::FunctionReturn(narrowed_value))
+            Err(InterpError::FunctionReturn(value))
         }
         ast::Statement::If(_) => {
             Err(InterpError::InvalidExpression("If statements in functions not yet implemented".to_string()))
@@ -1697,6 +1685,37 @@ fn allocate_int<'db>(
     let value_str = int_expr.value(ctx.db).as_str(ctx.db);
     let value: u32 = value_str.parse()
         .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
+    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tydesc_ref.size(),
+            tydesc_ref.align(),
+            1
+        )
+    };
+
+    unsafe {
+        *(ptr as *mut u32) = value;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a u32 value from a raw u32.
+fn allocate_u32_raw<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: u32,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
 
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
     let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
@@ -2583,6 +2602,122 @@ fn eval_div<'db>(
     }
 }
 
+/// Evaluate checked addition (u32 only, no widening).
+///
+/// Returns the u32 result on success, or Overflow error on overflow.
+fn eval_add_checked<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression(
+            "Checked addition only supports u32 operands".to_string()
+        ));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+
+    // Clean up input values.
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_add(rhs_val) {
+        Some(result) => allocate_u32_raw(ctx, result),
+        None => Err(InterpError::Overflow),
+    }
+}
+
+/// Evaluate checked subtraction (u32 only, no widening).
+///
+/// Returns the u32 result on success, or Overflow error on underflow.
+fn eval_sub_checked<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression(
+            "Checked subtraction only supports u32 operands".to_string()
+        ));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+
+    // Clean up input values.
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_sub(rhs_val) {
+        Some(result) => allocate_u32_raw(ctx, result),
+        None => Err(InterpError::Overflow),
+    }
+}
+
+/// Evaluate checked multiplication (u32 only, no widening).
+///
+/// Returns the u32 result on success, or Overflow error on overflow.
+fn eval_mul_checked<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression(
+            "Checked multiplication only supports u32 operands".to_string()
+        ));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+
+    // Clean up input values.
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_mul(rhs_val) {
+        Some(result) => allocate_u32_raw(ctx, result),
+        None => Err(InterpError::Overflow),
+    }
+}
+
+/// Evaluate checked division (u32 only, no widening).
+///
+/// Returns the u32 result on success, or DivisionByZero error.
+fn eval_div_checked<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression(
+            "Checked division only supports u32 operands".to_string()
+        ));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+
+    // Clean up input values.
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_div(rhs_val) {
+        Some(result) => allocate_u32_raw(ctx, result),
+        None => Err(InterpError::DivisionByZero),
+    }
+}
+
 /// Execute a binary operation.
 fn execute_binop<'db>(
     ctx: &mut InterpContext<'db>,
@@ -2593,10 +2728,17 @@ fn execute_binop<'db>(
     use crate::ast::BinOp;
 
     match op {
-        BinOp::Add | BinOp::AddChecked => eval_add(ctx, lhs, rhs),
-        BinOp::Sub | BinOp::SubChecked => eval_sub(ctx, lhs, rhs),
-        BinOp::Mul | BinOp::MulChecked => eval_mul(ctx, lhs, rhs),
-        BinOp::Div | BinOp::DivChecked => eval_div(ctx, lhs, rhs),
+        // Bare operators: widen to Int.
+        BinOp::Add => eval_add(ctx, lhs, rhs),
+        BinOp::Sub => eval_sub(ctx, lhs, rhs),
+        BinOp::Mul => eval_mul(ctx, lhs, rhs),
+        BinOp::Div => eval_div(ctx, lhs, rhs),
+
+        // Checked operators: preserve type, early-return on overflow.
+        BinOp::AddChecked => eval_add_checked(ctx, lhs, rhs),
+        BinOp::SubChecked => eval_sub_checked(ctx, lhs, rhs),
+        BinOp::MulChecked => eval_mul_checked(ctx, lhs, rhs),
+        BinOp::DivChecked => eval_div_checked(ctx, lhs, rhs),
 
         // Not yet implemented - clean up values before returning error.
         BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional => {
