@@ -1,0 +1,5 @@
+if cond
+  let x = @1
+else |val|
+  let x = val
+end if

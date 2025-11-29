@@ -1,0 +1,27 @@
+{
+  "statements": [
+    {
+      "kind": "Let",
+      "name": "x",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "BinOp",
+          "op": "MulOptional",
+          "lhs": {
+            "expr": {
+              "kind": "Name",
+              "name": "a"
+            }
+          },
+          "rhs": {
+            "expr": {
+              "kind": "Name",
+              "name": "b"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

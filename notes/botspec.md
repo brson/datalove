@@ -124,7 +124,7 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | `require module` | `require module sys/std/bool` | Implemented |
 | `require data` | `require data name` | [PARTIAL: parsed] |
 | `import` | `import module_name.item_name` | Implemented |
-| `if` | `if cond ... end if` | [PARTIAL: top-level only, not in function bodies] |
+| `if` | `if cond ... end if` | [PARTIAL: parsed, not interpreted] |
 
 ### 2.2 Expressions
 
@@ -135,9 +135,9 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | Binary op | `a + b` | Implemented |
 | Function call | `foo(a, b)` | Implemented |
 | Tuple | `(a, b)` | [NOT IMPLEMENTED in interpreter] |
-| Unary op | `-x` | [PARTIAL: parsed] |
-| Try option | `expr?` | [NOT IMPLEMENTED in interpreter] |
-| Try result | `expr!` | [NOT IMPLEMENTED in interpreter] |
+| Unary op | `-x`, `-? x`, `-! x` | [PARTIAL: parsed, not interpreted] |
+| Try option | `expr?` | [PARTIAL: parsed, not interpreted] |
+| Try result | `expr!` | [PARTIAL: parsed, not interpreted] |
 
 ### 2.3 Operators
 

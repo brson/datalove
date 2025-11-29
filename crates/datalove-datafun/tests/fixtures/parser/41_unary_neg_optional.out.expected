@@ -1,0 +1,21 @@
+{
+  "statements": [
+    {
+      "kind": "Let",
+      "name": "x",
+      "type_hint": null,
+      "value": {
+        "expr": {
+          "kind": "UnaryOp",
+          "op": "NegOptional",
+          "operand": {
+            "expr": {
+              "kind": "Name",
+              "name": "a"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
