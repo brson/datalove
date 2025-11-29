@@ -298,6 +298,26 @@ fn synthesize<'db>(
         // Rule: Syn-Float - default to f32.
         Expr::Float(_) => Type::F32,
 
+        // Rule: Syn-Hex - default to u32 (most common use case).
+        Expr::Hex(h) => {
+            let value_str = h.value(db).as_str(db);
+            // Strip 0x/0X prefix and optional leading minus.
+            let hex_part = value_str.trim_start_matches('-').trim_start_matches("0x").trim_start_matches("0X");
+            if u32::from_str_radix(hex_part, 16).is_ok() && !value_str.starts_with('-') {
+                Type::U32
+            } else {
+                // T001: Hex literal out of range for u32.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "hex literal out of range")
+                        .code("T001")
+                        .primary_label(text, span, "value too large for u32")
+                        .note("hex literals default to u32 type; use a type hint for other types")
+                        .emit_type();
+                }
+                return Err(TypeError::IntOutOfRange);
+            }
+        }
+
         // Rule: Syn-NamedTuple
         Expr::NamedTuple(t) => {
             let name = t.name(db);
@@ -963,6 +983,89 @@ fn check<'db>(
 
         // Rule: Check-Float
         (Expr::Float(_), Type::F32) => Ok(()),
+
+        // Rule: Check-Hex - hex literals can check against integer types or f32 (bit pattern).
+        (Expr::Hex(h), Type::U8) => {
+            let value_str = h.value(db).as_str(db);
+            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
+            if u8::from_str_radix(hex_part, 16).is_ok() {
+                Ok(())
+            } else {
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "hex literal out of range for type u8")
+                        .code("T005")
+                        .primary_label(text, span, "value out of range")
+                        .note("u8 can represent hex values from 0x00 to 0xFF")
+                        .emit_type();
+                }
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+        (Expr::Hex(h), Type::U16) => {
+            let value_str = h.value(db).as_str(db);
+            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
+            if u16::from_str_radix(hex_part, 16).is_ok() {
+                Ok(())
+            } else {
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "hex literal out of range for type u16")
+                        .code("T007")
+                        .primary_label(text, span, "value out of range")
+                        .note("u16 can represent hex values from 0x0000 to 0xFFFF")
+                        .emit_type();
+                }
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+        (Expr::Hex(h), Type::U32) => {
+            let value_str = h.value(db).as_str(db);
+            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
+            if u32::from_str_radix(hex_part, 16).is_ok() {
+                Ok(())
+            } else {
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "hex literal out of range for type u32")
+                        .code("T009")
+                        .primary_label(text, span, "value out of range")
+                        .note("u32 can represent hex values from 0x00000000 to 0xFFFFFFFF")
+                        .emit_type();
+                }
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+        (Expr::Hex(h), Type::U64) => {
+            let value_str = h.value(db).as_str(db);
+            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
+            if u64::from_str_radix(hex_part, 16).is_ok() {
+                Ok(())
+            } else {
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "hex literal out of range for type u64")
+                        .code("T011")
+                        .primary_label(text, span, "value out of range")
+                        .emit_type();
+                }
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+        (Expr::Hex(_), Type::Int) => Ok(()),
+        // Hex as f32 bit pattern - any 32-bit hex value is valid.
+        (Expr::Hex(h), Type::F32) => {
+            let value_str = h.value(db).as_str(db);
+            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
+            if u32::from_str_radix(hex_part, 16).is_ok() {
+                Ok(())
+            } else {
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "hex literal out of range for f32 bit pattern")
+                        .code("T013")
+                        .primary_label(text, span, "value out of range")
+                        .note("f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)")
+                        .emit_type();
+                }
+                Err(TypeError::IntOutOfRange)
+            }
+        }
 
         // Rule: Check-AnonTuple
         (Expr::AnonTuple(t), Type::AnonTuple(expected_tuple)) => {

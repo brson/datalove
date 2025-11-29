@@ -169,6 +169,8 @@ pub enum Expr<'db> {
     Int(ExprInt<'db>),
     /// Some float type. Tycheck will decide.
     Float(ExprFloat<'db>),
+    /// Hex literal. Can be int or f32 bit pattern depending on type context.
+    Hex(ExprHex<'db>),
     String(ExprString<'db>),
     AnonTuple(ExprAnonTuple<'db>),
     NamedTuple(ExprNamedTuple<'db>),
@@ -193,6 +195,11 @@ pub struct ExprInt<'db> {
 
 #[salsa::tracked]
 pub struct ExprFloat<'db> {
+    pub value: InternedText<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprHex<'db> {
     pub value: InternedText<'db>,
 }
 

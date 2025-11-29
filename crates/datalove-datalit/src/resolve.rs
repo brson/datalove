@@ -380,6 +380,7 @@ fn resolve_expr_refs<'db>(
         | Expr::False
         | Expr::Int(_)
         | Expr::Float(_)
+        | Expr::Hex(_)
         | Expr::String(_)
         | Expr::None
         | Expr::ParseError(_) => {

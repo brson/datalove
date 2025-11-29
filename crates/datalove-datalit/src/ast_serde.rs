@@ -145,6 +145,7 @@ pub enum Expr {
     False,
     Int(ExprInt),
     Float(ExprFloat),
+    Hex(ExprHex),
     String(ExprString),
     AnonTuple(ExprAnonTuple),
     NamedTuple(ExprNamedTuple),
@@ -169,6 +170,11 @@ pub struct ExprInt {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprFloat {
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprHex {
     pub value: String,
 }
 
@@ -464,6 +470,7 @@ impl Expr {
             crate::ast::Expr::False => Expr::False,
             crate::ast::Expr::Int(e) => Expr::Int(ExprInt::from_ast(db, e)),
             crate::ast::Expr::Float(e) => Expr::Float(ExprFloat::from_ast(db, e)),
+            crate::ast::Expr::Hex(e) => Expr::Hex(ExprHex::from_ast(db, e)),
             crate::ast::Expr::String(e) => Expr::String(ExprString::from_ast(db, e)),
             crate::ast::Expr::AnonTuple(e) => Expr::AnonTuple(ExprAnonTuple::from_ast(db, e)),
             crate::ast::Expr::NamedTuple(e) => Expr::NamedTuple(ExprNamedTuple::from_ast(db, e)),
@@ -494,6 +501,14 @@ impl ExprInt {
 impl ExprFloat {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFloat<'db>) -> Self {
         ExprFloat {
+            value: ast.value(db).text(db).S(),
+        }
+    }
+}
+
+impl ExprHex {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprHex<'db>) -> Self {
+        ExprHex {
             value: ast.value(db).text(db).S(),
         }
     }

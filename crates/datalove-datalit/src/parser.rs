@@ -746,8 +746,13 @@ impl<'db> DynParser<'db> {
                             let float_str = format!("-{}.{}", word, decimal_word.as_str(self.db));
                             let value = InternedText::new(self.db, float_str.S());
                             return ast::Expr::Float(ast::ExprFloat::new(self.db, value));
+                        } else if is_hex {
+                            // Negative hex literal.
+                            let hex_str = format!("-{}", word);
+                            let value = InternedText::new(self.db, hex_str.S());
+                            return ast::Expr::Hex(ast::ExprHex::new(self.db, value));
                         } else {
-                            // Negative int (decimal or hex): -number
+                            // Negative decimal int.
                             let int_str = format!("-{}", word);
                             let value = InternedText::new(self.db, int_str.S());
                             return ast::Expr::Int(ast::ExprInt::new(self.db, value));
@@ -1129,9 +1134,13 @@ impl<'db> DynParser<'db> {
                                     }
                                 }
                             }
-                            // Not a float - store as Int (includes hex literals).
+                            // Not a float - check if hex or decimal.
                             let value = InternedText::new(self.db, word.S());
-                            ast::Expr::Int(ast::ExprInt::new(self.db, value))
+                            if is_hex {
+                                ast::Expr::Hex(ast::ExprHex::new(self.db, value))
+                            } else {
+                                ast::Expr::Int(ast::ExprInt::new(self.db, value))
+                            }
                         } else {
                             // Not a number, parse error for bare identifiers.
                             let (text, span) = self.current_text_span();

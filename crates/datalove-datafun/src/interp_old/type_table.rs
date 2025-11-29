@@ -473,7 +473,7 @@ impl<'a, 'db> TypeTableBuilder<'a, 'db> {
         let expr_inner = expr_and_heap.expr(self.db);
 
         match expr_inner {
-            Expr::True | Expr::False | Expr::Int(_) | Expr::Float(_)
+            Expr::True | Expr::False | Expr::Int(_) | Expr::Float(_) | Expr::Hex(_)
             | Expr::String(_) | Expr::None | Expr::ParseError(_) => {
                 // No children.
             }

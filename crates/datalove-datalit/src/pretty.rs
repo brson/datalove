@@ -499,6 +499,10 @@ fn pretty_expr<'db>(
             out.push_str(f.value(db).as_str(db));
         }
 
+        Expr::Hex(h) => {
+            out.push_str(h.value(db).as_str(db));
+        }
+
         Expr::String(s) => {
             out.push_str(s.value(db).as_str(db));
         }

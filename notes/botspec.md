@@ -102,10 +102,13 @@ Every type has an associated heap:
 : @u32 / 42
 ```
 
-**Float bitpattern coercion:** Hex literals coerce to f32 bitpattern
+**Hex literals:** `0x` prefix for hexadecimal values
 ```
-: @f32 / 0xABABABAB
+: @u32 / 0xFF        // integer value 255
+: @u8 / 0x7F         // integer value 127
+: @f32 / 0xABABABAB  // f32 bit pattern coercion
 ```
+Hex literals can be used with any integer type or f32. With f32, the hex value is interpreted as a raw bit pattern.
 
 ---
 
