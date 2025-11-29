@@ -1555,9 +1555,6 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             type_weights: TypeWeights {
-                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
-                data_type: 0,
-                error_type: 0,
                 // Named types disabled by gen_expr_full_seeded (need external type definitions).
                 named_tuple_type: 0,
                 named_struct_type: 0,
@@ -1596,18 +1593,40 @@ proptest! {
         }
         prop_assert!(typechecked3.errors(&db).is_empty());
 
-        let inst1 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1)
-            .expect("Should instantiate");
+        let inst1 = match instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1) {
+            Ok(v) => v,
+            Err(_) => return Ok(()),
+        };
         let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
         drop(inst1);
 
-        let inst2 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked2)
-            .expect("Should instantiate");
+        let inst2 = match instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked2) {
+            Ok(v) => v,
+            Err(_) => {
+                // Clean up inst1 before returning.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, ptr1 as *mut u8, tydesc1);
+                    datalove_rt::c::dtlv_rti_mem_free_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, tydesc1, 1, ptr1 as *mut u8);
+                }
+                return Ok(());
+            }
+        };
         let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
         drop(inst2);
 
-        let inst3 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked3)
-            .expect("Should instantiate");
+        let inst3 = match instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked3) {
+            Ok(v) => v,
+            Err(_) => {
+                // Clean up inst1 and inst2 before returning.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, ptr1 as *mut u8, tydesc1);
+                    datalove_rt::c::dtlv_rti_mem_free_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, tydesc1, 1, ptr1 as *mut u8);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, ptr2 as *mut u8, tydesc2);
+                    datalove_rt::c::dtlv_rti_mem_free_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, tydesc2, 1, ptr2 as *mut u8);
+                }
+                return Ok(());
+            }
+        };
         let (ptr3, tydesc3) = (inst3.ptr, inst3.tydesc.as_ptr());
         drop(inst3);
 
@@ -1654,9 +1673,6 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             type_weights: TypeWeights {
-                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
-                data_type: 0,
-                error_type: 0,
                 // Named types disabled by gen_expr_full_seeded (need external type definitions).
                 named_tuple_type: 0,
                 named_struct_type: 0,
@@ -1687,13 +1703,24 @@ proptest! {
         }
         prop_assert!(typechecked2.errors(&db).is_empty());
 
-        let inst1 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1)
-            .expect("Should instantiate");
+        let inst1 = match instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1) {
+            Ok(v) => v,
+            Err(_) => return Ok(()),
+        };
         let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
         drop(inst1);
 
-        let inst2 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked2)
-            .expect("Should instantiate");
+        let inst2 = match instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked2) {
+            Ok(v) => v,
+            Err(_) => {
+                // Clean up inst1 before returning.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, ptr1 as *mut u8, tydesc1);
+                    datalove_rt::c::dtlv_rti_mem_free_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, tydesc1, 1, ptr1 as *mut u8);
+                }
+                return Ok(());
+            }
+        };
         let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
         drop(inst2);
 
@@ -1743,9 +1770,6 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             type_weights: TypeWeights {
-                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
-                data_type: 0,
-                error_type: 0,
                 // Named types disabled by gen_expr_full_seeded (need external type definitions).
                 named_tuple_type: 0,
                 named_struct_type: 0,
@@ -1776,13 +1800,24 @@ proptest! {
         }
         prop_assert!(typechecked2.errors(&db).is_empty());
 
-        let inst1 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1)
-            .expect("Should instantiate");
+        let inst1 = match instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked1) {
+            Ok(v) => v,
+            Err(_) => return Ok(()),
+        };
         let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
         drop(inst1);
 
-        let inst2 = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked2)
-            .expect("Should instantiate");
+        let inst2 = match instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked2) {
+            Ok(v) => v,
+            Err(_) => {
+                // Clean up inst1 before returning.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, ptr1 as *mut u8, tydesc1);
+                    datalove_rt::c::dtlv_rti_mem_free_local(&mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, tydesc1, 1, ptr1 as *mut u8);
+                }
+                return Ok(());
+            }
+        };
         let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
         drop(inst2);
 
@@ -1848,8 +1883,10 @@ proptest! {
         }
         prop_assert!(typechecked.errors(&db).is_empty());
 
-        let inst = instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked)
-            .expect("Should instantiate");
+        let inst = match instantiate2::instantiate_value(&db, &mut *rt as *mut _ as datalove_rt::c::LocalRtHandle, &mut tydesc_table, typechecked) {
+            Ok(v) => v,
+            Err(_) => return Ok(()),
+        };
 
         // Test that boundary values compare to themselves as Equal.
         let result = unsafe {

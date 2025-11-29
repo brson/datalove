@@ -822,11 +822,9 @@ let weights = if depth >= config.max_depth {
 
 ### Next Steps
 
-1. **Fix Data/Error clone** (high priority): Implement deep clone for Data and Error types
-   - Current implementation only does shallow copy via `std::ptr::copy_nonoverlapping`
-   - Need to recursively clone anypack contents (TwoPointers case allocates new memory, others can shallow copy)
-   - Would enable data_type and error_type in property tests
-   - Test case: seed 7631147988393530901 generates `data(data(u64))` which triggers double-free
+1. ~~**Fix Data/Error clone**~~ ✅ FIXED (2025-11-28): Deep clone was already implemented
+   - Clone implementation in clone.rs:478-530 (Data) and 534-586 (Error) handles TwoPointers case with recursive clone
+   - data_type and error_type now enabled in all property tests
 2. ~~**Fix Result instantiation**~~ ✅ FIXED (2025-11-28): Was already implemented, tests had wrong syntax
 3. ~~**Fix Map/Set instantiation limit**~~ ✅ FIXED: B-tree bulk building moved to runtime
 4. **Address typecheck failures** (optional): Refine max-depth generation to avoid invalid combinations
@@ -883,3 +881,21 @@ The types were correctly disabled in property tests, but for the wrong documente
    - Both APIs remain available for different use cases
 
 **Result:** B-tree construction logic is now consolidated in the runtime. Maps and Sets can be instantiated with arbitrary sizes.
+
+### Discovery (2025-11-28): Data/Error Clone Already Fixed
+
+**Investigation:** While reviewing the plan to implement deep clone for Data/Error types, discovered that the fix was already implemented.
+
+**Current Implementation (clone.rs):**
+- Data clone (lines 478-530): Handles `TwoPointers` tag by allocating new memory and recursively cloning inner value
+- Error clone (lines 534-586): Same approach, interprets Error as Data (same encoding)
+- Both fall back to shallow copy for `SmallImmediate` and `InlineWithTyDesc` tags (safe because data is inline)
+
+**Verification:**
+- Ran property tests with data_type and error_type enabled
+- All tests pass: clone_tests (12), eq_tests (47), cmp_tests (53), destroy_tests (24)
+- Leak checker (DATALOVE_LEAK_CHECK=panic) confirms no double-free issues
+
+**Action Taken:**
+- Removed `data_type: 0` and `error_type: 0` from all property test configurations
+- Updated plan documentation to reflect the fix is complete

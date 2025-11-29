@@ -605,9 +605,6 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             type_weights: TypeWeights {
-                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
-                data_type: 0,
-                error_type: 0,
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
@@ -668,9 +665,6 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             type_weights: TypeWeights {
-                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
-                data_type: 0,
-                error_type: 0,
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
@@ -755,9 +749,6 @@ proptest! {
             max_collection_size: 50,
             max_depth: 3,
             type_weights: TypeWeights {
-                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
-                data_type: 0,
-                error_type: 0,
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
@@ -820,9 +811,6 @@ proptest! {
             max_collection_size: 100,
             max_depth: 2,
             type_weights: TypeWeights {
-                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
-                data_type: 0,
-                error_type: 0,
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
@@ -889,9 +877,6 @@ fn test_clone_leak_regression_seed_980509222901775213() {
         max_collection_size: 150,
         max_depth: 3,
         type_weights: TypeWeights {
-            // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
-            data_type: 0,
-            error_type: 0,
             named_tuple_type: 0,
             named_struct_type: 0,
             named_enum_type: 0,
