@@ -1,0 +1,18 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Hex": {
+          "value": "0xFFFF"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "U16"
+    }
+  },
+  "errors": [],
+  "root_type": "@u16"
+}

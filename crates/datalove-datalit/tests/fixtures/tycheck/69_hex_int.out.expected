@@ -1,0 +1,18 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Hex": {
+          "value": "0xFFFFFFFF"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "Int"
+    }
+  },
+  "errors": [],
+  "root_type": "@int"
+}
