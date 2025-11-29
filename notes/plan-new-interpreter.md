@@ -1968,11 +1968,41 @@ Implementation complete when:
 
 **Fix Applied**: Renamed to `TempOwned`/`Borrowed` for clarity. Reference slots now return `Borrowed`. Added location check in `free_value_structure`.
 
-**Future Optimization**: Destination-passing style (DPS) to eliminate temp allocations by writing directly to destination slots.
+### Destination-Passing Style (DPS) Optimization
+
+**Status**: Future optimization, lower priority than checked arithmetic fix
+
+**Current Flow** (for `let y = expr`):
+1. Evaluate expression → allocate `TempOwned` value
+2. `write_value_to_slot()` → memcpy bytes to destination slot
+3. `free_value_structure()` → free temp allocation
+
+**With DPS**:
+1. Know destination slot upfront
+2. Write directly to destination slot
+3. No temp allocation needed
+
+**What DPS Would Eliminate**:
+- Literal allocations (`@42` → allocate temp → copy to slot → free temp)
+- Arithmetic result temps (runtime functions already take destination pointers)
+- Copy-type clone temps (`clone_value` allocates temp → copy to slot → free temp)
+
+**What's Already Efficient**:
+- Linear type moves: zero-copy `Borrowed` pointer + memcpy (no heap allocation)
+- `clone_value()` is only called for Copy types (verified 2025-11-28)
+
+**Implementation Notes**:
+- Runtime functions like `dtlv_rti_int_add` and `dtlv_rti_clone_local` already accept destination pointers
+- Requires threading destination slot info through `eval_expression_frame()` and related functions
+- Signature change: `eval_expression_frame(ctx, expr)` → `eval_expression_frame(ctx, expr, dest_slot)`
+
+**Priority**: Fix checked arithmetic first (bigger impact, simpler change).
 
 ### Checked Arithmetic Operators Incorrectly Widen to Int
 
 **Status**: Band-aid fix in place, proper fix needed
+
+**Priority**: HIGH - fix before DPS optimization. Bigger impact, simpler change.
 
 **Spec Reference**: `notes/typing-rules.md` lines 799-832
 
@@ -1984,6 +2014,11 @@ Implementation complete when:
 - ALL arithmetic operations widen u32 operands to Int
 - `eval_add()`, `eval_sub()`, `eval_mul()`, `eval_div()` always call `widen_u32_to_int()`
 - Returns Int even for checked operators like `+!`
+
+**Allocation Cost** (for `@5 +! @3` with u32 operands):
+- Current: 3 heap allocations (widen lhs, widen rhs, result Int) + narrowing on return
+- After fix: 1 heap allocation (result u32 temp)
+- After fix + DPS: 0 heap allocations (write result directly to slot)
 
 **Symptom**:
 - Function `add(x: u32, y: u32): u32` with body `ret x +! y` returns Int internally
@@ -2000,16 +2035,18 @@ Implementation complete when:
 1. Modify `execute_binop()` to check operator type (bare vs checked)
 2. For checked operators (`+!`, `-!`, `*!`, `/!`):
    - Operate directly on u32 values (no widening)
-   - Check for overflow, panic or return error if detected
+   - Use Rust's `checked_add()`, `checked_sub()`, etc.
    - Return u32 (same type as operands)
+   - Panic or return error on overflow
 3. For bare operators (`+`, `-`, `*`):
    - Keep current widening behavior (widen to Int, return Int)
 4. Remove the `narrow_int_to_u32()` workaround from return handling
 
 **Files to Modify**:
 - `crates/datalove-datafun/src/interp/mod.rs`:
-  - `execute_binop()` - dispatch based on operator type
-  - `eval_add()`, `eval_sub()`, `eval_mul()`, `eval_div()` - add non-widening paths
+  - `execute_binop()` - dispatch checked vs bare operators separately
+  - Add `eval_add_checked()`, `eval_sub_checked()`, etc. for u32 operations
+  - Keep `eval_add()`, etc. for bare operators (Int widening)
   - Remove `narrow_int_to_u32()` call from return handling (after fix)
 
 **Test Coverage**:
