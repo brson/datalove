@@ -736,10 +736,20 @@ fn check<'db>(
 ) -> Result<(), TypeError> {
     let db = ctx.db;
 
-    // First check heap compatibility.
     let expr_and_heap = expr.expr(db);
     let actual_heap = expr_and_heap.heap(db);
-    let expected_heap = expected.heap(db);
+    let expr_inner = expr_and_heap.expr(db);
+    let expected_type = expected.ty(db);
+
+    // Extract the expected heap for the heap compatibility check.
+    // All heaps in a type must match - datalove does not allow intermixed heaps.
+    let expected_heap = match (&expr_inner, expected_type) {
+        (Expr::None, Type::Option(_)) => expected.heap(db),
+        (Expr::Err(_), Type::Result(_)) => expected.heap(db),
+        (_, Type::Option(opt)) => opt.inner_type(db).heap(db),
+        (_, Type::Result(res)) => res.inner_type(db).heap(db),
+        _ => expected.heap(db),
+    };
 
     if !heaps_compatible(actual_heap, expected_heap) {
         // T037: General heap mismatch.
@@ -757,9 +767,6 @@ fn check<'db>(
             actual_heap: heap_to_string(actual_heap),
         });
     }
-
-    let expr_inner = expr_and_heap.expr(db);
-    let expected_type = expected.ty(db);
 
     match (expr_inner, expected_type) {
         // Rule: Check-None

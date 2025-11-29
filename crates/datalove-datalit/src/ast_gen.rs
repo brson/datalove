@@ -670,6 +670,10 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
 }
 
 /// Generate a value matching the given type hint.
+///
+/// Returns the expression and the heap that should be used for wrapping it.
+/// For most types this is just the input `heap`, but for Option/Result success
+/// values it may be the inner type's heap.
 pub fn gen_expr_matching_type<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
@@ -677,26 +681,27 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
     heap: Heap,
     config: &AstGenConfig,
     depth: usize,
-) -> Expr<'db> {
+) -> (Expr<'db>, Heap) {
     match type_hint {
         TypeHint::Bool => {
-            if rng.gen_bool(0.5) {
+            let expr = if rng.gen_bool(0.5) {
                 Expr::True
             } else {
                 Expr::False
-            }
+            };
+            (expr, heap)
         }
-        TypeHint::U8 => gen_uint_expr(db, rng, config, 0u8, u8::MAX),
-        TypeHint::I8 => gen_int_expr(db, rng, config, i8::MIN, i8::MAX),
-        TypeHint::U16 => gen_uint_expr(db, rng, config, 0u16, u16::MAX),
-        TypeHint::I16 => gen_int_expr(db, rng, config, i16::MIN, i16::MAX),
-        TypeHint::U32 => gen_uint_expr(db, rng, config, 0u32, u32::MAX),
-        TypeHint::I32 => gen_int_expr(db, rng, config, i32::MIN, i32::MAX),
-        TypeHint::U64 => gen_uint_expr(db, rng, config, 0u64, u64::MAX),
-        TypeHint::I64 => gen_int_expr(db, rng, config, i64::MIN, i64::MAX),
-        TypeHint::F32 => gen_f32_expr(db, rng, config),
-        TypeHint::Int => gen_int_expr(db, rng, config, i64::MIN, i64::MAX),
-        TypeHint::String => gen_string_expr(db, rng),
+        TypeHint::U8 => (gen_uint_expr(db, rng, config, 0u8, u8::MAX), heap),
+        TypeHint::I8 => (gen_int_expr(db, rng, config, i8::MIN, i8::MAX), heap),
+        TypeHint::U16 => (gen_uint_expr(db, rng, config, 0u16, u16::MAX), heap),
+        TypeHint::I16 => (gen_int_expr(db, rng, config, i16::MIN, i16::MAX), heap),
+        TypeHint::U32 => (gen_uint_expr(db, rng, config, 0u32, u32::MAX), heap),
+        TypeHint::I32 => (gen_int_expr(db, rng, config, i32::MIN, i32::MAX), heap),
+        TypeHint::U64 => (gen_uint_expr(db, rng, config, 0u64, u64::MAX), heap),
+        TypeHint::I64 => (gen_int_expr(db, rng, config, i64::MIN, i64::MAX), heap),
+        TypeHint::F32 => (gen_f32_expr(db, rng, config), heap),
+        TypeHint::Int => (gen_int_expr(db, rng, config, i64::MIN, i64::MAX), heap),
+        TypeHint::String => (gen_string_expr(db, rng), heap),
         TypeHint::AnonTuple(th) => {
             let elements: Vec<_> = th
                 .fields(db)
@@ -707,7 +712,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                     gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1)
                 })
                 .collect();
-            Expr::AnonTuple(ExprAnonTuple::new(db, elements))
+            (Expr::AnonTuple(ExprAnonTuple::new(db, elements)), heap)
         }
         TypeHint::NamedTuple(th) => {
             let name = th.name(db);
@@ -720,7 +725,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                     gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1)
                 })
                 .collect();
-            Expr::NamedTuple(ExprNamedTuple::new(db, name, elements))
+            (Expr::NamedTuple(ExprNamedTuple::new(db, name, elements)), heap)
         }
         TypeHint::AnonStruct(th) => {
             let fields: Vec<_> = th
@@ -735,7 +740,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                     ExprStructField::new(db, name, value)
                 })
                 .collect();
-            Expr::AnonStruct(ExprAnonStruct::new(db, fields))
+            (Expr::AnonStruct(ExprAnonStruct::new(db, fields)), heap)
         }
         TypeHint::NamedStruct(th) => {
             let name = th.name(db);
@@ -751,12 +756,12 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                     ExprStructField::new(db, field_name, value)
                 })
                 .collect();
-            Expr::NamedStruct(ExprNamedStruct::new(db, name, fields))
+            (Expr::NamedStruct(ExprNamedStruct::new(db, name, fields)), heap)
         }
         TypeHint::AnonEnum(th) => {
             let variants = th.variants(db);
             if variants.is_empty() {
-                return Expr::None;
+                return (Expr::None, heap);
             }
             let variant = &variants[rng.gen_range(0..variants.len())];
             let variant_name = variant.name(db);
@@ -768,13 +773,13 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 }
                 None => None,
             };
-            Expr::AnonEnum(ExprAnonEnum::new(db, variant_name, payload))
+            (Expr::AnonEnum(ExprAnonEnum::new(db, variant_name, payload)), heap)
         }
         TypeHint::NamedEnum(th) => {
             let enum_name = th.name(db);
             let variants = th.variants(db);
             if variants.is_empty() {
-                return Expr::None;
+                return (Expr::None, heap);
             }
             let variant = &variants[rng.gen_range(0..variants.len())];
             let variant_name = variant.name(db);
@@ -786,7 +791,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 }
                 None => None,
             };
-            Expr::NamedEnum(ExprNamedEnum::new(db, enum_name, variant_name, payload))
+            (Expr::NamedEnum(ExprNamedEnum::new(db, enum_name, variant_name, payload)), heap)
         }
         TypeHint::List(th) => {
             let element_type_and_heap = th.element_type(db);
@@ -796,7 +801,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
-            Expr::List(ExprList::new(db, elements))
+            (Expr::List(ExprList::new(db, elements)), heap)
         }
         TypeHint::Map(th) => {
             let key_type_and_heap = th.key_type(db);
@@ -813,7 +818,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                     ExprMapEntry::new(db, key, value)
                 })
                 .collect();
-            Expr::Map(ExprMap::new(db, entries))
+            (Expr::Map(ExprMap::new(db, entries)), heap)
         }
         TypeHint::Set(th) => {
             let element_type_and_heap = th.element_type(db);
@@ -823,15 +828,17 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
-            Expr::Set(ExprSet::new(db, elements))
+            (Expr::Set(ExprSet::new(db, elements)), heap)
         }
         TypeHint::Option(th) => {
             let inner_type_and_heap = th.inner_type(db);
             let inner_type = inner_type_and_heap.type_hint(db);
             let inner_heap = inner_type_and_heap.heap(db);
             if rng.gen_bool(0.5) {
-                Expr::None
+                // None uses the outer heap.
+                (Expr::None, heap)
             } else {
+                // Some case: use the inner heap for the value.
                 gen_expr_matching_type(db, rng, inner_type, inner_heap, config, depth + 1)
             }
         }
@@ -840,19 +847,20 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let inner_type = inner_type_and_heap.type_hint(db);
             let inner_heap = inner_type_and_heap.heap(db);
             if rng.gen_bool(0.5) {
-                // Success case: just generate the inner value directly
+                // Success case: use the inner heap for the value.
                 gen_expr_matching_type(db, rng, inner_type, inner_heap, config, depth + 1)
             } else {
-                // Error case: generate error with an arbitrary value (respecting config).
-                let error_type = gen_type_hint(db, rng, config, depth + 1);
-                let error_value = gen_expr_matching_type(db, rng, error_type.clone(), Heap::Omitted, config, depth + 1);
-                let error_type_hint = TypeHintAndHeap::new(db, Heap::Omitted, error_type);
+                // Error case: generate error with an arbitrary value.
+                // Use fixed heap to ensure all heaps match throughout.
+                let error_type = gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1);
+                let (error_value, _) = gen_expr_matching_type(db, rng, error_type.clone(), heap, config, depth + 1);
+                let error_type_hint = TypeHintAndHeap::new(db, heap, error_type);
                 let error_expr_full = ExprFull::new(
                     db,
                     Some(error_type_hint),
-                    ExprAndHeap::new(db, Heap::Omitted, error_value),
+                    ExprAndHeap::new(db, heap, error_value),
                 );
-                Expr::Err(ExprErr::new(db, error_expr_full))
+                (Expr::Err(ExprErr::new(db, error_expr_full)), heap)
             }
         }
         TypeHint::Tensor(th) => {
@@ -866,16 +874,16 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             for i in 0..rank {
                 let remaining_dims = rank - i;
                 let max_dim = if remaining_dims == 1 {
-                    // Last dimension: use all remaining budget
+                    // Last dimension: use all remaining budget.
                     config.max_collection_size / total_elements.max(1)
                 } else {
-                    // Not last: leave room for other dimensions
+                    // Not last: leave room for other dimensions.
                     config.tensor_config.max_dim_size as usize
                 };
                 let dim_size = rng.gen_range(1..=max_dim.min(config.tensor_config.max_dim_size as usize).max(1)) as u32;
                 shape.push(dim_size);
                 total_elements *= dim_size as usize;
-                // If we've hit the limit, make remaining dimensions size 1
+                // If we've hit the limit, make remaining dimensions size 1.
                 if total_elements >= config.max_collection_size {
                     for _ in (i + 1)..rank {
                         shape.push(1);
@@ -888,13 +896,13 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let elements: Vec<_> = (0..total_elements)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
-            Expr::Tensor(ExprTensor::new(db, shape, elements))
+            (Expr::Tensor(ExprTensor::new(db, shape, elements)), heap)
         }
         TypeHint::Data => {
-            let inner_type = gen_type_hint(db, rng, config, depth + 1);
-            // Use the same heap as the parent Data value to maintain heap consistency.
+            // Use fixed heap for inner type to ensure all heaps match.
+            let inner_type = gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1);
             let value = gen_expr_full_with_heap(db, rng, inner_type, heap, config, depth + 1);
-            Expr::Data(ExprData::new(db, value))
+            (Expr::Data(ExprData::new(db, value)), heap)
         }
         TypeHint::Error => {
             let error_msg = gen_string_expr(db, rng);
@@ -903,9 +911,9 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 None,
                 ExprAndHeap::new(db, Heap::Omitted, error_msg),
             );
-            Expr::Err(ExprErr::new(db, error_expr_full))
+            (Expr::Err(ExprErr::new(db, error_expr_full)), heap)
         }
-        TypeHint::ParseError(_) => Expr::None,
+        TypeHint::ParseError(_) => (Expr::None, heap),
     }
 }
 
@@ -1094,8 +1102,8 @@ fn gen_expr_full_with_heap<'db, R: Rng>(
     config: &AstGenConfig,
     depth: usize,
 ) -> ExprFull<'db> {
-    let expr = gen_expr_matching_type(db, rng, type_hint.clone(), heap, config, depth);
-    let expr_and_heap = ExprAndHeap::new(db, heap, expr);
+    let (expr, value_heap) = gen_expr_matching_type(db, rng, type_hint.clone(), heap, config, depth);
+    let expr_and_heap = ExprAndHeap::new(db, value_heap, expr);
 
     // Always include type hints for types that cannot be synthesized.
     // Option::None, Result values, and anonymous enums require type hints
