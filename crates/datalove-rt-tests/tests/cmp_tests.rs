@@ -888,10 +888,9 @@ fn test_cmp_option_some_less() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // Result type instantiation not yet implemented
 fn test_cmp_result_err_less_than_ok() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @!@u32 / @err")?;
+    let typechecked_a = compile_str(&db, ": @!@u32 / @error @\"oops\"")?;
     let typechecked_b = compile_str(&db, ": @!@u32 / @42")?;
 
     let mut rt = RtLocal::new();
@@ -920,11 +919,10 @@ fn test_cmp_result_err_less_than_ok() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // Result type instantiation not yet implemented
 fn test_cmp_result_ok_greater_than_err() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, ": @!@u32 / @42")?;
-    let typechecked_b = compile_str(&db, ": @!@u32 / @err")?;
+    let typechecked_b = compile_str(&db, ": @!@u32 / @error @\"oops\"")?;
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -952,7 +950,6 @@ fn test_cmp_result_ok_greater_than_err() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // Result type instantiation not yet implemented
 fn test_cmp_result_ok_equal() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, ": @!@u32 / @42")?;
@@ -984,7 +981,6 @@ fn test_cmp_result_ok_equal() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // Result type instantiation not yet implemented
 fn test_cmp_result_ok_less() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, ": @!@u32 / @10")?;
@@ -1016,11 +1012,10 @@ fn test_cmp_result_ok_less() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // Result type instantiation not yet implemented
 fn test_cmp_result_err_equal() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @!@u32 / @err")?;
-    let typechecked_b = compile_str(&db, ": @!@u32 / @err")?;
+    let typechecked_a = compile_str(&db, ": @!@u32 / @error @\"oops\"")?;
+    let typechecked_b = compile_str(&db, ": @!@u32 / @error @\"oops\"")?;
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1048,11 +1043,10 @@ fn test_cmp_result_err_equal() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // Result type instantiation not yet implemented
 fn test_cmp_result_err_less() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @!@u32 / @err")?;
-    let typechecked_b = compile_str(&db, ": @!@u32 / @err")?;
+    let typechecked_a = compile_str(&db, ": @!@u32 / @error @\"aaa\"")?;
+    let typechecked_b = compile_str(&db, ": @!@u32 / @error @\"bbb\"")?;
 
     let mut rt = RtLocal::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1561,11 +1555,9 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             type_weights: TypeWeights {
-                // data_type and error_type disabled: eq_value not implemented (cmp.rs:621-623).
+                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
                 data_type: 0,
                 error_type: 0,
-                // result_type disabled: instantiation issues in instantiate2.
-                result_type: 0,
                 // Named types disabled by gen_expr_full_seeded (need external type definitions).
                 named_tuple_type: 0,
                 named_struct_type: 0,
@@ -1660,11 +1652,9 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             type_weights: TypeWeights {
-                // data_type and error_type disabled: eq_value not implemented (cmp.rs:621-623).
+                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
                 data_type: 0,
                 error_type: 0,
-                // result_type disabled: instantiation issues in instantiate2.
-                result_type: 0,
                 // Named types disabled by gen_expr_full_seeded (need external type definitions).
                 named_tuple_type: 0,
                 named_struct_type: 0,
@@ -1749,11 +1739,9 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             type_weights: TypeWeights {
-                // data_type and error_type disabled: eq_value not implemented (cmp.rs:621-623).
+                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
                 data_type: 0,
                 error_type: 0,
-                // result_type disabled: instantiation issues in instantiate2.
-                result_type: 0,
                 // Named types disabled by gen_expr_full_seeded (need external type definitions).
                 named_tuple_type: 0,
                 named_struct_type: 0,
@@ -1830,11 +1818,9 @@ proptest! {
         let config = AstGenConfig {
             numeric_strategy: NumericStrategy::CornerCases,
             type_weights: TypeWeights {
-                // data_type and error_type disabled: eq_value not implemented (cmp.rs:621-623).
+                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
                 data_type: 0,
                 error_type: 0,
-                // result_type disabled: instantiation issues in instantiate2.
-                result_type: 0,
                 // Named types disabled by gen_expr_full_seeded (need external type definitions).
                 ..Default::default()
             },

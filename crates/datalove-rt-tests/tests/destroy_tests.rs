@@ -1136,13 +1136,12 @@ proptest! {
             max_collection_size: 30,
             max_depth: 3,
             type_weights: TypeWeights {
+                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
                 data_type: 0,
                 error_type: 0,
-                result_type: 0,
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
-                string_type: 0,
                 ..Default::default()
             },
             ..Default::default()
@@ -1189,13 +1188,12 @@ proptest! {
         let db = Database::default();
         let config = AstGenConfig {
             type_weights: TypeWeights {
+                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
                 data_type: 0,
                 error_type: 0,
-                result_type: 0,
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
-                string_type: 0,
                 ..Default::default()
             },
             ..Default::default()
@@ -1244,13 +1242,12 @@ proptest! {
             max_depth: 4,
             max_collection_size: 30,
             type_weights: TypeWeights {
+                // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
                 data_type: 0,
                 error_type: 0,
-                result_type: 0,
                 named_tuple_type: 0,
                 named_struct_type: 0,
                 named_enum_type: 0,
-                string_type: 0,
                 ..Default::default()
             },
             ..Default::default()

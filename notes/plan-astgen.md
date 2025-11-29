@@ -731,16 +731,19 @@ Successfully integrated AST generator with property-based testing using proptest
 - **Workaround:** Disabled `data_type: 0` and `error_type: 0` in test configs
 - **Fix Required:** Implement deep clone for Error and Data types (recursively clone anypack contents)
 
-#### Bug 1a: Result type instantiation not implemented
-**Status:** Not fixed (workaround in place)
-- **Location:** crates/datalove-datalit/src/instantiate2.rs
-- **Error:** "Result type instantiation not yet implemented"
+#### Bug 1a: Result type tests using wrong syntax
+**Status:** ✅ FIXED (2025-11-28)
+- **Location:** crates/datalove-rt-tests/tests/cmp_tests.rs
+- **Original Error:** Tests used `@err` syntax which doesn't exist
 - **Details:**
-  - cmp_value (lines 1005-1046) and eq_value (lines 452-484) ARE fully implemented for Result
-  - Instantiation is the blocker - cannot create runtime Result values
-  - Multiple manual tests for Result are ignored (cmp_tests.rs:891-1080)
-- **Workaround:** Disabled `result_type: 0` in property test configs
-- **Fix Required:** Implement instantiate_value for Result type
+  - Result instantiation WAS already implemented in instantiate2.rs
+  - cmp_value and eq_value ARE fully implemented for Result
+  - Tests were using incorrect syntax `@err` instead of `@error @"message"`
+- **Fix Applied:**
+  - Changed all `@err` occurrences to `@error @"..."` with proper payloads
+  - Removed `#[ignore]` annotations from 6 Result tests in cmp_tests.rs
+  - Enabled `result_type` in all property test configs (was unnecessarily disabled)
+- **Result:** All Result tests now pass, Result works in property-based testing
 
 #### Bug 1b: Map and Set instantiation limited to 11 elements
 **Status:** ✅ FIXED (2025-11-24)
@@ -796,9 +799,9 @@ let weights = if depth >= config.max_depth {
 - ⚠️ Occasional typecheck failures when all leaf types disabled at max depth (low priority)
 - ✅ Tests validate reflexivity, symmetry, transitivity, and other mathematical properties
 
-**With Current Configuration** (string_type: 0, data_type: 0, error_type: 0, named types: 0):
-- Tests run successfully for enabled types
-- String alignment violations eliminated
+**With Current Configuration** (data_type: 0, error_type: 0, named types: 0):
+- Tests run successfully for all enabled types including Result and String
+- All property tests pass (eq, cmp, clone, destroy)
 - Property-based testing validates runtime correctness
 
 ### Benefits Achieved
@@ -811,8 +814,8 @@ let weights = if depth >= config.max_depth {
    - Disabled named types in seeded generation (require external type definitions)
 2. **Discovered runtime limitations:**
    - Clone not implemented for Data/Error types (shallow copy causes double-free)
-   - Result type instantiation not implemented (cmp/eq work)
-   - Map/Set instantiation limited to 11 elements (single B-tree leaf node)
+   - ~~Result type instantiation not implemented~~ (was working, tests had wrong syntax)
+   - ~~Map/Set instantiation limited to 11 elements~~ (fixed)
 3. **Re-enabled string comparisons:** Strings work correctly in all property tests (was unnecessarily disabled)
 4. **Validated property-based testing approach** - found bugs hardcoded tests missed
 5. **Established infrastructure** for future property-based testing expansion
@@ -824,9 +827,7 @@ let weights = if depth >= config.max_depth {
    - Need to recursively clone anypack contents (TwoPointers case allocates new memory, others can shallow copy)
    - Would enable data_type and error_type in property tests
    - Test case: seed 7631147988393530901 generates `data(data(u64))` which triggers double-free
-2. **Fix Result instantiation** (high priority): Implement instantiate_value for Result type
-   - cmp_value and eq_value already work for Result
-   - Would enable result_type in property tests and un-ignore Result manual tests
+2. ~~**Fix Result instantiation**~~ ✅ FIXED (2025-11-28): Was already implemented, tests had wrong syntax
 3. ~~**Fix Map/Set instantiation limit**~~ ✅ FIXED: B-tree bulk building moved to runtime
 4. **Address typecheck failures** (optional): Refine max-depth generation to avoid invalid combinations
 5. **Expand coverage** (future): Add property tests for cmp_total, eq_unique, and other operations
