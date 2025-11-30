@@ -1982,7 +1982,6 @@ fn test_eq_map_equals_same_contents() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // TODO: B-tree equality with different insertion orders not yet implemented
 fn test_eq_map_equals_different_literal_order() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, "@map{@10 = @100, @20 = @200, @30 = @300}")?;
@@ -2321,7 +2320,6 @@ fn test_eq_set_equals_same_contents() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // TODO: B-tree equality with different insertion orders not yet implemented
 fn test_eq_set_equals_different_literal_order() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, "@set{@10, @20, @30}")?;

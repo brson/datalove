@@ -4,6 +4,7 @@ use rmx::prelude::*;
 
 pub mod ast;
 pub mod ast_serde;
+pub mod canon;
 pub mod parser;
 pub mod resolve;
 pub mod tycheck;

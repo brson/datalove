@@ -2024,6 +2024,29 @@ The checked operators do NOT wrap in `Result<T>` - they yield `T` directly on su
 - After fix: 1 heap allocation (result u32 temp)
 - After DPS optimization: 0 heap allocations
 
+### Compile-Time Expression Comparison (cmp_expr)
+
+**Status**: Implemented with limitations (2025-11-29)
+
+**Location**: `crates/datalove-datalit/src/canon.rs`
+
+**Purpose**: Provides compile-time ordering of map/set elements for canonical instantiation. Sorted order is memoized by Salsa (`sorted_set_indices`, `sorted_map_indices`).
+
+**Supported types**:
+- Scalars: int, float, string, bool, hex
+- Containers: list, set, map (recursive)
+- Tuples: anonymous tuples (field-by-field)
+- Structs: anonymous structs (fields sorted by name, then by value)
+- Enums: anonymous enums (variant name, then payload)
+- Wrappers: Data, Error (compare wrapped values)
+- None
+
+**Unsupported types** (will panic):
+- Named tuples/structs/enums (require external type definitions)
+- ParseError
+
+**Future work**: When the new interpreter has full expression evaluation, `cmp_expr` should be extended to handle all types by evaluating expressions and comparing runtime values.
+
 ## References
 
 - `notes/oldplans/plan-function-analysis.md` - Analysis framework design

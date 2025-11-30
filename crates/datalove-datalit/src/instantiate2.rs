@@ -218,12 +218,12 @@ fn instantiate_expr_into<'db>(
 
         (Expr::Map(map_expr), Type::Map(map_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_map(db, rt, &map_expr.entries(db), map_ty.key_type(db), map_ty.value_type(db), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_map(db, rt, map_expr, map_ty.key_type(db), map_ty.value_type(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Set(set_expr), Type::Set(set_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_set(db, rt, &set_expr.elements(db), set_ty.element_type(db), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_set(db, rt, set_expr, set_ty.element_type(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Tensor(tensor_expr), Type::Tensor(tensor_ty)) => {
@@ -797,7 +797,7 @@ fn instantiate_error<'db>(
 fn instantiate_map<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
-    entries: &[ExprMapEntry<'db>],
+    map_expr: ExprMap<'db>,
     key_type: TypeAndHeap<'db>,
     value_type: TypeAndHeap<'db>,
     tydesc_table: &mut TyDescTable<'db>,
@@ -808,6 +808,7 @@ fn instantiate_map<'db>(
     debug_assert!(!dest_ptr.is_null());
     let map_ptr = dest_ptr as *mut rtdt::Map;
 
+    let entries = map_expr.entries(db);
     if entries.is_empty() {
         unsafe {
             (*map_ptr).root = std::ptr::null();
@@ -815,6 +816,9 @@ fn instantiate_map<'db>(
         }
         return Ok(map_ptr as *const u8);
     }
+
+    // Get sorted indices (cached by Salsa).
+    let sorted_indices = crate::canon::sorted_map_indices(db, map_expr);
 
     let key_tydesc = tydesc_table.get_or_create(key_type.ty(db));
     let value_tydesc = tydesc_table.get_or_create(value_type.ty(db));
@@ -845,8 +849,9 @@ fn instantiate_map<'db>(
         // Track how many entries we've successfully instantiated (for cleanup on error).
         let mut instantiated_count = 0usize;
 
-        // Instantiate all keys and values into the buffers.
-        for (i, entry) in entries.iter().enumerate() {
+        // Instantiate entries into the buffers in sorted order (by key).
+        for (i, &orig_idx) in sorted_indices.iter().enumerate() {
+            let entry = &entries[orig_idx];
             let key_expr = entry.key(db);
             let value_expr = entry.value(db);
 
@@ -921,7 +926,7 @@ fn instantiate_map<'db>(
 fn instantiate_set<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
-    elements: &[ExprFull<'db>],
+    set_expr: ExprSet<'db>,
     element_type: TypeAndHeap<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _set_tydesc: *const rtdt::TyDesc,
@@ -931,6 +936,7 @@ fn instantiate_set<'db>(
     debug_assert!(!dest_ptr.is_null());
     let set_ptr = dest_ptr as *mut rtdt::Set;
 
+    let elements = set_expr.elements(db);
     if elements.is_empty() {
         unsafe {
             (*set_ptr).root = std::ptr::null();
@@ -938,6 +944,9 @@ fn instantiate_set<'db>(
         }
         return Ok(set_ptr as *const u8);
     }
+
+    // Get sorted indices (cached by Salsa).
+    let sorted_indices = crate::canon::sorted_set_indices(db, set_expr);
 
     let element_tydesc = tydesc_table.get_or_create(element_type.ty(db));
     let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
@@ -955,10 +964,11 @@ fn instantiate_set<'db>(
         // Track how many elements we've successfully instantiated (for cleanup on error).
         let mut instantiated_count = 0usize;
 
-        // Instantiate all elements into the buffer.
-        for (i, elem) in elements.iter().enumerate() {
+        // Instantiate elements into the buffer in sorted order.
+        for (i, &orig_idx) in sorted_indices.iter().enumerate() {
+            let elem = elements[orig_idx];
             let elem_dest = buffer.add(i * element_size);
-            if let Err(e) = instantiate_expr_into(db, rt, *elem, element_type.ty(db), tydesc_table, elem_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, elem, element_type.ty(db), tydesc_table, elem_dest, resolved) {
                 // Cleanup: destroy already-instantiated elements.
                 for j in 0..instantiated_count {
                     let elem_to_destroy = buffer.add(j * element_size);
