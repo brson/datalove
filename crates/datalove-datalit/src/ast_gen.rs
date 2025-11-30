@@ -1003,73 +1003,95 @@ where
     Expr::Int(ExprInt::new(db, InternedText::new(db, &value_str)))
 }
 
+/// Special f32 values represented as hex bit patterns.
+///
+/// Note: NaN is excluded because NaN != NaN in IEEE semantics, which breaks
+/// property tests that assume clone == original.
+const F32_HEX_SPECIAL: &[(&str, &str)] = &[
+    ("0x7F800000", "+infinity"),
+    ("0xFF800000", "-infinity"),
+    ("0x7F7FFFFF", "f32::MAX"),
+    ("0xFF7FFFFF", "f32::MIN"),
+    ("0x00000001", "smallest positive subnormal"),
+    ("0x80000001", "smallest negative subnormal"),
+    ("0x80000000", "-0.0"),
+];
+
 /// Generate a float expression.
 ///
-/// FIXME: Currently excludes NaN and infinity because the parser doesn't support them.
-/// We need to generate these special values for proper testing. Planned solution is to
-/// add hex literal syntax for bit-perfect float representation (e.g., `0x7fc00000` for NaN).
-/// See notes/bugs.md for details.
+/// Uses hex literals for special values (infinity, MIN, MAX, subnormals) that
+/// cannot be represented via decimal float syntax. NaN is excluded because
+/// NaN != NaN breaks property tests.
 fn gen_f32_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &AstGenConfig,
 ) -> Expr<'db> {
-    let value_str = match &config.numeric_strategy {
+    match &config.numeric_strategy {
         NumericStrategy::CornerCases => {
-            let choices = vec![
+            // Mix of decimal floats and hex for special values.
+            let decimal_choices = vec![
                 "0.0".to_string(),
                 "-0.0".to_string(),
-                // f32::MIN and f32::MAX excluded because their to_string() representation
-                // lacks decimal points and parser rejects scientific notation.
-                // FIXME: NaN and infinity excluded because parser doesn't support them yet.
-                // When hex float syntax is added, include:
-                // - NaN (various bit patterns)
-                // - f32::INFINITY
-                // - f32::NEG_INFINITY
-                // - f32::MIN
-                // - f32::MAX
                 "1.0".to_string(),
                 "-1.0".to_string(),
                 "123.456".to_string(),
                 "-123.456".to_string(),
             ];
-            choices[rng.gen_range(0..choices.len())].clone()
-        }
-        NumericStrategy::Random => {
-            // FIXME: Generate finite floats only until hex syntax supports NaN/infinity.
-            loop {
-                let val = rng.r#gen::<f32>();
-                if val.is_finite() {
-                    break val.to_string();
-                }
+
+            // 50% chance of hex special value, 50% decimal.
+            if rng.gen_bool(0.5) {
+                let (hex, _desc) = F32_HEX_SPECIAL[rng.gen_range(0..F32_HEX_SPECIAL.len())];
+                Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+            } else {
+                let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
+                Expr::Float(ExprFloat::new(db, InternedText::new(db, value_str)))
             }
         }
-        NumericStrategy::Mixed => {
+        NumericStrategy::Random => {
+            // 20% chance of special values via hex.
             if rng.gen_bool(0.2) {
-                let choices = vec![
-                    "0.0".to_string(),
-                    "-0.0".to_string(),
-                    // f32::MIN and f32::MAX excluded - see CornerCases comment above.
-                    // FIXME: NaN and infinity excluded because parser doesn't support them yet.
-                    "1.0".to_string(),
-                    "-1.0".to_string(),
-                    "123.456".to_string(),
-                    "-123.456".to_string(),
-                ];
-                choices[rng.gen_range(0..choices.len())].clone()
+                let (hex, _desc) = F32_HEX_SPECIAL[rng.gen_range(0..F32_HEX_SPECIAL.len())];
+                Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
             } else {
-                // FIXME: Generate finite floats only until hex syntax supports NaN/infinity.
+                // Random finite floats.
                 loop {
                     let val = rng.r#gen::<f32>();
                     if val.is_finite() {
-                        break val.to_string();
+                        let value_str = val.to_string();
+                        break Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)));
                     }
                 }
             }
         }
-    };
+        NumericStrategy::Mixed => {
+            if rng.gen_bool(0.3) {
+                // 30% corner cases: mix of decimal and hex special values.
+                let decimal_choices = vec![
+                    "0.0".to_string(),
+                    "1.0".to_string(),
+                    "-1.0".to_string(),
+                ];
 
-    Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)))
+                if rng.gen_bool(0.5) {
+                    let (hex, _desc) = F32_HEX_SPECIAL[rng.gen_range(0..F32_HEX_SPECIAL.len())];
+                    Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+                } else {
+                    let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
+                    Expr::Float(ExprFloat::new(db, InternedText::new(db, value_str)))
+                }
+            } else {
+                // 70% random finite floats.
+                loop {
+                    let val = rng.r#gen::<f32>();
+                    if val.is_finite() {
+                        let value_str = val.to_string();
+                        break Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)));
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Generate a string expression.
