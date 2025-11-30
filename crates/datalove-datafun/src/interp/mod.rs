@@ -871,7 +871,8 @@ fn eval_datalit_expression<'db>(
     match expr_inner {
         Expr::True => allocate_bool(ctx, true),
         Expr::False => allocate_bool(ctx, false),
-        Expr::Int(int_expr) => allocate_int(ctx, &int_expr),
+        Expr::Int(int_expr) => allocate_int_literal(ctx, &int_expr),
+        Expr::Float(float_expr) => allocate_float_literal(ctx, &float_expr),
         Expr::String(string_expr) => allocate_string(ctx, &string_expr),
         Expr::ParseError(_) => Err(InterpError::InvalidExpression("Parse error".to_string())),
         _ => Err(InterpError::InvalidExpression(
@@ -1590,10 +1591,52 @@ fn allocate_bool<'db>(
     })
 }
 
+/// Allocate an f32 value.
+fn allocate_f32<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: f32,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::F32);
+    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tydesc_ref.size(),
+            tydesc_ref.align(),
+            1
+        )
+    };
+
+    unsafe {
+        *(ptr as *mut f32) = value;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate an f32 value from a float literal.
+fn allocate_float_literal<'db>(
+    ctx: &mut InterpContext<'db>,
+    float_expr: &crate::datalit::ast::ExprFloat<'db>,
+) -> Result<Value, InterpError> {
+    let value_str = float_expr.value(ctx.db).as_str(ctx.db);
+    let value: f32 = value_str.parse()
+        .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
+    allocate_f32(ctx, value)
+}
+
 /// Allocate an integer value.
 ///
 /// For now, we only support u32 literals.
-fn allocate_int<'db>(
+fn allocate_int_literal<'db>(
     ctx: &mut InterpContext<'db>,
     int_expr: &crate::datalit::ast::ExprInt<'db>,
 ) -> Result<Value, InterpError> {
@@ -1741,6 +1784,13 @@ fn is_int_value(value: Value) -> bool {
     }
 }
 
+/// Check if a value is an f32 type.
+fn is_f32_value(value: Value) -> bool {
+    unsafe {
+        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::F32
+    }
+}
+
 /// Check if a value is a copy type.
 ///
 /// For now, we consider u32 and Bool as copy types.
@@ -1785,6 +1835,103 @@ fn allocate_bigint<'db>(
     Ok(Value {
         ptr,
         tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate an Option<T> with None value.
+fn allocate_option_none<'db>(
+    ctx: &mut InterpContext<'db>,
+    inner_tydesc: *const datalove_rt::rtdt::TyDesc,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    // Create Option tydesc from inner tydesc.
+    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_tydesc);
+    let option_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) };
+
+    // Allocate memory.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            option_tydesc_ref.size(),
+            option_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if ptr.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate Option".to_string()));
+    }
+
+    // Write None tag.
+    unsafe {
+        *ptr = rtdt::OptionTag::None as u8;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: option_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Wrap an existing value in Some, consuming the inner value.
+fn allocate_option_some_from_value<'db>(
+    ctx: &mut InterpContext<'db>,
+    inner_value: Value,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    // Create Option tydesc from inner value's tydesc.
+    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_value.tydesc);
+    let option_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) };
+
+    // Compute layout.
+    let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc_ref) };
+
+    // Allocate memory.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            option_tydesc_ref.size(),
+            option_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if ptr.is_null() {
+        destroy_value(ctx, inner_value);
+        return Err(InterpError::RuntimeError("Failed to allocate Option".to_string()));
+    }
+
+    unsafe {
+        // Write Some tag.
+        *ptr = rtdt::OptionTag::Some as u8;
+
+        // Copy inner value to payload offset.
+        let payload_ptr = ptr.add(layout.payload_offset as usize);
+        let inner_size = (*inner_value.tydesc).size as usize;
+        std::ptr::copy_nonoverlapping(inner_value.ptr, payload_ptr, inner_size);
+    }
+
+    // Free the inner value's container (but data has been copied to Option).
+    if inner_value.location == ValueLocation::TempOwned {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                inner_value.tydesc,
+                1,
+                inner_value.ptr,
+            );
+        }
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: option_tydesc,
         location: ValueLocation::TempOwned,
     })
 }
@@ -1981,6 +2128,15 @@ fn eval_add<'db>(
     rhs: Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
+    // Both f32: add and return f32.
+    if is_f32_value(lhs) && is_f32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const f32) };
+        let b = unsafe { *(rhs.ptr as *const f32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return allocate_f32(ctx, a + b);
+    }
+
     // Both u32: widen to Int and add.
     if is_u32_value(lhs) && is_u32_value(rhs) {
         let lhs_int = widen_u32_to_int(ctx, lhs)?;
@@ -2186,6 +2342,15 @@ fn eval_sub<'db>(
     rhs: Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
+    // Both f32: subtract and return f32.
+    if is_f32_value(lhs) && is_f32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const f32) };
+        let b = unsafe { *(rhs.ptr as *const f32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return allocate_f32(ctx, a - b);
+    }
+
     // Helper to get result buffer.
     let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
         if let Some(d) = dest {
@@ -2308,6 +2473,15 @@ fn eval_mul<'db>(
     rhs: Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
+    // Both f32: multiply and return f32.
+    if is_f32_value(lhs) && is_f32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const f32) };
+        let b = unsafe { *(rhs.ptr as *const f32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return allocate_f32(ctx, a * b);
+    }
+
     let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
         if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
     };
@@ -2387,6 +2561,15 @@ fn eval_div<'db>(
     rhs: Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
+    // Both f32: divide and return f32.
+    if is_f32_value(lhs) && is_f32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const f32) };
+        let b = unsafe { *(rhs.ptr as *const f32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return allocate_f32(ctx, a / b);
+    }
+
     let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
         if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
     };
@@ -2537,29 +2720,53 @@ fn eval_mul_checked<'db>(
     }
 }
 
-/// Evaluate checked division (u32 only, no widening).
+/// Evaluate checked division.
 ///
-/// Returns the u32 result on success, or DivisionByZero error.
+/// For u32: returns the u32 result on success, or DivisionByZero error.
+/// For int: returns the int result on success, or DivisionByZero error.
 fn eval_div_checked<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: Value,
     rhs: Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+    // Both int: use runtime checked division.
+    if is_int_value(lhs) && is_int_value(rhs) {
+        let result_int = allocate_bigint(ctx)?;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs.ptr, rhs.tydesc,
+                result_int.ptr, result_int.tydesc,
+            )
+        };
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
-        return Err(InterpError::InvalidExpression("Checked division only supports u32 operands".to_string()));
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            return Ok(result_int);
+        } else {
+            destroy_value(ctx, result_int);
+            return Err(InterpError::DivisionByZero);
+        }
     }
 
-    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
-    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-    destroy_value(ctx, lhs);
-    destroy_value(ctx, rhs);
+    // Both u32: use Rust checked_div.
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+        let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
 
-    match lhs_val.checked_div(rhs_val) {
-        Some(result) => write_u32_result(ctx, result, dest),
-        None => Err(InterpError::DivisionByZero),
+        match lhs_val.checked_div(rhs_val) {
+            Some(result) => write_u32_result(ctx, result, dest),
+            None => Err(InterpError::DivisionByZero),
+        }
+    } else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Checked division requires matching operand types".to_string()))
     }
 }
 
@@ -2571,6 +2778,185 @@ fn write_u32_result(ctx: &mut InterpContext<'_>, value: u32, dest: Option<Destin
     } else {
         allocate_u32_raw(ctx, value)
     }
+}
+
+/// Evaluate optional addition for u32.
+///
+/// Returns Some(result) on success, None on overflow.
+fn eval_add_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const u32) };
+        let b = unsafe { *(rhs.ptr as *const u32) };
+        let inner_tydesc = lhs.tydesc;
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        match a.checked_add(b) {
+            Some(result) => {
+                let val = allocate_u32_raw(ctx, result)?;
+                allocate_option_some_from_value(ctx, val)
+            }
+            None => allocate_option_none(ctx, inner_tydesc),
+        }
+    } else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Optional addition requires matching fixed int types".to_string()))
+    }
+}
+
+/// Evaluate optional subtraction for u32.
+///
+/// Returns Some(result) on success, None on underflow.
+fn eval_sub_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const u32) };
+        let b = unsafe { *(rhs.ptr as *const u32) };
+        let inner_tydesc = lhs.tydesc;
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        match a.checked_sub(b) {
+            Some(result) => {
+                let val = allocate_u32_raw(ctx, result)?;
+                allocate_option_some_from_value(ctx, val)
+            }
+            None => allocate_option_none(ctx, inner_tydesc),
+        }
+    } else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Optional subtraction requires matching fixed int types".to_string()))
+    }
+}
+
+/// Evaluate optional multiplication for u32.
+///
+/// Returns Some(result) on success, None on overflow.
+fn eval_mul_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const u32) };
+        let b = unsafe { *(rhs.ptr as *const u32) };
+        let inner_tydesc = lhs.tydesc;
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        match a.checked_mul(b) {
+            Some(result) => {
+                let val = allocate_u32_raw(ctx, result)?;
+                allocate_option_some_from_value(ctx, val)
+            }
+            None => allocate_option_none(ctx, inner_tydesc),
+        }
+    } else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Optional multiplication requires matching fixed int types".to_string()))
+    }
+}
+
+/// Evaluate optional division.
+///
+/// For int: returns Some(result) on success, None on div-by-zero.
+/// For u32: returns Some(result) on success, None on div-by-zero.
+fn eval_div_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    // Both int: use runtime checked division.
+    if is_int_value(lhs) && is_int_value(rhs) {
+        let result_int = allocate_bigint(ctx)?;
+        let inner_tydesc = lhs.tydesc;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs.ptr, rhs.tydesc,
+                result_int.ptr, result_int.tydesc,
+            )
+        };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            allocate_option_some_from_value(ctx, result_int)
+        } else {
+            destroy_value(ctx, result_int);
+            allocate_option_none(ctx, inner_tydesc)
+        }
+    }
+    // Both u32: use Rust checked_div.
+    else if is_u32_value(lhs) && is_u32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const u32) };
+        let b = unsafe { *(rhs.ptr as *const u32) };
+        let inner_tydesc = lhs.tydesc;
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        match a.checked_div(b) {
+            Some(result) => {
+                let val = allocate_u32_raw(ctx, result)?;
+                allocate_option_some_from_value(ctx, val)
+            }
+            None => allocate_option_none(ctx, inner_tydesc),
+        }
+    } else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Optional division requires matching operand types".to_string()))
+    }
+}
+
+/// Evaluate a comparison operation.
+fn eval_comparison<'db>(
+    ctx: &mut InterpContext<'db>,
+    op: crate::ast::BinOp,
+    lhs: Value,
+    rhs: Value,
+) -> Result<Value, InterpError> {
+    use crate::ast::BinOp;
+    use datalove_rt::c::RtOrdering;
+
+    let ordering = unsafe {
+        datalove_rt::c::dtlv_rti_cmp_total(
+            ctx.runtime.handle(),
+            lhs.ptr,
+            lhs.tydesc,
+            rhs.ptr,
+            rhs.tydesc,
+        )
+    };
+
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    let result = match (op, ordering) {
+        (BinOp::Lt, RtOrdering::Less) => true,
+        (BinOp::Gt, RtOrdering::Greater) => true,
+        (BinOp::Le, RtOrdering::Less | RtOrdering::Equal) => true,
+        (BinOp::Ge, RtOrdering::Greater | RtOrdering::Equal) => true,
+        (BinOp::Eq, RtOrdering::Equal) => true,
+        (BinOp::Ne, RtOrdering::Less | RtOrdering::Greater) => true,
+        (_, RtOrdering::Error) => {
+            return Err(InterpError::RuntimeError("Comparison failed: type mismatch".into()));
+        }
+        _ => false,
+    };
+
+    allocate_bool(ctx, result)
 }
 
 /// Execute a binary operation.
@@ -2596,16 +2982,15 @@ fn execute_binop<'db>(
         BinOp::MulChecked => eval_mul_checked(ctx, lhs, rhs, dest),
         BinOp::DivChecked => eval_div_checked(ctx, lhs, rhs, dest),
 
-        // Not yet implemented - clean up values before returning error.
-        BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional => {
-            destroy_value(ctx, lhs);
-            destroy_value(ctx, rhs);
-            Err(InterpError::InvalidExpression("Optional operators not yet implemented".to_string()))
-        }
+        // Comparison operators.
         BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
-            destroy_value(ctx, lhs);
-            destroy_value(ctx, rhs);
-            Err(InterpError::InvalidExpression("Comparison operators not yet implemented".to_string()))
+            eval_comparison(ctx, op, lhs, rhs)
         }
+
+        // Optional operators: return Option<T> with None on overflow/div0.
+        BinOp::AddOptional => eval_add_optional(ctx, lhs, rhs),
+        BinOp::SubOptional => eval_sub_optional(ctx, lhs, rhs),
+        BinOp::MulOptional => eval_mul_optional(ctx, lhs, rhs),
+        BinOp::DivOptional => eval_div_optional(ctx, lhs, rhs),
     }
 }

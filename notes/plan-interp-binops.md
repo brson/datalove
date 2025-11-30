@@ -4,18 +4,18 @@
 
 Implement complete binary operations and comparison operators for all numeric types per the botspec.
 
-## Current State
+## Current State (Updated 2025-11-29)
 
 **Implemented:**
-- Bare arithmetic (`+ - * /`): u32 and int only, widens u32 to int
-- Checked arithmetic (`+! -! *! /!`): u32 only
-
-**Not Implemented:**
+- Bare arithmetic (`+ - * /`): u32, int, and f32
+- Checked arithmetic (`+! -! *! /!`): u32 and int
+- Optional arithmetic (`+? -? *? /?`): u32 and int
+- Comparison operators (`.<` `.>` `<=` `>=` `==` `!=`): all numeric types
 - f32 bare arithmetic
+- f32 literal instantiation
+
+**Not Yet Implemented:**
 - Other fixed int types (i8, i16, i32, i64, u8, u16, u64)
-- Optional arithmetic (`+? -? *? /?`)
-- Comparison operators (`.<` `.>` `<=` `>=` `==` `!=`)
-- int division (`/!` and `/?` for bigint)
 
 ## Infrastructure Already Available
 
