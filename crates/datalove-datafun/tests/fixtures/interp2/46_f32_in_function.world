@@ -1,0 +1,13 @@
+----------
+script
+----------
+
+fun add_f32(a: f32, b: f32): f32
+    ret a + b
+end fun
+
+fun div_f32(a: f32, b: f32): f32
+    ret a / b
+end fun
+
+let output = add_f32(: f32 / @2.5, : f32 / @3.5)

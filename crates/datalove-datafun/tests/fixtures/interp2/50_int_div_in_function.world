@@ -1,0 +1,11 @@
+----------
+script
+----------
+
+fun div_int(a: int, b: int): int
+    ret a /! b
+end fun
+
+let x = @1000 + @0
+let y = @10 + @0
+let output = div_int(x, y)

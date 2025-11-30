@@ -1,0 +1,13 @@
+----------
+script
+----------
+
+fun safe_div(a: u32, b: u32): ?u32
+    ret a /? b
+end fun
+
+fun safe_add(a: u32, b: u32): ?u32
+    ret a +? b
+end fun
+
+let output = safe_div(@100, @10)
