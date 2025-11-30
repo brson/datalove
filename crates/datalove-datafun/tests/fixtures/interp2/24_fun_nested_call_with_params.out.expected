@@ -133,11 +133,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "VariableNotFound(\"a\")",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@21",
     ),
 ]

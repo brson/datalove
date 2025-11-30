@@ -151,11 +151,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "VariableNotFound(\"y\")",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@20",
     ),
 ]

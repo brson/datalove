@@ -975,10 +975,9 @@ fn eval_function_call_in_script_scope<'db>(
     execute_function_body(ctx, func, func_module, arg_values)
 }
 
-/// Evaluate a function call from function scope.
-fn eval_function_call_in_function_scope<'db>(
+/// Evaluate a function call from frame-based execution.
+fn eval_function_call_frame<'db>(
     ctx: &mut InterpContext<'db>,
-    local_variables: &mut HashMap<InternedText<'db>, ScriptVariable>,
     call_expr: ast::ExprFunctionCall<'db>,
 ) -> Result<Value, InterpError> {
     let name = call_expr.name(ctx.db);
@@ -997,10 +996,10 @@ fn eval_function_call_in_function_scope<'db>(
         ));
     }
 
-    // Evaluate all arguments in function scope (no destination - args are temporaries).
+    // Evaluate all arguments in frame context (no destination - args are temporaries).
     let mut arg_values = Vec::new();
     for arg_expr in arg_exprs {
-        let value = match eval_expression_in_function_scope(ctx, local_variables, *arg_expr, None) {
+        let value = match eval_expression_frame(ctx, *arg_expr, None) {
             Ok(v) => v,
             Err(e) => {
                 // Clean up previously evaluated arguments on error.
@@ -1014,7 +1013,6 @@ fn eval_function_call_in_function_scope<'db>(
     }
 
     // Execute the function body with arguments.
-    // Set current_module if this is a module function.
     execute_function_body(ctx, func, func_module, arg_values)
 }
 
@@ -1521,128 +1519,13 @@ fn eval_expression_frame<'db>(
         }
 
         ast::ExprFunKind::FunctionCall(call_expr) => {
-            // Use existing function call infrastructure.
-            // This creates a new frame internally via execute_function_body.
-            eval_function_call_in_function_scope(ctx, &mut HashMap::new(), call_expr)
+            // Evaluate function call with arguments in frame context.
+            eval_function_call_frame(ctx, call_expr)
         }
 
         _ => Err(InterpError::InvalidExpression(
             "Expression type not yet implemented in frame mode".to_string()
         ))
-    }
-}
-
-/// Execute a statement within a function body.
-fn execute_function_statement<'db>(
-    ctx: &mut InterpContext<'db>,
-    local_variables: &mut HashMap<InternedText<'db>, ScriptVariable>,
-    stmt: &ast::Statement<'db>,
-) -> Result<(), InterpError> {
-    match stmt {
-        ast::Statement::Let(let_stmt) => {
-            // Evaluate expression in function scope (no destination - stored in HashMap).
-            let value = eval_expression_in_function_scope(ctx, local_variables, let_stmt.value(ctx.db), None)?;
-
-            // Bind to local variable.
-            let is_copy = is_copy_type(value);
-            let name = let_stmt.name(ctx.db);
-            local_variables.insert(name, ScriptVariable {
-                value,
-                state: ScriptVarState::Available,
-                is_copy,
-            });
-            Ok(())
-        }
-        ast::Statement::Ret(ret_stmt) => {
-            // Evaluate the return expression (no destination - value escapes).
-            let value = eval_expression_in_function_scope(ctx, local_variables, ret_stmt.value(ctx.db), None)?;
-            Err(InterpError::FunctionReturn(value))
-        }
-        ast::Statement::If(_) => {
-            Err(InterpError::InvalidExpression("If statements in functions not yet implemented".to_string()))
-        }
-        ast::Statement::Fun(_) => {
-            Err(InterpError::InvalidExpression("Nested functions not yet implemented".to_string()))
-        }
-        ast::Statement::Require(_) | ast::Statement::Import(_) => {
-            // These are handled at the module level.
-            Ok(())
-        }
-        ast::Statement::ParseError(_) => {
-            Err(InterpError::InvalidExpression("Parse error in function".to_string()))
-        }
-    }
-}
-
-/// Evaluate an expression in function scope (can access local variables).
-fn eval_expression_in_function_scope<'db>(
-    ctx: &mut InterpContext<'db>,
-    local_variables: &mut HashMap<InternedText<'db>, ScriptVariable>,
-    expr: ast::ExprFun<'db>,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
-    match expr.expr(ctx.db) {
-        ast::ExprFunKind::Name(name) => {
-            // First check local variables, then script variables.
-            if let Some(var) = local_variables.get(&name) {
-                if var.state == ScriptVarState::Moved {
-                    return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
-                }
-                let value = var.value;
-                let is_copy = var.is_copy;
-
-                if is_copy {
-                    Ok(clone_value(ctx, value))
-                } else {
-                    local_variables.get_mut(&name).unwrap().state = ScriptVarState::Moved;
-                    Ok(value)
-                }
-            } else {
-                // Fall back to script scope.
-                read_script_variable(ctx, name)
-            }
-        }
-        ast::ExprFunKind::Datalit(datalit_expr) => {
-            eval_datalit_expression(ctx, datalit_expr)
-        }
-        ast::ExprFunKind::FunctionCall(call_expr) => {
-            eval_function_call_in_function_scope(ctx, local_variables, call_expr)
-        }
-        ast::ExprFunKind::BinOp(binop_expr) => {
-            let lhs = eval_expression_in_function_scope(ctx, local_variables, binop_expr.lhs(ctx.db), None)?;
-            let rhs = match eval_expression_in_function_scope(ctx, local_variables, binop_expr.rhs(ctx.db), None) {
-                Ok(v) => v,
-                Err(e) => {
-                    destroy_value(ctx, lhs);
-                    return Err(e);
-                }
-            };
-            execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, dest)
-        }
-        ast::ExprFunKind::Tuple(_) => {
-            Err(InterpError::InvalidExpression("Tuples not yet implemented".to_string()))
-        }
-        ast::ExprFunKind::UnaryOp(_) => {
-            Err(InterpError::InvalidExpression("Unary operations not yet implemented".to_string()))
-        }
-        ast::ExprFunKind::TryOption(_) | ast::ExprFunKind::TryResult(_) => {
-            Err(InterpError::InvalidExpression("Try operators not yet implemented".to_string()))
-        }
-        ast::ExprFunKind::ParseError(_) => {
-            Err(InterpError::InvalidExpression("Parse error in expression".to_string()))
-        }
-    }
-}
-
-/// Clean up local variables by destroying their values.
-fn cleanup_local_variables<'db>(
-    ctx: &mut InterpContext<'db>,
-    local_variables: HashMap<InternedText<'db>, ScriptVariable>,
-) {
-    for (_, var) in local_variables {
-        if var.state == ScriptVarState::Available {
-            destroy_value(ctx, var.value);
-        }
     }
 }
 
