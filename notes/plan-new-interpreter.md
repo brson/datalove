@@ -6,19 +6,19 @@
 - [x] Phase 1: Core Infrastructure (Frame Management) - **COMPLETED**
 - [x] Phase 2: Expression Evaluation - **COMPLETED** (literals and binary ops)
 - [ ] Phase 3: Move Semantics
-- [x] Phase 4: Control Flow
+- [x] Phase 4: Control Flow - **COMPLETED** (if-statements, CFG execution)
 - [ ] Phase 5: Drop Execution
 - [ ] Phase 6: Function Calls
 - [x] Phase 7: Module Integration - **COMPLETED**
 - [ ] Phase 8: Testing & Validation
 
-**Current Status**: Phases 0, 1, 2, and 7 completed. Frame-based execution is fully implemented and active. Functions execute using packed frame buffers with computed slot offsets from analysis. Variables are read/written from frame slots, move semantics tracked via SlotState. All 37 interp2 tests passing with zero memory leaks.
+**Current Status**: Phases 0, 1, 2, 4, and 7 completed. Frame-based execution is fully implemented and active. Functions execute using packed frame buffers with computed slot offsets from analysis. Variables are read/written from frame slots, move semantics tracked via SlotState. All 57 interp2 tests passing with zero memory leaks.
 
 **Latest Update (2025-11-25)**: Fixed type mismatch bug causing nondeterministic output in tests 30 and 33. Added `narrow_int_to_u32()` as temporary workaround. See "Known Issues" section below for the proper fix needed.
 
 **Previous Update (2025-11-06)**: ✅ Completed Phase 1 frame-based execution. Implemented `eval_expression_frame()` for Name (variables), Datalit (literals), BinOp (arithmetic), and FunctionCall expressions. Implemented `execute_let_statement_frame()` for variable assignments. Added helper functions: `find_slot_by_name()`, `read_reference_slot()`, `read_value_from_slot()`, `write_value_to_slot()`. Variable reads check copyability and SlotState, cloning Copy types and marking non-Copy types as Moved. All function execution now uses frame-based evaluation with no HashMap fallback.
 
-Ready for: Phase 3 (Move Semantics refinement with MoveInfo), Phase 4 (Control Flow with if statements), or Phase 5 (Drop Execution with drop points).
+Ready for: Phase 3 (Move Semantics refinement with MoveInfo), Phase 5 (Drop Execution with drop points), or Phase 6 (Function Calls with Out/Ref/Mut params).
 
 ## Overview
 
@@ -1122,21 +1122,37 @@ pub enum InterpError {
 - Last-use correctly transfers ownership
 - Clones are inserted when needed
 
-### Phase 4: Control Flow
+### Phase 4: Control Flow - COMPLETED
 **Goal**: Execute CFG-based control flow.
 
+**Status**: Complete. CFG-based execution with if-statement branching implemented and tested.
+
 **Tasks**:
-1. Implement CFG-based execution loop
-2. Implement if-statement branching
-3. Implement return statements
-4. Implement try operators (early return)
-5. Add tests for control flow
+1. ✅ Implement CFG-based execution loop (`execute_function_body_with_cfg`)
+2. ✅ Implement if-statement branching (Branch terminator evaluates condition)
+3. ✅ Implement return statements (Return terminator)
+4. ⏸️ Implement try operators (early return) - deferred
+5. ✅ Add tests for control flow (tests 51-55)
+
+**What was implemented**:
+- `execute_function_body_with_cfg()` in `interp/mod.rs` (lines 1201-1275)
+- CFG block iteration with `cfg.get_block()` and `cfg.get_stmt()`
+- `Terminator::Branch` handling: evaluates if-statement condition, branches to then_block/else_block
+- `Terminator::Return` and `Terminator::Goto` handling
+- `execute_cfg_statement()` for statement execution within CFG blocks
+
+**Test coverage** (tests 51-55):
+- 51_if_simple: Basic if/else with bool condition
+- 52_if_no_else: If without else branch
+- 53_if_nested: Nested if statements
+- 54_if_in_module: If statements in module functions
+- 55_if_else_branch: If/else branching with different return paths
 
 **Success criteria**:
-- Can execute linear statement sequences
-- If-statements branch correctly
-- Returns exit function properly
-- Try operators trigger early returns
+- ✅ Can execute linear statement sequences
+- ✅ If-statements branch correctly
+- ✅ Returns exit function properly
+- ⏸️ Try operators trigger early returns - deferred to Phase 5
 
 ### Phase 5: Drop Execution
 **Goal**: Execute drops at analysis-computed points.
