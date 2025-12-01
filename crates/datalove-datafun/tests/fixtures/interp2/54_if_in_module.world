@@ -1,0 +1,29 @@
+----------
+module sys/test/conditional
+----------
+
+fun max(a: u32, b: u32): u32
+    if a .> b
+        ret a
+    else
+        ret b
+    end if
+end fun
+
+fun min(a: u32, b: u32): u32
+    if a .< b
+        ret a
+    else
+        ret b
+    end if
+end fun
+
+----------
+script
+----------
+
+require module sys/test/conditional
+import conditional.max
+import conditional.min
+
+let output = max(@7, @12)

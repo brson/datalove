@@ -1,0 +1,12 @@
+----------
+script
+----------
+
+fun clamp_high(x: u32, max: u32): u32
+    if x .> max
+        ret max
+    end if
+    ret x
+end fun
+
+let output = clamp_high(@5, @10)
