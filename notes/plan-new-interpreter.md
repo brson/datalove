@@ -6,7 +6,7 @@
 - [x] Phase 1: Core Infrastructure (Frame Management) - **COMPLETED**
 - [x] Phase 2: Expression Evaluation - **COMPLETED** (literals and binary ops)
 - [ ] Phase 3: Move Semantics
-- [ ] Phase 4: Control Flow
+- [x] Phase 4: Control Flow
 - [ ] Phase 5: Drop Execution
 - [ ] Phase 6: Function Calls
 - [x] Phase 7: Module Integration - **COMPLETED**
