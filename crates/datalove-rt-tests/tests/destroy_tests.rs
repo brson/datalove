@@ -1130,6 +1130,7 @@ proptest! {
 
     /// Property: Destroy moderate structures with depth 3-4.
     #[test]
+    #[ignore] // ~25s - too slow for regular test runs
     fn proptest_destroy_moderate_structures(seed in any::<u64>()) {
         let db = Database::default();
         let config = AstGenConfig {
