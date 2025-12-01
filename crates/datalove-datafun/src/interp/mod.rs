@@ -9,6 +9,7 @@ use bct::text::InternedText;
 
 use crate::package::PackageWorld;
 use crate::ast::{self, StmtFun};
+use crate::function_analysis::{ControlFlowGraph, Terminator, BlockId};
 
 /// Interpreter context for script execution.
 pub struct InterpContext<'db> {
@@ -72,6 +73,14 @@ pub enum SlotState {
     Moved,
 }
 
+/// Control flow result from executing a CFG statement.
+enum CfgControl {
+    /// Continue to the next statement in the block.
+    Continue,
+    /// Return from the function with a value.
+    Return(Value),
+}
+
 /// Stack frame for function execution.
 ///
 /// Contains the packed frame data buffer and per-slot state tracking.
@@ -84,6 +93,8 @@ pub struct StackFrame<'db> {
     pub func: crate::ast::StmtFun<'db>,
     /// Frame layout providing slot offsets and types.
     pub layout: crate::function_analysis::FrameLayout<'db>,
+    /// Control flow graph for CFG-based execution.
+    pub cfg: ControlFlowGraph<'db>,
 }
 
 /// Tracks whether a Value's memory needs freeing after use.
@@ -171,6 +182,7 @@ pub enum InterpError {
     ReturnOutsideFunction,
     IfOutsideFunction,
     FunctionReturn(Value),  // Used internally to propagate return values.
+    EarlyReturn,  // Used for try operator (? or !) early return from CFG.
 
     // Checked arithmetic overflow - triggers early return.
     Overflow,
@@ -1108,8 +1120,9 @@ fn execute_function_body<'db>(
         ));
     }
 
-    // Get frame layout.
+    // Get frame layout and CFG.
     let layout = analysis.frame_layout(ctx.db);
+    let cfg = analysis.control_flow(ctx.db);
     let total_size = layout.total_size(ctx.db) as usize;
     let slots = layout.slots(ctx.db);
 
@@ -1162,6 +1175,7 @@ fn execute_function_body<'db>(
         slot_states,
         func,
         layout,
+        cfg,
     };
     ctx.call_stack.push(frame);
 
@@ -1184,33 +1198,120 @@ fn execute_function_body<'db>(
     result
 }
 
-/// Execute function body with frame-based execution.
+/// Execute function body with CFG-based execution.
 fn execute_function_body_with_frame<'db>(
     ctx: &mut InterpContext<'db>,
 ) -> Result<Value, InterpError> {
     // Get the current frame (top of stack).
     let frame_index = ctx.call_stack.len() - 1;
 
-    // Get the function from the frame.
+    // Get the function and CFG from the frame.
     let func = ctx.call_stack[frame_index].func;
+    let cfg = ctx.call_stack[frame_index].cfg;
 
-    // Execute each statement in the function body.
-    for stmt in func.body(ctx.db) {
-        match execute_function_statement_frame(ctx, stmt) {
-            Ok(()) => continue,
-            Err(InterpError::FunctionReturn(value)) => {
-                return Ok(value);
+    // Start at block 0 (entry block).
+    let mut current_block_id = BlockId(0);
+
+    loop {
+        let block = cfg.get_block(ctx.db, current_block_id)
+            .ok_or_else(|| InterpError::RuntimeError(
+                format!("Invalid block ID {:?}", current_block_id)
+            ))?;
+
+        // Execute all statements in the current block.
+        for stmt_id in &block.statements {
+            let stmt = cfg.get_stmt(ctx.db, *stmt_id)
+                .ok_or_else(|| InterpError::RuntimeError(
+                    format!("Invalid stmt ID {:?}", stmt_id)
+                ))?;
+
+            // Execute statement.
+            match execute_cfg_statement(ctx, stmt)? {
+                CfgControl::Continue => continue,
+                CfgControl::Return(value) => return Ok(value),
             }
-            Err(e) => {
-                return Err(e);
+        }
+
+        // Handle terminator.
+        match &block.terminator {
+            Terminator::Return => {
+                // Should have returned via CfgControl::Return above.
+                return Err(InterpError::RuntimeError(
+                    format!("Function '{}' reached Return terminator without ret statement",
+                            func.name(ctx.db).text(ctx.db))
+                ));
+            }
+            Terminator::Branch { condition_stmt, then_block, else_block } => {
+                // Get the if-statement and evaluate its condition.
+                let if_stmt = cfg.get_stmt(ctx.db, *condition_stmt)
+                    .ok_or_else(|| InterpError::RuntimeError(
+                        format!("Invalid condition stmt ID {:?}", condition_stmt)
+                    ))?;
+
+                let condition_value = match if_stmt {
+                    ast::Statement::If(if_s) => {
+                        eval_expression_frame(ctx, if_s.condition(ctx.db), None)?
+                    }
+                    _ => {
+                        return Err(InterpError::RuntimeError(
+                            "Branch terminator without if-statement".to_string()
+                        ));
+                    }
+                };
+
+                // Evaluate condition as boolean.
+                let is_true = extract_bool(ctx, condition_value)?;
+
+                current_block_id = if is_true { *then_block } else { *else_block };
+            }
+            Terminator::Goto(next_block) => {
+                current_block_id = *next_block;
+            }
+            Terminator::TryReturn => {
+                // Early return from ? operator - propagate.
+                return Err(InterpError::EarlyReturn);
             }
         }
     }
+}
 
-    // If we reach here, the function didn't have an explicit return.
-    Err(InterpError::RuntimeError(
-        format!("Function '{}' did not return a value", func.name(ctx.db).text(ctx.db))
-    ))
+/// Execute a statement within CFG-based execution.
+///
+/// In CFG mode, if-statements don't execute their bodies here - the CFG
+/// terminator handles branching. The condition is evaluated when handling
+/// the Branch terminator.
+fn execute_cfg_statement<'db>(
+    ctx: &mut InterpContext<'db>,
+    stmt: &ast::Statement<'db>,
+) -> Result<CfgControl, InterpError> {
+    match stmt {
+        ast::Statement::Let(let_stmt) => {
+            // Evaluate expression and store in frame slot.
+            execute_let_statement_frame(ctx, *let_stmt)?;
+            Ok(CfgControl::Continue)
+        }
+        ast::Statement::Ret(ret_stmt) => {
+            // Evaluate the return expression (no dest - value escapes frame).
+            let value = eval_expression_frame(ctx, ret_stmt.value(ctx.db), None)?;
+            Ok(CfgControl::Return(value))
+        }
+        ast::Statement::If(_) => {
+            // In CFG mode, if-statements are handled by the Branch terminator.
+            // We don't execute the body here - just continue.
+            // The condition will be evaluated when we reach the Block's terminator.
+            Ok(CfgControl::Continue)
+        }
+        ast::Statement::Fun(_) => {
+            Err(InterpError::RuntimeError("Nested functions not supported".to_string()))
+        }
+        ast::Statement::Require(_) | ast::Statement::Import(_) => {
+            // These are handled at the module level.
+            Ok(CfgControl::Continue)
+        }
+        ast::Statement::ParseError(_) => {
+            Err(InterpError::RuntimeError("Parse error in function".to_string()))
+        }
+    }
 }
 
 /// Clean up a stack frame by destroying all Available (non-moved) values.
@@ -1789,6 +1890,31 @@ fn is_f32_value(value: Value) -> bool {
     unsafe {
         (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::F32
     }
+}
+
+/// Check if a value is a Bool type.
+fn is_bool_value(value: Value) -> bool {
+    unsafe {
+        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::Bool
+    }
+}
+
+/// Extract a boolean value from a Bool-typed Value.
+///
+/// Returns an error if the value is not a Bool type.
+/// Destroys the value after extraction.
+fn extract_bool<'db>(ctx: &mut InterpContext<'db>, value: Value) -> Result<bool, InterpError> {
+    if !is_bool_value(value) {
+        let type_tag = unsafe { (*value.tydesc).type_tag };
+        destroy_value(ctx, value);
+        return Err(InterpError::RuntimeError(
+            format!("Expected Bool in condition, got {:?}", type_tag)
+        ));
+    }
+
+    let result = unsafe { *(value.ptr as *const bool) };
+    destroy_value(ctx, value);
+    Ok(result)
 }
 
 /// Check if a value is a copy type.

@@ -11,6 +11,9 @@ pub struct ControlFlowGraph<'db> {
     pub blocks: Vec<BasicBlock>,
     #[returns(ref)]
     pub edges: Vec<ControlFlowEdge>,
+    /// Map from StmtId to Statement for execution.
+    #[returns(ref)]
+    pub stmt_map: Vec<Statement<'db>>,
 }
 
 /// A basic block in the CFG.
@@ -27,7 +30,12 @@ pub enum Terminator {
     /// Normal function return.
     Return,
     /// Conditional branch (if-statement).
-    Branch { then_block: BlockId, else_block: BlockId },
+    Branch {
+        /// StmtId of the if-statement containing the condition to evaluate.
+        condition_stmt: StmtId,
+        then_block: BlockId,
+        else_block: BlockId,
+    },
     /// Unconditional jump.
     Goto(BlockId),
     /// Early return from ? or ! operator.
@@ -42,9 +50,10 @@ pub struct ControlFlowEdge {
 }
 
 /// Builder for constructing a CFG.
-pub struct CfgBuilder {
+pub struct CfgBuilder<'db> {
     blocks: Vec<BasicBlock>,
     edges: Vec<ControlFlowEdge>,
+    stmts: Vec<Statement<'db>>,
     next_block_id: u32,
     next_stmt_id: u32,
 }
@@ -63,15 +72,16 @@ pub fn build_cfg<'db>(
     // Build CFG from function body.
     let (_exit_block, _created) = builder.build_statements(db, func.body(db), entry_block);
 
-    ControlFlowGraph::new(db, builder.blocks, builder.edges)
+    ControlFlowGraph::new(db, builder.blocks, builder.edges, builder.stmts)
 }
 
-impl CfgBuilder {
+impl<'db> CfgBuilder<'db> {
     /// Create a new CFG builder.
     pub fn new() -> Self {
         Self {
             blocks: Vec::new(),
             edges: Vec::new(),
+            stmts: Vec::new(),
             next_block_id: 0,
             next_stmt_id: 0,
         }
@@ -84,10 +94,11 @@ impl CfgBuilder {
         id
     }
 
-    /// Allocate a new statement ID.
-    fn alloc_stmt_id(&mut self) -> StmtId {
+    /// Allocate a new statement ID and store the statement.
+    fn alloc_stmt_id(&mut self, stmt: Statement<'db>) -> StmtId {
         let id = StmtId(self.next_stmt_id);
         self.next_stmt_id += 1;
+        self.stmts.push(stmt);
         id
     }
 
@@ -105,7 +116,7 @@ impl CfgBuilder {
     /// Returns (exit_block_id, block_was_created).
     /// - exit_block_id: block where control flow exits (None if all paths diverge)
     /// - block_was_created: true if a block with exit_block_id was already created
-    fn build_statements<'db>(
+    fn build_statements(
         &mut self,
         db: &'db dyn crate::Db,
         stmts: &[Statement<'db>],
@@ -118,7 +129,7 @@ impl CfgBuilder {
             match stmt {
                 Statement::Let(let_stmt) => {
                     // Simple statement - add to current block.
-                    let stmt_id = self.alloc_stmt_id();
+                    let stmt_id = self.alloc_stmt_id(stmt.clone());
                     current_stmts.push(stmt_id);
 
                     // Check if the value expression contains try operators.
@@ -132,10 +143,12 @@ impl CfgBuilder {
                         // Note: This is simplified. A full implementation would split the
                         // expression evaluation into multiple blocks to handle the exact
                         // point where the try operator is evaluated.
+                        // For try operators, condition_stmt refers to the let statement with the try.
                         self.add_block(BasicBlock {
                             block_id: current_block,
                             statements: current_stmts.clone(),
                             terminator: Terminator::Branch {
+                                condition_stmt: stmt_id,
                                 then_block: continue_block,
                                 else_block: early_return_block,
                             },
@@ -158,9 +171,9 @@ impl CfgBuilder {
                     }
                 }
 
-                Statement::Ret(ret_stmt) => {
+                Statement::Ret(_ret_stmt) => {
                     // Return statement terminates the current block.
-                    let stmt_id = self.alloc_stmt_id();
+                    let stmt_id = self.alloc_stmt_id(stmt.clone());
                     current_stmts.push(stmt_id);
 
                     self.add_block(BasicBlock {
@@ -175,7 +188,7 @@ impl CfgBuilder {
 
                 Statement::If(if_stmt) => {
                     // If-statement creates a branch.
-                    let stmt_id = self.alloc_stmt_id();
+                    let stmt_id = self.alloc_stmt_id(stmt.clone());
                     current_stmts.push(stmt_id);
 
                     // Create blocks for then and else branches.
@@ -188,6 +201,7 @@ impl CfgBuilder {
                         block_id: current_block,
                         statements: current_stmts.clone(),
                         terminator: Terminator::Branch {
+                            condition_stmt: stmt_id,
                             then_block,
                             else_block,
                         },
@@ -289,7 +303,7 @@ impl CfgBuilder {
     }
 
     /// Check if an expression may return early (contains ? or !).
-    fn expr_may_return_early<'db>(&self, db: &'db dyn crate::Db, expr: ExprFun<'db>) -> bool {
+    fn expr_may_return_early(&self, db: &'db dyn crate::Db, expr: ExprFun<'db>) -> bool {
         match expr.expr(db) {
             ExprFunKind::TryOption(_) | ExprFunKind::TryResult(_) => true,
             ExprFunKind::BinOp(binop) => {
@@ -312,6 +326,11 @@ impl<'db> ControlFlowGraph<'db> {
     /// Get a basic block by its ID.
     pub fn get_block(&self, db: &'db dyn crate::Db, block_id: BlockId) -> Option<&BasicBlock> {
         self.blocks(db).iter().find(|b| b.block_id == block_id)
+    }
+
+    /// Get a statement by its ID.
+    pub fn get_stmt(&self, db: &'db dyn crate::Db, stmt_id: StmtId) -> Option<&Statement<'db>> {
+        self.stmt_map(db).get(stmt_id.0 as usize)
     }
 
     /// Get all edges from a given block.
@@ -348,30 +367,24 @@ mod tests {
 
     #[test]
     fn test_cfg_builder_creation() {
-        let builder = CfgBuilder::new();
+        let builder: CfgBuilder = CfgBuilder::new();
         assert_eq!(builder.blocks.len(), 0);
         assert_eq!(builder.edges.len(), 0);
+        assert_eq!(builder.stmts.len(), 0);
         assert_eq!(builder.next_block_id, 0);
         assert_eq!(builder.next_stmt_id, 0);
     }
 
     #[test]
     fn test_block_id_allocation() {
-        let mut builder = CfgBuilder::new();
+        let mut builder: CfgBuilder = CfgBuilder::new();
         let id1 = builder.alloc_block_id();
         let id2 = builder.alloc_block_id();
         assert_eq!(id1.0, 0);
         assert_eq!(id2.0, 1);
     }
 
-    #[test]
-    fn test_stmt_id_allocation() {
-        let mut builder = CfgBuilder::new();
-        let id1 = builder.alloc_stmt_id();
-        let id2 = builder.alloc_stmt_id();
-        assert_eq!(id1.0, 0);
-        assert_eq!(id2.0, 1);
-    }
+    // test_stmt_id_allocation removed - alloc_stmt_id now requires a statement
 
     #[test]
     fn test_simple_linear_function() {
