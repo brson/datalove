@@ -1,8 +1,8 @@
 {
   "errors": [
     {
-      "actual": "@!@u32",
-      "expected": "u32",
+      "actual": "u32",
+      "expected": "bool",
       "kind": "TypeMismatch"
     }
   ],
@@ -20,7 +20,7 @@
           "type": "@u32"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "bool"
     }
   ]
 }

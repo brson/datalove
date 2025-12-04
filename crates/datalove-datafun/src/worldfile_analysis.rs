@@ -122,8 +122,30 @@ pub fn analyze_worldfile(
     };
     let package_world = crate::package::import_from_loader(db, raw_package_world);
 
+    // Resolve and typecheck the package world.
+    let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
+    let graph = match resolution.result(db) {
+        Ok(graph) => graph,
+        Err(e) => bail!("Package world resolution failed: {:?}", e),
+    };
+    let typecheck_result = crate::tycheck::typecheck_package_world(db, graph);
+
     // Create persistent interpreter context for incremental scriptunit execution.
-    let mut interp_ctx = InterpContext::new(db, package_world, None);
+    let mut interp_ctx = match InterpContext::new_with_typecheck(db, package_world, typecheck_result) {
+        Ok(ctx) => ctx,
+        Err(crate::interp::InterpError::TypecheckErrors(count)) => {
+            // Provide detailed error info for typecheck failures.
+            let module_errors = typecheck_result.module_errors(db);
+            let mut error_details = Vec::new();
+            for (module, errors) in module_errors.iter() {
+                for err in errors {
+                    error_details.push(format!("{}: {:?}", module.name(db), err));
+                }
+            }
+            bail!("Package world has {} typecheck errors: {}", count, error_details.join("; "));
+        }
+        Err(e) => bail!("Failed to create interpreter context: {:?}", e),
+    };
 
     // Second pass: analyze each section in order.
     for section in parsed.sections {
@@ -297,8 +319,25 @@ fn analyze_script_section(
     let parsed_ast = crate::parser::parse_script_unit(db, script, 0);
     let serde_ast = crate::ast_serde::Script::from_ast(db, parsed_ast);
 
+    // Resolve and typecheck the package world.
+    let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
+    let graph = match resolution.result(db) {
+        Ok(graph) => graph,
+        Err(e) => {
+            return Ok(SectionAnalysis::Script(ScriptAnalysis {
+                ast: serde_ast,
+                typecheck: TypecheckResult::Error {
+                    errors: vec![format!("Resolution error: {:?}", e)],
+                },
+                output: String::new(),
+            }));
+        }
+    };
+
+    let typecheck_result = crate::tycheck::typecheck_package_world(db, graph);
+
     // Execute the script.
-    match crate::interp::execute_script(db, script, package_world) {
+    match crate::interp::execute_script(db, script, package_world, typecheck_result) {
         Ok(mut result) => {
             // Pretty-print the output.
             let output = crate::interp::pretty_print_value(&mut result)

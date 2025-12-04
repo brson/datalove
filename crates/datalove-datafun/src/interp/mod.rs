@@ -168,6 +168,7 @@ impl Drop for ScriptResult<'_> {
 pub enum InterpError {
     // Analysis-time errors.
     TypeErrors,
+    TypecheckErrors(usize),  // Number of typecheck errors found.
     AnalysisErrors(Vec<String>),
 
     // Runtime errors.
@@ -193,8 +194,49 @@ pub enum InterpError {
 }
 
 impl InterpContext<'_> {
-    /// Create a new interpreter context.
-    pub fn new<'db>(
+    /// Create a new interpreter context with typecheck result.
+    ///
+    /// The caller must provide a valid typecheck result with no errors.
+    /// The interpreter will use this to set up module function tables.
+    pub fn new_with_typecheck<'db>(
+        db: &'db dyn crate::Db,
+        package_world: PackageWorld,
+        typecheck_result: crate::tycheck::PackageWorldTypecheckResult<'db>,
+    ) -> Result<InterpContext<'db>, InterpError> {
+        // Check for typecheck errors.
+        let module_errors = typecheck_result.module_errors(db);
+        if !module_errors.is_empty() {
+            let error_count = module_errors.values().map(|v| v.len()).sum::<usize>();
+            return Err(InterpError::TypecheckErrors(error_count));
+        }
+
+        let graph = typecheck_result.graph(db);
+        let module_functions = ModuleFunctionTable::build_from_graph(db, graph);
+
+        Ok(InterpContext {
+            db,
+            runtime: datalove_rt::rust::Runtime::new(),
+            package_world,
+            script: None,
+            script_scope: ScriptScope {
+                variables: HashMap::new(),
+                functions: HashMap::new(),
+            },
+            module_functions,
+            current_module: None,
+            typecheck_result: Some(typecheck_result),
+            script_function_analyses: HashMap::new(),
+            tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
+            call_stack: Vec::new(),
+        })
+    }
+
+    /// Create a new interpreter context without typecheck (for testing only).
+    ///
+    /// WARNING: This creates a context without typechecking. The interpreter
+    /// may fail at runtime if it encounters untypechecked code.
+    #[doc(hidden)]
+    pub fn new_unchecked<'db>(
         db: &'db dyn crate::Db,
         package_world: PackageWorld,
         script: Option<crate::script::Script>,
@@ -511,68 +553,44 @@ fn build_module_alias_map<'db>(
 /// Execute a complete script in batch mode.
 ///
 /// This is the top-level entry point for running a complete script file
-/// against a package world.
+/// against a package world. The caller must have already typechecked the
+/// package world and script; the interpreter will refuse to run if there
+/// are any typecheck errors.
 pub fn execute_script<'db>(
     db: &'db dyn crate::Db,
     script: crate::script::Script,
     package_world: PackageWorld,
+    typecheck_result: crate::tycheck::PackageWorldTypecheckResult<'db>,
 ) -> Result<ScriptResult<'db>, InterpError> {
-    // Create interpreter context.
-    let mut ctx = InterpContext::new(db, package_world, Some(script));
+    // Create interpreter context (validates typecheck result has no errors).
+    let mut ctx = InterpContext::new_with_typecheck(db, package_world, typecheck_result)?;
+    ctx.script = Some(script);
 
-    // Resolve imports and typecheck the package world.
-    let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
-    let graph_result = resolution.result(db);
+    // Populate script-level imports.
+    ctx.module_functions.populate_script_imports(db, script, package_world);
 
-    // If resolution succeeds, run typecheck and store the result.
-    if let Ok(graph) = graph_result {
-        let typecheck_result = crate::tycheck::typecheck_package_world(db, graph);
+    // Typecheck and analyze script-level functions.
+    let units = script.units(db);
+    for unit_index in 0..units.len() {
+        let parsed_unit = crate::parser::parse_script_unit(db, script, unit_index);
+        let unit_source = units[unit_index].source(db);
 
-        // Check for typecheck errors (but don't fail - just log them for now).
-        // The interpreter can work without perfect types as long as the AST is valid.
-        let module_errors = typecheck_result.module_errors(db);
-        if !module_errors.is_empty() {
-            // Just log errors, don't fail execution.
-            // This allows tests with minor type mismatches to still run.
-            eprintln!("Note: typecheck found errors (continuing anyway): {} errors", module_errors.len());
-        }
+        // Typecheck the script unit with package world context.
+        let unit_typecheck = crate::tycheck::type_check_with_package_world(
+            db,
+            unit_source,
+            parsed_unit,
+            package_world,
+            typecheck_result,
+        );
 
-        ctx.typecheck_result = Some(typecheck_result);
-
-        // Build module function table from ALL modules in the graph (not just script imports).
-        // This includes transitive dependencies needed for cross-module calls.
-        ctx.module_functions = ModuleFunctionTable::build_from_graph(db, graph);
-
-        // Also populate script-level imports.
-        ctx.module_functions.populate_script_imports(db, script, package_world);
-
-        // Typecheck and analyze script-level functions.
-        let units = script.units(db);
-        for unit_index in 0..units.len() {
-            let parsed_unit = crate::parser::parse_script_unit(db, script, unit_index);
-            let unit_source = units[unit_index].source(db);
-
-            // Typecheck the script unit with package world context.
-            let unit_typecheck = crate::tycheck::type_check_with_package_world(
-                db,
-                unit_source,
-                parsed_unit,
-                package_world,
-                typecheck_result,
-            );
-
-            // Analyze each function in the unit.
-            for statement in parsed_unit.statements(db) {
-                if let crate::ast::Statement::Fun(func_stmt) = statement {
-                    let analysis = crate::function_analysis::analyze_function(db, *func_stmt, unit_typecheck);
-                    ctx.script_function_analyses.insert(*func_stmt, analysis);
-                }
+        // Analyze each function in the unit.
+        for statement in parsed_unit.statements(db) {
+            if let crate::ast::Statement::Fun(func_stmt) = statement {
+                let analysis = crate::function_analysis::analyze_function(db, *func_stmt, unit_typecheck);
+                ctx.script_function_analyses.insert(*func_stmt, analysis);
             }
         }
-    } else {
-        // Resolution failed - continue without typecheck (will fail at lookup if needed).
-        // This allows simple scripts without module imports to still work.
-        ctx.module_functions = ModuleFunctionTable::build_from_script(db, script, package_world);
     }
 
     // Helper to cleanup script scope variables.
@@ -697,15 +715,23 @@ pub fn pretty_print_value<'db>(
 ///
 /// This is used for incremental REPL execution where we only execute
 /// the newly added unit while maintaining state from previous units.
+///
+/// The caller must have created the InterpContext with `new_with_typecheck`
+/// to ensure the context has been properly initialized with typecheck results.
 pub fn execute_script_unit<'db>(
     ctx: &mut InterpContext<'db>,
     script: crate::script::Script,
     unit_index: usize,
 ) -> Result<Option<Value>, InterpError> {
+    // Verify context has typecheck result.
+    if ctx.typecheck_result.is_none() {
+        return Err(InterpError::RuntimeError(
+            "InterpContext not initialized with typecheck result".to_string()
+        ));
+    }
+
     // Update context with new script.
     ctx.script = Some(script);
-
-    // TODO: Add typechecking once basic expression evaluation works.
 
     // Execute only the new unit.
     execute_unit(ctx, script, unit_index)?;
@@ -792,6 +818,42 @@ fn execute_fun_statement<'db>(
     // Add function to script scope.
     let name = fun_stmt.name(ctx.db);
     ctx.script_scope.functions.insert(name, fun_stmt);
+
+    // Typecheck and analyze the function.
+    // We need a typecheck result - use the package world typecheck if available.
+    if let Some(typecheck_result) = ctx.typecheck_result {
+        // Create a minimal script containing just this function for typechecking.
+        let script = ctx.script.ok_or_else(|| {
+            InterpError::RuntimeError("No script set in context".to_string())
+        })?;
+
+        // Find the unit that contains this function and get its source.
+        let units = script.units(ctx.db);
+        for unit_index in 0..units.len() {
+            let parsed_unit = crate::parser::parse_script_unit(ctx.db, script, unit_index);
+            for stmt in parsed_unit.statements(ctx.db) {
+                if let crate::ast::Statement::Fun(f) = stmt {
+                    if *f == fun_stmt {
+                        let unit_source = units[unit_index].source(ctx.db);
+                        let unit_typecheck = crate::tycheck::type_check_with_package_world(
+                            ctx.db,
+                            unit_source,
+                            parsed_unit,
+                            ctx.package_world,
+                            typecheck_result,
+                        );
+                        let analysis = crate::function_analysis::analyze_function(
+                            ctx.db,
+                            fun_stmt,
+                            unit_typecheck,
+                        );
+                        ctx.script_function_analyses.insert(fun_stmt, analysis);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
 
     Ok(())
 }

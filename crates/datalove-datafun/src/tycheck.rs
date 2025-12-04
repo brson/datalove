@@ -1128,6 +1128,8 @@ fn synthesize_binop<'db>(
         }
 
         // Checked arithmetic: only fixed ints, plus division for bigints.
+        // Checked operators yield element type directly (not wrapped in Result).
+        // On overflow, the function early-returns with an error.
         AddChecked | SubChecked | MulChecked => {
             if !is_fixed_int_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
@@ -1136,20 +1138,8 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
-            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
-            let lhs_datalit_ty = match lhs_ty.ty(db) {
-                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
-                _ => {
-                    return Err(ctx.error_invalid_operand_type(
-                        expr,
-                        &format!("{:?}", op),
-                        &type_to_string(db, lhs_ty.ty(db))
-                    ));
-                }
-            };
-            let result_inner = datalit::tycheck::TypeResult::new(db, lhs_datalit_ty);
-            let result_ty = Type::Datalit(datalit::tycheck::Type::Result(result_inner));
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, result_ty)
+            // Return element type directly.
+            lhs_ty
         }
 
         DivChecked => {
@@ -1161,20 +1151,8 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
-            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
-            let lhs_datalit_ty = match lhs_ty.ty(db) {
-                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
-                _ => {
-                    return Err(ctx.error_invalid_operand_type(
-                        expr,
-                        &format!("{:?}", op),
-                        &type_to_string(db, lhs_ty.ty(db))
-                    ));
-                }
-            };
-            let result_inner = datalit::tycheck::TypeResult::new(db, lhs_datalit_ty);
-            let result_ty = Type::Datalit(datalit::tycheck::Type::Result(result_inner));
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, result_ty)
+            // Return element type directly.
+            lhs_ty
         }
 
         // Optional arithmetic: only fixed ints, plus division for bigints.
@@ -1991,19 +1969,20 @@ mod tests {
     #[test]
     fn test_tycheck_fun_checked() {
         let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): !@u32\n  ret a +! b\nend fun"));
+        // Checked operators yield element type directly.
+        // Function returns u32, and a +! b returns u32.
+        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): @u32\n  ret a +! b\nend fun"));
         let tycheck_result = compile_for_test(&db, source);
 
         // Should have no errors.
-        // Return type is Result<u32>, and a +! b returns Result<u32>.
         assert_eq!(tycheck_result.errors(&db).len(), 0);
     }
 
     #[test]
     fn test_tycheck_type_mismatch() {
         let db = crate::Database::default();
-        // Fun returns u32 but body returns Result<u32>.
-        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): @u32\n  ret a +! b\nend fun"));
+        // Fun returns bool but body returns u32.
+        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): bool\n  ret a +! b\nend fun"));
         let tycheck_result = compile_for_test(&db, source);
 
         // Should have a type mismatch error.

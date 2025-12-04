@@ -121,7 +121,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"No typecheck result available - cannot execute function\")",
+                "VariableNotFound(\"base_value\")",
             ],
         ),
         state_changes: [],

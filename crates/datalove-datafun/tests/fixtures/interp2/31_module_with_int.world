@@ -2,9 +2,10 @@
 module sys/test/bigmath
 ----------
 
-fun compute_large(x: u32, y: u32): int
+fun compute_large(x: int, y: int): int
     let a = x + y
-    let b = a * @1000000
+    let mult = @1000000 + @0
+    let b = a * mult
     ret b
 end fun
 
@@ -15,4 +16,6 @@ script
 require module sys/test/bigmath
 import bigmath.compute_large
 
-let output = compute_large(@42, @58)
+let x = @42 + @0
+let y = @58 + @0
+let output = compute_large(x, y)

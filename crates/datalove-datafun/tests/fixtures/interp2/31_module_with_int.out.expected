@@ -13,7 +13,7 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: U32,
+                                type_hint: Int,
                             ),
                         ),
                         FunParam(
@@ -21,7 +21,7 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: U32,
+                                type_hint: Int,
                             ),
                         ),
                     ],
@@ -55,6 +55,45 @@
                         ),
                         StmtLet(
                             kind: "Let",
+                            name: "mult",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: Add,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "1000000",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "0",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        StmtLet(
+                            kind: "Let",
                             name: "b",
                             type_hint: None,
                             value: ExprFun(
@@ -69,16 +108,8 @@
                                     ),
                                     rhs: ExprFun(
                                         expr: ExprFunKind(
-                                            kind: "Datalit",
-                                            value: ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "1000000",
-                                                    )),
-                                                ),
-                                            ),
+                                            kind: "Name",
+                                            name: "mult",
                                         ),
                                     ),
                                 ),
@@ -120,6 +151,84 @@
                 ),
                 StmtLet(
                     kind: "Let",
+                    name: "x",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Add,
+                            lhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "42",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "0",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "y",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Add,
+                            lhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "58",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "0",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
                     name: "output",
                     type_hint: None,
                     value: ExprFun(
@@ -129,30 +238,14 @@
                             args: [
                                 ExprFun(
                                     expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "42",
-                                                )),
-                                            ),
-                                        ),
+                                        kind: "Name",
+                                        name: "x",
                                     ),
                                 ),
                                 ExprFun(
                                     expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "58",
-                                                )),
-                                            ),
-                                        ),
+                                        kind: "Name",
+                                        name: "y",
                                     ),
                                 ),
                             ],
@@ -164,7 +257,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"Function \'compute_large\' has analysis errors: [UseAfterMove { slot: SlotId(2), use_location: ProgramPoint { stmt_id: StmtId(1), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
+                "RuntimeError(\"Function \'compute_large\' has analysis errors: [UseAfterMove { slot: SlotId(2), use_location: ProgramPoint { stmt_id: StmtId(2), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }, UseAfterMove { slot: SlotId(4), use_location: ProgramPoint { stmt_id: StmtId(2), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }, UseAfterMove { slot: SlotId(6), use_location: ProgramPoint { stmt_id: StmtId(3), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
             ],
         ),
         output: "",
