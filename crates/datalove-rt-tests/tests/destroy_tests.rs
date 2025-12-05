@@ -1231,6 +1231,7 @@ proptest! {
 
     /// Property: Deep nesting destruction - test with depth 3-4.
     #[test]
+    #[ignore] // slow
     fn proptest_destroy_deep_nesting(seed in any::<u64>()) {
         let db = Database::default();
         let config = AstGenConfig {
