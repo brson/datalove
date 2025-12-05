@@ -1,0 +1,69 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "a",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Add,
+                            lhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "42",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "0",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprUnaryOp(
+                            kind: "UnaryOp",
+                            op: Neg,
+                            operand: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "a",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@-42",
+    ),
+]

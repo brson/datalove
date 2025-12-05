@@ -1,0 +1,52 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Lt,
+                            lhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "1",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "1",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@false",
+    ),
+]

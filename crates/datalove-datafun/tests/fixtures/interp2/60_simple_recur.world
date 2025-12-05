@@ -1,0 +1,13 @@
+----------
+script
+----------
+
+fun recurse(n: u32): u32
+    if n .< @1
+        ret @0
+    else
+        ret recurse(n -! @1)
+    end if
+end fun
+
+let output = recurse(@3)

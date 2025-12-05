@@ -895,8 +895,11 @@ fn eval_expression_in_script_scope<'db>(
         ast::ExprFunKind::Tuple(_) => {
             Err(InterpError::InvalidExpression("Tuples not yet implemented".to_string()))
         }
-        ast::ExprFunKind::UnaryOp(_) => {
-            Err(InterpError::InvalidExpression("Unary operations not yet implemented".to_string()))
+        ast::ExprFunKind::UnaryOp(unary_expr) => {
+            // Evaluate operand.
+            let operand = eval_expression_in_script_scope(ctx, unary_expr.operand(ctx.db), None)?;
+            // Execute unary operation.
+            execute_unop(ctx, unary_expr.op(ctx.db), operand, dest)
         }
         ast::ExprFunKind::TryOption(_) | ast::ExprFunKind::TryResult(_) => {
             Err(InterpError::InvalidExpression("Try operators not yet implemented".to_string()))
@@ -1688,6 +1691,13 @@ fn eval_expression_frame<'db>(
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Evaluate function call with arguments in frame context.
             eval_function_call_frame(ctx, call_expr)
+        }
+
+        ast::ExprFunKind::UnaryOp(unary_expr) => {
+            // Evaluate operand.
+            let operand = eval_expression_frame(ctx, unary_expr.operand(ctx.db), None)?;
+            // Execute unary operation.
+            execute_unop(ctx, unary_expr.op(ctx.db), operand, dest)
         }
 
         _ => Err(InterpError::InvalidExpression(
@@ -3171,5 +3181,76 @@ fn execute_binop<'db>(
         BinOp::SubOptional => eval_sub_optional(ctx, lhs, rhs, dest),
         BinOp::MulOptional => eval_mul_optional(ctx, lhs, rhs, dest),
         BinOp::DivOptional => eval_div_optional(ctx, lhs, rhs, dest),
+    }
+}
+
+/// Execute a unary operation.
+fn execute_unop<'db>(
+    ctx: &mut InterpContext<'db>,
+    op: crate::ast::UnaryOp,
+    operand: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    use crate::ast::UnaryOp;
+
+    match op {
+        UnaryOp::Neg => eval_neg(ctx, operand, dest),
+        UnaryOp::NegOptional | UnaryOp::NegResult => {
+            destroy_value(ctx, operand);
+            Err(InterpError::InvalidExpression(
+                "Optional/Result negation not yet implemented".to_string()
+            ))
+        }
+    }
+}
+
+/// Evaluate negation for Int type.
+fn eval_neg<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    // Only Int (bigint) supports bare negation.
+    if !is_int_value(operand) {
+        destroy_value(ctx, operand);
+        return Err(InterpError::InvalidExpression(
+            "Negation only supports Int type".to_string()
+        ));
+    }
+
+    // Get result buffer - either from dest or allocate.
+    let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
+        (d.ptr, d.tydesc, true)
+    } else {
+        let result_int = allocate_bigint(ctx)?;
+        (result_int.ptr, result_int.tydesc, false)
+    };
+
+    // Call runtime negation.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_int_neg(
+            ctx.runtime.handle(),
+            operand.ptr,
+            operand.tydesc,
+            result_ptr,
+            result_tydesc,
+        )
+    };
+
+    // Clean up operand.
+    destroy_value(ctx, operand);
+
+    if status == datalove_rt::c::RtStatus::Ok {
+        Ok(Value {
+            ptr: result_ptr,
+            tydesc: result_tydesc,
+            location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+        })
+    } else {
+        if !is_borrowed {
+            let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+            destroy_value(ctx, result_val);
+        }
+        Err(InterpError::RuntimeError("Int negation failed".to_string()))
     }
 }

@@ -1,0 +1,21 @@
+----------
+script
+----------
+
+fun is_even(n: u32): bool
+    if n == @0
+        ret true
+    else
+        ret is_odd(n -! @1)
+    end if
+end fun
+
+fun is_odd(n: u32): bool
+    if n == @0
+        ret false
+    else
+        ret is_even(n -! @1)
+    end if
+end fun
+
+let output = is_even(@6)

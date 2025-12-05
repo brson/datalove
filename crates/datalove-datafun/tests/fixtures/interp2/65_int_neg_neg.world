@@ -1,0 +1,7 @@
+----------
+script
+----------
+
+let a = @42 + @0
+let b = -a
+let output = -b

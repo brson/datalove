@@ -1,0 +1,13 @@
+----------
+script
+----------
+
+fun fib(n: u32): u32
+    if n .< @2
+        ret n
+    else
+        ret fib(n -! @1) +! fib(n -! @2)
+    end if
+end fun
+
+let output = fib(@10)

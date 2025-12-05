@@ -1,0 +1,250 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "is_even",
+                    params: [
+                        FunParam(
+                            name: "n",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Bool,
+                    )),
+                    body: [
+                        StmtIf(
+                            kind: "If",
+                            condition: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: Eq,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "n",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "0",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            then_body: [
+                                StmtRet(
+                                    kind: "Ret",
+                                    value: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Omitted,
+                                                    expr: True,
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                            else_body: Some([
+                                StmtRet(
+                                    kind: "Ret",
+                                    value: ExprFun(
+                                        expr: ExprFunctionCall(
+                                            kind: "FunctionCall",
+                                            name: "is_odd",
+                                            args: [
+                                                ExprFun(
+                                                    expr: ExprBinOp(
+                                                        kind: "BinOp",
+                                                        op: SubChecked,
+                                                        lhs: ExprFun(
+                                                            expr: ExprFunKind(
+                                                                kind: "Name",
+                                                                name: "n",
+                                                            ),
+                                                        ),
+                                                        rhs: ExprFun(
+                                                            expr: ExprFunKind(
+                                                                kind: "Datalit",
+                                                                value: ExprFull(
+                                                                    type_hint: None,
+                                                                    expr: ExprAndHeap(
+                                                                        heap: Local,
+                                                                        expr: Int(ExprInt(
+                                                                            value: "1",
+                                                                        )),
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                        ),
+                                                    ),
+                                                ),
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                            ]),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "is_odd",
+                    params: [
+                        FunParam(
+                            name: "n",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Bool,
+                    )),
+                    body: [
+                        StmtIf(
+                            kind: "If",
+                            condition: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: Eq,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "n",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "0",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            then_body: [
+                                StmtRet(
+                                    kind: "Ret",
+                                    value: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Omitted,
+                                                    expr: False,
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                            else_body: Some([
+                                StmtRet(
+                                    kind: "Ret",
+                                    value: ExprFun(
+                                        expr: ExprFunctionCall(
+                                            kind: "FunctionCall",
+                                            name: "is_even",
+                                            args: [
+                                                ExprFun(
+                                                    expr: ExprBinOp(
+                                                        kind: "BinOp",
+                                                        op: SubChecked,
+                                                        lhs: ExprFun(
+                                                            expr: ExprFunKind(
+                                                                kind: "Name",
+                                                                name: "n",
+                                                            ),
+                                                        ),
+                                                        rhs: ExprFun(
+                                                            expr: ExprFunKind(
+                                                                kind: "Datalit",
+                                                                value: ExprFull(
+                                                                    type_hint: None,
+                                                                    expr: ExprAndHeap(
+                                                                        heap: Local,
+                                                                        expr: Int(ExprInt(
+                                                                            value: "1",
+                                                                        )),
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                        ),
+                                                    ),
+                                                ),
+                                            ],
+                                        ),
+                                    ),
+                                ),
+                            ]),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "is_even",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "6",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@true",
+    ),
+]
