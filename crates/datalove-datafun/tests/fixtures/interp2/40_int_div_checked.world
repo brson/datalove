@@ -2,6 +2,10 @@
 script
 ----------
 
+fun divide_checked(x: int, y: int): !int
+    ret x /! y
+end fun
+
 let a = @1000 + @0
 let b = @100 + @0
-let output = a /! b
+let output = divide_checked(a, b)

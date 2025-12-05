@@ -171,4 +171,4 @@ Convert old tests to worldfile format with correct expected outputs.
 
 Old interpreter wraps checked ops in Result - WRONG. Correct: yield T directly, early-return on overflow.
 
-**Known issue:** Script sections in worldfile tests bypass typechecking. The `execute_script` function calls `type_check_with_package_world` but doesn't check for errors before proceeding. This is why tests 60-63 (which use checked operators in script sections) pass despite having type errors - the errors are silently ignored. Module sections are properly typechecked.
+**Fixed:** Script sections now properly check for typecheck errors. Tests 60-63 updated to use bare operators with int types.

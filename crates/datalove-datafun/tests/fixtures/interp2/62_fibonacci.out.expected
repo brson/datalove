@@ -18,7 +18,12 @@
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: U32,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
                     )),
                     body: [
                         StmtIf(
@@ -68,71 +73,81 @@
                                             kind: "BinOp",
                                             op: AddChecked,
                                             lhs: ExprFun(
-                                                expr: ExprFunctionCall(
-                                                    kind: "FunctionCall",
-                                                    name: "fib",
-                                                    args: [
-                                                        ExprFun(
-                                                            expr: ExprBinOp(
-                                                                kind: "BinOp",
-                                                                op: SubChecked,
-                                                                lhs: ExprFun(
-                                                                    expr: ExprFunKind(
-                                                                        kind: "Name",
-                                                                        name: "n",
-                                                                    ),
-                                                                ),
-                                                                rhs: ExprFun(
-                                                                    expr: ExprFunKind(
-                                                                        kind: "Datalit",
-                                                                        value: ExprFull(
-                                                                            type_hint: None,
-                                                                            expr: ExprAndHeap(
-                                                                                heap: Local,
-                                                                                expr: Int(ExprInt(
-                                                                                    value: "1",
-                                                                                )),
+                                                expr: ExprTryResult(
+                                                    kind: "TryResult",
+                                                    operand: ExprFun(
+                                                        expr: ExprFunctionCall(
+                                                            kind: "FunctionCall",
+                                                            name: "fib",
+                                                            args: [
+                                                                ExprFun(
+                                                                    expr: ExprBinOp(
+                                                                        kind: "BinOp",
+                                                                        op: SubChecked,
+                                                                        lhs: ExprFun(
+                                                                            expr: ExprFunKind(
+                                                                                kind: "Name",
+                                                                                name: "n",
+                                                                            ),
+                                                                        ),
+                                                                        rhs: ExprFun(
+                                                                            expr: ExprFunKind(
+                                                                                kind: "Datalit",
+                                                                                value: ExprFull(
+                                                                                    type_hint: None,
+                                                                                    expr: ExprAndHeap(
+                                                                                        heap: Local,
+                                                                                        expr: Int(ExprInt(
+                                                                                            value: "1",
+                                                                                        )),
+                                                                                    ),
+                                                                                ),
                                                                             ),
                                                                         ),
                                                                     ),
                                                                 ),
-                                                            ),
+                                                            ],
                                                         ),
-                                                    ],
+                                                    ),
                                                 ),
                                             ),
                                             rhs: ExprFun(
-                                                expr: ExprFunctionCall(
-                                                    kind: "FunctionCall",
-                                                    name: "fib",
-                                                    args: [
-                                                        ExprFun(
-                                                            expr: ExprBinOp(
-                                                                kind: "BinOp",
-                                                                op: SubChecked,
-                                                                lhs: ExprFun(
-                                                                    expr: ExprFunKind(
-                                                                        kind: "Name",
-                                                                        name: "n",
-                                                                    ),
-                                                                ),
-                                                                rhs: ExprFun(
-                                                                    expr: ExprFunKind(
-                                                                        kind: "Datalit",
-                                                                        value: ExprFull(
-                                                                            type_hint: None,
-                                                                            expr: ExprAndHeap(
-                                                                                heap: Local,
-                                                                                expr: Int(ExprInt(
-                                                                                    value: "2",
-                                                                                )),
+                                                expr: ExprTryResult(
+                                                    kind: "TryResult",
+                                                    operand: ExprFun(
+                                                        expr: ExprFunctionCall(
+                                                            kind: "FunctionCall",
+                                                            name: "fib",
+                                                            args: [
+                                                                ExprFun(
+                                                                    expr: ExprBinOp(
+                                                                        kind: "BinOp",
+                                                                        op: SubChecked,
+                                                                        lhs: ExprFun(
+                                                                            expr: ExprFunKind(
+                                                                                kind: "Name",
+                                                                                name: "n",
+                                                                            ),
+                                                                        ),
+                                                                        rhs: ExprFun(
+                                                                            expr: ExprFunKind(
+                                                                                kind: "Datalit",
+                                                                                value: ExprFull(
+                                                                                    type_hint: None,
+                                                                                    expr: ExprAndHeap(
+                                                                                        heap: Local,
+                                                                                        expr: Int(ExprInt(
+                                                                                            value: "2",
+                                                                                        )),
+                                                                                    ),
+                                                                                ),
                                                                             ),
                                                                         ),
                                                                     ),
                                                                 ),
-                                                            ),
+                                                            ],
                                                         ),
-                                                    ],
+                                                    ),
                                                 ),
                                             ),
                                         ),
@@ -172,8 +187,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "InvalidExpression(\"Expression type not yet implemented in frame mode\")",
+            ],
         ),
-        output: "@55",
+        output: "",
     ),
 ]

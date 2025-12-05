@@ -2,7 +2,7 @@
 script
 ----------
 
-fun recurse(n: u32): u32
+fun recurse(n: u32): !u32
     if n .< @1
         ret @0
     else

@@ -2,7 +2,11 @@
 script
 ----------
 
-let success = @100 +? @50
-let overflow = @4294967295 +? @1
+fun add_optional(x: u32, y: u32): ?u32
+    ret x +? y
+end fun
+
+let success = add_optional(@100, @50)
+let overflow = add_optional(@4294967295, @1)
 
 let output = success

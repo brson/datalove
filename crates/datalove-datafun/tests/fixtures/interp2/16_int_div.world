@@ -2,5 +2,9 @@
 script
 ----------
 
+fun divide(x: int, y: int): !int
+    ret x /! y
+end fun
+
 let a = @2000000000 + @4000000000
-let output = a / @3
+let output = divide(a, @3 + @0)

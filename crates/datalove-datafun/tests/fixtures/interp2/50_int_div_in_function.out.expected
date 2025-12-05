@@ -26,7 +26,12 @@
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: Int,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: Int,
+                            ),
+                        )),
                     )),
                     body: [
                         StmtRet(

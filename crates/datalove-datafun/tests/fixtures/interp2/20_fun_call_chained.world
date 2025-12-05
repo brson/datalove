@@ -3,12 +3,12 @@ script
 ----------
 
 fun get_value(): int
-    ret @5
+    ret :int/@5
 end fun
 
 fun calc(): int
     let x = get_value()
-    let y = @2
+    let y = :int/@2
     ret x * y
 end fun
 

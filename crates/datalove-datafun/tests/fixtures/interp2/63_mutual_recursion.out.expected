@@ -18,7 +18,12 @@
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: Bool,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: Bool,
+                            ),
+                        )),
                     )),
                     body: [
                         StmtIf(
@@ -123,7 +128,12 @@
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: Bool,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: Bool,
+                            ),
+                        )),
                     )),
                     body: [
                         StmtIf(

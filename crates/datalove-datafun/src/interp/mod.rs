@@ -587,6 +587,12 @@ pub fn execute_script<'db>(
             typecheck_result,
         );
 
+        // Check for script unit typecheck errors.
+        let errors = unit_typecheck.errors(db);
+        if !errors.is_empty() {
+            return Err(InterpError::TypecheckErrors(errors.len()));
+        }
+
         // Analyze each function in the unit.
         for statement in parsed_unit.statements(db) {
             if let crate::ast::Statement::Fun(func_stmt) = statement {

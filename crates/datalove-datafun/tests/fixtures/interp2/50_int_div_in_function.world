@@ -2,7 +2,7 @@
 script
 ----------
 
-fun div_int(a: int, b: int): int
+fun div_int(a: int, b: int): !int
     ret a /! b
 end fun
 

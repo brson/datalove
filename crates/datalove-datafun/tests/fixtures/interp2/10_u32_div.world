@@ -2,4 +2,8 @@
 script
 ----------
 
-let output = @84 / @2
+fun divide(a: u32, b: u32): !u32
+    ret a /! b
+end fun
+
+let output = divide(@84, @2)

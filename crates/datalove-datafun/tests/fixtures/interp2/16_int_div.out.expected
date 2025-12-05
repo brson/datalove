@@ -3,6 +3,60 @@
         type: "Script",
         ast: Script(
             statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "divide",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: Int,
+                            ),
+                        ),
+                        FunParam(
+                            name: "y",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: Int,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: Int,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: DivChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "x",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "y",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
                 StmtLet(
                     kind: "Let",
                     name: "a",
@@ -47,29 +101,51 @@
                     name: "output",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprBinOp(
-                            kind: "BinOp",
-                            op: Div,
-                            lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Name",
-                                    name: "a",
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "divide",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "a",
+                                    ),
                                 ),
-                            ),
-                            rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "3",
-                                            )),
+                                ExprFun(
+                                    expr: ExprBinOp(
+                                        kind: "BinOp",
+                                        op: Add,
+                                        lhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "3",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                        rhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "0",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
                                         ),
                                     ),
                                 ),
-                            ),
+                            ],
                         ),
                     ),
                 ),

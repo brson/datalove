@@ -2,8 +2,6 @@
 script
 ----------
 
-fun test_sub(n: u32): u32
-    ret n - @1
-end fun
-
-let output = test_sub(@2)
+let a = @2 + @0
+let b = @1 + @0
+let output = a - b

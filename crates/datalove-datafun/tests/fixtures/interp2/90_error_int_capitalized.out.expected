@@ -48,8 +48,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "TypecheckErrors(3)",
+            ],
         ),
-        output: "@5",
+        output: "",
     ),
 ]

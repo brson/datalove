@@ -2,11 +2,11 @@
 script
 ----------
 
-fun factorial(n: u32): u32
+fun factorial(n: u32): !u32
     if n .< @2
         ret @1
     else
-        ret n *! factorial(n -! @1)
+        ret n *! factorial(n -! @1)!
     end if
 end fun
 

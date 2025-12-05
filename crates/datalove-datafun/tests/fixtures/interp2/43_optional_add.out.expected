@@ -3,42 +3,98 @@
         type: "Script",
         ast: Script(
             statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "add_optional",
+                    params: [
+                        FunParam(
+                            name: "x",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                        FunParam(
+                            name: "y",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Option(TypeHintOption(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: AddOptional,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "x",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "y",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
                 StmtLet(
                     kind: "Let",
                     name: "success",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprBinOp(
-                            kind: "BinOp",
-                            op: AddOptional,
-                            lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "100",
-                                            )),
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "add_optional",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "100",
+                                                )),
+                                            ),
                                         ),
                                     ),
                                 ),
-                            ),
-                            rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "50",
-                                            )),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "50",
+                                                )),
+                                            ),
                                         ),
                                     ),
                                 ),
-                            ),
+                            ],
                         ),
                     ),
                 ),
@@ -47,37 +103,39 @@
                     name: "overflow",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprBinOp(
-                            kind: "BinOp",
-                            op: AddOptional,
-                            lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "4294967295",
-                                            )),
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "add_optional",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "4294967295",
+                                                )),
+                                            ),
                                         ),
                                     ),
                                 ),
-                            ),
-                            rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "1",
-                                            )),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "1",
+                                                )),
+                                            ),
                                         ),
                                     ),
                                 ),
-                            ),
+                            ],
                         ),
                     ),
                 ),

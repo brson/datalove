@@ -18,7 +18,10 @@
                                 expr: ExprFunKind(
                                     kind: "Datalit",
                                     value: ExprFull(
-                                        type_hint: None,
+                                        type_hint: Some(TypeHintAndHeap(
+                                            heap: Omitted,
+                                            type_hint: Int,
+                                        )),
                                         expr: ExprAndHeap(
                                             heap: Local,
                                             expr: Int(ExprInt(
@@ -60,7 +63,10 @@
                                 expr: ExprFunKind(
                                     kind: "Datalit",
                                     value: ExprFull(
-                                        type_hint: None,
+                                        type_hint: Some(TypeHintAndHeap(
+                                            heap: Omitted,
+                                            type_hint: Int,
+                                        )),
                                         expr: ExprAndHeap(
                                             heap: Local,
                                             expr: Int(ExprInt(
