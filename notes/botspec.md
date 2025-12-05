@@ -179,8 +179,8 @@ These operators early-return on overflow/div0, requiring the enclosing function 
 
 These operators early-return `none` on overflow/div0. `-?` disallowed for unsigned ints (footgun).
 
-**Tycheck:** Correct per spec.
-**Interpreter:** [NOT IMPLEMENTED]
+**Tycheck:** Correct per spec (operator yields T, function must return ?T).
+**Interpreter:** Correct per spec (early-returns OptionNone on overflow).
 
 #### Comparison (`.<` `.>` `<=` `>=` `==` `!=`)
 

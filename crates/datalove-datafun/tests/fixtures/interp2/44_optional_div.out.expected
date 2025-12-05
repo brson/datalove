@@ -95,8 +95,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "OptionNone",
+            ],
         ),
-        output: "@10",
+        output: "",
     ),
 ]

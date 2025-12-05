@@ -185,9 +185,12 @@ pub enum InterpError {
     FunctionReturn(Value),  // Used internally to propagate return values.
     EarlyReturn,  // Used for try operator (? or !) early return from CFG.
 
-    // Checked arithmetic overflow - triggers early return.
+    // Checked arithmetic overflow - triggers early return with Err.
     Overflow,
     DivisionByZero,
+
+    // Optional arithmetic overflow - triggers early return with None.
+    OptionNone,
 
     // Result type.
     NoOutputVariable,
@@ -2970,104 +2973,95 @@ fn write_u32_result(ctx: &mut InterpContext<'_>, value: u32, dest: Option<Destin
 
 /// Evaluate optional addition for u32.
 ///
-/// Returns Some(result) on success, None on overflow.
+/// Returns result on success, OptionNone error on overflow.
 fn eval_add_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: Value,
     rhs: Value,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if is_u32_value(lhs) && is_u32_value(rhs) {
-        let a = unsafe { *(lhs.ptr as *const u32) };
-        let b = unsafe { *(rhs.ptr as *const u32) };
-        let inner_tydesc = lhs.tydesc;
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression("Optional addition only supports u32 operands".to_string()));
+    }
 
-        match a.checked_add(b) {
-            Some(result) => {
-                let val = allocate_u32_raw(ctx, result)?;
-                allocate_option_some_from_value(ctx, val)
-            }
-            None => allocate_option_none(ctx, inner_tydesc),
-        }
-    } else {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
-        Err(InterpError::InvalidExpression("Optional addition requires matching fixed int types".to_string()))
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_add(rhs_val) {
+        Some(result) => write_u32_result(ctx, result, dest),
+        None => Err(InterpError::OptionNone),
     }
 }
 
 /// Evaluate optional subtraction for u32.
 ///
-/// Returns Some(result) on success, None on underflow.
+/// Returns result on success, OptionNone error on underflow.
 fn eval_sub_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: Value,
     rhs: Value,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if is_u32_value(lhs) && is_u32_value(rhs) {
-        let a = unsafe { *(lhs.ptr as *const u32) };
-        let b = unsafe { *(rhs.ptr as *const u32) };
-        let inner_tydesc = lhs.tydesc;
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression("Optional subtraction only supports u32 operands".to_string()));
+    }
 
-        match a.checked_sub(b) {
-            Some(result) => {
-                let val = allocate_u32_raw(ctx, result)?;
-                allocate_option_some_from_value(ctx, val)
-            }
-            None => allocate_option_none(ctx, inner_tydesc),
-        }
-    } else {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
-        Err(InterpError::InvalidExpression("Optional subtraction requires matching fixed int types".to_string()))
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_sub(rhs_val) {
+        Some(result) => write_u32_result(ctx, result, dest),
+        None => Err(InterpError::OptionNone),
     }
 }
 
 /// Evaluate optional multiplication for u32.
 ///
-/// Returns Some(result) on success, None on overflow.
+/// Returns result on success, OptionNone error on overflow.
 fn eval_mul_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: Value,
     rhs: Value,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if is_u32_value(lhs) && is_u32_value(rhs) {
-        let a = unsafe { *(lhs.ptr as *const u32) };
-        let b = unsafe { *(rhs.ptr as *const u32) };
-        let inner_tydesc = lhs.tydesc;
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression("Optional multiplication only supports u32 operands".to_string()));
+    }
 
-        match a.checked_mul(b) {
-            Some(result) => {
-                let val = allocate_u32_raw(ctx, result)?;
-                allocate_option_some_from_value(ctx, val)
-            }
-            None => allocate_option_none(ctx, inner_tydesc),
-        }
-    } else {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
-        Err(InterpError::InvalidExpression("Optional multiplication requires matching fixed int types".to_string()))
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_mul(rhs_val) {
+        Some(result) => write_u32_result(ctx, result, dest),
+        None => Err(InterpError::OptionNone),
     }
 }
 
 /// Evaluate optional division.
 ///
-/// For int: returns Some(result) on success, None on div-by-zero.
-/// For u32: returns Some(result) on success, None on div-by-zero.
+/// For int: returns result on success, OptionNone error on div-by-zero.
+/// For u32: returns result on success, OptionNone error on div-by-zero.
 fn eval_div_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: Value,
     rhs: Value,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Both int: use runtime checked division.
     if is_int_value(lhs) && is_int_value(rhs) {
         let result_int = allocate_bigint(ctx)?;
-        let inner_tydesc = lhs.tydesc;
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_div_checked(
                 ctx.runtime.handle(),
@@ -3080,26 +3074,23 @@ fn eval_div_optional<'db>(
         destroy_value(ctx, rhs);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            allocate_option_some_from_value(ctx, result_int)
+            return Ok(result_int);
         } else {
             destroy_value(ctx, result_int);
-            allocate_option_none(ctx, inner_tydesc)
+            return Err(InterpError::OptionNone);
         }
     }
+
     // Both u32: use Rust checked_div.
-    else if is_u32_value(lhs) && is_u32_value(rhs) {
-        let a = unsafe { *(lhs.ptr as *const u32) };
-        let b = unsafe { *(rhs.ptr as *const u32) };
-        let inner_tydesc = lhs.tydesc;
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+        let rhs_val = unsafe { *(rhs.ptr as *const u32) };
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
 
-        match a.checked_div(b) {
-            Some(result) => {
-                let val = allocate_u32_raw(ctx, result)?;
-                allocate_option_some_from_value(ctx, val)
-            }
-            None => allocate_option_none(ctx, inner_tydesc),
+        match lhs_val.checked_div(rhs_val) {
+            Some(result) => write_u32_result(ctx, result, dest),
+            None => Err(InterpError::OptionNone),
         }
     } else {
         destroy_value(ctx, lhs);
@@ -3175,10 +3166,10 @@ fn execute_binop<'db>(
             eval_comparison(ctx, op, lhs, rhs)
         }
 
-        // Optional operators: return Option<T> with None on overflow/div0.
-        BinOp::AddOptional => eval_add_optional(ctx, lhs, rhs),
-        BinOp::SubOptional => eval_sub_optional(ctx, lhs, rhs),
-        BinOp::MulOptional => eval_mul_optional(ctx, lhs, rhs),
-        BinOp::DivOptional => eval_div_optional(ctx, lhs, rhs),
+        // Optional operators: preserve type, early-return on overflow/div0.
+        BinOp::AddOptional => eval_add_optional(ctx, lhs, rhs, dest),
+        BinOp::SubOptional => eval_sub_optional(ctx, lhs, rhs, dest),
+        BinOp::MulOptional => eval_mul_optional(ctx, lhs, rhs, dest),
+        BinOp::DivOptional => eval_div_optional(ctx, lhs, rhs, dest),
     }
 }

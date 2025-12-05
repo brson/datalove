@@ -1155,7 +1155,7 @@ fn synthesize_binop<'db>(
             lhs_ty
         }
 
-        // Optional arithmetic: only fixed ints, plus division for bigints.
+        // Optional arithmetic: only fixed ints, early-returns None on overflow.
         AddOptional | SubOptional | MulOptional => {
             if !is_fixed_int_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
@@ -1164,24 +1164,12 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
-            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
-            let lhs_datalit_ty = match lhs_ty.ty(db) {
-                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
-                _ => {
-                    return Err(ctx.error_invalid_operand_type(
-                        expr,
-                        &format!("{:?}", op),
-                        &type_to_string(db, lhs_ty.ty(db))
-                    ));
-                }
-            };
-            let option_inner = datalit::tycheck::TypeOption::new(db, lhs_datalit_ty);
-            let option_ty = Type::Datalit(datalit::tycheck::Type::Option(option_inner));
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, option_ty)
+            // Return element type directly.
+            lhs_ty
         }
 
         DivOptional => {
-            // Division: fixed ints or bigints.
+            // Division: fixed ints or bigints, early-returns None on overflow/div0.
             if !is_fixed_int_type(operand_ty) && !is_bigint_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
@@ -1189,20 +1177,8 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
-            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
-            let lhs_datalit_ty = match lhs_ty.ty(db) {
-                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, lhs_ty.heap(db), dt.clone()),
-                _ => {
-                    return Err(ctx.error_invalid_operand_type(
-                        expr,
-                        &format!("{:?}", op),
-                        &type_to_string(db, lhs_ty.ty(db))
-                    ));
-                }
-            };
-            let option_inner = datalit::tycheck::TypeOption::new(db, lhs_datalit_ty);
-            let option_ty = Type::Datalit(datalit::tycheck::Type::Option(option_inner));
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, option_ty)
+            // Return element type directly.
+            lhs_ty
         }
 
         // Comparison: bool.
