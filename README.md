@@ -4,7 +4,22 @@ An simple and expressive typed scripting language
 for efficient data modeling and transformation,
 with a batteries included standard library.
 
+It looks like this:
 
+```datalove
+: struct Person { name: string, born: u32 } / struct Person {
+  name = "Ada",
+  born = 1815,
+}
+
+fun years_since(year: u32, now: u32): ?u32
+  if now .< year
+    ret none
+  else
+    ret now -? year
+  end if
+end fun
+```
 
 
 ## A Tower of Love
