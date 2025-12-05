@@ -7,16 +7,16 @@ with a batteries included standard library.
 It looks like this:
 
 ```datalove
-: struct Person { name: string, born: u32 } / struct Person {
+let ada = struct {
   name = "Ada",
   born = 1815,
 }
 
-fun years_since(year: u32, now: u32): ?u32
-  if now .< year
+fun age(player: struct { name: string, born: u32 }, now: u32): ?u32
+  if now .< player.born
     ret none
   else
-    ret now -? year
+    ret now -? player.year
   end if
 end fun
 ```
