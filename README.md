@@ -4,15 +4,19 @@ An simple and expressive typed scripting language
 for efficient data modeling and transformation,
 with a batteries included standard library.
 
-It looks like this:
-
 ```datalove
 let ada = struct {
   name = "Ada",
   born = 1815,
 }
 
-fun age(player: struct { name: string, born: u32 }, now: u32): ?u32
+fun age(
+  player: struct {
+    name: string,
+    born: u32,
+  },
+  now: u32,
+): ?u32
   if now .< player.born
     ret none
   else
