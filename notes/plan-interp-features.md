@@ -4,9 +4,20 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 ## Current State
 
-**New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports.
+**New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int).
 
-**56 tests passing** in interp2 vs **136 tests** in old interp.
+**65 tests passing** in interp2 vs **136 tests** in old interp.
+
+## Progress
+
+**Completed:**
+- Phase 1: Recursion tests (60-63: simple_recur, factorial, fibonacci, mutual_recursion)
+- Phase 2: Unary negation for int (64-65: int_neg, int_neg_neg)
+
+**Key discoveries:**
+- Bare operators (`-`, `*`) widen u32 to Int
+- Checked operators (`-!`, `*!`) preserve type but require Result return type
+- **BUG FOUND:** Typechecker missing validation for checked/optional binary ops
 
 ## Runtime API Available
 
@@ -21,16 +32,41 @@ Option/Result representation: first byte = tag (OptionTag::Some/None, ResultTag:
 
 ## Priority Order
 
-### Phase 1: Recursion
-**Tests:** 12_factorial, 13_fibonacci, 25_fun_mutual_recursion
+### Phase 1: Recursion ✓
+**Tests:** 60-63 (simple_recur, factorial, fibonacci, mutual_recursion)
 
-Already have function calls. Just add tests to verify recursion works.
+Recursion works with checked operators. Tests added.
 
-### Phase 2: Unary Negation
-**Tests:** 203_int_neg
+### Phase 2: Unary Negation ✓
+**Tests:** 64-65 (int_neg, int_neg_neg)
 
-Add to `execute_unop()`:
-- `-x` for int: call `dtlv_rti_int_neg()`
+Added `execute_unop()` with `-x` for int calling `dtlv_rti_int_neg()`.
+
+### Phase 2.5: Fix Typechecker Bug (NEW)
+
+Binary checked/optional operators (`+!`, `-?`, etc.) don't validate that the enclosing function has matching return type.
+
+**Problem:**
+- Try operators (`?`, `!`) have validation in `tycheck.rs:1324-1426`
+- Binary checked/optional operators missing validation in `tycheck.rs:1130-1182`
+
+**Required semantics:**
+| Operator | Early Return | Required Function Return |
+|----------|--------------|--------------------------|
+| Bare (`-`) | Never | Any |
+| Checked (`-!`) | `Err` on overflow | `!T` (Result) |
+| Optional (`-?`) | `None` on overflow | `?T` (Option) |
+
+**Fix:**
+In `synthesize_binop` for `AddChecked | SubChecked | MulChecked | DivChecked`:
+1. Verify `ctx.expected_return_type` exists (inside a function)
+2. Verify return type is `Result<T>`
+3. Emit error if not (reuse F047/F049 pattern)
+
+Same for `AddOptional | SubOptional | MulOptional | DivOptional` but check for `Option<T>`.
+
+**Test updates required after fix:**
+- 60-63: Change return types to `!u32` or use bare operators
 
 ### Phase 3: Collection Literals
 **Tests:** 09-19, 162-171
