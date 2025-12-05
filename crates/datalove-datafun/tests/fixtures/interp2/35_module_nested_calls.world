@@ -2,26 +2,29 @@
 module sys/test/calc
 ----------
 
-fun base(x: u32): u32
-    ret x *! @2
+fun base(x: int): int
+    let two = @2 + @0
+    ret x * two
 end fun
 
-fun level1(x: u32): u32
+fun level1(x: int): int
     let a = base(x)
     let b = base(a)
     ret b
 end fun
 
-fun level2(x: u32): u32
+fun level2(x: int): int
     let a = level1(x)
-    let b = level1(@3)
-    ret a +! b
+    let three = @3 + @0
+    let b = level1(three)
+    ret a + b
 end fun
 
-fun top(x: u32): u32
+fun top(x: int): int
     let a = level2(x)
-    let b = level1(@1)
-    ret a +! b
+    let one = @1 + @0
+    let b = level1(one)
+    ret a + b
 end fun
 
 ----------
@@ -31,4 +34,4 @@ script
 require module sys/test/calc
 import calc.top
 
-let output = top(@5)
+let output = top(@5 + @0)

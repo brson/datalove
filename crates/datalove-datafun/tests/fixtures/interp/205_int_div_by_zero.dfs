@@ -1,4 +1,6 @@
 // Test bigint checked division by zero (error case).
-let a: @int = @300
-let b: @int = @0
-let output = a /! b
+fun divide(a: @int, b: @int): !@int
+    ret a /! b
+end fun
+
+let output = divide(@300, @0)

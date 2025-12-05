@@ -19,7 +19,7 @@
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: U32,
+                        type_hint: Int,
                     )),
                     body: [
                         StmtRet(
@@ -27,7 +27,7 @@
                             value: ExprFun(
                                 expr: ExprBinOp(
                                     kind: "BinOp",
-                                    op: MulChecked,
+                                    op: Mul,
                                     lhs: ExprFun(
                                         expr: ExprFunKind(
                                             kind: "Name",

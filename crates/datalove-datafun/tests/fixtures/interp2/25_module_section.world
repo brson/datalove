@@ -2,10 +2,10 @@
 module sys/test/math
 ----------
 
-fun add(a: u32, b: u32): u32
-    ret a +! b
+fun add(a: u32, b: u32): int
+    ret a + b
 end fun
 
-fun double(x: u32): u32
-    ret x *! @2
+fun double(x: u32): int
+    ret x * @2
 end fun

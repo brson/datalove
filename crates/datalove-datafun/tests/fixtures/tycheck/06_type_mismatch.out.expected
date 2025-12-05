@@ -1,7 +1,7 @@
 {
   "errors": [
     {
-      "actual": "u32",
+      "actual": "int",
       "expected": "bool",
       "kind": "TypeMismatch"
     }

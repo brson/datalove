@@ -1138,6 +1138,23 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
+            // Verify we're inside a function with Result return type.
+            let op_str = format!("{:?}", op);
+            let expected_return = ctx.expected_return_type
+                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
+            match expected_return.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Result(_)) => {
+                    // OK, function returns Result type.
+                }
+                _ => {
+                    return Err(ctx.error_try_return_type_mismatch(
+                        expr,
+                        &op_str,
+                        "Result",
+                        &type_to_string(db, expected_return.ty(db))
+                    ));
+                }
+            }
             // Return element type directly.
             lhs_ty
         }
@@ -1150,6 +1167,23 @@ fn synthesize_binop<'db>(
                     &format!("{:?}", op),
                     &type_to_string(db, operand_ty)
                 ));
+            }
+            // Verify we're inside a function with Result return type.
+            let op_str = format!("{:?}", op);
+            let expected_return = ctx.expected_return_type
+                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
+            match expected_return.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Result(_)) => {
+                    // OK, function returns Result type.
+                }
+                _ => {
+                    return Err(ctx.error_try_return_type_mismatch(
+                        expr,
+                        &op_str,
+                        "Result",
+                        &type_to_string(db, expected_return.ty(db))
+                    ));
+                }
             }
             // Return element type directly.
             lhs_ty
@@ -1164,6 +1198,23 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
+            // Verify we're inside a function with Option return type.
+            let op_str = format!("{:?}", op);
+            let expected_return = ctx.expected_return_type
+                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
+            match expected_return.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Option(_)) => {
+                    // OK, function returns Option type.
+                }
+                _ => {
+                    return Err(ctx.error_try_return_type_mismatch(
+                        expr,
+                        &op_str,
+                        "Option",
+                        &type_to_string(db, expected_return.ty(db))
+                    ));
+                }
+            }
             // Return element type directly.
             lhs_ty
         }
@@ -1176,6 +1227,23 @@ fn synthesize_binop<'db>(
                     &format!("{:?}", op),
                     &type_to_string(db, operand_ty)
                 ));
+            }
+            // Verify we're inside a function with Option return type.
+            let op_str = format!("{:?}", op);
+            let expected_return = ctx.expected_return_type
+                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
+            match expected_return.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Option(_)) => {
+                    // OK, function returns Option type.
+                }
+                _ => {
+                    return Err(ctx.error_try_return_type_mismatch(
+                        expr,
+                        &op_str,
+                        "Option",
+                        &type_to_string(db, expected_return.ty(db))
+                    ));
+                }
             }
             // Return element type directly.
             lhs_ty
@@ -1914,12 +1982,13 @@ mod tests {
     #[test]
     fn test_tycheck_binop_checked() {
         let db = crate::Database::default();
+        // Checked operators can only be used inside functions with Result return type.
+        // Using +! at top level should produce an error.
         let source = bct::input::Source::new(&db, S("let x = @1 +! @2"));
         let tycheck_result = compile_for_test(&db, source);
 
-        // Should have no errors.
-        // The result type should be Result<u32>.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
+        // Should have an error: checked operator outside function.
+        assert!(tycheck_result.errors(&db).len() > 0);
     }
 
     #[test]
@@ -1945,9 +2014,9 @@ mod tests {
     #[test]
     fn test_tycheck_fun_checked() {
         let db = crate::Database::default();
-        // Checked operators yield element type directly.
-        // Function returns u32, and a +! b returns u32.
-        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): @u32\n  ret a +! b\nend fun"));
+        // Checked operators yield element type directly but require Result return type.
+        // Function returns !@u32, and a +! b returns u32, which coerces to Ok(u32).
+        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): !@u32\n  ret a +! b\nend fun"));
         let tycheck_result = compile_for_test(&db, source);
 
         // Should have no errors.

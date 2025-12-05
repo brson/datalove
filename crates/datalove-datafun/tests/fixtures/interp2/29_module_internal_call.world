@@ -2,12 +2,12 @@
 module sys/test/helpers
 ----------
 
-fun double(x: u32): u32
+fun double(x: u32): !u32
     ret x *! @2
 end fun
 
-fun quadruple(y: u32): u32
-    ret double(double(y))
+fun quadruple(y: u32): !u32
+    ret double(double(y)!)!
 end fun
 
 ----------

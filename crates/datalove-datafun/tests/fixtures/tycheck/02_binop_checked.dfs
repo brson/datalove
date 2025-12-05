@@ -1,1 +1,3 @@
-let x = @1 +! @2
+fun add(): !@u32
+    ret @1 +! @2
+end fun

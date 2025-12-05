@@ -2,8 +2,8 @@
 module sys/test/helpers
 ----------
 
-fun triple(x: u32): u32
-    ret x *! @3
+fun triple(x: u32): int
+    ret x * @3
 end fun
 
 ----------

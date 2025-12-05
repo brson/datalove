@@ -2,24 +2,25 @@
 module sys/test/ops1
 ----------
 
-fun add(x: u32, y: u32): u32
-    ret x +! y
+fun add(x: int, y: int): int
+    ret x + y
 end fun
 
-fun double(x: u32): u32
-    ret x *! @2
+fun double(x: int): int
+    let two = @2 + @0
+    ret x * two
 end fun
 
 ----------
 module sys/test/ops2
 ----------
 
-fun multiply(x: u32, y: u32): u32
-    ret x *! y
+fun multiply(x: int, y: int): int
+    ret x * y
 end fun
 
-fun square(x: u32): u32
-    ret x *! x
+fun square(x: int): int
+    ret x * x
 end fun
 
 ----------
@@ -33,8 +34,8 @@ import ops1.double
 import ops2.multiply
 import ops2.square
 
-let a = add(@3, @4)
-let b = double(@5)
-let c = multiply(@2, @3)
-let d = square(@4)
+let a = add(@3 + @0, @4 + @0)
+let b = double(@5 + @0)
+let c = multiply(@2 + @0, @3 + @0)
+let d = square(@4 + @0)
 let output = add(a, add(b, add(c, d)))

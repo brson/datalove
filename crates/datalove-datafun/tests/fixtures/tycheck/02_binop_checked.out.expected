@@ -2,9 +2,10 @@
   "errors": [],
   "judgements": [
     {
-      "kind": "variable",
-      "name": "x",
-      "type": "u32"
+      "kind": "function",
+      "name": "add",
+      "params": [],
+      "return_type": "!@u32"
     }
   ]
 }

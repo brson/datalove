@@ -2,8 +2,9 @@
 module sys/test/base
 ----------
 
-fun increment(x: u32): u32
-    ret x +! @1
+fun increment(x: int): int
+    let one = @1 + @0
+    ret x + one
 end fun
 
 ----------
@@ -13,7 +14,7 @@ module sys/test/derived
 require module sys/test/base
 import base.increment
 
-fun add_five(x: u32): u32
+fun add_five(x: int): int
     let a = increment(x)
     let b = increment(a)
     let c = increment(b)
@@ -29,4 +30,4 @@ script
 require module sys/test/derived
 import derived.add_five
 
-let output = add_five(@10)
+let output = add_five(@10 + @0)

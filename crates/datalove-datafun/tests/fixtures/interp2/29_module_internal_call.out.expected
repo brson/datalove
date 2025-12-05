@@ -19,7 +19,12 @@
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: U32,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
                     )),
                     body: [
                         StmtRet(
@@ -68,31 +73,46 @@
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: U32,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
                     )),
                     body: [
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprFunctionCall(
-                                    kind: "FunctionCall",
-                                    name: "double",
-                                    args: [
-                                        ExprFun(
-                                            expr: ExprFunctionCall(
-                                                kind: "FunctionCall",
-                                                name: "double",
-                                                args: [
-                                                    ExprFun(
-                                                        expr: ExprFunKind(
-                                                            kind: "Name",
-                                                            name: "y",
+                                expr: ExprTryResult(
+                                    kind: "TryResult",
+                                    operand: ExprFun(
+                                        expr: ExprFunctionCall(
+                                            kind: "FunctionCall",
+                                            name: "double",
+                                            args: [
+                                                ExprFun(
+                                                    expr: ExprTryResult(
+                                                        kind: "TryResult",
+                                                        operand: ExprFun(
+                                                            expr: ExprFunctionCall(
+                                                                kind: "FunctionCall",
+                                                                name: "double",
+                                                                args: [
+                                                                    ExprFun(
+                                                                        expr: ExprFunKind(
+                                                                            kind: "Name",
+                                                                            name: "y",
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                            ),
                                                         ),
                                                     ),
-                                                ],
-                                            ),
+                                                ),
+                                            ],
                                         ),
-                                    ],
+                                    ),
                                 ),
                             ),
                         ),
@@ -151,8 +171,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "InvalidExpression(\"Expression type not yet implemented in frame mode\")",
+            ],
         ),
-        output: "@20",
+        output: "",
     ),
 ]

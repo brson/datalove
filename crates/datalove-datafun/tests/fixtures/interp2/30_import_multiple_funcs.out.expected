@@ -13,7 +13,7 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: U32,
+                                type_hint: Int,
                             ),
                         ),
                         FunParam(
@@ -21,13 +21,13 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: U32,
+                                type_hint: Int,
                             ),
                         ),
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: U32,
+                        type_hint: Int,
                     )),
                     body: [
                         StmtRet(
@@ -35,7 +35,7 @@
                             value: ExprFun(
                                 expr: ExprBinOp(
                                     kind: "BinOp",
-                                    op: AddChecked,
+                                    op: Add,
                                     lhs: ExprFun(
                                         expr: ExprFunKind(
                                             kind: "Name",
@@ -62,7 +62,7 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: U32,
+                                type_hint: Int,
                             ),
                         ),
                         FunParam(
@@ -70,13 +70,13 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: U32,
+                                type_hint: Int,
                             ),
                         ),
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: U32,
+                        type_hint: Int,
                     )),
                     body: [
                         StmtRet(
@@ -84,7 +84,7 @@
                             value: ExprFun(
                                 expr: ExprBinOp(
                                     kind: "BinOp",
-                                    op: SubChecked,
+                                    op: Sub,
                                     lhs: ExprFun(
                                         expr: ExprFunKind(
                                             kind: "Name",
@@ -111,7 +111,7 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: U32,
+                                type_hint: Int,
                             ),
                         ),
                         FunParam(
@@ -119,13 +119,13 @@
                             mode: In,
                             type_hint: TypeHintAndHeap(
                                 heap: Omitted,
-                                type_hint: U32,
+                                type_hint: Int,
                             ),
                         ),
                     ],
                     return_type: Some(TypeHintAndHeap(
                         heap: Omitted,
-                        type_hint: U32,
+                        type_hint: Int,
                     )),
                     body: [
                         StmtRet(
@@ -133,7 +133,7 @@
                             value: ExprFun(
                                 expr: ExprBinOp(
                                     kind: "BinOp",
-                                    op: MulChecked,
+                                    op: Mul,
                                     lhs: ExprFun(
                                         expr: ExprFunKind(
                                             kind: "Name",
@@ -194,29 +194,69 @@
                             name: "add",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "10",
-                                                )),
+                                    expr: ExprBinOp(
+                                        kind: "BinOp",
+                                        op: Add,
+                                        lhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "10",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                        rhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "0",
+                                                        )),
+                                                    ),
+                                                ),
                                             ),
                                         ),
                                     ),
                                 ),
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "5",
-                                                )),
+                                    expr: ExprBinOp(
+                                        kind: "BinOp",
+                                        op: Add,
+                                        lhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "5",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                        rhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "0",
+                                                        )),
+                                                    ),
+                                                ),
                                             ),
                                         ),
                                     ),
@@ -235,29 +275,69 @@
                             name: "sub",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "20",
-                                                )),
+                                    expr: ExprBinOp(
+                                        kind: "BinOp",
+                                        op: Add,
+                                        lhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "20",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                        rhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "0",
+                                                        )),
+                                                    ),
+                                                ),
                                             ),
                                         ),
                                     ),
                                 ),
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "8",
-                                                )),
+                                    expr: ExprBinOp(
+                                        kind: "BinOp",
+                                        op: Add,
+                                        lhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "8",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                        rhs: ExprFun(
+                                            expr: ExprFunKind(
+                                                kind: "Datalit",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "0",
+                                                        )),
+                                                    ),
+                                                ),
                                             ),
                                         ),
                                     ),

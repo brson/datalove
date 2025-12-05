@@ -2,16 +2,16 @@
 module sys/test/math
 ----------
 
-fun add(x: u32, y: u32): u32
-    ret x +! y
+fun add(x: int, y: int): int
+    ret x + y
 end fun
 
-fun sub(x: u32, y: u32): u32
-    ret x -! y
+fun sub(x: int, y: int): int
+    ret x - y
 end fun
 
-fun mul(x: u32, y: u32): u32
-    ret x *! y
+fun mul(x: int, y: int): int
+    ret x * y
 end fun
 
 ----------
@@ -23,6 +23,6 @@ import math.add
 import math.sub
 import math.mul
 
-let a = add(@10, @5)
-let b = sub(@20, @8)
+let a = add(@10 + @0, @5 + @0)
+let b = sub(@20 + @0, @8 + @0)
 let output = mul(a, b)
