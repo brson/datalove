@@ -4,9 +4,9 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 ## Current State
 
-**New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int).
+**New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs.
 
-**65 tests passing** in interp2 vs **136 tests** in old interp.
+**70 tests passing** in interp2 vs **136 tests** in old interp.
 
 ## Progress
 
@@ -14,6 +14,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 1: Recursion tests (60-63: simple_recur, factorial, fibonacci, mutual_recursion)
 - Phase 2: Unary negation for int (64-65: int_neg, int_neg_neg)
 - Phase 2.5: Typechecker bug fix for checked/optional binary operators
+- Phase 3 (partial): Tuples and structs (70-74)
 
 **Key discoveries:**
 - Bare operators (`-`, `*`) widen u32 to Int
@@ -57,28 +58,31 @@ Binary checked/optional operators (`+!`, `-?`, etc.) now validate that the enclo
 - tycheck tests 02, 06: Updated for new semantics
 - tycheck.rs unit tests: Updated to use Result return types
 
-### Phase 3: Collection Literals
+### Phase 3: Collection Literals (partial ✓)
 **Tests:** 09-19, 162-171
 
-**Tuple** `@(@42, @"hello")`:
-1. Eval each element
-2. Allocate tuple via `dtlv_rti_mem_alloc_local()`
-3. Compute layout: `compute_tuple_layout(tydesc)`
-4. Write each field at `ptr.add(field_offset)` via `copy_nonoverlapping`
+**Tuple** `@(@42, @"hello")`: ✓
+- `allocate_tuple_from_values()` in interp/mod.rs
+- Eval each element, create tydesc via `tydesc_table.get_or_create_tuple()`
+- Compute layout, copy elements at field offsets
+- Works in script scope, frame scope, and datalit expressions
+- Tests: 70_tuple_simple, 71_tuple_nested, 73_tuple_in_module, 74_datafun_tuple_script
 
-**List** `@[@1, @2, @3]`:
+**Struct** `@{x = @1}`: ✓
+- `allocate_struct_from_values()` in interp/mod.rs
+- Fields sorted by name for canonical order
+- Test: 72_struct_simple
+
+**List** `@[@1, @2, @3]`: TODO
 1. Eval elements to temp array
 2. Call `dtlv_rti_list_create_from_slice_local()`
 
-**Struct** `@{x = @1}`:
-- Same as tuple but fields ordered by name
-
-**Map** `@map { @k = @v }`:
+**Map** `@map { @k = @v }`: TODO
 1. Eval key-value pairs
 2. Sort by key (canonical order)
 3. Call `dtlv_rti_btreemap_build_from_sorted_slices_local()`
 
-**Set** `@set { @1, @2 }`:
+**Set** `@set { @1, @2 }`: TODO
 1. Eval elements
 2. Sort (canonical order)
 3. Call `dtlv_rti_btreeset_build_from_sorted_slice_local()`
