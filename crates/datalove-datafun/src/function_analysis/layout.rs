@@ -29,6 +29,7 @@ pub struct SlotInfo<'db> {
     pub kind: SlotKind,
     pub offset: u32,
     pub ty: crate::tycheck::TypeAndHeap<'db>,
+    pub expr: Option<crate::ast::ExprFun<'db>>,  // For temporaries: the creating expression
 }
 
 impl<'db> FrameLayout<'db> {
@@ -37,10 +38,21 @@ impl<'db> FrameLayout<'db> {
         self.slots(db).iter().find(|s| s.slot_id(db) == slot_id).copied()
     }
 
+    /// Get the temporary slot for a given expression.
+    pub fn get_temp_slot_for_expr(
+        self,
+        db: &'db dyn crate::Db,
+        expr: crate::ast::ExprFun<'db>,
+    ) -> Option<SlotInfo<'db>> {
+        self.slots(db).iter()
+            .find(|s| s.kind(db) == SlotKind::Temporary && s.expr(db) == Some(expr))
+            .copied()
+    }
+
     /// Compute frame layout from allocated slots with types.
     pub fn compute_layout(
         db: &'db dyn crate::Db,
-        slots: Vec<(SlotId, Option<InternedText<'db>>, SlotKind, crate::tycheck::TypeAndHeap<'db>)>,
+        slots: Vec<(SlotId, Option<InternedText<'db>>, SlotKind, crate::tycheck::TypeAndHeap<'db>, Option<crate::ast::ExprFun<'db>>)>,
     ) -> Self {
         use std::mem::{size_of, align_of};
 
@@ -48,7 +60,7 @@ impl<'db> FrameLayout<'db> {
         let mut max_align = 1u32;
         let mut slot_infos = Vec::new();
 
-        for (slot_id, name, kind, ty) in slots {
+        for (slot_id, name, kind, ty, expr) in slots {
             // Compute size and alignment for this slot.
             // Reference slots are always pointer-sized, regardless of the referenced type.
             // Local and Temporary slots use the actual type size.
@@ -65,7 +77,7 @@ impl<'db> FrameLayout<'db> {
             offset = align_up(offset, layout.align);
 
             // Create slot info.
-            let slot_info = SlotInfo::new(db, slot_id, name, kind, offset, ty);
+            let slot_info = SlotInfo::new(db, slot_id, name, kind, offset, ty, expr);
             slot_infos.push(slot_info);
 
             // Advance offset by slot size.

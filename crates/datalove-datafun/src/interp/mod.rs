@@ -1166,11 +1166,19 @@ fn eval_function_call_frame<'db>(
         ));
     }
 
-    // Evaluate all arguments in frame context (no destination - args are temporaries).
+    // Evaluate all arguments in frame context with temp slot destinations.
     let mut arg_values = Vec::new();
     for arg_expr in arg_exprs {
-        let value = match eval_expression_frame(ctx, *arg_expr, None) {
-            Ok(v) => v,
+        // Get temp slot destination for this argument.
+        let arg_dest = get_destination_for_expr(ctx, *arg_expr);
+        let value = match eval_expression_frame(ctx, *arg_expr, arg_dest) {
+            Ok(v) => {
+                // Mark slot available if DPS was used.
+                if arg_dest.is_some() && v.location == ValueLocation::Borrowed {
+                    mark_temp_slot_available(ctx, *arg_expr);
+                }
+                v
+            }
             Err(e) => {
                 // Clean up previously evaluated arguments on error.
                 for val in arg_values {
@@ -1342,6 +1350,49 @@ fn execute_function_body<'db>(
     // Pop the frame and capture slot states for argument cleanup.
     let frame = ctx.call_stack.pop().unwrap();
     let final_slot_states = frame.slot_states.clone();
+
+    // If result is Borrowed (pointing to frame memory), clone to heap before frame cleanup.
+    // This is necessary because the frame memory will be deallocated.
+    // We use proper cloning (not memcpy) to handle types with internal pointers.
+    let result = match result {
+        Ok(mut value) if value.location == ValueLocation::Borrowed => {
+            // Allocate heap space and clone the value properly.
+            unsafe {
+                let heap_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(
+                    ctx.runtime.handle(),
+                    value.tydesc,
+                    1,
+                );
+                if heap_ptr.is_null() {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to allocate heap memory for return value".to_string()
+                    ));
+                }
+                // Use proper clone to handle types with internal pointers (e.g., Int).
+                let status = datalove_rt::c::dtlv_rti_clone_local(
+                    ctx.runtime.handle(),
+                    value.ptr,
+                    value.tydesc,
+                    heap_ptr,
+                );
+                if status != datalove_rt::c::RtStatus::Ok {
+                    datalove_rt::c::dtlv_rti_mem_free_local(
+                        ctx.runtime.handle(),
+                        value.tydesc,
+                        1,
+                        heap_ptr,
+                    );
+                    return Err(InterpError::RuntimeError(
+                        "Failed to clone return value to heap".to_string()
+                    ));
+                }
+                value.ptr = heap_ptr;
+                value.location = ValueLocation::TempOwned;
+            }
+            Ok(value)
+        }
+        other => other,
+    };
 
     // Clean up frame values before returning.
     cleanup_frame(ctx, frame);
@@ -1560,6 +1611,40 @@ fn find_slot_by_name<'db>(
         .copied()
 }
 
+/// Get a Destination for an expression's temporary slot, if one exists.
+fn get_destination_for_expr<'db>(
+    ctx: &mut InterpContext<'db>,
+    expr: ast::ExprFun<'db>,
+) -> Option<Destination> {
+    let frame_index = ctx.call_stack.len() - 1;
+    let layout = ctx.call_stack[frame_index].layout;
+
+    layout.get_temp_slot_for_expr(ctx.db, expr).and_then(|slot_info| {
+        let offset = slot_info.offset(ctx.db) as usize;
+        let ptr = unsafe {
+            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset)
+        };
+        let ty = slot_info.ty(ctx.db);
+        let datalit_ty = match ty.ty(ctx.db) {
+            crate::tycheck::Type::Datalit(dt) => dt.clone(),
+            _ => return None,
+        };
+        let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+        Some(Destination { ptr, tydesc })
+    })
+}
+
+/// Mark a temporary slot as Available after writing a value to it.
+fn mark_temp_slot_available<'db>(ctx: &mut InterpContext<'db>, expr: ast::ExprFun<'db>) {
+    let frame_index = ctx.call_stack.len() - 1;
+    let layout = ctx.call_stack[frame_index].layout;
+
+    if let Some(slot_info) = layout.get_temp_slot_for_expr(ctx.db, expr) {
+        let slot_id = slot_info.slot_id(ctx.db);
+        ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+    }
+}
+
 /// Read a pointer value from a Reference slot (parameter).
 fn read_reference_slot<'db>(
     frame: &StackFrame<'db>,
@@ -1762,19 +1847,42 @@ fn eval_expression_frame<'db>(
         }
 
         ast::ExprFunKind::BinOp(binop_expr) => {
-            // Evaluate operands (no destination - they are intermediates).
-            let lhs = eval_expression_frame(ctx, binop_expr.lhs(ctx.db), None)?;
-            let rhs = match eval_expression_frame(ctx, binop_expr.rhs(ctx.db), None) {
+            // Get temp slot destinations for subexpressions.
+            let lhs_expr = binop_expr.lhs(ctx.db);
+            let rhs_expr = binop_expr.rhs(ctx.db);
+            let lhs_dest = get_destination_for_expr(ctx, lhs_expr);
+            let rhs_dest = get_destination_for_expr(ctx, rhs_expr);
+
+            // Evaluate lhs with destination.
+            let lhs = eval_expression_frame(ctx, lhs_expr, lhs_dest)?;
+            // Only mark slot available if DPS was actually used (value is Borrowed).
+            if lhs_dest.is_some() && lhs.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, lhs_expr);
+            }
+
+            // Evaluate rhs with destination.
+            let rhs = match eval_expression_frame(ctx, rhs_expr, rhs_dest) {
                 Ok(v) => v,
                 Err(e) => {
-                    // Clean up lhs on error.
                     destroy_value(ctx, lhs);
                     return Err(e);
                 }
             };
+            // Only mark slot available if DPS was actually used.
+            if rhs_dest.is_some() && rhs.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, rhs_expr);
+            }
 
-            // Execute operation with destination.
-            execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, dest)
+            // Use provided dest or own temp slot.
+            let result_dest = dest.or_else(|| get_destination_for_expr(ctx, expr));
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, result_dest)?;
+
+            // If result went to our temp slot (not caller's dest), mark Available for cleanup.
+            if dest.is_none() && result.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, expr);
+            }
+
+            Ok(result)
         }
 
         ast::ExprFunKind::FunctionCall(call_expr) => {
@@ -1783,10 +1891,27 @@ fn eval_expression_frame<'db>(
         }
 
         ast::ExprFunKind::UnaryOp(unary_expr) => {
-            // Evaluate operand.
-            let operand = eval_expression_frame(ctx, unary_expr.operand(ctx.db), None)?;
-            // Execute unary operation.
-            execute_unop(ctx, unary_expr.op(ctx.db), operand, dest)
+            // Get temp slot for operand.
+            let operand_expr = unary_expr.operand(ctx.db);
+            let operand_dest = get_destination_for_expr(ctx, operand_expr);
+
+            // Evaluate operand with destination.
+            let operand = eval_expression_frame(ctx, operand_expr, operand_dest)?;
+            // Only mark slot available if DPS was actually used.
+            if operand_dest.is_some() && operand.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, operand_expr);
+            }
+
+            // Use provided dest or own temp slot.
+            let result_dest = dest.or_else(|| get_destination_for_expr(ctx, expr));
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), operand, result_dest)?;
+
+            // If result went to our temp slot, mark Available for cleanup.
+            if dest.is_none() && result.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, expr);
+            }
+
+            Ok(result)
         }
 
         ast::ExprFunKind::Tuple(tuple_expr) => {
@@ -1795,8 +1920,16 @@ fn eval_expression_frame<'db>(
             let mut values = Vec::with_capacity(elements.len());
 
             for elem in elements {
-                match eval_expression_frame(ctx, *elem, None) {
-                    Ok(v) => values.push(v),
+                // Get temp slot for this element.
+                let elem_dest = get_destination_for_expr(ctx, *elem);
+                match eval_expression_frame(ctx, *elem, elem_dest) {
+                    Ok(v) => {
+                        // Only mark slot available if DPS was actually used.
+                        if elem_dest.is_some() && v.location == ValueLocation::Borrowed {
+                            mark_temp_slot_available(ctx, *elem);
+                        }
+                        values.push(v);
+                    }
                     Err(e) => {
                         // Clean up already-evaluated values on error.
                         for v in values {
@@ -1807,6 +1940,7 @@ fn eval_expression_frame<'db>(
                 }
             }
 
+            // TODO: Support dest for tuple allocation to avoid heap.
             allocate_tuple_from_values(ctx, values)
         }
 

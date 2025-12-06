@@ -190,7 +190,7 @@ fn build_frame_layout<'db>(
             }
         };
 
-        slots_with_types.push((slot.slot_id(db), slot.name(db), slot.kind(db), ty));
+        slots_with_types.push((slot.slot_id(db), slot.name(db), slot.kind(db), ty, slot.expr(db)));
     }
 
     FrameLayout::compute_layout(db, slots_with_types)
