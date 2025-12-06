@@ -1,0 +1,75 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "a",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: Int(ExprInt(
+                                        value: "10",
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "b",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: Int(ExprInt(
+                                        value: "20",
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprTuple(
+                            kind: "Tuple",
+                            elements: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "a",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "b",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@(@10, @20)",
+    ),
+]

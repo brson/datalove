@@ -898,8 +898,25 @@ fn eval_expression_in_script_scope<'db>(
             };
             execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, dest)
         }
-        ast::ExprFunKind::Tuple(_) => {
-            Err(InterpError::InvalidExpression("Tuples not yet implemented".to_string()))
+        ast::ExprFunKind::Tuple(tuple_expr) => {
+            // Evaluate each element in script scope.
+            let elements = tuple_expr.elements(ctx.db);
+            let mut values = Vec::with_capacity(elements.len());
+
+            for elem in elements {
+                match eval_expression_in_script_scope(ctx, *elem, None) {
+                    Ok(v) => values.push(v),
+                    Err(e) => {
+                        // Clean up already-evaluated values on error.
+                        for v in values {
+                            destroy_value(ctx, v);
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+
+            allocate_tuple_from_values(ctx, values)
         }
         ast::ExprFunKind::UnaryOp(unary_expr) => {
             // Evaluate operand.
@@ -960,6 +977,52 @@ fn eval_datalit_expression<'db>(
         Expr::Int(int_expr) => allocate_int_literal(ctx, &int_expr),
         Expr::Float(float_expr) => allocate_float_literal(ctx, &float_expr),
         Expr::String(string_expr) => allocate_string(ctx, &string_expr),
+        Expr::AnonTuple(tuple_expr) => {
+            // Evaluate each element.
+            let elements = tuple_expr.elements(ctx.db);
+            let mut values = Vec::with_capacity(elements.len());
+
+            for elem in elements {
+                match eval_datalit_expression(ctx, elem) {
+                    Ok(v) => values.push(v),
+                    Err(e) => {
+                        // Clean up already-evaluated values on error.
+                        for v in values {
+                            destroy_value(ctx, v);
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+
+            allocate_tuple_from_values(ctx, values)
+        }
+        Expr::AnonStruct(struct_expr) => {
+            // Get and sort fields by name for canonical order.
+            let expr_fields = struct_expr.fields(ctx.db);
+            let mut sorted_fields: Vec<_> = expr_fields.iter()
+                .map(|f| (f.name(ctx.db), f.value(ctx.db)))
+                .collect();
+            sorted_fields.sort_by_key(|(name, _)| name.as_str(ctx.db));
+
+            // Evaluate each field value in sorted order.
+            let mut field_values = Vec::with_capacity(sorted_fields.len());
+
+            for (name, value_expr) in sorted_fields {
+                match eval_datalit_expression(ctx, value_expr) {
+                    Ok(v) => field_values.push((name, v)),
+                    Err(e) => {
+                        // Clean up already-evaluated values on error.
+                        for (_, v) in field_values {
+                            destroy_value(ctx, v);
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+
+            allocate_struct_from_values(ctx, field_values)
+        }
         Expr::ParseError(_) => Err(InterpError::InvalidExpression("Parse error".to_string())),
         _ => Err(InterpError::InvalidExpression(
             "Datalit expression type not yet implemented".to_string()
@@ -1706,6 +1769,27 @@ fn eval_expression_frame<'db>(
             execute_unop(ctx, unary_expr.op(ctx.db), operand, dest)
         }
 
+        ast::ExprFunKind::Tuple(tuple_expr) => {
+            // Evaluate each element in frame scope.
+            let elements = tuple_expr.elements(ctx.db);
+            let mut values = Vec::with_capacity(elements.len());
+
+            for elem in elements {
+                match eval_expression_frame(ctx, *elem, None) {
+                    Ok(v) => values.push(v),
+                    Err(e) => {
+                        // Clean up already-evaluated values on error.
+                        for v in values {
+                            destroy_value(ctx, v);
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+
+            allocate_tuple_from_values(ctx, values)
+        }
+
         _ => Err(InterpError::InvalidExpression(
             "Expression type not yet implemented in frame mode".to_string()
         ))
@@ -2139,6 +2223,157 @@ fn allocate_option_some_from_value<'db>(
     Ok(Value {
         ptr,
         tydesc: option_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a tuple from a vector of evaluated values.
+///
+/// Takes ownership of all element values, copying their data into the tuple
+/// and freeing their original containers.
+fn allocate_tuple_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    values: Vec<Value>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if values.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty tuple".to_string()));
+    }
+
+    // Collect element tydescs from the values.
+    let element_tydescs: Vec<*const rtdt::TyDesc> = values.iter()
+        .map(|v| v.tydesc)
+        .collect();
+
+    // Create tuple tydesc.
+    let tuple_tydesc = ctx.tydesc_table.get_or_create_tuple(&element_tydescs);
+    let tuple_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(tuple_tydesc) };
+
+    // Compute layout to get field offsets.
+    let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc_ref) };
+
+    // Allocate memory for tuple.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tuple_tydesc_ref.size(),
+            tuple_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if ptr.is_null() {
+        // Clean up all values on allocation failure.
+        for value in values {
+            destroy_value(ctx, value);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate tuple".to_string()));
+    }
+
+    // Copy each element to its field offset in the tuple.
+    for (i, value) in values.into_iter().enumerate() {
+        let field_offset = layout.field_offsets[i] as usize;
+        let element_size = unsafe { (*value.tydesc).size as usize };
+
+        unsafe {
+            let field_ptr = ptr.add(field_offset);
+            std::ptr::copy_nonoverlapping(value.ptr, field_ptr, element_size);
+        }
+
+        // Free the element's container (data has been copied to tuple).
+        if value.location == ValueLocation::TempOwned {
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    ctx.runtime.handle(),
+                    value.tydesc,
+                    1,
+                    value.ptr,
+                );
+            }
+        }
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tuple_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a struct from field names and evaluated values.
+///
+/// Takes ownership of all field values, copying their data into the struct
+/// and freeing their original containers. Fields must be provided in sorted
+/// order by name for canonical representation.
+fn allocate_struct_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    fields: Vec<(bct::text::InternedText<'db>, Value)>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if fields.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty struct".to_string()));
+    }
+
+    // Collect field names and tydescs from the values.
+    let field_names_and_tydescs: Vec<(bct::text::InternedText<'db>, *const rtdt::TyDesc)> = fields.iter()
+        .map(|(name, value)| (*name, value.tydesc))
+        .collect();
+
+    // Create struct tydesc.
+    let struct_tydesc = ctx.tydesc_table.get_or_create_struct(&field_names_and_tydescs);
+    let struct_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(struct_tydesc) };
+
+    // Compute layout to get field offsets.
+    let layout = unsafe { rtdt::layout::compute_struct_layout(struct_tydesc_ref) };
+
+    // Allocate memory for struct.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            struct_tydesc_ref.size(),
+            struct_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if ptr.is_null() {
+        // Clean up all values on allocation failure.
+        for (_, value) in fields {
+            destroy_value(ctx, value);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate struct".to_string()));
+    }
+
+    // Copy each field value to its offset in the struct.
+    for (i, (_, value)) in fields.into_iter().enumerate() {
+        let field_offset = layout.field_offsets[i] as usize;
+        let field_size = unsafe { (*value.tydesc).size as usize };
+
+        unsafe {
+            let field_ptr = ptr.add(field_offset);
+            std::ptr::copy_nonoverlapping(value.ptr, field_ptr, field_size);
+        }
+
+        // Free the field's container (data has been copied to struct).
+        if value.location == ValueLocation::TempOwned {
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    ctx.runtime.handle(),
+                    value.tydesc,
+                    1,
+                    value.ptr,
+                );
+            }
+        }
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: struct_tydesc,
         location: ValueLocation::TempOwned,
     })
 }

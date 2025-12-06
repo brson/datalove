@@ -122,6 +122,76 @@ impl<'db> TyDescTable<'db> {
         ptr
     }
 
+    /// Create a struct type descriptor from field names and type descriptors.
+    ///
+    /// Fields must be provided in sorted order by name for canonical representation.
+    /// This is used when building structs from datafun expressions where we
+    /// already have the runtime type descriptors for each field.
+    pub fn get_or_create_struct(
+        &mut self,
+        field_names_and_tydescs: &[(bct::text::InternedText<'db>, *const rtdt::TyDesc)],
+    ) -> *const rtdt::TyDesc {
+        // Create temporary field info array with placeholder offsets.
+        let mut temp_field_info = Vec::new();
+        for (name, tydesc) in field_names_and_tydescs {
+            let name_str = name.as_str(self.db);
+            temp_field_info.push(rtdt::TyInfoStructField {
+                name: name_str.as_ptr(),
+                name_len: name_str.len() as u32,
+                offset: 0,
+                tydesc: *tydesc,
+            });
+        }
+
+        // Compute layout.
+        let layout = unsafe {
+            let temp_tydesc = rtdt::TyDesc {
+                type_tag: rtdt::TyTag::Struct,
+                size: 0,
+                align: 1,
+                type_info: rtdt::TyInfo {
+                    struct_: rtdt::TyInfoStruct {
+                        num_fields: field_names_and_tydescs.len() as u32,
+                        fields: temp_field_info.as_ptr(),
+                    },
+                },
+            };
+            rtdt::layout::compute_struct_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc))
+        };
+
+        // Create final field info array with computed offsets.
+        let mut field_info = Vec::new();
+        for (i, (name, tydesc)) in field_names_and_tydescs.iter().enumerate() {
+            let name_str = name.as_str(self.db);
+            field_info.push(rtdt::TyInfoStructField {
+                name: name_str.as_ptr(),
+                name_len: name_str.len() as u32,
+                offset: layout.field_offsets[i],
+                tydesc: *tydesc,
+            });
+        }
+
+        // Store field array and get stable pointer.
+        self.struct_fields.push(field_info);
+        let fields_ptr = self.struct_fields.last().unwrap().as_ptr();
+
+        let tydesc = Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Struct,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo {
+                struct_: rtdt::TyInfoStruct {
+                    num_fields: field_names_and_tydescs.len() as u32,
+                    fields: fields_ptr,
+                },
+            },
+        });
+
+        self.tydescs.push(tydesc);
+        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        ptr
+    }
+
     /// Create a new TyDesc for the given type.
     fn create_tydesc(&mut self, ty: &Type<'db>) -> Box<rtdt::TyDesc> {
         match ty {

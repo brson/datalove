@@ -1,0 +1,57 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: AnonStruct(ExprAnonStruct(
+                                        fields: [
+                                            ExprStructField(
+                                                name: "x",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "1",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                            ExprStructField(
+                                                name: "y",
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: Int(ExprInt(
+                                                            value: "2",
+                                                        )),
+                                                    ),
+                                                ),
+                                            ),
+                                        ],
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@{x = @1, y = @2}",
+    ),
+]

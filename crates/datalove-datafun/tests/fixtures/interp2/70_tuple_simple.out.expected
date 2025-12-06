@@ -1,0 +1,51 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: AnonTuple(ExprAnonTuple(
+                                        elements: [
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "42",
+                                                    )),
+                                                ),
+                                            ),
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: String(ExprString(
+                                                        value: "\"hello\"",
+                                                    )),
+                                                ),
+                                            ),
+                                        ],
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@(@42, @\"hello\")",
+    ),
+]

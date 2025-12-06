@@ -1,0 +1,115 @@
+[
+    ModuleAnalysis(
+        type: "Module",
+        path: "sys/test/tuplemod",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "pair",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: AnonTuple(ExprAnonTuple(
+                                        elements: [
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "100",
+                                                    )),
+                                                ),
+                                            ),
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "200",
+                                                    )),
+                                                ),
+                                            ),
+                                        ],
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "get_value",
+                    params: [],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Int(ExprInt(
+                                                value: "42",
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        exports: [],
+    ),
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtRequireModule(
+                    kind: "Require",
+                    variant: "Module",
+                    import_space: "sys",
+                    package_alias: "test",
+                    module_alias: "tuplemod",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "tuplemod",
+                    item_name: "get_value",
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "get_value",
+                            args: [],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@42",
+    ),
+]
