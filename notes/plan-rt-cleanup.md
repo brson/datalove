@@ -1,5 +1,44 @@
 # datalove-rt C ABI Cleanup
 
+## Progress
+
+### Completed
+
+- [x] **Step 0**: Add `_local` suffix to all functions
+  - `dtlv_rti_eq` → `dtlv_rti_eq_local`
+  - `dtlv_rti_eq_unique` → `dtlv_rti_eq_unique_local`
+  - `dtlv_rti_cmp` → `dtlv_rti_cmp_local`
+  - `dtlv_rti_cmp_total` → `dtlv_rti_cmp_total_local`
+  - `dtlv_rti_int_cmp` → `dtlv_rti_int_cmp_local`
+  - `dtlv_rti_list_get` → `dtlv_rti_list_get_local`
+
+- [x] **Step 2**: Fix semantic suffix naming for comparison functions
+  - `value_a` → `value_a_ref`, `tydesc_a` → `value_a_tydesc`
+  - `value_b` → `value_b_ref`, `tydesc_b` → `value_b_tydesc`
+
+- [x] **Step 3**: Remove duplicate `dtlv_rti_btreemap_get`
+  - Kept only `dtlv_rti_btreemap_get_local`
+
+- [x] **Step 4**: Standardize parameter naming
+  - `slice_ptr_ref` → `slice_ref`
+  - `slice_ptr_len` → `slice_len`
+
+- [x] **Step 5**: Add documentation to `c.rs` module
+
+- [x] Updated all callers in interp modules and test files
+
+### Remaining
+
+- [ ] **Step 1**: Fix missing tydesc pairing (ABI-breaking, 100+ call sites)
+  - `dtlv_rti_clone_local`: add `tydesc_out`
+  - `dtlv_rti_tensor_get_local`: add `element_tydesc`
+  - `dtlv_rti_tensor_set_local`: add `element_tydesc`
+  - `dtlv_rti_tensor_transpose_local`: add `tensor_tydesc_out`
+
+- [ ] Add debug heap assertions (`contains_ptr`)
+
+---
+
 ## Expected Conventions (from lib.rs:11-33)
 
 1. All functions (except `init`) take a runtime handle

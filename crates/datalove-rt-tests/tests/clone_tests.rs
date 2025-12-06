@@ -638,7 +638,7 @@ proptest! {
 
         // Test equality.
         let result = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
                 inst.tydesc.as_ptr(),
@@ -710,7 +710,7 @@ proptest! {
 
         // Test equality between double-cloned and original.
         let result = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 clone2_buffer.as_ptr(),
                 inst.tydesc.as_ptr(),
@@ -778,7 +778,7 @@ proptest! {
 
         // Test equality.
         let result = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
                 inst.tydesc.as_ptr(),
@@ -838,7 +838,7 @@ proptest! {
 
         // Test equality.
         let result = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
                 inst.tydesc.as_ptr(),
@@ -902,7 +902,7 @@ fn test_clone_leak_regression_seed_980509222901775213() {
 
     // Test equality.
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             inst.ptr,
             inst.tydesc.as_ptr(),

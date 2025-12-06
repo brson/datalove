@@ -1452,7 +1452,7 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_btreemap_get(
+        datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
             &*map_tydesc as *const rtdt::TyDesc,
@@ -1529,7 +1529,7 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_btreemap_get(
+        datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
             &*map_tydesc as *const rtdt::TyDesc,
@@ -1616,7 +1616,7 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_btreemap_get(
+        datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
             &*map_tydesc as *const rtdt::TyDesc,
@@ -1698,7 +1698,7 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
         let mut option_buffer = vec![0u8; option_layout.size as usize];
 
         let status = unsafe {
-            datalove_rt::c::dtlv_rti_btreemap_get(
+            datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
                 map_ptr,
                 &*map_tydesc as *const rtdt::TyDesc,
@@ -1781,7 +1781,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     // Get and verify initial value.
     let mut option_buffer = vec![0u8; option_layout.size as usize];
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_btreemap_get(
+        datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
             &*map_tydesc as *const rtdt::TyDesc,
@@ -1820,7 +1820,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     // Get and verify updated value.
     let mut option_buffer2 = vec![0u8; option_layout.size as usize];
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_btreemap_get(
+        datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
             &*map_tydesc as *const rtdt::TyDesc,
@@ -1907,7 +1907,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         let mut option_buffer = vec![0u8; option_layout.size as usize];
 
         let status = unsafe {
-            datalove_rt::c::dtlv_rti_btreemap_get(
+            datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
                 map_ptr,
                 &*map_tydesc as *const rtdt::TyDesc,
@@ -1935,7 +1935,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         let mut option_buffer = vec![0u8; option_layout.size as usize];
 
         let status = unsafe {
-            datalove_rt::c::dtlv_rti_btreemap_get(
+            datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
                 map_ptr,
                 &*map_tydesc as *const rtdt::TyDesc,

@@ -296,7 +296,7 @@ impl LitOpCommand {
             "eq" => {
                 // Call dtlv_rti_eq.
                 let result = unsafe {
-                    datalove_rt::c::dtlv_rti_eq(
+                    datalove_rt::c::dtlv_rti_eq_local(
                         std::ptr::null_mut(), // runtime handle not needed
                         inst1.ptr,
                         inst1.tydesc.as_ptr(),
@@ -314,7 +314,7 @@ impl LitOpCommand {
             "cmp" => {
                 // Call dtlv_rti_cmp_total.
                 let result = unsafe {
-                    datalove_rt::c::dtlv_rti_cmp_total(
+                    datalove_rt::c::dtlv_rti_cmp_total_local(
                         std::ptr::null_mut(), // runtime handle not needed
                         inst1.ptr,
                         inst1.tydesc.as_ptr(),

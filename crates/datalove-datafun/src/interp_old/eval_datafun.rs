@@ -982,7 +982,7 @@ fn eval_lt(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a < b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp(
+                rt::c::dtlv_rti_int_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1013,7 +1013,7 @@ fn eval_gt(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a > b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp(
+                rt::c::dtlv_rti_int_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1044,7 +1044,7 @@ fn eval_le(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a <= b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp(
+                rt::c::dtlv_rti_int_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1075,7 +1075,7 @@ fn eval_ge(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a >= b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp(
+                rt::c::dtlv_rti_int_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1107,7 +1107,7 @@ fn eval_eq(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a == b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp(
+                rt::c::dtlv_rti_int_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1139,7 +1139,7 @@ fn eval_ne(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a != b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp(
+                rt::c::dtlv_rti_int_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,

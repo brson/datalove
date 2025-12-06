@@ -507,7 +507,7 @@ fn test_list_get_empty() -> AnyResult<()> {
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_list_get(
+        datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
             &*list_tydesc as *const rtdt::TyDesc,
@@ -583,7 +583,7 @@ fn test_list_get_valid() -> AnyResult<()> {
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_list_get(
+        datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
             &*list_tydesc as *const rtdt::TyDesc,
@@ -665,7 +665,7 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_list_get(
+        datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
             &*list_tydesc as *const rtdt::TyDesc,
@@ -964,7 +964,7 @@ fn test_list_insert_at_start() -> AnyResult<()> {
     for (idx, expected) in [(0, 5), (1, 10), (2, 20), (3, 30)] {
         let mut option_buffer = vec![0u8; option_layout.size as usize];
         let status = unsafe {
-            datalove_rt::c::dtlv_rti_list_get(
+            datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
                 list_ptr,
                 &*list_tydesc as *const rtdt::TyDesc,
@@ -1593,7 +1593,7 @@ fn test_list_get_empty_string() -> AnyResult<()> {
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_list_get(
+        datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
             &*list_tydesc as *const rtdt::TyDesc,
@@ -1667,7 +1667,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_list_get(
+        datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
             &*list_tydesc as *const rtdt::TyDesc,
@@ -1750,7 +1750,7 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_list_get(
+        datalove_rt::c::dtlv_rti_list_get_local(
             rt,
             list_ptr,
             &*list_tydesc as *const rtdt::TyDesc,

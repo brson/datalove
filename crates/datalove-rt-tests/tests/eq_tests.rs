@@ -37,7 +37,7 @@ fn test_eq_bool_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -93,7 +93,7 @@ fn test_eq_bool_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -149,7 +149,7 @@ fn test_eq_u32_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -205,7 +205,7 @@ fn test_eq_u32_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -261,7 +261,7 @@ fn test_eq_f32_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -317,7 +317,7 @@ fn test_eq_f32_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -373,7 +373,7 @@ fn test_eq_string_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -429,7 +429,7 @@ fn test_eq_string_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -485,7 +485,7 @@ fn test_eq_int_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -541,7 +541,7 @@ fn test_eq_int_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -597,7 +597,7 @@ fn test_eq_tuple_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -653,7 +653,7 @@ fn test_eq_tuple_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -709,7 +709,7 @@ fn test_eq_nested_tuple_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -765,7 +765,7 @@ fn test_eq_nested_tuple_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -821,7 +821,7 @@ fn test_eq_struct_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -877,7 +877,7 @@ fn test_eq_struct_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -933,7 +933,7 @@ fn test_eq_list_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -989,7 +989,7 @@ fn test_eq_list_not_equals_values() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1045,7 +1045,7 @@ fn test_eq_list_not_equals_lengths() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1101,7 +1101,7 @@ fn test_eq_enum_no_payload_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1157,7 +1157,7 @@ fn test_eq_enum_no_payload_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1213,7 +1213,7 @@ fn test_eq_enum_with_payload_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1269,7 +1269,7 @@ fn test_eq_enum_with_payload_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1325,7 +1325,7 @@ fn test_eq_option_none_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1381,7 +1381,7 @@ fn test_eq_option_some_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1437,7 +1437,7 @@ fn test_eq_option_none_vs_some() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1493,7 +1493,7 @@ fn test_eq_option_some_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1549,7 +1549,7 @@ fn test_eq_result_ok_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1605,7 +1605,7 @@ fn test_eq_result_ok_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1661,7 +1661,7 @@ fn test_eq_result_err_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1717,7 +1717,7 @@ fn test_eq_result_err_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1773,7 +1773,7 @@ fn test_eq_result_ok_vs_err() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1829,7 +1829,7 @@ fn test_eq_type_mismatch() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1887,7 +1887,7 @@ fn test_eq_map_empty_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1943,7 +1943,7 @@ fn test_eq_map_equals_same_contents() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1999,7 +1999,7 @@ fn test_eq_map_equals_different_literal_order() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -2055,7 +2055,7 @@ fn test_eq_map_not_equals_different_keys() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -2111,7 +2111,7 @@ fn test_eq_map_not_equals_different_values() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -2167,7 +2167,7 @@ fn test_eq_map_not_equals_different_sizes() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -2225,7 +2225,7 @@ fn test_eq_set_empty_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -2281,7 +2281,7 @@ fn test_eq_set_equals_same_contents() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -2337,7 +2337,7 @@ fn test_eq_set_equals_different_literal_order() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -2393,7 +2393,7 @@ fn test_eq_set_not_equals_different_elements() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -2449,7 +2449,7 @@ fn test_eq_set_not_equals_different_sizes() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq(
+        datalove_rt::c::dtlv_rti_eq_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -2526,7 +2526,7 @@ proptest! {
         eprintln!("Testing seed {}, type_tag: {:?}", seed, inst.tydesc.as_ref().type_tag);
 
         let result = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
                 inst.tydesc.as_ptr(),
@@ -2591,7 +2591,7 @@ proptest! {
         drop(inst2);
 
         let result_xy = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 ptr1,
                 tydesc1,
@@ -2601,7 +2601,7 @@ proptest! {
         };
 
         let result_yx = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 ptr2,
                 tydesc2,
@@ -2658,7 +2658,7 @@ proptest! {
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let result = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
                 inst.tydesc.as_ptr(),
@@ -2699,7 +2699,7 @@ proptest! {
 
         // Test reflexivity with boundary values.
         let result = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
                 inst.tydesc.as_ptr(),
@@ -2739,7 +2739,7 @@ proptest! {
 
         // Test reflexivity with moderate-sized structures.
         let result = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 inst.ptr,
                 inst.tydesc.as_ptr(),

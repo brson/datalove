@@ -3465,7 +3465,7 @@ fn eval_comparison<'db>(
     use datalove_rt::c::RtOrdering;
 
     let ordering = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             ctx.runtime.handle(),
             lhs.ptr,
             lhs.tydesc,

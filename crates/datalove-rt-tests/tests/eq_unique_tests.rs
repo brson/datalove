@@ -38,7 +38,7 @@ fn test_eq_unique_f32_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -69,7 +69,7 @@ fn test_eq_unique_u32_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -100,7 +100,7 @@ fn test_eq_unique_tuple_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -131,7 +131,7 @@ fn test_eq_unique_tuple_not_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -164,7 +164,7 @@ fn test_eq_unique_map_empty_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -195,7 +195,7 @@ fn test_eq_unique_map_equals_same_contents() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -226,7 +226,7 @@ fn test_eq_unique_map_not_equals_different_keys() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -257,7 +257,7 @@ fn test_eq_unique_map_not_equals_different_values() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -288,7 +288,7 @@ fn test_eq_unique_map_not_equals_different_sizes() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -321,7 +321,7 @@ fn test_eq_unique_set_empty_equals() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -352,7 +352,7 @@ fn test_eq_unique_set_equals_same_contents() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -383,7 +383,7 @@ fn test_eq_unique_set_not_equals_different_elements() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -414,7 +414,7 @@ fn test_eq_unique_set_not_equals_different_sizes() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_eq_unique(
+        datalove_rt::c::dtlv_rti_eq_unique_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,

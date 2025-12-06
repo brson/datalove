@@ -38,7 +38,7 @@ fn test_cmp_total_f32_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -69,7 +69,7 @@ fn test_cmp_total_f32_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -100,7 +100,7 @@ fn test_cmp_total_f32_greater() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -131,7 +131,7 @@ fn test_cmp_total_tuple_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -162,7 +162,7 @@ fn test_cmp_total_tuple_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -195,7 +195,7 @@ fn test_cmp_total_map_empty_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -226,7 +226,7 @@ fn test_cmp_total_map_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -257,7 +257,7 @@ fn test_cmp_total_map_empty_vs_nonempty() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -288,7 +288,7 @@ fn test_cmp_total_map_less_by_key() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -319,7 +319,7 @@ fn test_cmp_total_map_less_by_value() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -350,7 +350,7 @@ fn test_cmp_total_map_less_by_length() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -381,7 +381,7 @@ fn test_cmp_total_map_greater_by_key() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -414,7 +414,7 @@ fn test_cmp_total_set_empty_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -445,7 +445,7 @@ fn test_cmp_total_set_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -476,7 +476,7 @@ fn test_cmp_total_set_empty_vs_nonempty() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -507,7 +507,7 @@ fn test_cmp_total_set_less_by_element() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -538,7 +538,7 @@ fn test_cmp_total_set_less_by_length() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -569,7 +569,7 @@ fn test_cmp_total_set_greater_by_element() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp_total(
+        datalove_rt::c::dtlv_rti_cmp_total_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,

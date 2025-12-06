@@ -1,6 +1,25 @@
 //! C-ABI surface API for FFI.
 //!
 //! All runtime functions with the `dtlv_rti_*` prefix are exposed through this module.
+//!
+//! ## Naming Conventions
+//!
+//! Function suffixes:
+//! - `_local` - operates on local heap (all current functions)
+//! - (future) `_global` - operates on global heap
+//!
+//! Parameter suffixes (ownership semantics):
+//! - `_in` - move in, callee owns, `*mut`
+//! - `_out` - move out, caller owns, `*mut`
+//! - `_ref` - shared borrow, `*const`
+//! - `_mut` - unique borrow, `*mut`
+//!
+//! Every value pointer is followed by its tydesc.
+//!
+//! ## Error Handling
+//!
+//! Functions return `RtStatus::Error` on null required params.
+//! Argument pointers should never be null in correct generated code.
 
 use crate::rtdt;
 use crate::impls::rt_local;
@@ -140,18 +159,18 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clone_local(
 ///
 /// Floats have weird cases.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_eq(
+pub unsafe extern "C-unwind" fn dtlv_rti_eq_local(
     _rt: LocalRtHandle,
-    value_a: *const u8,
-    tydesc_a: *const rtdt::TyDesc,
-    value_b: *const u8,
-    tydesc_b: *const rtdt::TyDesc,
+    value_a_ref: *const u8,
+    value_a_tydesc: *const rtdt::TyDesc,
+    value_b_ref: *const u8,
+    value_b_tydesc: *const rtdt::TyDesc,
 ) -> RtEq {
     // Note that the runtime handle isn't needed
     // because we don't allocate - it's just part
     // of the ABI.
     unsafe {
-        crate::impls::cmp::eq(value_a, tydesc_a, value_b, tydesc_b)
+        crate::impls::cmp::eq(value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc)
     }
 }
 
@@ -161,15 +180,15 @@ pub unsafe extern "C-unwind" fn dtlv_rti_eq(
 /// This is primarily useful for keying hash tables.
 /// Not yet clear whether Datalove wants this.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_eq_unique(
+pub unsafe extern "C-unwind" fn dtlv_rti_eq_unique_local(
     _rt: LocalRtHandle,
-    value_a: *const u8,
-    tydesc_a: *const rtdt::TyDesc,
-    value_b: *const u8,
-    tydesc_b: *const rtdt::TyDesc,
+    value_a_ref: *const u8,
+    value_a_tydesc: *const rtdt::TyDesc,
+    value_b_ref: *const u8,
+    value_b_tydesc: *const rtdt::TyDesc,
 ) -> RtEq {
     unsafe {
-        crate::impls::cmp::eq_unique(value_a, tydesc_a, value_b, tydesc_b)
+        crate::impls::cmp::eq_unique(value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc)
     }
 }
 
@@ -178,15 +197,15 @@ pub unsafe extern "C-unwind" fn dtlv_rti_eq_unique(
 /// This is probably not actually useful. Just experimenting.
 /// NaN's have total order; float zeros are equal.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_cmp(
+pub unsafe extern "C-unwind" fn dtlv_rti_cmp_local(
     _rt: LocalRtHandle,
-    value_a: *const u8,
-    tydesc_a: *const rtdt::TyDesc,
-    value_b: *const u8,
-    tydesc_b: *const rtdt::TyDesc,
+    value_a_ref: *const u8,
+    value_a_tydesc: *const rtdt::TyDesc,
+    value_b_ref: *const u8,
+    value_b_tydesc: *const rtdt::TyDesc,
 ) -> RtOrdering {
     unsafe {
-        crate::impls::cmp::cmp(value_a, tydesc_a, value_b, tydesc_b)
+        crate::impls::cmp::cmp(value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc)
     }
 }
 
@@ -196,15 +215,15 @@ pub unsafe extern "C-unwind" fn dtlv_rti_cmp(
 ///
 /// > -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_cmp_total(
+pub unsafe extern "C-unwind" fn dtlv_rti_cmp_total_local(
     _rt: LocalRtHandle,
-    value_a: *const u8,
-    tydesc_a: *const rtdt::TyDesc,
-    value_b: *const u8,
-    tydesc_b: *const rtdt::TyDesc,
+    value_a_ref: *const u8,
+    value_a_tydesc: *const rtdt::TyDesc,
+    value_b_ref: *const u8,
+    value_b_tydesc: *const rtdt::TyDesc,
 ) -> RtOrdering {
     unsafe {
-        crate::impls::cmp::cmp_total(value_a, tydesc_a, value_b, tydesc_b)
+        crate::impls::cmp::cmp_total(value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc)
     }
 }
 
@@ -417,8 +436,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clone_from_slice_local(
     // BTreeMap type.
     btreemap_tydesc: *const rtdt::TyDesc,
     // Values will be cloned.
-    slice_ptr_ref: *const u8,
-    slice_ptr_len: u32,
+    slice_ref: *const u8,
+    slice_len: u32,
     // Should be a tuple of key/value I guess.
     slice_element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -433,8 +452,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clone_from_slice_local(
             rt_ref,
             btreemap_value_out,
             btreemap_tydesc_ref,
-            slice_ptr_ref,
-            slice_ptr_len,
+            slice_ref,
+            slice_len,
             slice_element_tydesc,
         )
     }
@@ -550,41 +569,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_remove_local(
             btreemap_tydesc_ref,
             key_ref,
             key_tydesc_ref,
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get(
-    rt: LocalRtHandle,
-    btreemap_value_mut: *mut u8,
-    btreemap_tydesc: *const rtdt::TyDesc,
-    // Key is searched (read-only).
-    key_ref: *const u8,
-    key_tydesc: *const rtdt::TyDesc,
-    // Value is cloned. This is an _option<V>_.
-    value_out: *mut u8,
-    value_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    unsafe {
-        if rt.is_null() || btreemap_value_mut.is_null() || btreemap_tydesc.is_null()
-            || key_ref.is_null() || key_tydesc.is_null()
-            || value_out.is_null() || value_tydesc.is_null() {
-            return RtStatus::Error;
-        }
-
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
-        let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
-        let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
-        crate::impls::btreemap::btreemap_get_impl(
-            rt_ref,
-            btreemap_value_mut,
-            btreemap_tydesc_ref,
-            key_ref,
-            key_tydesc_ref,
-            value_out,
-            value_tydesc_ref,
         )
     }
 }
@@ -777,8 +761,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clone_from_slice_local(
     rt: LocalRtHandle,
     btreeset_value_out: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
-    slice_ptr_ref: *const u8,
-    slice_ptr_len: u32,
+    slice_ref: *const u8,
+    slice_len: u32,
     slice_element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
@@ -791,8 +775,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clone_from_slice_local(
             rt_ref,
             btreeset_value_out,
             btreeset_tydesc,
-            slice_ptr_ref,
-            slice_ptr_len,
+            slice_ref,
+            slice_len,
             slice_element_tydesc,
         )
     }
@@ -850,13 +834,13 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_create_local(
 
 /// Creates a list by cloning elements from a contiguous slice.
 ///
-/// The `slice_ptr_ref` is a read-only reference to source elements. Each element
+/// The `slice_ref` is a read-only reference to source elements. Each element
 /// is cloned into the new list. Caller retains ownership of the source slice and
 /// must destroy those elements separately after this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_create_from_slice_local(
     rt: LocalRtHandle,
-    slice_ptr_ref: *const u8,
+    slice_ref: *const u8,
     slice_len: u32,
     element_tydesc: *const rtdt::TyDesc,
     list_value_out: *mut u8,
@@ -864,7 +848,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_create_from_slice_local(
 ) -> RtStatus {
     unsafe {
         if rt.is_null() || list_value_out.is_null() || list_tydesc.is_null()
-            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
+            || slice_ref.is_null() || element_tydesc.is_null() {
             return RtStatus::Error;
         }
 
@@ -873,7 +857,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_create_from_slice_local(
         let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
         crate::impls::list::list_create_from_slice_impl(
             rt_ref,
-            slice_ptr_ref,
+            slice_ref,
             slice_len,
             element_tydesc_ref,
             list_value_out,
@@ -917,7 +901,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_clear_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_get(
+pub unsafe extern "C-unwind" fn dtlv_rti_list_get_local(
     rt: LocalRtHandle,
     list_value_ref: *const u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -1135,13 +1119,13 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_extend_from_slice_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
-    slice_ptr_ref: *const u8,
+    slice_ref: *const u8,
     slice_len: u32,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
-            || slice_ptr_ref.is_null() || element_tydesc.is_null() {
+            || slice_ref.is_null() || element_tydesc.is_null() {
             return RtStatus::Error;
         }
 
@@ -1152,7 +1136,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_extend_from_slice_local(
             rt_ref,
             list_value_mut,
             list_tydesc_ref,
-            slice_ptr_ref,
+            slice_ref,
             slice_len,
             element_tydesc_ref,
         )
@@ -1166,7 +1150,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_extend_from_slice_local(
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_tensor_create_from_slice_local(
     rt: LocalRtHandle,
-    slice_ptr_ref: *const u8,
+    slice_ref: *const u8,
     slice_len: u32,
     element_tydesc: *const rtdt::TyDesc,
     shape_in: *mut u8,
@@ -1177,7 +1161,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_create_from_slice_local(
 ) -> RtStatus {
     unsafe {
         if rt.is_null() || tensor_value_out.is_null() || tensor_tydesc.is_null()
-            || slice_ptr_ref.is_null() || element_tydesc.is_null()
+            || slice_ref.is_null() || element_tydesc.is_null()
             || shape_in.is_null() || shape_tydesc.is_null() {
             return RtStatus::Error;
         }
@@ -1188,7 +1172,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_create_from_slice_local(
         let shape_tydesc_ref = rtdt::TyDescRef::from_ptr(shape_tydesc);
         crate::impls::tensor::tensor_create_from_slice_impl(
             rt_ref,
-            slice_ptr_ref,
+            slice_ref,
             slice_len,
             element_tydesc_ref,
             shape_in,
@@ -1360,7 +1344,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_reshape_local(
 /// Compare two bigints: a cmp b.
 /// Returns: -1 if a < b, 0 if a == b, 1 if a > b.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_int_cmp(
+pub unsafe extern "C-unwind" fn dtlv_rti_int_cmp_local(
     _rt: LocalRtHandle,
     a_ref: *const u8,
     _a_tydesc: *const rtdt::TyDesc,

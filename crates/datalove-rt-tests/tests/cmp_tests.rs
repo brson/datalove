@@ -37,7 +37,7 @@ fn test_cmp_bool_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -68,7 +68,7 @@ fn test_cmp_bool_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -99,7 +99,7 @@ fn test_cmp_u32_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -130,7 +130,7 @@ fn test_cmp_u32_greater() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -161,7 +161,7 @@ fn test_cmp_u32_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -192,7 +192,7 @@ fn test_cmp_f32_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -223,7 +223,7 @@ fn test_cmp_f32_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -254,7 +254,7 @@ fn test_cmp_string_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -285,7 +285,7 @@ fn test_cmp_string_greater() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -316,7 +316,7 @@ fn test_cmp_string_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -347,7 +347,7 @@ fn test_cmp_int_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -378,7 +378,7 @@ fn test_cmp_int_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -409,7 +409,7 @@ fn test_cmp_tuple_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -440,7 +440,7 @@ fn test_cmp_tuple_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -471,7 +471,7 @@ fn test_cmp_tuple_greater() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -502,7 +502,7 @@ fn test_cmp_struct_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -533,7 +533,7 @@ fn test_cmp_struct_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -564,7 +564,7 @@ fn test_cmp_list_less_by_element() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -595,7 +595,7 @@ fn test_cmp_list_less_by_length() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -626,7 +626,7 @@ fn test_cmp_list_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -657,7 +657,7 @@ fn test_cmp_enum_less_by_discriminant() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -688,7 +688,7 @@ fn test_cmp_enum_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -719,7 +719,7 @@ fn test_cmp_enum_with_payload_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -750,7 +750,7 @@ fn test_cmp_option_none_vs_none() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -781,7 +781,7 @@ fn test_cmp_option_none_less_than_some() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -812,7 +812,7 @@ fn test_cmp_option_some_greater_than_none() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -843,7 +843,7 @@ fn test_cmp_option_some_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -874,7 +874,7 @@ fn test_cmp_option_some_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -905,7 +905,7 @@ fn test_cmp_result_err_less_than_ok() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -936,7 +936,7 @@ fn test_cmp_result_ok_greater_than_err() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -967,7 +967,7 @@ fn test_cmp_result_ok_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -998,7 +998,7 @@ fn test_cmp_result_ok_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1029,7 +1029,7 @@ fn test_cmp_result_err_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1060,7 +1060,7 @@ fn test_cmp_result_err_less() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1091,7 +1091,7 @@ fn test_cmp_type_mismatch() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1122,7 +1122,7 @@ fn test_cmp_map_empty_vs_empty() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1153,7 +1153,7 @@ fn test_cmp_map_empty_vs_nonempty() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1184,7 +1184,7 @@ fn test_cmp_map_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1215,7 +1215,7 @@ fn test_cmp_map_less_by_key() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1246,7 +1246,7 @@ fn test_cmp_map_less_by_value() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1277,7 +1277,7 @@ fn test_cmp_map_less_by_length() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1308,7 +1308,7 @@ fn test_cmp_map_greater_by_key() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1339,7 +1339,7 @@ fn test_cmp_set_empty_vs_empty() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1370,7 +1370,7 @@ fn test_cmp_set_empty_vs_nonempty() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1401,7 +1401,7 @@ fn test_cmp_set_equal() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1432,7 +1432,7 @@ fn test_cmp_set_less_by_element() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1463,7 +1463,7 @@ fn test_cmp_set_less_by_length() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1494,7 +1494,7 @@ fn test_cmp_set_greater_by_element() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1525,7 +1525,7 @@ fn test_cmp_set_with_strings() -> AnyResult<()> {
     };
 
     let result = unsafe {
-        datalove_rt::c::dtlv_rti_cmp(
+        datalove_rt::c::dtlv_rti_cmp_local(
             std::ptr::null_mut(),
             ptr_a,
             tydesc_a,
@@ -1609,7 +1609,7 @@ proptest! {
         drop(inst3);
 
         let cmp_xy = unsafe {
-            datalove_rt::c::dtlv_rti_cmp(
+            datalove_rt::c::dtlv_rti_cmp_local(
                 std::ptr::null_mut(),
                 ptr1,
                 tydesc1,
@@ -1619,7 +1619,7 @@ proptest! {
         };
 
         let cmp_yz = unsafe {
-            datalove_rt::c::dtlv_rti_cmp(
+            datalove_rt::c::dtlv_rti_cmp_local(
                 std::ptr::null_mut(),
                 ptr2,
                 tydesc2,
@@ -1631,7 +1631,7 @@ proptest! {
         // Only test transitivity if cmp(x,y)=Less AND cmp(y,z)=Less.
         if matches!(cmp_xy, datalove_rt::c::RtOrdering::Less) && matches!(cmp_yz, datalove_rt::c::RtOrdering::Less) {
             let cmp_xz = unsafe {
-                datalove_rt::c::dtlv_rti_cmp(
+                datalove_rt::c::dtlv_rti_cmp_local(
                     std::ptr::null_mut(),
                     ptr1,
                     tydesc1,
@@ -1692,7 +1692,7 @@ proptest! {
         drop(inst2);
 
         let cmp_xy = unsafe {
-            datalove_rt::c::dtlv_rti_cmp(
+            datalove_rt::c::dtlv_rti_cmp_local(
                 std::ptr::null_mut(),
                 ptr1,
                 tydesc1,
@@ -1702,7 +1702,7 @@ proptest! {
         };
 
         let cmp_yx = unsafe {
-            datalove_rt::c::dtlv_rti_cmp(
+            datalove_rt::c::dtlv_rti_cmp_local(
                 std::ptr::null_mut(),
                 ptr2,
                 tydesc2,
@@ -1778,7 +1778,7 @@ proptest! {
         drop(inst2);
 
         let cmp_result = unsafe {
-            datalove_rt::c::dtlv_rti_cmp(
+            datalove_rt::c::dtlv_rti_cmp_local(
                 std::ptr::null_mut(),
                 ptr1,
                 tydesc1,
@@ -1788,7 +1788,7 @@ proptest! {
         };
 
         let eq_result = unsafe {
-            datalove_rt::c::dtlv_rti_eq(
+            datalove_rt::c::dtlv_rti_eq_local(
                 std::ptr::null_mut(),
                 ptr1,
                 tydesc1,
@@ -1844,7 +1844,7 @@ proptest! {
 
         // Test that boundary values compare to themselves as Equal.
         let result = unsafe {
-            datalove_rt::c::dtlv_rti_cmp(
+            datalove_rt::c::dtlv_rti_cmp_local(
                 std::ptr::null_mut(),
                 inst.ptr,
                 inst.tydesc.as_ptr(),

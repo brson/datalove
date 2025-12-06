@@ -1062,7 +1062,7 @@ proptest! {
             for (key, expected_value) in &expected_values {
                 let mut option_buffer = vec![0u8; option_layout.size as usize];
 
-                let status = datalove_rt::c::dtlv_rti_btreemap_get(
+                let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
                     map_ptr,
                     &*map_tydesc,
@@ -1137,7 +1137,7 @@ proptest! {
             for key in &query_keys {
                 let mut option_buffer = vec![0u8; option_layout.size as usize];
 
-                let status = datalove_rt::c::dtlv_rti_btreemap_get(
+                let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
                     map_ptr,
                     &*map_tydesc,
@@ -1209,7 +1209,7 @@ proptest! {
                 // After each update, verify we get the current value.
                 let mut option_buffer = vec![0u8; option_layout.size as usize];
 
-                let status = datalove_rt::c::dtlv_rti_btreemap_get(
+                let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
                     map_ptr,
                     &*map_tydesc,
@@ -1281,7 +1281,7 @@ proptest! {
                     // Get operation.
                     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
-                    let status = datalove_rt::c::dtlv_rti_btreemap_get(
+                    let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                         rt,
                         map_ptr,
                         &*map_tydesc,
