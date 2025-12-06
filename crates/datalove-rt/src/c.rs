@@ -848,6 +848,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_create_local(
     }
 }
 
+/// Creates a list by cloning elements from a contiguous slice.
+///
+/// The `slice_ptr_ref` is a read-only reference to source elements. Each element
+/// is cloned into the new list. Caller retains ownership of the source slice and
+/// must destroy those elements separately after this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_create_from_slice_local(
     rt: LocalRtHandle,

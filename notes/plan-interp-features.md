@@ -4,9 +4,9 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 ## Current State
 
-**New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs.
+**New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs; lists.
 
-**70 tests passing** in interp2 vs **136 tests** in old interp.
+**73 tests passing** in interp2 vs **136 tests** in old interp.
 
 ## Progress
 
@@ -14,7 +14,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 1: Recursion tests (60-63: simple_recur, factorial, fibonacci, mutual_recursion)
 - Phase 2: Unary negation for int (64-65: int_neg, int_neg_neg)
 - Phase 2.5: Typechecker bug fix for checked/optional binary operators
-- Phase 3 (partial): Tuples and structs (70-74)
+- Phase 3 (partial): Tuples, structs, and lists (70-77)
 
 **Key discoveries:**
 - Bare operators (`-`, `*`) widen u32 to Int
@@ -73,9 +73,12 @@ Binary checked/optional operators (`+!`, `-?`, etc.) now validate that the enclo
 - Fields sorted by name for canonical order
 - Test: 72_struct_simple
 
-**List** `@[@1, @2, @3]`: TODO
-1. Eval elements to temp array
-2. Call `dtlv_rti_list_create_from_slice_local()`
+**List** `@[@1, @2, @3]`: ✓
+- `allocate_list_from_values()` in interp/mod.rs
+- `tydesc_table.create_list_from_element_tydesc()` for runtime list tydesc
+- Eval elements, build contiguous buffer, call `dtlv_rti_list_create_from_slice_local()`
+- Runtime clones elements; originals destroyed after
+- Tests: 75_list_simple, 76_list_nested, 77_list_of_tuples
 
 **Map** `@map { @k = @v }`: TODO
 1. Eval key-value pairs

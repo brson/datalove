@@ -1,0 +1,89 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: List(ExprList(
+                                        elements: [
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: List(ExprList(
+                                                        elements: [
+                                                            ExprFull(
+                                                                type_hint: None,
+                                                                expr: ExprAndHeap(
+                                                                    heap: Local,
+                                                                    expr: Int(ExprInt(
+                                                                        value: "1",
+                                                                    )),
+                                                                ),
+                                                            ),
+                                                            ExprFull(
+                                                                type_hint: None,
+                                                                expr: ExprAndHeap(
+                                                                    heap: Local,
+                                                                    expr: Int(ExprInt(
+                                                                        value: "2",
+                                                                    )),
+                                                                ),
+                                                            ),
+                                                        ],
+                                                    )),
+                                                ),
+                                            ),
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: List(ExprList(
+                                                        elements: [
+                                                            ExprFull(
+                                                                type_hint: None,
+                                                                expr: ExprAndHeap(
+                                                                    heap: Local,
+                                                                    expr: Int(ExprInt(
+                                                                        value: "3",
+                                                                    )),
+                                                                ),
+                                                            ),
+                                                            ExprFull(
+                                                                type_hint: None,
+                                                                expr: ExprAndHeap(
+                                                                    heap: Local,
+                                                                    expr: Int(ExprInt(
+                                                                        value: "4",
+                                                                    )),
+                                                                ),
+                                                            ),
+                                                        ],
+                                                    )),
+                                                ),
+                                            ),
+                                        ],
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@[@[@1, @2], @[@3, @4]]",
+    ),
+]

@@ -21,6 +21,8 @@ pub struct TyDescTable<'db> {
     runtime_option_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Runtime-constructed Result cache: inner_tydesc → Result<T> tydesc.
     runtime_result_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
+    /// Runtime-constructed List cache: element_tydesc → List<T> tydesc.
+    runtime_list_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Storage for TyDesc allocations.
     tydescs: Vec<Box<rtdt::TyDesc>>,
     /// Storage for flexible array members.
@@ -36,6 +38,7 @@ impl<'db> TyDescTable<'db> {
             cache: HashMap::new(),
             runtime_option_cache: HashMap::new(),
             runtime_result_cache: HashMap::new(),
+            runtime_list_cache: HashMap::new(),
             tydescs: Vec::new(),
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
@@ -731,6 +734,31 @@ impl<'db> TyDescTable<'db> {
         let inner_ptr = inner_tydesc_ref.as_ptr();
         let result_ptr = self.create_result_from_inner_tydesc(inner_ptr);
         unsafe { rtdt::TyDescRef::from_ptr(result_ptr) }
+    }
+
+    /// Create TyDesc for List<T> from an existing element tydesc.
+    ///
+    /// Used when building lists from datafun expressions where we already have
+    /// the runtime type descriptor for the element type.
+    pub fn create_list_from_element_tydesc(&mut self, element_tydesc: *const rtdt::TyDesc) -> *const rtdt::TyDesc {
+        // Check cache first.
+        if let Some(&cached) = self.runtime_list_cache.get(&element_tydesc) {
+            return cached;
+        }
+
+        let tydesc = Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::List,
+            size: std::mem::size_of::<rtdt::List>() as u32,
+            align: std::mem::align_of::<rtdt::List>() as u32,
+            type_info: rtdt::TyInfo {
+                list: rtdt::TyInfoList { element_tydesc },
+            },
+        });
+
+        self.tydescs.push(tydesc);
+        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        self.runtime_list_cache.insert(element_tydesc, ptr);
+        ptr
     }
 
     /// Create TyDesc for result.

@@ -1023,6 +1023,26 @@ fn eval_datalit_expression<'db>(
 
             allocate_struct_from_values(ctx, field_values)
         }
+        Expr::List(list_expr) => {
+            // Evaluate each element.
+            let elements = list_expr.elements(ctx.db);
+            let mut values = Vec::with_capacity(elements.len());
+
+            for elem in elements {
+                match eval_datalit_expression(ctx, elem) {
+                    Ok(v) => values.push(v),
+                    Err(e) => {
+                        // Clean up already-evaluated values on error.
+                        for v in values {
+                            destroy_value(ctx, v);
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+
+            allocate_list_from_values(ctx, values)
+        }
         Expr::ParseError(_) => Err(InterpError::InvalidExpression("Parse error".to_string())),
         _ => Err(InterpError::InvalidExpression(
             "Datalit expression type not yet implemented".to_string()
@@ -2374,6 +2394,90 @@ fn allocate_struct_from_values<'db>(
     Ok(Value {
         ptr,
         tydesc: struct_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a list from a vector of evaluated values.
+///
+/// Takes ownership of all element values, copying their data into the list
+/// and freeing their original containers. All elements must have the same type.
+fn allocate_list_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    values: Vec<Value>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if values.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty list".to_string()));
+    }
+
+    // All elements must have same type - use first element's tydesc.
+    let element_tydesc = values[0].tydesc;
+    let element_size = unsafe { (*element_tydesc).size as usize };
+
+    // Create list tydesc.
+    let list_tydesc = ctx.tydesc_table.create_list_from_element_tydesc(element_tydesc);
+    let list_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(list_tydesc) };
+
+    // Build contiguous buffer of element data.
+    let mut buffer = Vec::with_capacity(values.len() * element_size);
+    for value in &values {
+        unsafe {
+            let slice = std::slice::from_raw_parts(value.ptr, element_size);
+            buffer.extend_from_slice(slice);
+        }
+    }
+
+    // Allocate list value.
+    let rt_handle = ctx.runtime.handle();
+    let list_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            list_tydesc_ref.size(),
+            list_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if list_ptr.is_null() {
+        for value in values {
+            destroy_value(ctx, value);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate list".to_string()));
+    }
+
+    // Create list from slice.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_from_slice_local(
+            rt_handle,
+            buffer.as_ptr(),
+            values.len() as u32,
+            element_tydesc,
+            list_ptr,
+            list_tydesc,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        // Free allocated memory and element values.
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, list_tydesc, 1, list_ptr);
+        }
+        for value in values {
+            destroy_value(ctx, value);
+        }
+        return Err(InterpError::RuntimeError("Failed to create list".to_string()));
+    }
+
+    // Destroy original elements (list cloned them).
+    for value in values {
+        destroy_value(ctx, value);
+    }
+
+    Ok(Value {
+        ptr: list_ptr,
+        tydesc: list_tydesc,
         location: ValueLocation::TempOwned,
     })
 }
