@@ -149,7 +149,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clone_local(
     value_in: *const u8,
     tydesc_in: *const rtdt::TyDesc,
     value_out: *mut u8,
+    _tydesc_out: *const rtdt::TyDesc,
 ) -> RtStatus {
+    // tydesc_out is provided for convention consistency - every value pointer
+    // gets its paired tydesc. In practice, tydesc_in and tydesc_out should be
+    // identical for clone operations.
     unsafe {
         crate::impls::clone::clone_value(rt, value_in, tydesc_in, value_out)
     }
@@ -1208,6 +1212,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_get_local(
     tensor_tydesc: *const rtdt::TyDesc,
     indices_ptr: *const u32,
     element_value_out: *mut u8,
+    _element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         if rt.is_null() || tensor_value_ref.is_null() || tensor_tydesc.is_null()
@@ -1233,11 +1238,12 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
     tensor_value_ref: *mut u8,
     tensor_tydesc: *const rtdt::TyDesc,
     indices_ptr: *const u32,
-    value_ptr: *const u8,
+    element_ref: *const u8,
+    _element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         if rt.is_null() || tensor_value_ref.is_null() || tensor_tydesc.is_null()
-            || indices_ptr.is_null() || value_ptr.is_null() {
+            || indices_ptr.is_null() || element_ref.is_null() {
             return RtStatus::Error;
         }
 
@@ -1248,7 +1254,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
             tensor_value_ref,
             tensor_tydesc_ref,
             indices_ptr,
-            value_ptr,
+            element_ref,
         )
     }
 }
@@ -1256,23 +1262,24 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_tensor_transpose_local(
     rt: LocalRtHandle,
-    tensor_value_in: *mut u8,
-    tensor_tydesc: *const rtdt::TyDesc,
+    tensor_ref: *const u8,
+    tensor_tydesc_ref: *const rtdt::TyDesc,
     perm_ptr: *const u32,
     tensor_value_out: *mut u8,
+    _tensor_tydesc_out: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        if rt.is_null() || tensor_value_in.is_null() || tensor_tydesc.is_null()
+        if rt.is_null() || tensor_ref.is_null() || tensor_tydesc_ref.is_null()
             || perm_ptr.is_null() || tensor_value_out.is_null() {
             return RtStatus::Error;
         }
 
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        let tensor_tydesc = rtdt::TyDescRef::from_ptr(tensor_tydesc_ref);
         crate::impls::tensor::tensor_transpose_impl(
             rt_ref,
-            tensor_value_in,
-            tensor_tydesc_ref,
+            tensor_ref as *mut u8,
+            tensor_tydesc,
             perm_ptr,
             tensor_value_out,
         )

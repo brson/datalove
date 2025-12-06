@@ -188,6 +188,7 @@ fn eval_name<'db>(
                     ptr,
                     tydesc,
                     new_value.as_mut_ptr(),
+                    tydesc,
                 )
             };
 
@@ -1913,6 +1914,7 @@ unsafe fn write_value_to_ptr(
                 ptr as *const u8,
                 tydesc,
                 dest_ptr,
+                tydesc,
             ) };
             if status != datalove_rt::c::RtStatus::Ok {
                 return Err(InterpError::RuntimeError(
@@ -1927,6 +1929,7 @@ unsafe fn write_value_to_ptr(
                 ptr as *const u8,
                 tydesc,
                 dest_ptr,
+                tydesc,
             ) };
             if status != datalove_rt::c::RtStatus::Ok {
                 return Err(InterpError::RuntimeError(

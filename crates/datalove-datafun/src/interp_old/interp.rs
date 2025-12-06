@@ -712,6 +712,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {
@@ -729,6 +730,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {
@@ -746,6 +748,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {
@@ -763,6 +766,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {
@@ -780,6 +784,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {
@@ -797,6 +802,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {
@@ -814,6 +820,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {
@@ -831,6 +838,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {
@@ -848,6 +856,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {
@@ -865,6 +874,7 @@ impl<'db> InterpContext<'db> {
                         ptr,
                         tydesc,
                         new_value.as_mut_ptr(),
+                        tydesc,
                     )
                 };
                 if status != rt::c::RtStatus::Ok {

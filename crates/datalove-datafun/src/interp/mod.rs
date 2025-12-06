@@ -1836,7 +1836,13 @@ fn clone_value<'db>(
 
     // Clone into the allocated memory.
     unsafe {
-        datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, cloned_ptr);
+        datalove_rt::c::dtlv_rti_clone_local(
+            rt_handle,
+            value.ptr,
+            value.tydesc,
+            cloned_ptr,
+            value.tydesc,
+        );
     }
 
     Value {

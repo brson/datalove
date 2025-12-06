@@ -2653,6 +2653,7 @@ proptest! {
                 inst.ptr,
                 inst.tydesc.as_ptr(),
                 clone_buffer.as_mut_ptr(),
+                inst.tydesc.as_ptr(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);

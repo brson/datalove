@@ -36,6 +36,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
             inst.ptr,
             inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -98,6 +99,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
             inst.ptr,
             inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -162,6 +164,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
             inst.ptr,
             inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -226,6 +229,7 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
             inst.ptr,
             inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -288,6 +292,7 @@ fn test_clone_empty_set() -> AnyResult<()> {
             inst.ptr,
             inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -350,6 +355,7 @@ fn test_clone_set_single_element() -> AnyResult<()> {
             inst.ptr,
             inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -414,6 +420,7 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
             inst.ptr,
             inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -478,6 +485,7 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
             inst.ptr,
             inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -542,6 +550,7 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
             inst.ptr,
             inst.tydesc.as_ptr(),
             cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -632,6 +641,7 @@ proptest! {
                 inst.ptr,
                 inst.tydesc.as_ptr(),
                 clone_buffer.as_mut_ptr(),
+                inst.tydesc.as_ptr(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -692,6 +702,7 @@ proptest! {
                 inst.ptr,
                 inst.tydesc.as_ptr(),
                 clone1_buffer.as_mut_ptr(),
+                inst.tydesc.as_ptr(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -704,6 +715,7 @@ proptest! {
                 clone1_buffer.as_ptr(),
                 inst.tydesc.as_ptr(),
                 clone2_buffer.as_mut_ptr(),
+                inst.tydesc.as_ptr(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -772,6 +784,7 @@ proptest! {
                 inst.ptr,
                 inst.tydesc.as_ptr(),
                 clone_buffer.as_mut_ptr(),
+                inst.tydesc.as_ptr(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -832,6 +845,7 @@ proptest! {
                 inst.ptr,
                 inst.tydesc.as_ptr(),
                 clone_buffer.as_mut_ptr(),
+                inst.tydesc.as_ptr(),
             )
         };
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -896,6 +910,7 @@ fn test_clone_leak_regression_seed_980509222901775213() {
             inst.ptr,
             inst.tydesc.as_ptr(),
             clone_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
