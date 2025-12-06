@@ -12,6 +12,13 @@
   - `dtlv_rti_int_cmp` → `dtlv_rti_int_cmp_local`
   - `dtlv_rti_list_get` → `dtlv_rti_list_get_local`
 
+- [x] **Step 1**: Fix missing tydesc pairing
+  - `dtlv_rti_clone_local`: added `tydesc_out`
+  - `dtlv_rti_tensor_get_local`: added `element_tydesc`
+  - `dtlv_rti_tensor_set_local`: added `element_tydesc`, renamed `value_ptr` → `element_ref`
+  - `dtlv_rti_tensor_transpose_local`: added `tensor_tydesc_out`, renamed `tensor_value_in` → `tensor_ref` (`*const`)
+  - Updated callers: `interp/mod.rs`, `tensor_tests.rs`, `clone_tests.rs`, `destroy_tests.rs`, `eq_tests.rs`
+
 - [x] **Step 2**: Fix semantic suffix naming for comparison functions
   - `value_a` → `value_a_ref`, `tydesc_a` → `value_a_tydesc`
   - `value_b` → `value_b_ref`, `tydesc_b` → `value_b_tydesc`
@@ -29,12 +36,6 @@
 
 ### Remaining
 
-- [ ] **Step 1**: Fix missing tydesc pairing (ABI-breaking, 100+ call sites)
-  - `dtlv_rti_clone_local`: add `tydesc_out`
-  - `dtlv_rti_tensor_get_local`: add `element_tydesc`
-  - `dtlv_rti_tensor_set_local`: add `element_tydesc`
-  - `dtlv_rti_tensor_transpose_local`: add `tensor_tydesc_out`
-
 - [ ] Add debug heap assertions (`contains_ptr`)
 
 ---
@@ -51,54 +52,34 @@
 
 ## Issues Found
 
-### A. Missing tydesc Pairing (violates convention #2)
+### A. Missing tydesc Pairing (violates convention #2) - RESOLVED
 
-| Function | Parameter | Issue |
-|----------|-----------|-------|
-| `dtlv_rti_clone_local` | `value_out` | No paired tydesc_out |
-| `dtlv_rti_tensor_get_local` | `element_value_out` | No tydesc |
-| `dtlv_rti_tensor_set_local` | `value_ptr` | No tydesc |
-| `dtlv_rti_tensor_transpose_local` | shares tydesc | Input/output share `tensor_tydesc` |
+All functions now have proper tydesc pairing:
+- `dtlv_rti_clone_local`: has `tydesc_out`
+- `dtlv_rti_tensor_get_local`: has `element_tydesc`
+- `dtlv_rti_tensor_set_local`: has `element_tydesc`
+- `dtlv_rti_tensor_transpose_local`: has separate `tensor_tydesc_ref` and `tensor_tydesc_out`
 
-### B. Missing Semantic Suffixes (violates convention #3)
+### B. Missing Semantic Suffixes (violates convention #3) - RESOLVED
 
-Comparison functions use bare names instead of `_ref`:
-- `dtlv_rti_eq`: `value_a`, `value_b` should be `value_a_ref`, `value_b_ref`
-- `dtlv_rti_eq_unique`: same
-- `dtlv_rti_cmp`: same
-- `dtlv_rti_cmp_total`: same
-- `dtlv_rti_int_cmp`: `a_ref`, `b_ref` - actually correct!
+Comparison functions now use `_ref` suffix:
+- `dtlv_rti_eq_local`: `value_a_ref`, `value_b_ref`, `value_a_tydesc`, `value_b_tydesc`
+- `dtlv_rti_eq_unique_local`: same
+- `dtlv_rti_cmp_local`: same
+- `dtlv_rti_cmp_total_local`: same
 
-### C. Inconsistent `_local` Suffix
+### C. Inconsistent `_local` Suffix - RESOLVED
 
-Functions without `_local`:
-- `dtlv_rti_eq`, `dtlv_rti_eq_unique`, `dtlv_rti_cmp`, `dtlv_rti_cmp_total`
-- `dtlv_rti_int_cmp`
-- `dtlv_rti_list_get`
-- `dtlv_rti_btreemap_get` (but there's also `_get_local` version!)
+All functions now have `_local` suffix.
 
-### D. Duplicate/Confusing Function Pairs
+### D. Duplicate/Confusing Function Pairs - RESOLVED
 
-- `dtlv_rti_btreemap_get` vs `dtlv_rti_btreemap_get_local`
-  - Nearly identical, both call `btreemap_get_impl`
-  - `get` uses `btreemap_value_mut` (*mut), `get_local` uses `btreemap_value_ref` (*const)
-  - Both are read operations - should use `_ref`
+Kept only `dtlv_rti_btreemap_get_local`, removed duplicate.
 
-### E. Parameter Naming Inconsistencies
+### E. Parameter Naming Inconsistencies - RESOLVED
 
-1. **tydesc naming varies**:
-   - Generic: `tydesc`
-   - Prefixed: `btreemap_tydesc`, `key_tydesc`, `element_tydesc`
-   - Suffixed: `tydesc_in`, `tydesc_a`
-   - Recommendation: Always use prefix matching the value param
-
-2. **Slice parameters**:
-   - `slice_ptr_ref` + `slice_ptr_len` - `ptr` in name is redundant
-   - Should be `slice_ref` + `slice_len`
-
-3. **Value naming**:
-   - `value_ptr` (tensor_set) - should be `element_ref` or `element_in`
-   - `perm_ptr`, `indices_ptr` - raw pointers without semantic suffix
+1. Slice parameters standardized: `slice_ref` + `slice_len`
+2. `value_ptr` in tensor_set renamed to `element_ref`
 
 ### F. Unused tydesc Parameters
 
