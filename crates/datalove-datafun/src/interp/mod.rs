@@ -191,6 +191,9 @@ pub enum InterpError {
 
     // Optional arithmetic overflow - triggers early return with None.
     OptionNone,
+    // Result error - triggers early return with Err.
+    // Carries the error value (tydesc + ptr) to be wrapped in Result::Err.
+    ResultErr { tydesc: *const datalove_rt::rtdt::TyDesc, ptr: *mut u8 },
 
     // Result type.
     NoOutputVariable,
@@ -1050,6 +1053,13 @@ fn eval_datalit_expression<'db>(
                 "@none literal requires type context (use in typed slot or with type annotation)".to_string()
             ))
         }
+        Expr::Err(_) => {
+            // @error without type context - this should be handled by write_datalit_to_dest
+            // when we have a destination with type information.
+            Err(InterpError::InvalidExpression(
+                "@error literal requires type context (use in typed slot or with type annotation)".to_string()
+            ))
+        }
         Expr::ParseError(_) => Err(InterpError::InvalidExpression("Parse error".to_string())),
         _ => Err(InterpError::InvalidExpression(
             "Datalit expression type not yet implemented".to_string()
@@ -1108,6 +1118,9 @@ fn write_datalit_to_dest<'db>(
         }
         Expr::None => {
             write_option_none_to_dest(dest)
+        }
+        Expr::Err(err_expr) => {
+            write_result_err_to_dest(ctx, &err_expr, dest)
         }
         Expr::ParseError(_) => Err(InterpError::InvalidExpression("Parse error".to_string())),
         _ => Err(InterpError::InvalidExpression(
@@ -1340,6 +1353,51 @@ fn write_option_none_to_dest(dest: Destination) -> Result<Value, InterpError> {
     unsafe {
         *(dest.ptr as *mut u8) = OptionTag::None as u8;
     }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write Result::Err to a destination.
+fn write_result_err_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    err_expr: &crate::datalit::ast::ExprErr<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag, ResultTag};
+
+    let dest_tydesc = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+
+    // Verify the destination type is Result.
+    if dest_tydesc.type_tag() != TyTag::Result {
+        return Err(InterpError::RuntimeError(
+            format!("Cannot write @error to non-Result type: {:?}", dest_tydesc.type_tag())
+        ));
+    }
+
+    // Write Err tag to destination.
+    unsafe {
+        *(dest.ptr as *mut u8) = ResultTag::Err as u8;
+    }
+
+    // Compute payload offset.
+    let layout = unsafe { datalove_rt::rtdt::layout::compute_result_layout(dest_tydesc) };
+    let payload_ptr = unsafe { dest.ptr.add(layout.payload_offset as usize) };
+
+    // Evaluate the inner error value.
+    let inner_expr = err_expr.value(ctx.db);
+    let inner_value = eval_datalit_expression(ctx, inner_expr)?;
+
+    // Write Error struct at payload offset.
+    // Error has same layout as Data: (tydesc ptr, value ptr).
+    unsafe {
+        let error_ptr = payload_ptr as *mut datalove_rt::rtdt::Data;
+        std::ptr::write(
+            error_ptr,
+            datalove_rt::rtdt::Data::from_pointers(inner_value.tydesc, inner_value.ptr)
+        );
+    }
+
+    // The inner value is now owned by the Error, don't free it separately.
 
     Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
 }
@@ -1705,24 +1763,42 @@ fn execute_function_body<'db>(
     // Restore previous module.
     ctx.current_module = prev_module;
 
-    // Handle Option return type wrapping.
-    // If the function's return type is ?T, wrap result in Some or catch OptionNone as None.
+    // Handle Option/Result return type wrapping.
     use crate::datalit::ast::TypeHint;
     let return_type = func.return_type(ctx.db);
     if let Some(ret_type) = return_type {
-        if let TypeHint::Option(_) = ret_type.type_hint(ctx.db) {
-            match result {
-                Ok(value) => {
-                    // Wrap successful result in Some.
-                    return allocate_option_some_from_value(ctx, value);
+        match ret_type.type_hint(ctx.db) {
+            TypeHint::Option(_) => {
+                // If the function's return type is ?T, wrap result in Some or catch OptionNone as None.
+                match result {
+                    Ok(value) => {
+                        // Wrap successful result in Some.
+                        return allocate_option_some_from_value(ctx, value);
+                    }
+                    Err(InterpError::OptionNone) => {
+                        // Early return with None - allocate Option::None.
+                        let inner_tydesc = value_tydesc_for_option(ctx, ret_type);
+                        return allocate_option_none(ctx, inner_tydesc);
+                    }
+                    Err(e) => return Err(e),
                 }
-                Err(InterpError::OptionNone) => {
-                    // Early return with None - allocate Option::None.
-                    let inner_tydesc = value_tydesc_for_option(ctx, ret_type);
-                    return allocate_option_none(ctx, inner_tydesc);
-                }
-                Err(e) => return Err(e),
             }
+            TypeHint::Result(_) => {
+                // If the function's return type is !T, wrap result in Ok or catch ResultErr as Err.
+                match result {
+                    Ok(value) => {
+                        // Wrap successful result in Ok.
+                        return allocate_result_ok_from_value(ctx, value);
+                    }
+                    Err(InterpError::ResultErr { tydesc, ptr }) => {
+                        // Early return with Err - allocate Result::Err.
+                        let ok_tydesc = value_tydesc_for_result(ctx, ret_type);
+                        return allocate_result_err(ctx, ok_tydesc, tydesc, ptr);
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            _ => {}
         }
     }
 
@@ -1738,6 +1814,22 @@ fn value_tydesc_for_option<'db>(
 
     if let TypeHint::Option(opt) = type_hint.type_hint(ctx.db) {
         let inner = opt.inner_type(ctx.db);
+        type_hint_to_tydesc(ctx, inner)
+    } else {
+        // Fallback - shouldn't happen.
+        ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32)
+    }
+}
+
+/// Get the ok type descriptor for a Result type hint.
+fn value_tydesc_for_result<'db>(
+    ctx: &mut InterpContext<'db>,
+    type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
+) -> *const datalove_rt::rtdt::TyDesc {
+    use crate::datalit::ast::TypeHint;
+
+    if let TypeHint::Result(res) = type_hint.type_hint(ctx.db) {
+        let inner = res.inner_type(ctx.db);
         type_hint_to_tydesc(ctx, inner)
     } else {
         // Fallback - shouldn't happen.
@@ -2971,6 +3063,117 @@ fn allocate_option_some_from_value<'db>(
     Ok(Value {
         ptr,
         tydesc: option_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Wrap an existing value in Ok, consuming the inner value.
+fn allocate_result_ok_from_value<'db>(
+    ctx: &mut InterpContext<'db>,
+    inner_value: Value,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    // Create Result tydesc from inner value's tydesc.
+    let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(inner_value.tydesc);
+    let result_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(result_tydesc) };
+
+    // Compute layout.
+    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc_ref) };
+
+    // Allocate memory.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            result_tydesc_ref.size(),
+            result_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if ptr.is_null() {
+        destroy_value(ctx, inner_value);
+        return Err(InterpError::RuntimeError("Failed to allocate Result".to_string()));
+    }
+
+    unsafe {
+        // Write Ok tag.
+        *ptr = rtdt::ResultTag::Ok as u8;
+
+        // Copy inner value to payload offset.
+        let payload_ptr = ptr.add(layout.payload_offset as usize);
+        let inner_size = (*inner_value.tydesc).size as usize;
+        std::ptr::copy_nonoverlapping(inner_value.ptr, payload_ptr, inner_size);
+    }
+
+    // Free the inner value's container (but data has been copied to Result).
+    if inner_value.location == ValueLocation::TempOwned {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                inner_value.tydesc,
+                1,
+                inner_value.ptr,
+            );
+        }
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: result_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a Result::Err with an error value.
+fn allocate_result_err<'db>(
+    ctx: &mut InterpContext<'db>,
+    ok_tydesc: *const datalove_rt::rtdt::TyDesc,
+    err_tydesc: *const datalove_rt::rtdt::TyDesc,
+    err_ptr: *mut u8,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    // Create Result tydesc from ok type.
+    let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(ok_tydesc);
+    let result_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(result_tydesc) };
+
+    // Compute layout.
+    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc_ref) };
+
+    // Allocate memory.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            result_tydesc_ref.size(),
+            result_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if ptr.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate Result".to_string()));
+    }
+
+    unsafe {
+        // Write Err tag.
+        *ptr = rtdt::ResultTag::Err as u8;
+
+        // Write Error at payload offset.
+        // Error has same layout as Data: (tydesc ptr, value ptr).
+        let payload_ptr = ptr.add(layout.payload_offset as usize);
+        let error_ptr = payload_ptr as *mut rtdt::Data;
+        std::ptr::write(
+            error_ptr,
+            rtdt::Data::from_pointers(err_tydesc, err_ptr)
+        );
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: result_tydesc,
         location: ValueLocation::TempOwned,
     })
 }

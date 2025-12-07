@@ -6,7 +6,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 **New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs; lists.
 
-**75 tests passing** in interp2 vs **136 tests** in old interp.
+**77 tests passing** in interp2 vs **136 tests** in old interp.
 
 ## Progress
 
@@ -15,14 +15,18 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 2: Unary negation for int (64-65: int_neg, int_neg_neg)
 - Phase 2.5: Typechecker bug fix for checked/optional binary operators
 - Phase 3 (partial): Tuples, structs, and lists (70-77)
-- Phase 4 (partial): @none literal, Option return type wrapping
+- Phase 4: @none literal, @error literal, Option/Result return type wrapping
 - Phase 5: If-destructuring for Option (80_if_option_some, 81_if_option_none)
+- Phase 5b: If-destructuring for Result (82_if_result_ok, 82a_result_ok_simple) - Ok case works
 
 **Key implementations:**
-- `execute_function_body` now wraps return values in Some for `?T` return types
-- `evaluate_branch_condition` handles Option conditions with payload binding
+- `execute_function_body` wraps return values in Some/Ok for `?T`/`!T` return types
+- `evaluate_branch_condition` handles Bool/Option/Result conditions with payload binding
 - Optional operators (`+?` etc.) return raw values; wrapping happens at function boundary
-- Proper memory management: only free heap-allocated Option containers, not frame slots
+- Checked operators (`+!` etc.) return raw values; wrapping happens at function boundary
+- `write_result_err_to_dest` writes @error literals to Result destinations
+- `allocate_result_ok_from_value` / `allocate_result_err` for Result allocation
+- Proper memory management: only free heap-allocated containers, not frame slots
 
 **Key discoveries:**
 - Bare operators (`-`, `*`) widen u32 to Int
@@ -98,40 +102,22 @@ Binary checked/optional operators (`+!`, `-?`, etc.) now validate that the enclo
 2. Sort (canonical order)
 3. Call `dtlv_rti_btreeset_build_from_sorted_slice_local()`
 
-### Phase 4: Option/Result Basics
+### Phase 4: Option/Result Basics ✓
 **Tests:** 51-56
 
-**`@none` literal:**
-1. Allocate Option via `dtlv_rti_mem_alloc_local()`
-2. Write tag: `*(ptr as *mut u8) = OptionTag::None as u8`
+**`@none` literal:** ✓ `write_option_none_to_dest`
+**`@error(@42)` literal:** ✓ `write_result_err_to_dest`
+**Return type wrapping (value → Some/Ok):** ✓ `allocate_option_some_from_value`, `allocate_result_ok_from_value`
 
-**`@error(@42)` literal:**
-1. Allocate Result
-2. Write tag: `ResultTag::Err`
-3. Write Error struct (tydesc + value ptr) at payload offset
-
-**Coercion (value → Some/Ok):**
-1. Allocate Option/Result
-2. Write tag: `Some`/`Ok`
-3. Write payload at `ptr.add(layout.payload_offset)`
-
-### Phase 5: If Destructuring
+### Phase 5: If Destructuring ✓
 **Tests:** 57-101
 
 Syntax: `if opt |value| ... else ... end if`
 
-1. Eval condition to Option/Result
-2. Read tag: `*(ptr as *const u8)`
-3. If Some/Ok:
-   - Get payload offset from layout
-   - Move payload out: read ptr at offset, create Value pointing to it
-   - Mark Option/Result as "payload moved" (or just don't free payload on container destroy)
-   - Bind moved value to `value` variable in scope
-   - Execute then-branch
-   - Value ownership transfers to scope, freed when scope exits
-4. If None/Err:
-   - Execute else-branch
-5. Free container (but not moved payload)
+✓ `evaluate_branch_condition` handles:
+- Bool: simple truth check
+- Option: Some extracts payload to then_binding, None goes to else
+- Result: Ok extracts payload to then_binding, Err goes to else (else_binding TODO)
 
 ### Phase 6: Try Operators
 **Tests:** 129-141, 162-164
