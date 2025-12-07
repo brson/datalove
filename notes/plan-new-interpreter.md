@@ -1984,35 +1984,23 @@ Implementation complete when:
 
 **Fix Applied**: Renamed to `TempOwned`/`Borrowed` for clarity. Reference slots now return `Borrowed`. Added location check in `free_value_structure`.
 
-### Destination-Passing Style (DPS) Optimization
+### Destination-Passing Style (DPS) Optimization - COMPLETED (2025-12-06)
 
-**Status**: Future optimization, lower priority than checked arithmetic fix
+**Status**: Fully implemented for frame-based function evaluation. See `notes/plan-interp-temp-slots.md` for details.
 
-**Current Flow** (for `let y = expr`):
-1. Evaluate expression → allocate `TempOwned` value
-2. `write_value_to_slot()` → memcpy bytes to destination slot
-3. `free_value_structure()` → free temp allocation
+**What Was Implemented**:
+- All expressions have pre-allocated temp slots (mandatory, not optional)
+- `eval_expression_frame(ctx, expr, dest)` signature with destination parameter
+- `get_destination_for_expr()` returns `Result<Destination>` (fails hard on missing slot)
+- Direct writes for scalars: `write_datalit_to_dest()` for bool, int, f32
+- String DPS: `write_string_to_dest()` using `dtlv_rti_string_create_local`
+- Tuple DPS: `write_tuple_to_dest()` writes elements directly to field offsets
+- Arithmetic DPS: `write_f32_result()`, `write_bool_result()` helpers
+- Comparison DPS: `eval_comparison()` takes dest parameter
 
-**With DPS**:
-1. Know destination slot upfront
-2. Write directly to destination slot
-3. No temp allocation needed
+**Result**: Zero heap allocation for expression temporaries during frame-based function evaluation. All intermediate values live in pre-allocated frame slots.
 
-**What DPS Would Eliminate**:
-- Literal allocations (`@42` → allocate temp → copy to slot → free temp)
-- Arithmetic result temps (runtime functions already take destination pointers)
-- Copy-type clone temps (`clone_value` allocates temp → copy to slot → free temp)
-
-**What's Already Efficient**:
-- Linear type moves: zero-copy `Borrowed` pointer + memcpy (no heap allocation)
-- `clone_value()` is only called for Copy types (verified 2025-11-28)
-
-**Implementation Notes**:
-- Runtime functions like `dtlv_rti_int_add` and `dtlv_rti_clone_local` already accept destination pointers
-- Requires threading destination slot info through `eval_expression_frame()` and related functions
-- Signature change: `eval_expression_frame(ctx, expr)` → `eval_expression_frame(ctx, expr, dest_slot)`
-
-**Priority**: Lower priority now that checked arithmetic is fixed.
+**Note**: Script-scope evaluation (without frames) still uses heap allocation via `allocate_*()` functions.
 
 ### Checked Arithmetic Operators - FIXED (2025-11-28)
 
