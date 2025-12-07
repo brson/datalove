@@ -6,7 +6,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 **New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs; lists.
 
-**73 tests passing** in interp2 vs **136 tests** in old interp.
+**75 tests passing** in interp2 vs **136 tests** in old interp.
 
 ## Progress
 
@@ -15,6 +15,14 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 2: Unary negation for int (64-65: int_neg, int_neg_neg)
 - Phase 2.5: Typechecker bug fix for checked/optional binary operators
 - Phase 3 (partial): Tuples, structs, and lists (70-77)
+- Phase 4 (partial): @none literal, Option return type wrapping
+- Phase 5: If-destructuring for Option (80_if_option_some, 81_if_option_none)
+
+**Key implementations:**
+- `execute_function_body` now wraps return values in Some for `?T` return types
+- `evaluate_branch_condition` handles Option conditions with payload binding
+- Optional operators (`+?` etc.) return raw values; wrapping happens at function boundary
+- Proper memory management: only free heap-allocated Option containers, not frame slots
 
 **Key discoveries:**
 - Bare operators (`-`, `*`) widen u32 to Int

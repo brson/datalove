@@ -1043,6 +1043,13 @@ fn eval_datalit_expression<'db>(
 
             allocate_list_from_values(ctx, values)
         }
+        Expr::None => {
+            // @none without type context - this should be handled by write_datalit_to_dest
+            // when we have a destination with type information.
+            Err(InterpError::InvalidExpression(
+                "@none literal requires type context (use in typed slot or with type annotation)".to_string()
+            ))
+        }
         Expr::ParseError(_) => Err(InterpError::InvalidExpression("Parse error".to_string())),
         _ => Err(InterpError::InvalidExpression(
             "Datalit expression type not yet implemented".to_string()
@@ -1098,6 +1105,9 @@ fn write_datalit_to_dest<'db>(
         }
         Expr::List(list_expr) => {
             write_list_to_dest(ctx, &list_expr, dest)
+        }
+        Expr::None => {
+            write_option_none_to_dest(dest)
         }
         Expr::ParseError(_) => Err(InterpError::InvalidExpression("Parse error".to_string())),
         _ => Err(InterpError::InvalidExpression(
@@ -1308,6 +1318,27 @@ fn write_list_to_dest<'db>(
 
     if status != datalove_rt::c::RtStatus::Ok {
         return Err(InterpError::RuntimeError("Failed to create list".to_string()));
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write Option::None to a destination.
+fn write_option_none_to_dest(dest: Destination) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag, OptionTag};
+
+    let dest_tydesc = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+
+    // Verify the destination type is Option.
+    if dest_tydesc.type_tag() != TyTag::Option {
+        return Err(InterpError::RuntimeError(
+            format!("Cannot write @none to non-Option type: {:?}", dest_tydesc.type_tag())
+        ));
+    }
+
+    // Write None tag to destination.
+    unsafe {
+        *(dest.ptr as *mut u8) = OptionTag::None as u8;
     }
 
     Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
@@ -1674,7 +1705,64 @@ fn execute_function_body<'db>(
     // Restore previous module.
     ctx.current_module = prev_module;
 
+    // Handle Option return type wrapping.
+    // If the function's return type is ?T, wrap result in Some or catch OptionNone as None.
+    use crate::datalit::ast::TypeHint;
+    let return_type = func.return_type(ctx.db);
+    if let Some(ret_type) = return_type {
+        if let TypeHint::Option(_) = ret_type.type_hint(ctx.db) {
+            match result {
+                Ok(value) => {
+                    // Wrap successful result in Some.
+                    return allocate_option_some_from_value(ctx, value);
+                }
+                Err(InterpError::OptionNone) => {
+                    // Early return with None - allocate Option::None.
+                    let inner_tydesc = value_tydesc_for_option(ctx, ret_type);
+                    return allocate_option_none(ctx, inner_tydesc);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     result
+}
+
+/// Get the inner type descriptor for an Option type hint.
+fn value_tydesc_for_option<'db>(
+    ctx: &mut InterpContext<'db>,
+    type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
+) -> *const datalove_rt::rtdt::TyDesc {
+    use crate::datalit::ast::TypeHint;
+
+    if let TypeHint::Option(opt) = type_hint.type_hint(ctx.db) {
+        let inner = opt.inner_type(ctx.db);
+        type_hint_to_tydesc(ctx, inner)
+    } else {
+        // Fallback - shouldn't happen.
+        ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32)
+    }
+}
+
+/// Convert a type hint to a tydesc.
+fn type_hint_to_tydesc<'db>(
+    ctx: &mut InterpContext<'db>,
+    type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
+) -> *const datalove_rt::rtdt::TyDesc {
+    use crate::datalit::ast::TypeHint;
+
+    match type_hint.type_hint(ctx.db) {
+        TypeHint::U32 => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32),
+        TypeHint::Bool => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::Bool),
+        TypeHint::String => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::String),
+        TypeHint::Int => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::Int),
+        TypeHint::F32 => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::F32),
+        _ => {
+            // Default fallback for complex types.
+            ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32)
+        }
+    }
 }
 
 /// Execute function body with CFG-based execution.
@@ -1727,9 +1815,11 @@ fn execute_function_body_with_frame<'db>(
                         format!("Invalid condition stmt ID {:?}", condition_stmt)
                     ))?;
 
-                let condition_value = match if_stmt {
+                let (if_s, condition_value) = match if_stmt {
                     ast::Statement::If(if_s) => {
-                        eval_expression_frame(ctx, if_s.condition(ctx.db), None)?
+                        let value = eval_expression_frame(ctx, if_s.condition(ctx.db), None)?;
+                        let tag = unsafe { (*value.tydesc).type_tag };
+                        (if_s, value)
                     }
                     _ => {
                         return Err(InterpError::RuntimeError(
@@ -1738,8 +1828,13 @@ fn execute_function_body_with_frame<'db>(
                     }
                 };
 
-                // Evaluate condition as boolean.
-                let is_true = extract_bool(ctx, condition_value)?;
+                // Handle condition based on type (bool, Option, or Result).
+                let is_true = evaluate_branch_condition(
+                    ctx,
+                    condition_value,
+                    if_s.then_binding(ctx.db),
+                    if_s.else_binding(ctx.db),
+                )?;
 
                 current_block_id = if is_true { *then_block } else { *else_block };
             }
@@ -2298,9 +2393,33 @@ fn clone_value_to_dest<'db>(
     value: Value,
     dest: Destination,
 ) -> Value {
-    let rt_handle = ctx.runtime.handle();
-    unsafe {
-        datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, dest.ptr, dest.tydesc);
+    use datalove_rt::rtdt::TyDescRef;
+
+    // If tydescs are identical, use the runtime clone directly.
+    if value.tydesc == dest.tydesc {
+        let rt_handle = ctx.runtime.handle();
+        unsafe {
+            datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, dest.ptr, dest.tydesc);
+        }
+    } else {
+        // Tydescs differ but might represent the same type. Check if they're compatible
+        // (same type_tag and size) and use raw memcpy for simple copy types.
+        let src_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+        let dst_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+
+        if src_ref.type_tag() == dst_ref.type_tag() && src_ref.size() == dst_ref.size() {
+            // Types are structurally compatible, use raw memcpy.
+            unsafe {
+                std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, src_ref.size() as usize);
+            }
+        } else {
+            // Types are incompatible, this is an error.
+            panic!(
+                "clone_value_to_dest: incompatible types {:?} (size {}) vs {:?} (size {})",
+                src_ref.type_tag(), src_ref.size(),
+                dst_ref.type_tag(), dst_ref.size()
+            );
+        }
     }
     Value {
         ptr: dest.ptr,
@@ -2563,6 +2682,152 @@ fn extract_bool<'db>(ctx: &mut InterpContext<'db>, value: Value) -> Result<bool,
     let result = unsafe { *(value.ptr as *const bool) };
     destroy_value(ctx, value);
     Ok(result)
+}
+
+/// Evaluate a branch condition for if-statements.
+///
+/// Handles three condition types:
+/// - Bool: simple true/false
+/// - Option: Some is true, None is false; payload bound to then_binding
+/// - Result: Ok is true, Err is false; payload bound to then_binding, error to else_binding
+///
+/// Returns true if the condition is truthy (bool=true, Option=Some, Result=Ok).
+fn evaluate_branch_condition<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+    then_binding: Option<InternedText<'db>>,
+    else_binding: Option<InternedText<'db>>,
+) -> Result<bool, InterpError> {
+    use datalove_rt::rtdt::{TyTag, OptionTag, ResultTag, TyDescRef};
+    use datalove_rt::rtdt::layout::{compute_option_layout, compute_result_layout};
+
+    let type_tag = unsafe { (*value.tydesc).type_tag };
+
+    match type_tag {
+        TyTag::Bool => {
+            // Simple bool condition.
+            let result = unsafe { *(value.ptr as *const bool) };
+            destroy_value(ctx, value);
+            Ok(result)
+        }
+        TyTag::Option => {
+            // Option condition: Some = true, None = false.
+            let tag = unsafe { *(value.ptr as *const u8) };
+            let is_some = tag == OptionTag::Some as u8;
+
+            if is_some {
+                if let Some(binding_name) = then_binding {
+                    // Extract payload and bind to then_binding slot.
+                    let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+                    let layout = unsafe { compute_option_layout(tydesc_ref) };
+                    let inner_tydesc = tydesc_ref.option_inner_ty();
+
+                    // Get the slot for then_binding.
+                    let frame_index = ctx.call_stack.len() - 1;
+                    let frame_layout = ctx.call_stack[frame_index].layout;
+                    if let Some(slot_info) = find_slot_by_name(ctx.db, frame_layout, binding_name) {
+                        let slot_offset = slot_info.offset(ctx.db) as usize;
+                        let slot_ptr = unsafe {
+                            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
+                        };
+
+
+                        // Copy payload to slot.
+                        let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                        let inner_size = inner_tydesc.size() as usize;
+
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, inner_size);
+                        }
+
+                        // Mark slot as available.
+                        let slot_index = frame_layout.slots(ctx.db)
+                            .iter()
+                            .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
+                            .unwrap_or(0);
+                        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    }
+                }
+            }
+
+            // Destroy the Option container if it was heap-allocated.
+            // Frame slot values are stack memory and shouldn't be freed here.
+            if value.location == ValueLocation::TempOwned {
+                unsafe {
+                    datalove_rt::c::dtlv_rti_mem_free_local(
+                        ctx.runtime.handle(),
+                        value.tydesc,
+                        1,
+                        value.ptr,
+                    );
+                }
+            }
+
+            Ok(is_some)
+        }
+        TyTag::Result => {
+            // Result condition: Ok = true, Err = false.
+            let tag = unsafe { *(value.ptr as *const u8) };
+            let is_ok = tag == ResultTag::Ok as u8;
+
+            if is_ok {
+                if let Some(binding_name) = then_binding {
+                    // Extract Ok payload and bind to then_binding slot.
+                    let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+                    let layout = unsafe { compute_result_layout(tydesc_ref) };
+                    let ok_tydesc = tydesc_ref.result_ok_ty();
+
+                    // Get the slot for then_binding.
+                    let frame_index = ctx.call_stack.len() - 1;
+                    let frame_layout = ctx.call_stack[frame_index].layout;
+                    if let Some(slot_info) = find_slot_by_name(ctx.db, frame_layout, binding_name) {
+                        let slot_offset = slot_info.offset(ctx.db) as usize;
+                        let slot_ptr = unsafe {
+                            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
+                        };
+
+                        // Copy Ok payload to slot.
+                        let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                        let ok_size = ok_tydesc.size() as usize;
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, ok_size);
+                        }
+
+                        // Mark slot as available.
+                        let slot_index = frame_layout.slots(ctx.db)
+                            .iter()
+                            .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
+                            .unwrap_or(0);
+                        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    }
+                }
+            } else {
+                // Err case - bind error to else_binding if present.
+                if let Some(_binding_name) = else_binding {
+                    // TODO: Extract Error payload and bind to else_binding slot.
+                    // For now, we just skip error binding.
+                }
+            }
+
+            // Destroy the Result container.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    ctx.runtime.handle(),
+                    value.tydesc,
+                    1,
+                    value.ptr,
+                );
+            }
+
+            Ok(is_ok)
+        }
+        _ => {
+            destroy_value(ctx, value);
+            Err(InterpError::RuntimeError(
+                format!("Expected Bool, Option, or Result in condition, got {:?}", type_tag)
+            ))
+        }
+    }
 }
 
 /// Check if a value is a copy type.
@@ -3786,6 +4051,73 @@ fn write_u32_result(ctx: &mut InterpContext<'_>, value: u32, dest: Option<Destin
         Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
     } else {
         allocate_u32_raw(ctx, value)
+    }
+}
+
+/// Write Option<u32> result to destination or allocate new value.
+fn write_option_u32_result(ctx: &mut InterpContext<'_>, value: Option<u32>, dest: Option<Destination>) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{OptionTag, TyDescRef};
+    use datalove_rt::rtdt::layout::compute_option_layout;
+
+    
+
+    // Get or create the Option<u32> type descriptor.
+    let u32_tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32);
+    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(u32_tydesc);
+    let option_ref = unsafe { TyDescRef::from_ptr(option_tydesc) };
+    let layout = unsafe { compute_option_layout(option_ref) };
+
+    
+
+    // Check if destination is properly sized for Option.
+    let dest_size = dest.map(|d| unsafe { (*d.tydesc).size });
+    let use_dest = dest.is_some() && dest_size == Some(option_ref.size());
+
+    if let (Some(d), true) = (dest, use_dest) {
+        // Write to provided destination (properly sized).
+        unsafe {
+            match value {
+                Some(v) => {
+                    *(d.ptr as *mut u8) = OptionTag::Some as u8;
+                    let payload_ptr = d.ptr.add(layout.payload_offset as usize);
+                    *(payload_ptr as *mut u32) = v;
+                }
+                None => {
+                    *(d.ptr as *mut u8) = OptionTag::None as u8;
+                }
+            }
+        }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        // Allocate new Option<u32>.
+        let rt_handle = ctx.runtime.handle();
+        let ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                rt_handle,
+                option_ref.size(),
+                option_ref.align(),
+                1
+            )
+        };
+
+        if ptr.is_null() {
+            return Err(InterpError::RuntimeError("Failed to allocate Option<u32>".to_string()));
+        }
+
+        unsafe {
+            match value {
+                Some(v) => {
+                    *(ptr as *mut u8) = OptionTag::Some as u8;
+                    let payload_ptr = ptr.add(layout.payload_offset as usize);
+                    *(payload_ptr as *mut u32) = v;
+                }
+                None => {
+                    *(ptr as *mut u8) = OptionTag::None as u8;
+                }
+            }
+        }
+
+        Ok(Value { ptr, tydesc: option_tydesc, location: ValueLocation::TempOwned })
     }
 }
 

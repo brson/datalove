@@ -1,0 +1,17 @@
+----------
+script
+----------
+
+fun make_none(): ?u32
+    ret @4294967295 +? @1
+end fun
+
+fun unwrap_or_default(opt: ?u32): u32
+    if opt |value|
+        ret value
+    else
+        ret @999
+    end if
+end fun
+
+let output = unwrap_or_default(make_none())

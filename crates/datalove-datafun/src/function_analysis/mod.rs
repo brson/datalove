@@ -215,7 +215,7 @@ fn get_param_type<'db>(
     create_placeholder_type(db)
 }
 
-/// Get type for a local (let binding) slot.
+/// Get type for a local (let binding or if-binding) slot.
 fn get_local_type<'db>(
     db: &'db dyn crate::Db,
     func: StmtFun<'db>,
@@ -226,13 +226,33 @@ fn get_local_type<'db>(
     use crate::ast::{Statement, ExprFun};
 
     if let Some(name) = local_name {
-        // Find the let statement with this name.
-        for stmt in func.body(db) {
-            if let Statement::Let(let_stmt) = stmt {
+        // Find the statement with this name (let or if-binding).
+        if let Some(ty) = find_local_type_recursive(db, func.body(db), name, expr_types) {
+            return ty;
+        }
+    }
+    // Fallback to placeholder if local not found or no type.
+    create_placeholder_type(db)
+}
+
+/// Recursively search for a local's type in statement list.
+fn find_local_type_recursive<'db>(
+    db: &'db dyn crate::Db,
+    stmts: &[crate::ast::Statement<'db>],
+    name: InternedText<'db>,
+    expr_types: &[Option<crate::tycheck::TypeAndHeap<'db>>],
+) -> Option<crate::tycheck::TypeAndHeap<'db>> {
+    use salsa::plumbing::AsId;
+    use crate::ast::Statement;
+    use crate::tycheck::{Type, TypeAndHeap};
+
+    for stmt in stmts {
+        match stmt {
+            Statement::Let(let_stmt) => {
                 if let_stmt.name(db) == name {
                     // First, check if there's an explicit type hint.
                     if let Some(type_hint) = let_stmt.type_hint(db) {
-                        return convert_type_hint_to_type(db, type_hint);
+                        return Some(convert_type_hint_to_type(db, type_hint));
                     }
 
                     // No type hint - get the type from the RHS expression.
@@ -241,14 +261,66 @@ fn get_local_type<'db>(
                     let index = expr_id.index() as usize;
 
                     if let Some(Some(ty)) = expr_types.get(index) {
-                        return *ty;
+                        return Some(*ty);
                     }
                 }
             }
+            Statement::If(if_stmt) => {
+                // Check if this is a then_binding or else_binding.
+                if Some(name) == if_stmt.then_binding(db) {
+                    // Then binding type is the inner type of Option or Ok type of Result.
+                    let condition = if_stmt.condition(db);
+                    let expr_id = condition.as_id();
+                    let index = expr_id.index() as usize;
+
+                    if let Some(Some(cond_ty)) = expr_types.get(index) {
+                        if let Type::Datalit(datalit_ty) = cond_ty.ty(db) {
+                            match datalit_ty {
+                                crate::datalit::tycheck::Type::Option(opt) => {
+                                    let inner = opt.inner_type(db);
+                                    return Some(TypeAndHeap::new(
+                                        db,
+                                        inner.heap(db),
+                                        Type::Datalit(inner.ty(db).clone()),
+                                    ));
+                                }
+                                crate::datalit::tycheck::Type::Result(res) => {
+                                    let ok_ty = res.inner_type(db);
+                                    return Some(TypeAndHeap::new(
+                                        db,
+                                        ok_ty.heap(db),
+                                        Type::Datalit(ok_ty.ty(db).clone()),
+                                    ));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                if Some(name) == if_stmt.else_binding(db) {
+                    // Else binding type is the Error type for Result.
+                    // For now, return Error type.
+                    return Some(TypeAndHeap::new(
+                        db,
+                        crate::datalit::ast::Heap::Local,
+                        Type::Datalit(crate::datalit::tycheck::Type::Error),
+                    ));
+                }
+
+                // Recurse into then and else bodies.
+                if let Some(ty) = find_local_type_recursive(db, if_stmt.then_body(db), name, expr_types) {
+                    return Some(ty);
+                }
+                if let Some(else_body) = if_stmt.else_body(db) {
+                    if let Some(ty) = find_local_type_recursive(db, else_body, name, expr_types) {
+                        return Some(ty);
+                    }
+                }
+            }
+            _ => {}
         }
     }
-    // Fallback to placeholder if local not found or no type.
-    create_placeholder_type(db)
+    None
 }
 
 /// Convert a type hint to a TypeAndHeap.

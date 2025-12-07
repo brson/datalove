@@ -620,10 +620,28 @@ fn walk_and_track_init<'db>(
 
                 // Process then branch.
                 let mut then_state = state_before_if.clone();
+                // If there's a then_binding, mark it as initialized in then branch.
+                if let Some(then_name) = if_stmt.then_binding(db) {
+                    if let Some(slot_id) = find_slot_by_name(db, slots, then_name) {
+                        let slot_idx = slot_id.0 as usize;
+                        if slot_idx < then_state.len() {
+                            then_state[slot_idx] = InitState::Always;
+                        }
+                    }
+                }
                 walk_and_track_init(db, if_stmt.then_body(db), slots, &mut then_state, map, stmt_counter);
 
                 // Process else branch.
                 let mut else_state = state_before_if.clone();
+                // If there's an else_binding, mark it as initialized in else branch.
+                if let Some(else_name) = if_stmt.else_binding(db) {
+                    if let Some(slot_id) = find_slot_by_name(db, slots, else_name) {
+                        let slot_idx = slot_id.0 as usize;
+                        if slot_idx < else_state.len() {
+                            else_state[slot_idx] = InitState::Always;
+                        }
+                    }
+                }
                 if let Some(else_body) = if_stmt.else_body(db) {
                     walk_and_track_init(db, else_body, slots, &mut else_state, map, stmt_counter);
                 }
@@ -633,7 +651,7 @@ fn walk_and_track_init<'db>(
                     current_state[i] = then_state[i].merge(else_state[i]);
                 }
 
-                // Handle if-bindings.
+                // Handle if-bindings for merged state (they're only valid in their respective branches).
                 if let Some(then_name) = if_stmt.then_binding(db) {
                     if let Some(slot_id) = find_slot_by_name(db, slots, then_name) {
                         let slot_idx = slot_id.0 as usize;

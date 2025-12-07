@@ -64,8 +64,8 @@ fn is_datalit_copy<'db>(
         // Wrapper types - depend on inner type.
         Type::Option(opt) => {
             // Option is copy only if inner type is copy.
-            let inner = convert_datalit_type(db, opt.inner_type(db));
-            is_copy_type(db, inner)
+            let inner_type = opt.inner_type(db);
+            is_datalit_copy(db, inner_type.ty(db))
         }
         Type::Result(_res) => {
             // Result is copy only if inner type is copy.
@@ -78,42 +78,38 @@ fn is_datalit_copy<'db>(
         // Compound types - copy only if all fields/variants are copy.
         Type::AnonTuple(tuple) => {
             tuple.fields(db).iter().all(|field_ty| {
-                let converted = convert_datalit_type(db, *field_ty);
-                is_copy_type(db, converted)
+                is_datalit_copy(db, field_ty.ty(db))
             })
         }
         Type::NamedTuple(tuple) => {
             tuple.fields(db).iter().all(|field_ty| {
-                let converted = convert_datalit_type(db, *field_ty);
-                is_copy_type(db, converted)
+                is_datalit_copy(db, field_ty.ty(db))
             })
         }
         Type::AnonStruct(struct_ty) => {
             struct_ty.fields(db).iter().all(|field| {
-                let converted = convert_datalit_type(db, field.ty(db));
-                is_copy_type(db, converted)
+                let field_type = field.ty(db);
+                is_datalit_copy(db, field_type.ty(db))
             })
         }
         Type::NamedStruct(struct_ty) => {
             struct_ty.fields(db).iter().all(|field| {
-                let converted = convert_datalit_type(db, field.ty(db));
-                is_copy_type(db, converted)
+                let field_type = field.ty(db);
+                is_datalit_copy(db, field_type.ty(db))
             })
         }
         Type::AnonEnum(enum_ty) => {
             enum_ty.variants(db).iter().all(|variant| {
                 // Variant is copy if it has no payload OR payload is copy.
                 variant.payload(db).map_or(true, |payload_ty| {
-                    let converted = convert_datalit_type(db, payload_ty);
-                    is_copy_type(db, converted)
+                    is_datalit_copy(db, payload_ty.ty(db))
                 })
             })
         }
         Type::NamedEnum(enum_ty) => {
             enum_ty.variants(db).iter().all(|variant| {
                 variant.payload(db).map_or(true, |payload_ty| {
-                    let converted = convert_datalit_type(db, payload_ty);
-                    is_copy_type(db, converted)
+                    is_datalit_copy(db, payload_ty.ty(db))
                 })
             })
         }
