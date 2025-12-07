@@ -1,0 +1,17 @@
+----------
+script
+----------
+
+fun checked_neg(x: i32): ?i32
+    ret -?x
+end fun
+
+fun unwrap_or_default(opt: ?i32): i32
+    if opt |value|
+        ret value
+    else
+        ret @0
+    end if
+end fun
+
+let output = unwrap_or_default(checked_neg(@42))

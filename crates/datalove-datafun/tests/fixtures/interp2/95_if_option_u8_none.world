@@ -1,0 +1,18 @@
+----------
+script
+----------
+
+// Test Option<u8> destructuring - None variant.
+fun make_none(): @?u8
+    ret @none
+end fun
+
+fun unwrap_or_default(opt: @?u8): @u8
+    if opt |value|
+        ret value
+    else
+        ret @99
+    end if
+end fun
+
+let output = unwrap_or_default(make_none())

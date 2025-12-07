@@ -147,7 +147,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"Failed to clone return value to heap\")",
+                "RuntimeError(\"Cannot write integer literal to destination type Result\")",
             ],
         ),
         output: "",

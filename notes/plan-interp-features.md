@@ -6,7 +6,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 **New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs; lists.
 
-**77 tests passing** in interp2 vs **136 tests** in old interp.
+**84 tests passing** in interp2 vs **136 tests** in old interp.
 
 ## Progress
 
@@ -19,6 +19,8 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 5: If-destructuring for Option (80_if_option_some, 81_if_option_none)
 - Phase 5b: If-destructuring for Result (82_if_result_ok, 82a_result_ok_simple) - Ok case works
 - Phase 6: Try operators (val? and val!) - tested via 62_fibonacci
+- Phase 7: Optional/Result unary negation (-?, -!) - tests 84a, 85, 87
+- Phase 8: Other integer types with Option/Result coercion - tests 94-97
 
 **Key implementations:**
 - `execute_function_body` wraps return values in Some/Ok for `?T`/`!T` return types
@@ -29,6 +31,14 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - `allocate_result_ok_from_value` / `allocate_result_err` for Result allocation
 - `eval_try_option` / `eval_try_result` for try operator unwrapping
 - Proper memory management: only free heap-allocated containers, not frame slots
+- `eval_neg_optional` / `eval_neg_result` for checked unary negation (-?, -!)
+- `write_typed_int_result` preserves operand type when writing result
+- `allocate_error_string` creates "overflow" error for ResultErr on overflow
+- `write_typed_int_to_dest` writes integer literals based on destination type (u8, i8, u16, i16, etc.)
+- `type_hint_to_tydesc` extended for all integer types and Option/Result
+- `coerce_value_to_dest` handles T → Option<T> and T → Result<T> coercion
+- `eval_return_expression_frame` provides typed destination for @none/@error literals
+- Skip double-wrapping when return value is already Option/Result type
 
 **Key discoveries:**
 - Bare operators (`-`, `*`) widen u32 to Int
@@ -134,22 +144,32 @@ Syntax: `if opt |value| ... else ... end if`
 - If Err → extract Error, return `InterpError::ResultErr { tydesc, ptr }`
 - If Ok → extract payload to new allocation, free container, return payload
 
-### Phase 7: Optional/Result Unary Ops
-**Tests:** 158-161
+### Phase 7: Optional/Result Unary Ops ✓
+**Tests:** 84a_neg_optional_raw, 85_neg_optional, 87_neg_result
 
-- `-?x`: checked negation, early-returns None on overflow
-- `-!x`: checked negation, early-returns Err on overflow
-- Use Rust's `checked_neg()`:
-  - Success → return negated value directly (not wrapped)
-  - Overflow → return `InterpError::EarlyReturnNone` or `EarlyReturnErr`
-- Function must have `?T` or `!T` return type
+**`-?x` (optional negation):** ✓
+- `eval_neg_optional()` checks type tag (I8, I16, I32)
+- Uses Rust's `checked_neg()` for overflow detection
+- Success → return negated value directly (not wrapped)
+- Overflow → return `InterpError::OptionNone`
 
-### Phase 8: Other Integer Types
-**Tests:** 94-101
+**`-!x` (result negation):** ✓
+- `eval_neg_result()` checks type tag (I8, I16, I32, U8, U16, U32)
+- Uses Rust's `checked_neg()` for overflow detection
+- Success → return negated value directly (not wrapped)
+- Overflow → allocate "overflow" string, return `InterpError::ResultErr`
 
-Add to tydesc_table and allocation:
-- i8, i16, i32, i64: signed integers
-- u8, u16, u64: more unsigned
+**Typechecker fix:** NegOptional/NegResult now return element type directly (not wrapped) and require matching Option/Result function return type, consistent with checked binary operators.
+
+### Phase 8: Other Integer Types ✓
+**Tests:** 94-97 (if_option_u8, if_option_u8_none, if_option_i8, if_option_u16)
+
+Implemented typed integer literals with Option/Result coercion:
+- `write_typed_int_to_dest` handles u8, i8, u16, i16, u32, i32, u64, i64 based on dest type
+- `type_hint_to_tydesc` extended for all integer types and Option/Result
+- Argument coercion: when T is passed where Option<T> expected, wrap in Some
+- Return coercion: @none/@error get typed destination from function return type
+- Fixed double-wrapping: if return value already Option/Result, don't wrap again
 
 ### Phase 9: Coercion Tests
 **Tests:** 117-128

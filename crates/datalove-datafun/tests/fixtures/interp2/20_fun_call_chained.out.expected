@@ -115,8 +115,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "RuntimeError(\"Cannot write integer literal to destination type Int\")",
+            ],
         ),
-        output: "@0",
+        output: "",
     ),
 ]

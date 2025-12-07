@@ -1297,6 +1297,7 @@ fn synthesize_unaryop<'db>(
         }
 
         // Optional negation: only fixed ints, and not unsigned.
+        // Returns element type directly; on overflow, early-returns None.
         UnaryOp::NegOptional => {
             if !is_fixed_int_type(operand_type) {
                 return Err(ctx.error_invalid_operand_type(
@@ -1313,23 +1314,29 @@ fn synthesize_unaryop<'db>(
                     &type_to_string(db, operand_type)
                 ));
             }
-            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
-            let operand_datalit_ty = match operand_ty.ty(db) {
-                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, operand_ty.heap(db), dt.clone()),
+            // Verify we're inside a function with Option return type.
+            let op_str = format!("{:?}", op);
+            let expected_return = ctx.expected_return_type
+                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
+            match expected_return.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Option(_)) => {
+                    // OK, function returns Option type.
+                }
                 _ => {
-                    return Err(ctx.error_invalid_operand_type(
+                    return Err(ctx.error_try_return_type_mismatch(
                         expr,
-                        &format!("{:?}", op),
-                        &type_to_string(db, operand_ty.ty(db))
+                        &op_str,
+                        "Option",
+                        &type_to_string(db, expected_return.ty(db))
                     ));
                 }
-            };
-            let option_inner = datalit::tycheck::TypeOption::new(db, operand_datalit_ty);
-            let option_ty = Type::Datalit(datalit::tycheck::Type::Option(option_inner));
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, option_ty)
+            }
+            // Return element type directly (wrapping happens at function boundary).
+            operand_ty
         }
 
         // Result negation: only fixed ints.
+        // Returns element type directly; on overflow, early-returns Err.
         UnaryOp::NegResult => {
             if !is_fixed_int_type(operand_type) {
                 return Err(ctx.error_invalid_operand_type(
@@ -1338,20 +1345,25 @@ fn synthesize_unaryop<'db>(
                     &type_to_string(db, operand_type)
                 ));
             }
-            // Convert datafun TypeAndHeap to datalit TypeAndHeap.
-            let operand_datalit_ty = match operand_ty.ty(db) {
-                Type::Datalit(dt) => datalit::tycheck::TypeAndHeap::new(db, operand_ty.heap(db), dt.clone()),
+            // Verify we're inside a function with Result return type.
+            let op_str = format!("{:?}", op);
+            let expected_return = ctx.expected_return_type
+                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
+            match expected_return.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Result(_)) => {
+                    // OK, function returns Result type.
+                }
                 _ => {
-                    return Err(ctx.error_invalid_operand_type(
+                    return Err(ctx.error_try_return_type_mismatch(
                         expr,
-                        &format!("{:?}", op),
-                        &type_to_string(db, operand_ty.ty(db))
+                        &op_str,
+                        "Result",
+                        &type_to_string(db, expected_return.ty(db))
                     ));
                 }
-            };
-            let result_inner = datalit::tycheck::TypeResult::new(db, operand_datalit_ty);
-            let result_ty = Type::Datalit(datalit::tycheck::Type::Result(result_inner));
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, result_ty)
+            }
+            // Return element type directly (wrapping happens at function boundary).
+            operand_ty
         }
     };
 

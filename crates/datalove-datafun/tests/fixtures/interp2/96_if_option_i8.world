@@ -1,0 +1,14 @@
+----------
+script
+----------
+
+// Test Option<i8> destructuring with signed values.
+fun test(a: @?i8): @i8
+    if a |value|
+        ret value
+    else
+        ret @0
+    end if
+end fun
+
+let output = test(@42)

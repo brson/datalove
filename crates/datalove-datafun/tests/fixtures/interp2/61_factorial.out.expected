@@ -164,7 +164,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "InvalidExpression(\"Checked multiplication only supports u32 operands\")",
+                "RuntimeError(\"Cannot write integer literal to destination type Result\")",
             ],
         ),
         output: "",

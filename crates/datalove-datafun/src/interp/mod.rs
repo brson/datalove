@@ -883,7 +883,12 @@ fn eval_expression_in_script_scope<'db>(
         }
         ast::ExprFunKind::Datalit(datalit_expr) => {
             // Evaluate datalit expression (literals, tuples, etc.).
-            eval_datalit_expression(ctx, datalit_expr)
+            // If a destination is provided, use type-guided evaluation.
+            if let Some(d) = dest {
+                write_datalit_to_dest(ctx, datalit_expr, d)
+            } else {
+                eval_datalit_expression(ctx, datalit_expr)
+            }
         }
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Evaluate function call in script scope.
@@ -1100,11 +1105,7 @@ fn write_datalit_to_dest<'db>(
             Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
         }
         Expr::Int(int_expr) => {
-            let value_str = int_expr.value(ctx.db).as_str(ctx.db);
-            let value: u32 = value_str.parse()
-                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
-            unsafe { *(dest.ptr as *mut u32) = value; }
-            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+            write_typed_int_to_dest(ctx, &int_expr, dest)
         }
         Expr::Float(float_expr) => {
             let value_str = float_expr.value(ctx.db).as_str(ctx.db);
@@ -1136,6 +1137,68 @@ fn write_datalit_to_dest<'db>(
             "Datalit expression type not yet implemented".to_string()
         )),
     }
+}
+
+/// Write a typed integer literal to a destination, respecting the destination's type.
+fn write_typed_int_to_dest<'db>(
+    ctx: &InterpContext<'db>,
+    int_expr: &crate::datalit::ast::ExprInt<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::TyTag;
+
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+    let dest_type_tag = unsafe { (*dest.tydesc).type_tag };
+
+    match dest_type_tag {
+        TyTag::U8 => {
+            let value: u8 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u8: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u8) = value; }
+        }
+        TyTag::I8 => {
+            let value: i8 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i8: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i8) = value; }
+        }
+        TyTag::U16 => {
+            let value: u16 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u16: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u16) = value; }
+        }
+        TyTag::I16 => {
+            let value: i16 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i16: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i16) = value; }
+        }
+        TyTag::U32 => {
+            let value: u32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u32: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u32) = value; }
+        }
+        TyTag::I32 => {
+            let value: i32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i32: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i32) = value; }
+        }
+        TyTag::U64 => {
+            let value: u64 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u64: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u64) = value; }
+        }
+        TyTag::I64 => {
+            let value: i64 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i64: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i64) = value; }
+        }
+        _ => {
+            return Err(InterpError::RuntimeError(
+                format!("Cannot write integer literal to destination type {:?}", dest_type_tag)
+            ));
+        }
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
 }
 
 /// Write a string literal directly to a destination.
@@ -1485,20 +1548,143 @@ fn eval_function_call_in_script_scope<'db>(
         ));
     }
 
-    // Evaluate all arguments in script scope (no destination - args are temporaries).
+    // Evaluate all arguments and coerce to parameter types where needed.
     let mut arg_values = Vec::new();
-    for arg_expr in arg_exprs {
-        let value = match eval_expression_in_script_scope(ctx, *arg_expr, None) {
-            Ok(v) => v,
-            Err(e) => {
-                // Clean up previously evaluated arguments on error.
-                for val in arg_values {
-                    destroy_value(ctx, val);
-                }
-                return Err(e);
+    for (i, arg_expr) in arg_exprs.iter().enumerate() {
+        // Get parameter type.
+        let param_type_hint = params[i].type_hint(ctx.db);
+        let param_tydesc = type_hint_to_tydesc(ctx, param_type_hint);
+
+        // Check if parameter is Option or Result - these need special coercion handling.
+        let param_tag = unsafe { (*param_tydesc).type_tag };
+        let needs_coercion = param_tag == datalove_rt::rtdt::TyTag::Option
+                          || param_tag == datalove_rt::rtdt::TyTag::Result;
+
+        if needs_coercion {
+            // For Option<T>/Result<T> parameters, try to evaluate as inner type T first.
+            let inner_tydesc = if param_tag == datalove_rt::rtdt::TyTag::Option {
+                let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(param_tydesc) };
+                tydesc_ref.option_inner_ty().as_ptr()
+            } else {
+                let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(param_tydesc) };
+                tydesc_ref.result_ok_ty().as_ptr()
+            };
+
+            // Allocate buffer for inner type.
+            let inner_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(inner_tydesc) };
+            let inner_ptr = unsafe {
+                datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                    ctx.runtime.handle(),
+                    inner_ref.size(),
+                    inner_ref.align(),
+                    1
+                )
+            };
+            if inner_ptr.is_null() {
+                for val in arg_values { destroy_value(ctx, val); }
+                return Err(InterpError::RuntimeError("Failed to allocate argument buffer".to_string()));
             }
-        };
-        arg_values.push(value);
+
+            let inner_dest = Destination { ptr: inner_ptr, tydesc: inner_tydesc };
+
+            // Try to evaluate to inner type.
+            let inner_value = match eval_expression_in_script_scope(ctx, *arg_expr, Some(inner_dest)) {
+                Ok(v) => {
+                    if v.location == ValueLocation::Borrowed && v.ptr == inner_ptr {
+                        Value { ptr: inner_ptr, tydesc: inner_tydesc, location: ValueLocation::TempOwned }
+                    } else {
+                        // Expression returned a different value - free inner buffer and use value directly.
+                        unsafe {
+                            datalove_rt::c::dtlv_rti_mem_free_local(
+                                ctx.runtime.handle(),
+                                inner_tydesc,
+                                1,
+                                inner_ptr,
+                            );
+                        }
+                        v
+                    }
+                }
+                Err(e) => {
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_mem_free_local(
+                            ctx.runtime.handle(),
+                            inner_tydesc,
+                            1,
+                            inner_ptr,
+                        );
+                    }
+                    for val in arg_values { destroy_value(ctx, val); }
+                    return Err(e);
+                }
+            };
+
+            // Now check if we need to wrap in Option/Result.
+            if inner_value.tydesc == inner_tydesc {
+                // Value matches inner type - wrap in Option/Result.
+                let param_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(param_tydesc) };
+                let param_ptr = unsafe {
+                    datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                        ctx.runtime.handle(),
+                        param_ref.size(),
+                        param_ref.align(),
+                        1
+                    )
+                };
+                if param_ptr.is_null() {
+                    destroy_value(ctx, inner_value);
+                    for val in arg_values { destroy_value(ctx, val); }
+                    return Err(InterpError::RuntimeError("Failed to allocate argument buffer".to_string()));
+                }
+
+                let dest = Destination { ptr: param_ptr, tydesc: param_tydesc };
+                let value = coerce_value_to_dest(ctx, inner_value, dest)?;
+                arg_values.push(value);
+            } else {
+                // Value didn't match inner type - check if it's already the Option/Result type.
+                let value_tag = unsafe { (*inner_value.tydesc).type_tag };
+                if value_tag == param_tag {
+                    // Value is already an Option/Result - check inner types match.
+                    let value_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(inner_value.tydesc) };
+                    let value_inner = if value_tag == datalove_rt::rtdt::TyTag::Option {
+                        value_ref.option_inner_ty()
+                    } else {
+                        value_ref.result_ok_ty()
+                    };
+                    let param_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(param_tydesc) };
+                    let param_inner = if param_tag == datalove_rt::rtdt::TyTag::Option {
+                        param_ref.option_inner_ty()
+                    } else {
+                        param_ref.result_ok_ty()
+                    };
+
+                    // Compare inner types by type tag (allow same type even if different tydesc ptrs).
+                    if value_inner.type_tag() == param_inner.type_tag() {
+                        // Types are compatible, use directly.
+                        arg_values.push(inner_value);
+                    } else {
+                        destroy_value(ctx, inner_value);
+                        for val in arg_values { destroy_value(ctx, val); }
+                        return Err(InterpError::RuntimeError("Argument inner type mismatch for Option/Result parameter".to_string()));
+                    }
+                } else {
+                    // Type mismatch - cleanup and error.
+                    destroy_value(ctx, inner_value);
+                    for val in arg_values { destroy_value(ctx, val); }
+                    return Err(InterpError::RuntimeError("Argument type mismatch for Option/Result parameter".to_string()));
+                }
+            }
+        } else {
+            // Non-Option/Result parameter - use original simple evaluation.
+            let value = match eval_expression_in_script_scope(ctx, *arg_expr, None) {
+                Ok(v) => v,
+                Err(e) => {
+                    for val in arg_values { destroy_value(ctx, val); }
+                    return Err(e);
+                }
+            };
+            arg_values.push(value);
+        }
     }
 
     // Execute the function body with arguments.
@@ -1781,7 +1967,13 @@ fn execute_function_body<'db>(
                 // If the function's return type is ?T, wrap result in Some or catch OptionNone as None.
                 match result {
                     Ok(value) => {
-                        // Wrap successful result in Some.
+                        // Check if value is already an Option (e.g., from @none literal).
+                        let value_tag = unsafe { (*value.tydesc).type_tag };
+                        if value_tag == datalove_rt::rtdt::TyTag::Option {
+                            // Already an Option - return directly, don't double-wrap.
+                            return Ok(value);
+                        }
+                        // Wrap non-Option result in Some.
                         return allocate_option_some_from_value(ctx, value);
                     }
                     Err(InterpError::OptionNone) => {
@@ -1796,7 +1988,13 @@ fn execute_function_body<'db>(
                 // If the function's return type is !T, wrap result in Ok or catch ResultErr as Err.
                 match result {
                     Ok(value) => {
-                        // Wrap successful result in Ok.
+                        // Check if value is already a Result (e.g., from @error literal).
+                        let value_tag = unsafe { (*value.tydesc).type_tag };
+                        if value_tag == datalove_rt::rtdt::TyTag::Result {
+                            // Already a Result - return directly, don't double-wrap.
+                            return Ok(value);
+                        }
+                        // Wrap non-Result value in Ok.
                         return allocate_result_ok_from_value(ctx, value);
                     }
                     Err(InterpError::ResultErr { tydesc, ptr }) => {
@@ -1852,16 +2050,32 @@ fn type_hint_to_tydesc<'db>(
     type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
 ) -> *const datalove_rt::rtdt::TyDesc {
     use crate::datalit::ast::TypeHint;
+    use crate::datalit::tycheck::Type;
 
     match type_hint.type_hint(ctx.db) {
-        TypeHint::U32 => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32),
-        TypeHint::Bool => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::Bool),
-        TypeHint::String => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::String),
-        TypeHint::Int => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::Int),
-        TypeHint::F32 => ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::F32),
+        TypeHint::Bool => ctx.tydesc_table.get_or_create(&Type::Bool),
+        TypeHint::U8 => ctx.tydesc_table.get_or_create(&Type::U8),
+        TypeHint::I8 => ctx.tydesc_table.get_or_create(&Type::I8),
+        TypeHint::U16 => ctx.tydesc_table.get_or_create(&Type::U16),
+        TypeHint::I16 => ctx.tydesc_table.get_or_create(&Type::I16),
+        TypeHint::U32 => ctx.tydesc_table.get_or_create(&Type::U32),
+        TypeHint::I32 => ctx.tydesc_table.get_or_create(&Type::I32),
+        TypeHint::U64 => ctx.tydesc_table.get_or_create(&Type::U64),
+        TypeHint::I64 => ctx.tydesc_table.get_or_create(&Type::I64),
+        TypeHint::F32 => ctx.tydesc_table.get_or_create(&Type::F32),
+        TypeHint::Int => ctx.tydesc_table.get_or_create(&Type::Int),
+        TypeHint::String => ctx.tydesc_table.get_or_create(&Type::String),
+        TypeHint::Option(opt) => {
+            let inner_tydesc = type_hint_to_tydesc(ctx, opt.inner_type(ctx.db));
+            ctx.tydesc_table.create_option_from_inner_tydesc(inner_tydesc)
+        }
+        TypeHint::Result(res) => {
+            let inner_tydesc = type_hint_to_tydesc(ctx, res.inner_type(ctx.db));
+            ctx.tydesc_table.create_result_from_inner_tydesc(inner_tydesc)
+        }
         _ => {
             // Default fallback for complex types.
-            ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32)
+            ctx.tydesc_table.get_or_create(&Type::U32)
         }
     }
 }
@@ -1967,7 +2181,8 @@ fn execute_cfg_statement<'db>(
         }
         ast::Statement::Ret(ret_stmt) => {
             // Evaluate the return expression (no dest - value escapes frame).
-            let value = eval_expression_frame(ctx, ret_stmt.value(ctx.db), None)?;
+            // Note: @none/@error in return position require typed context from function return type.
+            let value = eval_return_expression_frame(ctx, ret_stmt.value(ctx.db))?;
             Ok(CfgControl::Return(value))
         }
         ast::Statement::If(_) => {
@@ -2500,6 +2715,58 @@ fn clone_value<'db>(
         tydesc: value.tydesc,
         location: ValueLocation::TempOwned,
     }
+}
+
+/// Evaluate a return expression with the function's return type as context.
+///
+/// This is needed for @none/@error literals which require a typed destination.
+fn eval_return_expression_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    expr: ast::ExprFun<'db>,
+) -> Result<Value, InterpError> {
+    // Check if this is a @none or @error literal that needs typed context.
+    if let ast::ExprFunKind::Datalit(datalit_expr) = expr.expr(ctx.db) {
+        let inner = datalit_expr.expr(ctx.db);
+        let needs_typed_dest = matches!(
+            inner.expr(ctx.db),
+            crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
+        );
+
+        if needs_typed_dest {
+            // Get the function's return type to provide as destination.
+            let frame_index = ctx.call_stack.len() - 1;
+            let func = ctx.call_stack[frame_index].func;
+            if let Some(ret_type) = func.return_type(ctx.db) {
+                let ret_tydesc = type_hint_to_tydesc(ctx, ret_type);
+                let ret_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(ret_tydesc) };
+                let ret_ptr = unsafe {
+                    datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                        ctx.runtime.handle(),
+                        ret_ref.size(),
+                        ret_ref.align(),
+                        1
+                    )
+                };
+                if ret_ptr.is_null() {
+                    return Err(InterpError::RuntimeError("Failed to allocate return buffer".to_string()));
+                }
+
+                let dest = Destination { ptr: ret_ptr, tydesc: ret_tydesc };
+                let value = write_datalit_to_dest(ctx, datalit_expr, dest)?;
+
+                // Convert Borrowed to TempOwned since this escapes the frame.
+                if value.location == ValueLocation::Borrowed && value.ptr == ret_ptr {
+                    return Ok(Value { ptr: ret_ptr, tydesc: ret_tydesc, location: ValueLocation::TempOwned });
+                } else {
+                    // This shouldn't happen for @none/@error.
+                    return Ok(value);
+                }
+            }
+        }
+    }
+
+    // For other expressions, evaluate without special destination.
+    eval_expression_frame(ctx, expr, None)
 }
 
 /// Clone a value into a pre-allocated destination.
@@ -4776,12 +5043,8 @@ fn execute_unop<'db>(
 
     match op {
         UnaryOp::Neg => eval_neg(ctx, operand, dest),
-        UnaryOp::NegOptional | UnaryOp::NegResult => {
-            destroy_value(ctx, operand);
-            Err(InterpError::InvalidExpression(
-                "Optional/Result negation not yet implemented".to_string()
-            ))
-        }
+        UnaryOp::NegOptional => eval_neg_optional(ctx, operand, dest),
+        UnaryOp::NegResult => eval_neg_result(ctx, operand, dest),
     }
 }
 
@@ -4834,4 +5097,325 @@ fn eval_neg<'db>(
         }
         Err(InterpError::RuntimeError("Int negation failed".to_string()))
     }
+}
+
+/// Evaluate optional negation (-?x).
+///
+/// Performs checked negation on signed integers.
+/// Returns the raw negated value on success, or OptionNone error on overflow.
+fn eval_neg_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::TyTag;
+
+    let type_tag = unsafe { (*operand.tydesc).type_tag };
+    let operand_tydesc = operand.tydesc;
+
+    // Read value and perform checked negation based on type.
+    let raw_value = unsafe { *(operand.ptr as *const u32) };
+
+    let negated_result: Option<u32> = match type_tag {
+        TyTag::I8 => {
+            let val = raw_value as i8;
+            val.checked_neg().map(|r| (r as i32) as u32)
+        }
+        TyTag::I16 => {
+            let val = raw_value as i16;
+            val.checked_neg().map(|r| (r as i32) as u32)
+        }
+        TyTag::I32 => {
+            let val = raw_value as i32;
+            val.checked_neg().map(|r| r as u32)
+        }
+        _ => {
+            destroy_value(ctx, operand);
+            return Err(InterpError::InvalidExpression(
+                format!("Optional negation not supported for type {:?}", type_tag)
+            ));
+        }
+    };
+
+    // Clean up operand.
+    destroy_value(ctx, operand);
+
+    match negated_result {
+        Some(result) => write_typed_int_result(ctx, result, operand_tydesc, dest),
+        None => Err(InterpError::OptionNone),
+    }
+}
+
+/// Evaluate result negation (-!x).
+///
+/// Performs checked negation on fixed-width integers.
+/// Returns the raw negated value on success, or ResultErr with "overflow" on overflow.
+fn eval_neg_result<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::TyTag;
+
+    let type_tag = unsafe { (*operand.tydesc).type_tag };
+    let operand_tydesc = operand.tydesc;
+
+    // Read value and perform checked negation based on type.
+    let raw_value = unsafe { *(operand.ptr as *const u32) };
+
+    let negated_result: Option<u32> = match type_tag {
+        TyTag::I8 => {
+            let val = raw_value as i8;
+            val.checked_neg().map(|r| (r as i32) as u32)
+        }
+        TyTag::I16 => {
+            let val = raw_value as i16;
+            val.checked_neg().map(|r| (r as i32) as u32)
+        }
+        TyTag::I32 => {
+            let val = raw_value as i32;
+            val.checked_neg().map(|r| r as u32)
+        }
+        TyTag::U8 => {
+            let val = raw_value as u8;
+            val.checked_neg().map(|r| r as u32)
+        }
+        TyTag::U16 => {
+            let val = raw_value as u16;
+            val.checked_neg().map(|r| r as u32)
+        }
+        TyTag::U32 => {
+            raw_value.checked_neg()
+        }
+        _ => {
+            destroy_value(ctx, operand);
+            return Err(InterpError::InvalidExpression(
+                format!("Result negation not supported for type {:?}", type_tag)
+            ));
+        }
+    };
+
+    // Clean up operand.
+    destroy_value(ctx, operand);
+
+    match negated_result {
+        Some(result) => write_typed_int_result(ctx, result, operand_tydesc, dest),
+        None => {
+            // Allocate an "overflow" error string and return ResultErr.
+            let err_string = allocate_error_string(ctx, "overflow")?;
+            Err(InterpError::ResultErr {
+                tydesc: err_string.tydesc,
+                ptr: err_string.ptr,
+            })
+        }
+    }
+}
+
+/// Coerce a value to a destination type.
+///
+/// Handles T → Option<T> (wrap in Some) and T → Result<T> (wrap in Ok).
+/// If the types are compatible, copies the value to the destination.
+fn coerce_value_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyTag, TyDescRef, OptionTag, ResultTag};
+    use datalove_rt::rtdt::layout::{compute_option_layout, compute_result_layout};
+
+    let value_tag = unsafe { (*value.tydesc).type_tag };
+    let dest_tag = unsafe { (*dest.tydesc).type_tag };
+
+    // If types match, clone the value to dest (not shallow copy - types may have internal pointers).
+    if value.tydesc == dest.tydesc {
+        let clone_status = unsafe {
+            datalove_rt::c::dtlv_rti_clone_local(
+                ctx.runtime.handle(),
+                value.ptr,
+                value.tydesc,
+                dest.ptr,
+                dest.tydesc,
+            )
+        };
+        if clone_status != datalove_rt::c::RtStatus::Ok {
+            destroy_value(ctx, value);
+            return Err(InterpError::RuntimeError("Failed to clone value in coercion".to_string()));
+        }
+        destroy_value(ctx, value);
+        return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
+    }
+
+    // Coerce T → Option<T>
+    if dest_tag == TyTag::Option {
+        let dest_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+        let inner_tydesc = dest_ref.option_inner_ty();
+
+        // Check if value type matches inner type.
+        if value.tydesc == inner_tydesc.as_ptr() {
+            // Wrap value in Some.
+            let layout = unsafe { compute_option_layout(dest_ref) };
+
+            // Write Some tag.
+            unsafe { *(dest.ptr as *mut u8) = OptionTag::Some as u8; }
+
+            // Clone payload (not shallow copy - types may have internal pointers).
+            let payload_ptr = unsafe { dest.ptr.add(layout.payload_offset as usize) };
+            let clone_status = unsafe {
+                datalove_rt::c::dtlv_rti_clone_local(
+                    ctx.runtime.handle(),
+                    value.ptr,
+                    value.tydesc,
+                    payload_ptr,
+                    inner_tydesc.as_ptr(),
+                )
+            };
+            if clone_status != datalove_rt::c::RtStatus::Ok {
+                destroy_value(ctx, value);
+                return Err(InterpError::RuntimeError("Failed to clone value in Option coercion".to_string()));
+            }
+
+            // Clean up the original value (we cloned it).
+            destroy_value(ctx, value);
+
+            return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
+        }
+    }
+
+    // Coerce T → Result<T>
+    if dest_tag == TyTag::Result {
+        let dest_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+        let inner_tydesc = dest_ref.result_ok_ty();
+
+        // Check if value type matches inner type.
+        if value.tydesc == inner_tydesc.as_ptr() {
+            // Wrap value in Ok.
+            let layout = unsafe { compute_result_layout(dest_ref) };
+
+            // Write Ok tag.
+            unsafe { *(dest.ptr as *mut u8) = ResultTag::Ok as u8; }
+
+            // Clone payload (not shallow copy - types may have internal pointers).
+            let payload_ptr = unsafe { dest.ptr.add(layout.payload_offset as usize) };
+            let clone_status = unsafe {
+                datalove_rt::c::dtlv_rti_clone_local(
+                    ctx.runtime.handle(),
+                    value.ptr,
+                    value.tydesc,
+                    payload_ptr,
+                    inner_tydesc.as_ptr(),
+                )
+            };
+            if clone_status != datalove_rt::c::RtStatus::Ok {
+                destroy_value(ctx, value);
+                return Err(InterpError::RuntimeError("Failed to clone value in Result coercion".to_string()));
+            }
+
+            // Clean up the original value (we cloned it).
+            destroy_value(ctx, value);
+
+            return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
+        }
+    }
+
+    // No coercion available - type mismatch.
+    destroy_value(ctx, value);
+    Err(InterpError::RuntimeError(
+        format!("Type mismatch: cannot coerce {:?} to {:?}", value_tag, dest_tag)
+    ))
+}
+
+/// Write a typed integer result to destination or allocate new value.
+///
+/// Preserves the original type (i8, i16, i32, u8, u16, u32) from the tydesc.
+fn write_typed_int_result(
+    ctx: &mut InterpContext<'_>,
+    value: u32,
+    tydesc: *const datalove_rt::rtdt::TyDesc,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    if let Some(d) = dest {
+        // Write to destination.
+        unsafe { *(d.ptr as *mut u32) = value; }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        // Allocate new value with the correct type.
+        let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc) };
+        let ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                ctx.runtime.handle(),
+                tydesc_ref.size(),
+                tydesc_ref.align(),
+                1
+            )
+        };
+
+        if ptr.is_null() {
+            return Err(InterpError::RuntimeError("Failed to allocate integer".to_string()));
+        }
+
+        unsafe { *(ptr as *mut u32) = value; }
+        Ok(Value { ptr, tydesc, location: ValueLocation::TempOwned })
+    }
+}
+
+/// Allocate a string value with the given content for use as an error.
+fn allocate_error_string<'db>(
+    ctx: &mut InterpContext<'db>,
+    content: &str,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
+    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
+
+    // Allocate memory for string.
+    let rt_handle = ctx.runtime.handle();
+    let string_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            tydesc_ref.size(),
+            tydesc_ref.align(),
+            1
+        )
+    };
+
+    if string_ptr.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate error string".to_string()));
+    }
+
+    // Initialize string structure.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            string_ptr,
+            tydesc_ref.as_ptr(),
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create error string".to_string()));
+    }
+
+    // Push the string bytes.
+    if !content.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                string_ptr,
+                tydesc_ref.as_ptr(),
+                content.as_ptr(),
+                content.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push error string bytes".to_string()));
+        }
+    }
+
+    Ok(Value {
+        ptr: string_ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
 }
