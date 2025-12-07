@@ -1644,6 +1644,7 @@ fn execute_function_body<'db>(
                     value.ptr,
                     value.tydesc,
                     heap_ptr,
+                    value.tydesc,
                 );
                 if status != datalove_rt::c::RtStatus::Ok {
                     datalove_rt::c::dtlv_rti_mem_free_local(
@@ -2299,7 +2300,7 @@ fn clone_value_to_dest<'db>(
 ) -> Value {
     let rt_handle = ctx.runtime.handle();
     unsafe {
-        datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, dest.ptr);
+        datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, dest.ptr, dest.tydesc);
     }
     Value {
         ptr: dest.ptr,
