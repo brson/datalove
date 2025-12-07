@@ -36,7 +36,11 @@
 
 ### Remaining
 
-- [ ] Add debug heap assertions (`contains_ptr`)
+- [x] Add debug assertions for API invariants
+  - Replaced original heap locality idea (didn't work - tydescs don't encode heap info)
+  - Added tydesc pointer equality assertions (clone in/out, tensor transpose in/out)
+  - Added container element consistency assertions (list, tensor, set, map element types)
+  - Note: Option inner type assertions removed - test infrastructure doesn't deduplicate tydescs
 
 ---
 
