@@ -1604,6 +1604,8 @@ fn check_expr<'db>(
                     return Err(ctx.error_datalit_error(expr, &error_msg));
                 }
 
+                // Store the expression type so temp slots get the correct type.
+                ctx.store_expr_type(expr, expected);
                 Ok(())
             } else {
                 // Expected type is not a datalit type (e.g., function type).

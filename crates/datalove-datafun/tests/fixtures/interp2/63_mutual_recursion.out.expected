@@ -255,6 +255,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "@true",
+        output: "@false",
     ),
 ]

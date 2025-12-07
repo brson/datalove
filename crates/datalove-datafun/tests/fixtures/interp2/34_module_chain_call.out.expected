@@ -307,7 +307,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"Function \'add_five\' has analysis errors: [UseAfterMove { slot: SlotId(9), use_location: ProgramPoint { stmt_id: StmtId(5), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
+                "RuntimeError(\"Function \'add_five\' has analysis errors: [UseAfterMove { slot: SlotId(13), use_location: ProgramPoint { stmt_id: StmtId(5), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
             ],
         ),
         output: "",

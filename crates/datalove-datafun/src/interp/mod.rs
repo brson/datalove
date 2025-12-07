@@ -1050,6 +1050,40 @@ fn eval_datalit_expression<'db>(
     }
 }
 
+/// Evaluate a datalit expression and write the result to a destination.
+fn eval_datalit_expression_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    expr: crate::datalit::ast::ExprFull<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    // Evaluate the expression (allocates temp).
+    let temp_value = eval_datalit_expression(ctx, expr)?;
+
+    // Copy value data to destination.
+    let size = unsafe { (*temp_value.tydesc).size as usize };
+    unsafe {
+        std::ptr::copy_nonoverlapping(temp_value.ptr, dest.ptr, size);
+    }
+
+    // Free the temp allocation (data has been copied).
+    if temp_value.location == ValueLocation::TempOwned {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                temp_value.tydesc,
+                1,
+                temp_value.ptr,
+            );
+        }
+    }
+
+    Ok(Value {
+        ptr: dest.ptr,
+        tydesc: dest.tydesc,
+        location: ValueLocation::Borrowed,
+    })
+}
+
 /// Look up a function by name in script scope or imported modules.
 ///
 /// Returns the function definition and its source module (if from a module).
@@ -1170,11 +1204,18 @@ fn eval_function_call_frame<'db>(
     let mut arg_values = Vec::new();
     for arg_expr in arg_exprs {
         // Get temp slot destination for this argument.
-        let arg_dest = get_destination_for_expr(ctx, *arg_expr);
-        let value = match eval_expression_frame(ctx, *arg_expr, arg_dest) {
+        let arg_dest = match get_destination_for_expr(ctx, *arg_expr) {
+            Ok(d) => d,
+            Err(e) => {
+                for val in arg_values {
+                    destroy_value(ctx, val);
+                }
+                return Err(e);
+            }
+        };
+        let value = match eval_expression_frame(ctx, *arg_expr, Some(arg_dest)) {
             Ok(v) => {
-                // Mark slot available if DPS was used.
-                if arg_dest.is_some() && v.location == ValueLocation::Borrowed {
+                if v.location == ValueLocation::Borrowed {
                     mark_temp_slot_available(ctx, *arg_expr);
                 }
                 v
@@ -1611,27 +1652,32 @@ fn find_slot_by_name<'db>(
         .copied()
 }
 
-/// Get a Destination for an expression's temporary slot, if one exists.
+/// Get a Destination for an expression's temporary slot.
 fn get_destination_for_expr<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
-) -> Option<Destination> {
+) -> Result<Destination, InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
     let layout = ctx.call_stack[frame_index].layout;
 
-    layout.get_temp_slot_for_expr(ctx.db, expr).and_then(|slot_info| {
-        let offset = slot_info.offset(ctx.db) as usize;
-        let ptr = unsafe {
-            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset)
-        };
-        let ty = slot_info.ty(ctx.db);
-        let datalit_ty = match ty.ty(ctx.db) {
-            crate::tycheck::Type::Datalit(dt) => dt.clone(),
-            _ => return None,
-        };
-        let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-        Some(Destination { ptr, tydesc })
-    })
+    let slot_info = layout.get_temp_slot_for_expr(ctx.db, expr)
+        .ok_or_else(|| InterpError::RuntimeError(
+            "No temp slot allocated for expression".to_string()
+        ))?;
+
+    let offset = slot_info.offset(ctx.db) as usize;
+    let ptr = unsafe {
+        ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset)
+    };
+    let ty = slot_info.ty(ctx.db);
+    let datalit_ty = match ty.ty(ctx.db) {
+        crate::tycheck::Type::Datalit(dt) => dt.clone(),
+        _ => return Err(InterpError::RuntimeError(
+            "Non-datalit type in temp slot".to_string()
+        )),
+    };
+    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+    Ok(Destination { ptr, tydesc })
 }
 
 /// Mark a temporary slot as Available after writing a value to it.
@@ -1808,9 +1854,17 @@ fn eval_expression_frame<'db>(
                 let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
                 if is_copy {
-                    // Copy: clone the value. The clone is TempOwned.
+                    // Copy: clone to dest.
                     let borrowed = Value { ptr, tydesc, location: ValueLocation::Borrowed };
-                    Ok(clone_value(ctx, borrowed))
+                    let result_dest = match dest {
+                        Some(d) => d,
+                        None => get_destination_for_expr(ctx, expr)?,
+                    };
+                    let result = clone_value_to_dest(ctx, borrowed, result_dest);
+                    if dest.is_none() {
+                        mark_temp_slot_available(ctx, expr);
+                    }
+                    Ok(result)
                 } else {
                     // Move: take ownership. Value becomes TempOwned.
                     ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
@@ -1819,7 +1873,7 @@ fn eval_expression_frame<'db>(
             } else {
                 // Local/Temporary slot.
                 if is_copy {
-                    // For Copy types, clone directly from frame without allocating.
+                    // For Copy types, clone to dest.
                     let offset = slot_info.offset(ctx.db) as usize;
                     let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
 
@@ -1829,9 +1883,16 @@ fn eval_expression_frame<'db>(
                     };
                     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-                    // Temporary value for cloning - location doesn't matter since we only clone from it.
-                    let temp_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::Borrowed };
-                    Ok(clone_value(ctx, temp_value))
+                    let source_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::Borrowed };
+                    let result_dest = match dest {
+                        Some(d) => d,
+                        None => get_destination_for_expr(ctx, expr)?,
+                    };
+                    let result = clone_value_to_dest(ctx, source_value, result_dest);
+                    if dest.is_none() {
+                        mark_temp_slot_available(ctx, expr);
+                    }
+                    Ok(result)
                 } else {
                     // For Move types, allocate and copy from frame, then mark as moved.
                     let value = read_value_from_slot(ctx, frame_index, slot_info)?;
@@ -1842,40 +1903,50 @@ fn eval_expression_frame<'db>(
         }
 
         ast::ExprFunKind::Datalit(datalit_expr) => {
-            // Allocate literals on heap (as currently done).
-            eval_datalit_expression(ctx, datalit_expr)
+            // Use provided dest or own temp slot.
+            let result_dest = match dest {
+                Some(d) => d,
+                None => get_destination_for_expr(ctx, expr)?,
+            };
+            let result = eval_datalit_expression_to_dest(ctx, datalit_expr, result_dest)?;
+            // If using own temp slot, mark Available for cleanup.
+            if dest.is_none() {
+                mark_temp_slot_available(ctx, expr);
+            }
+            Ok(result)
         }
 
         ast::ExprFunKind::BinOp(binop_expr) => {
             // Get temp slot destinations for subexpressions.
             let lhs_expr = binop_expr.lhs(ctx.db);
             let rhs_expr = binop_expr.rhs(ctx.db);
-            let lhs_dest = get_destination_for_expr(ctx, lhs_expr);
-            let rhs_dest = get_destination_for_expr(ctx, rhs_expr);
+            let lhs_dest = get_destination_for_expr(ctx, lhs_expr)?;
+            let rhs_dest = get_destination_for_expr(ctx, rhs_expr)?;
 
             // Evaluate lhs with destination.
-            let lhs = eval_expression_frame(ctx, lhs_expr, lhs_dest)?;
-            // Only mark slot available if DPS was actually used (value is Borrowed).
-            if lhs_dest.is_some() && lhs.location == ValueLocation::Borrowed {
+            let lhs = eval_expression_frame(ctx, lhs_expr, Some(lhs_dest))?;
+            if lhs.location == ValueLocation::Borrowed {
                 mark_temp_slot_available(ctx, lhs_expr);
             }
 
             // Evaluate rhs with destination.
-            let rhs = match eval_expression_frame(ctx, rhs_expr, rhs_dest) {
+            let rhs = match eval_expression_frame(ctx, rhs_expr, Some(rhs_dest)) {
                 Ok(v) => v,
                 Err(e) => {
                     destroy_value(ctx, lhs);
                     return Err(e);
                 }
             };
-            // Only mark slot available if DPS was actually used.
-            if rhs_dest.is_some() && rhs.location == ValueLocation::Borrowed {
+            if rhs.location == ValueLocation::Borrowed {
                 mark_temp_slot_available(ctx, rhs_expr);
             }
 
             // Use provided dest or own temp slot.
-            let result_dest = dest.or_else(|| get_destination_for_expr(ctx, expr));
-            let result = execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, result_dest)?;
+            let result_dest = match dest {
+                Some(d) => d,
+                None => get_destination_for_expr(ctx, expr)?,
+            };
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, Some(result_dest))?;
 
             // If result went to our temp slot (not caller's dest), mark Available for cleanup.
             if dest.is_none() && result.location == ValueLocation::Borrowed {
@@ -1893,18 +1964,20 @@ fn eval_expression_frame<'db>(
         ast::ExprFunKind::UnaryOp(unary_expr) => {
             // Get temp slot for operand.
             let operand_expr = unary_expr.operand(ctx.db);
-            let operand_dest = get_destination_for_expr(ctx, operand_expr);
+            let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
 
             // Evaluate operand with destination.
-            let operand = eval_expression_frame(ctx, operand_expr, operand_dest)?;
-            // Only mark slot available if DPS was actually used.
-            if operand_dest.is_some() && operand.location == ValueLocation::Borrowed {
+            let operand = eval_expression_frame(ctx, operand_expr, Some(operand_dest))?;
+            if operand.location == ValueLocation::Borrowed {
                 mark_temp_slot_available(ctx, operand_expr);
             }
 
             // Use provided dest or own temp slot.
-            let result_dest = dest.or_else(|| get_destination_for_expr(ctx, expr));
-            let result = execute_unop(ctx, unary_expr.op(ctx.db), operand, result_dest)?;
+            let result_dest = match dest {
+                Some(d) => d,
+                None => get_destination_for_expr(ctx, expr)?,
+            };
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), operand, Some(result_dest))?;
 
             // If result went to our temp slot, mark Available for cleanup.
             if dest.is_none() && result.location == ValueLocation::Borrowed {
@@ -1921,11 +1994,18 @@ fn eval_expression_frame<'db>(
 
             for elem in elements {
                 // Get temp slot for this element.
-                let elem_dest = get_destination_for_expr(ctx, *elem);
-                match eval_expression_frame(ctx, *elem, elem_dest) {
+                let elem_dest = match get_destination_for_expr(ctx, *elem) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        for v in values {
+                            destroy_value(ctx, v);
+                        }
+                        return Err(e);
+                    }
+                };
+                match eval_expression_frame(ctx, *elem, Some(elem_dest)) {
                     Ok(v) => {
-                        // Only mark slot available if DPS was actually used.
-                        if elem_dest.is_some() && v.location == ValueLocation::Borrowed {
+                        if v.location == ValueLocation::Borrowed {
                             mark_temp_slot_available(ctx, *elem);
                         }
                         values.push(v);
@@ -1983,6 +2063,23 @@ fn clone_value<'db>(
         ptr: cloned_ptr,
         tydesc: value.tydesc,
         location: ValueLocation::TempOwned,
+    }
+}
+
+/// Clone a value into a pre-allocated destination.
+fn clone_value_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+    dest: Destination,
+) -> Value {
+    let rt_handle = ctx.runtime.handle();
+    unsafe {
+        datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, dest.ptr);
+    }
+    Value {
+        ptr: dest.ptr,
+        tydesc: dest.tydesc,
+        location: ValueLocation::Borrowed,
     }
 }
 

@@ -462,7 +462,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"Function \'top\' has analysis errors: [UseAfterMove { slot: SlotId(1), use_location: ProgramPoint { stmt_id: StmtId(3), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }, UseAfterMove { slot: SlotId(5), use_location: ProgramPoint { stmt_id: StmtId(3), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
+                "RuntimeError(\"Function \'top\' has analysis errors: [UseAfterMove { slot: SlotId(1), use_location: ProgramPoint { stmt_id: StmtId(3), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }, UseAfterMove { slot: SlotId(8), use_location: ProgramPoint { stmt_id: StmtId(3), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
             ],
         ),
         output: "",

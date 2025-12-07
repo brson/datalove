@@ -99,10 +99,12 @@ impl<'db> SlotAllocationBuilder<'db> {
     fn analyze_expr(&mut self, db: &'db dyn crate::Db, expr: ExprFun<'db>) {
         match expr.expr(db) {
             ExprFunKind::Datalit(_) => {
-                // Literals might need temporaries, but for now we'll handle them later.
+                // Literals need a temporary slot.
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
             }
             ExprFunKind::Name(_) => {
-                // Variable reference, no temporary needed.
+                // Variable reads need a temp slot (for copy-type clones; unused for moves).
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
             }
             ExprFunKind::BinOp(binop) => {
                 self.analyze_expr(db, binop.lhs(db));

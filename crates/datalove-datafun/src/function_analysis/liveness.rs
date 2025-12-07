@@ -478,6 +478,22 @@ mod tests {
         panic!("No function found in source code");
     }
 
+    /// Find a slot by name in the slot allocation.
+    fn find_slot_by_name<'db>(
+        db: &'db dyn crate::Db,
+        slot_alloc: &SlotAllocation<'db>,
+        name: &str,
+    ) -> SlotId {
+        for slot in slot_alloc.slots(db) {
+            if let Some(slot_name) = slot.name(db) {
+                if slot_name.text(db) == name {
+                    return slot.slot_id(db);
+                }
+            }
+        }
+        panic!("Slot '{}' not found", name);
+    }
+
     #[test]
     fn test_init_simple_linear() {
         let ref db = crate::Database::default();
@@ -496,8 +512,8 @@ end fun
 
         // x is a Reference slot (parameter) - Always initialized.
         // y is a Local slot - becomes Always after let statement.
-        let x_slot = slot_alloc.slots(db)[0].slot_id(db);
-        let y_slot = slot_alloc.slots(db)[1].slot_id(db);
+        let x_slot = find_slot_by_name(db, &slot_alloc, "x");
+        let y_slot = find_slot_by_name(db, &slot_alloc, "y");
 
         let entry_block = cfg.blocks(db)[0].block_id;
 
@@ -528,7 +544,7 @@ end fun
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
-        let x_slot = slot_alloc.slots(db)[1].slot_id(db);
+        let x_slot = find_slot_by_name(db, &slot_alloc, "x");
         let blocks = cfg.blocks(db);
 
         // Entry block: x is Never.
@@ -555,8 +571,8 @@ end fun
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
-        let x_slot = slot_alloc.slots(db)[1].slot_id(db);  // x from then-branch
-        let y_slot = slot_alloc.slots(db)[2].slot_id(db);  // y from else-branch
+        let x_slot = find_slot_by_name(db, &slot_alloc, "x");
+        let y_slot = find_slot_by_name(db, &slot_alloc, "y");
 
         let blocks = cfg.blocks(db);
 
@@ -600,8 +616,8 @@ end fun
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
-        let x_slot = slot_alloc.slots(db)[1].slot_id(db);  // x from then-branch
-        let y_slot = slot_alloc.slots(db)[2].slot_id(db);  // y from else-branch
+        let x_slot = find_slot_by_name(db, &slot_alloc, "x");
+        let y_slot = find_slot_by_name(db, &slot_alloc, "y");
         let blocks = cfg.blocks(db);
 
         // Entry: both x and y slots are Never.
@@ -632,10 +648,10 @@ end fun
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
-        let a_slot = slot_alloc.slots(db)[0].slot_id(db);
-        let b_slot = slot_alloc.slots(db)[1].slot_id(db);
-        let c_slot = slot_alloc.slots(db)[2].slot_id(db);
-        let d_slot = slot_alloc.slots(db)[3].slot_id(db);
+        let a_slot = find_slot_by_name(db, &slot_alloc, "a");
+        let b_slot = find_slot_by_name(db, &slot_alloc, "b");
+        let c_slot = find_slot_by_name(db, &slot_alloc, "c");
+        let d_slot = find_slot_by_name(db, &slot_alloc, "d");
 
         let entry_block = cfg.blocks(db)[0].block_id;
 
@@ -673,7 +689,7 @@ end fun
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
 
         // x is only initialized in the innermost then-branch.
-        let x_slot = slot_alloc.slots(db)[2].slot_id(db);
+        let x_slot = find_slot_by_name(db, &slot_alloc, "x");
 
         // Find the innermost then block.
         let blocks = cfg.blocks(db);
@@ -740,17 +756,20 @@ end fun
         let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
 
         // b is read once (in let c = b).
-        let b_range = live_ranges.get_range(db, slot_alloc.slots(db)[1].slot_id(db)).unwrap();
+        let b_slot = find_slot_by_name(db, &slot_alloc, "b");
+        let b_range = live_ranges.get_range(db, b_slot).unwrap();
         assert_eq!(b_range.birth(db).stmt_id, StmtId(0));  // let b = a
         assert_eq!(b_range.death(db).stmt_id, StmtId(1));  // let c = b
 
         // c is read once (in let d = c).
-        let c_range = live_ranges.get_range(db, slot_alloc.slots(db)[2].slot_id(db)).unwrap();
+        let c_slot = find_slot_by_name(db, &slot_alloc, "c");
+        let c_range = live_ranges.get_range(db, c_slot).unwrap();
         assert_eq!(c_range.birth(db).stmt_id, StmtId(1));  // let c = b
         assert_eq!(c_range.death(db).stmt_id, StmtId(2));  // let d = c
 
         // d is read once (in ret d).
-        let d_range = live_ranges.get_range(db, slot_alloc.slots(db)[3].slot_id(db)).unwrap();
+        let d_slot = find_slot_by_name(db, &slot_alloc, "d");
+        let d_range = live_ranges.get_range(db, d_slot).unwrap();
         assert_eq!(d_range.birth(db).stmt_id, StmtId(2));  // let d = c
         assert_eq!(d_range.death(db).stmt_id, StmtId(3));  // ret d
     }

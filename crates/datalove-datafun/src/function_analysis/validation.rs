@@ -282,9 +282,16 @@ pub fn check_use_after_move<'db>(
     move_info: super::MoveInfo<'db>,
 ) -> Vec<AnalysisError> {
     use std::collections::HashMap;
+    use std::collections::HashSet;
     use super::MoveKind;
 
     let mut errors = Vec::new();
+
+    // Build set of Temporary slots to skip.
+    let temp_slots: HashSet<SlotId> = slots.iter()
+        .filter(|s| s.kind(db) == SlotKind::Temporary)
+        .map(|s| s.slot_id(db))
+        .collect();
 
     // Build a map from ExprId to StmtId.
     let expr_to_stmt = build_expr_to_stmt_map(db, func);
@@ -294,6 +301,11 @@ pub fn check_use_after_move<'db>(
     for move_op in move_info.moves(db) {
         // Skip Copy moves - they don't consume the value.
         if move_op.move_kind(db) == MoveKind::Copy {
+            continue;
+        }
+
+        // Skip Temporary slots - they have different semantics.
+        if temp_slots.contains(&move_op.slot_id(db)) {
             continue;
         }
 
@@ -422,7 +434,8 @@ pub fn check_value_not_used<'db>(
     // Check each slot.
     for slot in slots {
         // Skip Reference slots (parameters - they are used by caller).
-        if slot.kind(db) == SlotKind::Reference {
+        // Skip Temporary slots (expression intermediates - always consumed immediately).
+        if slot.kind(db) == SlotKind::Reference || slot.kind(db) == SlotKind::Temporary {
             continue;
         }
 
