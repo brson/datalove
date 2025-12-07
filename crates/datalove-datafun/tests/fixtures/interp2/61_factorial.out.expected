@@ -164,7 +164,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "InvalidExpression(\"Expression type not yet implemented in frame mode\")",
+                "InvalidExpression(\"Checked multiplication only supports u32 operands\")",
             ],
         ),
         output: "",

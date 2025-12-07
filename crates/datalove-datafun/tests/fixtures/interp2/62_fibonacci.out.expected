@@ -187,11 +187,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "InvalidExpression(\"Expression type not yet implemented in frame mode\")",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@55",
     ),
 ]

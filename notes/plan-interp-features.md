@@ -18,6 +18,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 4: @none literal, @error literal, Option/Result return type wrapping
 - Phase 5: If-destructuring for Option (80_if_option_some, 81_if_option_none)
 - Phase 5b: If-destructuring for Result (82_if_result_ok, 82a_result_ok_simple) - Ok case works
+- Phase 6: Try operators (val? and val!) - tested via 62_fibonacci
 
 **Key implementations:**
 - `execute_function_body` wraps return values in Some/Ok for `?T`/`!T` return types
@@ -26,6 +27,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Checked operators (`+!` etc.) return raw values; wrapping happens at function boundary
 - `write_result_err_to_dest` writes @error literals to Result destinations
 - `allocate_result_ok_from_value` / `allocate_result_err` for Result allocation
+- `eval_try_option` / `eval_try_result` for try operator unwrapping
 - Proper memory management: only free heap-allocated containers, not frame slots
 
 **Key discoveries:**
@@ -119,20 +121,18 @@ Syntax: `if opt |value| ... else ... end if`
 - Option: Some extracts payload to then_binding, None goes to else
 - Result: Ok extracts payload to then_binding, Err goes to else (else_binding TODO)
 
-### Phase 6: Try Operators
-**Tests:** 129-141, 162-164
+### Phase 6: Try Operators ✓
+**Tests:** 62_fibonacci uses try-result operator successfully
 
-**`val?` (try-option):**
-1. Eval operand to Option
-2. Read tag; if None → return `InterpError::EarlyReturnNone`
-3. If Some → move payload out (read ptr at offset), free container shell, return payload
-4. Caller catches EarlyReturnNone, wraps as Option::None
+**`val?` (try-option):** ✓
+- `eval_try_option()` evaluates operand as Option
+- If None → return `InterpError::OptionNone` (caught by function, wrapped as Option::None)
+- If Some → extract payload to new allocation, free container, return payload
 
-**`val!` (try-result):**
-1. Eval operand to Result
-2. Read tag; if Err → move Error out, return `InterpError::EarlyReturnErr(error)`
-3. If Ok → move payload out, free container shell, return payload
-4. Caller catches EarlyReturnErr, wraps as Result::Err
+**`val!` (try-result):** ✓
+- `eval_try_result()` evaluates operand as Result
+- If Err → extract Error, return `InterpError::ResultErr { tydesc, ptr }`
+- If Ok → extract payload to new allocation, free container, return payload
 
 ### Phase 7: Optional/Result Unary Ops
 **Tests:** 158-161

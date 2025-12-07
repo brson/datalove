@@ -927,8 +927,17 @@ fn eval_expression_in_script_scope<'db>(
             // Execute unary operation.
             execute_unop(ctx, unary_expr.op(ctx.db), operand, dest)
         }
-        ast::ExprFunKind::TryOption(_) | ast::ExprFunKind::TryResult(_) => {
-            Err(InterpError::InvalidExpression("Try operators not yet implemented".to_string()))
+        ast::ExprFunKind::TryOption(try_op) => {
+            // Evaluate operand.
+            let operand = eval_expression_in_script_scope(ctx, try_op.operand(ctx.db), None)?;
+            // Apply try-option operator.
+            eval_try_option(ctx, operand)
+        }
+        ast::ExprFunKind::TryResult(try_op) => {
+            // Evaluate operand.
+            let operand = eval_expression_in_script_scope(ctx, try_op.operand(ctx.db), None)?;
+            // Apply try-result operator.
+            eval_try_result(ctx, operand)
         }
         ast::ExprFunKind::ParseError(_) => {
             Err(InterpError::InvalidExpression("Parse error in expression".to_string()))
@@ -2437,6 +2446,20 @@ fn eval_expression_frame<'db>(
             Ok(Value { ptr: result_dest.ptr, tydesc: result_dest.tydesc, location: ValueLocation::Borrowed })
         }
 
+        ast::ExprFunKind::TryOption(try_op) => {
+            // Evaluate operand.
+            let operand = eval_expression_frame(ctx, try_op.operand(ctx.db), None)?;
+            // Apply try-option operator.
+            eval_try_option(ctx, operand)
+        }
+
+        ast::ExprFunKind::TryResult(try_op) => {
+            // Evaluate operand.
+            let operand = eval_expression_frame(ctx, try_op.operand(ctx.db), None)?;
+            // Apply try-result operator.
+            eval_try_result(ctx, operand)
+        }
+
         _ => Err(InterpError::InvalidExpression(
             "Expression type not yet implemented in frame mode".to_string()
         ))
@@ -3174,6 +3197,200 @@ fn allocate_result_err<'db>(
     Ok(Value {
         ptr,
         tydesc: result_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Evaluate try-option operator (`val?`).
+///
+/// If the operand is None, returns `InterpError::OptionNone` for early return.
+/// If the operand is Some(value), extracts and returns the inner value.
+fn eval_try_option<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand_value: Value,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag, OptionTag, layout::compute_option_layout};
+
+    let tydesc_ref = unsafe { TyDescRef::from_ptr(operand_value.tydesc) };
+
+    // Verify operand is Option type.
+    if tydesc_ref.type_tag() != TyTag::Option {
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::RuntimeError(
+            format!("Try-option operator (?) requires Option type, got {:?}", tydesc_ref.type_tag())
+        ));
+    }
+
+    // Read tag.
+    let tag = unsafe { *(operand_value.ptr as *const u8) };
+
+    if tag == OptionTag::None as u8 {
+        // Free the Option container and return early.
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::OptionNone);
+    }
+
+    // Some case: extract the payload.
+    let layout = unsafe { compute_option_layout(tydesc_ref) };
+    let payload_ptr = unsafe { operand_value.ptr.add(layout.payload_offset as usize) };
+
+    // Get inner type descriptor.
+    let inner_tydesc = tydesc_ref.option_inner_ty().as_ptr();
+    let inner_size = unsafe { (*inner_tydesc).size as usize };
+
+    // Clone the payload to a new allocation.
+    let rt_handle = ctx.runtime.handle();
+    let inner_tydesc_ref = unsafe { TyDescRef::from_ptr(inner_tydesc) };
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            inner_tydesc_ref.size(),
+            inner_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if result_ptr.is_null() {
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::RuntimeError("Failed to allocate unwrapped value".to_string()));
+    }
+
+    // Copy payload to result.
+    unsafe {
+        std::ptr::copy_nonoverlapping(payload_ptr, result_ptr, inner_size);
+    }
+
+    // Free the Option container (payload has been copied).
+    if operand_value.location == ValueLocation::TempOwned {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                operand_value.tydesc,
+                1,
+                operand_value.ptr,
+            );
+        }
+    }
+
+    Ok(Value {
+        ptr: result_ptr,
+        tydesc: inner_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Evaluate try-result operator (`val!`).
+///
+/// If the operand is Err, returns `InterpError::ResultErr` for early return.
+/// If the operand is Ok(value), extracts and returns the inner value.
+fn eval_try_result<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand_value: Value,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag, ResultTag, Data, layout::compute_result_layout};
+
+    let tydesc_ref = unsafe { TyDescRef::from_ptr(operand_value.tydesc) };
+
+    // Verify operand is Result type.
+    if tydesc_ref.type_tag() != TyTag::Result {
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::RuntimeError(
+            format!("Try-result operator (!) requires Result type, got {:?}", tydesc_ref.type_tag())
+        ));
+    }
+
+    // Read tag.
+    let tag = unsafe { *(operand_value.ptr as *const u8) };
+
+    let layout = unsafe { compute_result_layout(tydesc_ref) };
+    let payload_ptr = unsafe { operand_value.ptr.add(layout.payload_offset as usize) };
+
+    if tag == ResultTag::Err as u8 {
+        // Err case: extract error and return early.
+        // Error is a Data struct (tydesc ptr + value ptr).
+        let error_data = unsafe { std::ptr::read(payload_ptr as *const Data) };
+        let err_tydesc = error_data.tydesc();
+        let err_value_ptr = error_data.value_ptr();
+
+        // Clone the error value.
+        let err_tydesc_ref = unsafe { TyDescRef::from_ptr(err_tydesc) };
+        let err_size = err_tydesc_ref.size() as usize;
+
+        let rt_handle = ctx.runtime.handle();
+        let cloned_err_ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                rt_handle,
+                err_tydesc_ref.size(),
+                err_tydesc_ref.align(),
+                1
+            )
+        };
+
+        if !cloned_err_ptr.is_null() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(err_value_ptr, cloned_err_ptr, err_size);
+            }
+        }
+
+        // Free the Result container.
+        if operand_value.location == ValueLocation::TempOwned {
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    ctx.runtime.handle(),
+                    operand_value.tydesc,
+                    1,
+                    operand_value.ptr,
+                );
+            }
+        }
+
+        return Err(InterpError::ResultErr {
+            tydesc: err_tydesc,
+            ptr: cloned_err_ptr,
+        });
+    }
+
+    // Ok case: extract the payload.
+    let ok_tydesc = tydesc_ref.result_ok_ty().as_ptr();
+    let ok_size = unsafe { (*ok_tydesc).size as usize };
+
+    // Clone the payload to a new allocation.
+    let rt_handle = ctx.runtime.handle();
+    let ok_tydesc_ref = unsafe { TyDescRef::from_ptr(ok_tydesc) };
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            ok_tydesc_ref.size(),
+            ok_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if result_ptr.is_null() {
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::RuntimeError("Failed to allocate unwrapped value".to_string()));
+    }
+
+    // Copy payload to result.
+    unsafe {
+        std::ptr::copy_nonoverlapping(payload_ptr, result_ptr, ok_size);
+    }
+
+    // Free the Result container (payload has been copied).
+    if operand_value.location == ValueLocation::TempOwned {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                operand_value.tydesc,
+                1,
+                operand_value.ptr,
+            );
+        }
+    }
+
+    Ok(Value {
+        ptr: result_ptr,
+        tydesc: ok_tydesc,
         location: ValueLocation::TempOwned,
     })
 }
