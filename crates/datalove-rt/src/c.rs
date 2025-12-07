@@ -436,15 +436,15 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_create_local(
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clone_from_slice_local(
     rt: LocalRtHandle,
-    // Destination will be overwritten.
-    btreemap_value_out: *mut u8,
-    // BTreeMap type.
-    btreemap_tydesc: *const rtdt::TyDesc,
     // Values will be cloned.
     slice_ref: *const u8,
     slice_len: u32,
     // Should be a tuple of key/value I guess.
     slice_element_tydesc: *const rtdt::TyDesc,
+    // Destination will be overwritten.
+    btreemap_value_out: *mut u8,
+    // BTreeMap type.
+    btreemap_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         if rt.is_null() || btreemap_tydesc.is_null() {
@@ -455,11 +455,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clone_from_slice_local(
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
         crate::impls::btreemap::btreemap_clone_from_slice_impl(
             rt_ref,
-            btreemap_value_out,
-            btreemap_tydesc_ref,
             slice_ref,
             slice_len,
             slice_element_tydesc,
+            btreemap_value_out,
+            btreemap_tydesc_ref,
         )
     }
 }
@@ -798,11 +798,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clear_local(
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clone_from_slice_local(
     rt: LocalRtHandle,
-    btreeset_value_out: *mut u8,
-    btreeset_tydesc: *const rtdt::TyDesc,
     slice_ref: *const u8,
     slice_len: u32,
     slice_element_tydesc: *const rtdt::TyDesc,
+    btreeset_value_out: *mut u8,
+    btreeset_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
         if rt.is_null() || btreeset_tydesc.is_null() || slice_element_tydesc.is_null() {
@@ -818,11 +818,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clone_from_slice_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         crate::impls::set::btreeset_clone_from_slice_impl(
             rt_ref,
-            btreeset_value_out,
-            btreeset_tydesc,
             slice_ref,
             slice_len,
             slice_element_tydesc,
+            btreeset_value_out,
+            btreeset_tydesc,
         )
     }
 }

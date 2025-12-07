@@ -2887,11 +2887,11 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
             rt,
-            map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
             ptr::null(),
             0,
             &*tuple_tydesc as *const rtdt::TyDesc,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2941,11 +2941,11 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
             rt,
-            map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
             &*tuple_tydesc as *const rtdt::TyDesc,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3025,11 +3025,11 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
             rt,
-            map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
             &*tuple_tydesc as *const rtdt::TyDesc,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3111,11 +3111,11 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
             rt,
-            map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
             &*tuple_tydesc as *const rtdt::TyDesc,
+            map_ptr,
+            &*map_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);

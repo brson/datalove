@@ -2168,11 +2168,11 @@ unsafe fn cleanup_map_leaves_internal(
 /// Takes a slice of (K, V) tuples and creates a map by cloning and inserting each pair.
 pub unsafe fn btreemap_clone_from_slice_impl(
     rt: &mut RtLocal,
-    btreemap_value_out: *mut u8,
-    btreemap_tydesc: rtdt::TyDescRef,
     slice_ptr_ref: *const u8,
     slice_ptr_len: u32,
     slice_element_tydesc: *const TyDesc,
+    btreemap_value_out: *mut u8,
+    btreemap_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
         if btreemap_value_out.is_null() || slice_element_tydesc.is_null() {

@@ -98,12 +98,13 @@ Per convention, these should still be passed for uniformity, but worth documenti
 Removed `dtlv_rti_int_cmp_local` entirely. Callers now use `dtlv_rti_cmp_local`.
 Also fixed denormalized zero handling in generic int comparison.
 
-### H. Parameter Order Inconsistencies
+### H. Parameter Order Inconsistencies - RESOLVED
 
-Different patterns for "create from slice" operations:
-- `list_create_from_slice`: slice params first, then list output
-- `tensor_create_from_slice`: slice, then shape, then tensor output
-- `btreemap_clone_from_slice`: map output first, then slice
+Standardized all "create from slice" operations to use inputs first, outputs last:
+- `list_create_from_slice`: slice, element_tydesc, list_out, list_tydesc
+- `tensor_create_from_slice`: slice, element_tydesc, shape, tensor_out, tensor_tydesc
+- `btreemap_clone_from_slice`: slice, element_tydesc, map_out, map_tydesc
+- `btreeset_clone_from_slice`: slice, element_tydesc, set_out, set_tydesc
 
 ## Implementation Plan
 

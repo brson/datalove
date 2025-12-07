@@ -781,11 +781,11 @@ fn test_btreeset_clone_from_slice_single() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
-            set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
             &*element_tydesc as *const rtdt::TyDesc,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1169,11 +1169,11 @@ fn test_btreeset_clone_from_slice_1000() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
-            set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
             &*element_tydesc as *const rtdt::TyDesc,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1397,11 +1397,11 @@ fn test_btreeset_clone_from_slice_empty() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
-            set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
             &*element_tydesc as *const rtdt::TyDesc,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1442,11 +1442,11 @@ fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
-            set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
             &*element_tydesc as *const rtdt::TyDesc,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1504,11 +1504,11 @@ fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
-            set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
             &*element_tydesc as *const rtdt::TyDesc,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1571,11 +1571,11 @@ fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
-            set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
             runtime_strings.as_ptr() as *const u8,
             runtime_strings.len() as u32,
             &*element_tydesc as *const rtdt::TyDesc,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1626,11 +1626,11 @@ fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
-            set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
             &*element_tydesc as *const rtdt::TyDesc,
+            set_ptr,
+            &*set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);

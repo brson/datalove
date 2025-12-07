@@ -1236,11 +1236,11 @@ pub unsafe fn btreeset_insert_impl(
 /// Creates a BTreeSet from a slice of elements.
 pub unsafe fn btreeset_clone_from_slice_impl(
     rt: &mut RtLocal,
-    btreeset_value_out: *mut u8,
-    btreeset_tydesc: *const TyDesc,
     slice_ptr_ref: *const u8,
     slice_ptr_len: u32,
     slice_element_tydesc: *const TyDesc,
+    btreeset_value_out: *mut u8,
+    btreeset_tydesc: *const TyDesc,
 ) -> RtStatus {
     unsafe {
         if btreeset_value_out.is_null() || slice_element_tydesc.is_null() {
