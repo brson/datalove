@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::ast::*;
 use crate::interp_old::interp::{InterpContext, InterpResult, InterpError};
 use crate::interp_old::value::Value;
-use datalove_rt::{self as rt, c::{LocalRtHandle, RtStatus}};
+use datalove_rt::{self as rt, c::{LocalRtHandle, RtStatus, RtOrdering}};
 
 /// Evaluate a datafun expression.
 pub fn eval_expr<'db>(ctx: &mut InterpContext<'db>, expr: ExprFun<'db>) -> InterpResult {
@@ -983,7 +983,7 @@ fn eval_lt(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a < b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp_local(
+                rt::c::dtlv_rti_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -991,7 +991,7 @@ fn eval_lt(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
                     *b_tydesc,
                 )
             };
-            Ok(Value::from_bool(cmp_result < 0))
+            Ok(Value::from_bool(matches!(cmp_result, RtOrdering::Less)))
         }
         _ => Err(InterpError::TypeError(
             "Unsupported types for comparison".to_string(),
@@ -1014,7 +1014,7 @@ fn eval_gt(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a > b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp_local(
+                rt::c::dtlv_rti_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1022,7 +1022,7 @@ fn eval_gt(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
                     *b_tydesc,
                 )
             };
-            Ok(Value::from_bool(cmp_result > 0))
+            Ok(Value::from_bool(matches!(cmp_result, RtOrdering::Greater)))
         }
         _ => Err(InterpError::TypeError(
             "Unsupported types for comparison".to_string(),
@@ -1045,7 +1045,7 @@ fn eval_le(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a <= b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp_local(
+                rt::c::dtlv_rti_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1053,7 +1053,7 @@ fn eval_le(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
                     *b_tydesc,
                 )
             };
-            Ok(Value::from_bool(cmp_result <= 0))
+            Ok(Value::from_bool(matches!(cmp_result, RtOrdering::Less | RtOrdering::Equal)))
         }
         _ => Err(InterpError::TypeError(
             "Unsupported types for comparison".to_string(),
@@ -1076,7 +1076,7 @@ fn eval_ge(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a >= b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp_local(
+                rt::c::dtlv_rti_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1084,7 +1084,7 @@ fn eval_ge(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
                     *b_tydesc,
                 )
             };
-            Ok(Value::from_bool(cmp_result >= 0))
+            Ok(Value::from_bool(matches!(cmp_result, RtOrdering::Greater | RtOrdering::Equal)))
         }
         _ => Err(InterpError::TypeError(
             "Unsupported types for comparison".to_string(),
@@ -1108,7 +1108,7 @@ fn eval_eq(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a == b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp_local(
+                rt::c::dtlv_rti_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1116,7 +1116,7 @@ fn eval_eq(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
                     *b_tydesc,
                 )
             };
-            Ok(Value::from_bool(cmp_result == 0))
+            Ok(Value::from_bool(matches!(cmp_result, RtOrdering::Equal)))
         }
         _ => Err(InterpError::TypeError(
             "Unsupported types for equality".to_string(),
@@ -1140,7 +1140,7 @@ fn eval_ne(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
         (Value::F32(a), Value::F32(b)) => Ok(Value::from_bool(a != b)),
         (Value::Int { ptr: a_ptr, tydesc: a_tydesc }, Value::Int { ptr: b_ptr, tydesc: b_tydesc }) => {
             let cmp_result = unsafe {
-                rt::c::dtlv_rti_int_cmp_local(
+                rt::c::dtlv_rti_cmp_local(
                     Box::as_mut(&mut ctx.rt) as *mut _ as LocalRtHandle,
                     *a_ptr as *const u8,
                     *a_tydesc,
@@ -1148,7 +1148,7 @@ fn eval_ne(ctx: &mut InterpContext<'_>, mut lhs: Value, mut rhs: Value) -> Inter
                     *b_tydesc,
                 )
             };
-            Ok(Value::from_bool(cmp_result != 0))
+            Ok(Value::from_bool(!matches!(cmp_result, RtOrdering::Equal)))
         }
         _ => Err(InterpError::TypeError(
             "Unsupported types for inequality".to_string(),

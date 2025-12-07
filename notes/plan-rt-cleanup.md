@@ -93,10 +93,10 @@ Several bigint functions accept tydescs but don't use them:
 
 Per convention, these should still be passed for uniformity, but worth documenting.
 
-### G. Return Type Inconsistency
+### G. Return Type Inconsistency - RESOLVED
 
-- Most comparison functions return `RtEq` or `RtOrdering`
-- `dtlv_rti_int_cmp` returns raw `i32`
+Removed `dtlv_rti_int_cmp_local` entirely. Callers now use `dtlv_rti_cmp_local`.
+Also fixed denormalized zero handling in generic int comparison.
 
 ### H. Parameter Order Inconsistencies
 
