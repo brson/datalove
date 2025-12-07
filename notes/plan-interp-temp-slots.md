@@ -2,9 +2,9 @@
 
 Use pre-computed temporary slots for expression intermediates instead of heap allocation.
 
-## Status: Phase 5 Complete
+## Status: Phase 6 Complete
 
-Phases 1-5 implemented. All expressions now have mandatory temp slots and use DPS.
+All phases complete. Frame-based function evaluation now uses pre-allocated slots for all temporaries - no heap allocation for expression intermediates.
 
 ## Completed
 
@@ -29,45 +29,17 @@ Phases 1-5 implemented. All expressions now have mandatory temp slots and use DP
 - Updated liveness tests to find slots by name (indices shifted)
 - Blessed 73 interp tests with updated slot IDs
 
-## Remaining Work
-
-### Not Yet Using DPS (still heap-allocating)
-
-1. **Tuple results** (`interp/mod.rs:2024`)
-   ```rust
-   // TODO: Support dest for tuple allocation to avoid heap.
-   allocate_tuple_from_values(ctx, values)
-   ```
-   Tuple elements use temp slots, but final tuple goes to heap.
-
-2. **Datalit evaluation** (`interp/mod.rs:1059-1060`)
-   ```rust
-   let temp_value = eval_datalit_expression(ctx, expr)?;  // heap alloc
-   // then copy to dest and free
-   ```
-   Uses allocate-copy-free pattern instead of direct write to dest.
-
-3. **f32 arithmetic** (`interp/mod.rs:2914,3128,3259,3347`)
-   ```rust
-   return allocate_f32(ctx, a + b);
-   ```
-   f32 operations don't support DPS - always heap-allocate.
-
-4. **Compound datalit types** (strings, lists, maps, etc.)
-   Go through `eval_datalit_expression` which heap-allocates.
-
-### Future Optimization: Direct Datalit Write
-
-Replace allocate-copy-free with direct writes for simple types:
-```rust
-fn write_datalit_to_dest(ctx, expr, dest) -> Result<Value, InterpError> {
-    match expr.expr(db) {
-        Expr::True => { *(dest.ptr as *mut bool) = true; ... }
-        Expr::Int(i) => { write_int_to_dest(ctx, i, dest); ... }
-        // etc.
-    }
-}
-```
+### Phase 6: Eliminate All Heap-Allocated Temporaries
+- Added `write_datalit_to_dest()` - direct writes for scalars (bool, int, f32)
+- Added `write_string_to_dest()` - uses `dtlv_rti_string_create_local` at dest
+- Added `write_tuple_to_dest()` - writes elements directly to field offsets
+- Added `write_struct_to_dest()` - writes fields directly to field offsets
+- Added `write_list_to_dest()` - builds list at dest via runtime API
+- Added `write_f32_result()`, `write_bool_result()` helpers
+- Updated f32 arithmetic (add, sub, mul, div) to use `write_f32_result`
+- Updated comparisons to use `write_bool_result` with dest parameter
+- Rewrote Tuple expression case to write elements directly to tuple field offsets
+- Removed `allocate_tuple_from_values` call from frame-based evaluation
 
 ## Original Problem
 

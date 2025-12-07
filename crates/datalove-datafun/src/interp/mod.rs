@@ -1050,30 +1050,106 @@ fn eval_datalit_expression<'db>(
     }
 }
 
-/// Evaluate a datalit expression and write the result to a destination.
-fn eval_datalit_expression_to_dest<'db>(
+/// Write a datalit expression directly to a destination.
+///
+/// This writes values directly to the destination pointer without intermediate
+/// heap allocation.
+fn write_datalit_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     expr: crate::datalit::ast::ExprFull<'db>,
     dest: Destination,
 ) -> Result<Value, InterpError> {
-    // Evaluate the expression (allocates temp).
-    let temp_value = eval_datalit_expression(ctx, expr)?;
+    use crate::datalit::ast::{Expr, ExprAndHeap};
 
-    // Copy value data to destination.
-    let size = unsafe { (*temp_value.tydesc).size as usize };
-    unsafe {
-        std::ptr::copy_nonoverlapping(temp_value.ptr, dest.ptr, size);
+    let expr_and_heap: &ExprAndHeap<'db> = expr.expr(ctx.db);
+    let expr_inner: Expr<'db> = expr_and_heap.expr(ctx.db).clone();
+
+    match expr_inner {
+        Expr::True => {
+            unsafe { *(dest.ptr as *mut u8) = 1; }
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+        }
+        Expr::False => {
+            unsafe { *(dest.ptr as *mut u8) = 0; }
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+        }
+        Expr::Int(int_expr) => {
+            let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+            let value: u32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u32) = value; }
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+        }
+        Expr::Float(float_expr) => {
+            let value_str = float_expr.value(ctx.db).as_str(ctx.db);
+            let value: f32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
+            unsafe { *(dest.ptr as *mut f32) = value; }
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+        }
+        Expr::String(string_expr) => {
+            write_string_to_dest(ctx, &string_expr, dest)
+        }
+        Expr::AnonTuple(tuple_expr) => {
+            write_tuple_to_dest(ctx, &tuple_expr, dest)
+        }
+        Expr::AnonStruct(struct_expr) => {
+            write_struct_to_dest(ctx, &struct_expr, dest)
+        }
+        Expr::List(list_expr) => {
+            write_list_to_dest(ctx, &list_expr, dest)
+        }
+        Expr::ParseError(_) => Err(InterpError::InvalidExpression("Parse error".to_string())),
+        _ => Err(InterpError::InvalidExpression(
+            "Datalit expression type not yet implemented".to_string()
+        )),
+    }
+}
+
+/// Write a string literal directly to a destination.
+fn write_string_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    string_expr: &crate::datalit::ast::ExprString<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    let string_value_raw = string_expr.value(ctx.db).as_str(ctx.db);
+
+    // Strip quotes if present.
+    let string_value = if string_value_raw.starts_with('"') && string_value_raw.ends_with('"') {
+        &string_value_raw[1..string_value_raw.len()-1]
+    } else {
+        string_value_raw
+    };
+
+    let rt_handle = ctx.runtime.handle();
+
+    // Initialize the string structure at the destination.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            dest.ptr,
+            dest.tydesc,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create string".to_string()));
     }
 
-    // Free the temp allocation (data has been copied).
-    if temp_value.location == ValueLocation::TempOwned {
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                ctx.runtime.handle(),
-                temp_value.tydesc,
-                1,
-                temp_value.ptr,
-            );
+    // Push the string bytes if non-empty.
+    if !string_value.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                dest.ptr,
+                dest.tydesc,
+                string_value.as_ptr(),
+                string_value.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push string bytes".to_string()));
         }
     }
 
@@ -1082,6 +1158,159 @@ fn eval_datalit_expression_to_dest<'db>(
         tydesc: dest.tydesc,
         location: ValueLocation::Borrowed,
     })
+}
+
+/// Write a tuple literal directly to a destination.
+fn write_tuple_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    tuple_expr: &crate::datalit::ast::ExprAnonTuple<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    let dest_tydesc = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(dest.tydesc) };
+    let elements = tuple_expr.elements(ctx.db);
+
+    // Write each element directly to its field offset.
+    for (elem_expr, field) in elements.iter().zip(dest_tydesc.iter_tuple_fields()) {
+        let field_ptr = unsafe { dest.ptr.add(field.offset() as usize) };
+        let field_dest = Destination { ptr: field_ptr, tydesc: field.tydesc().as_ptr() };
+
+        // Recursively write element to field destination.
+        write_datalit_to_dest(ctx, *elem_expr, field_dest)?;
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write a struct literal directly to a destination.
+fn write_struct_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    struct_expr: &crate::datalit::ast::ExprAnonStruct<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    let dest_tydesc = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(dest.tydesc) };
+
+    // Get and sort fields by name for canonical order.
+    let expr_fields = struct_expr.fields(ctx.db);
+    let mut sorted_fields: Vec<_> = expr_fields.iter()
+        .map(|f| (f.name(ctx.db), f.value(ctx.db)))
+        .collect();
+    sorted_fields.sort_by_key(|(name, _)| name.as_str(ctx.db));
+
+    // Write each field directly to its offset.
+    for ((_, value_expr), field) in sorted_fields.iter().zip(dest_tydesc.iter_struct_fields()) {
+        let field_ptr = unsafe { dest.ptr.add(field.offset() as usize) };
+        let field_dest = Destination { ptr: field_ptr, tydesc: field.tydesc().as_ptr() };
+
+        // Recursively write field value to field destination.
+        write_datalit_to_dest(ctx, *value_expr, field_dest)?;
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write a list literal directly to a destination.
+fn write_list_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    list_expr: &crate::datalit::ast::ExprList<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    let dest_tydesc = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(dest.tydesc) };
+    let elements = list_expr.elements(ctx.db);
+    let rt_handle = ctx.runtime.handle();
+
+    // Get the element type descriptor.
+    let elem_tydesc = dest_tydesc.list_element_ty();
+    let elem_size = elem_tydesc.size() as usize;
+
+    // Allocate a temporary buffer for the element data.
+    // dtlv_rti_list_create_from_slice_local clones from this buffer.
+    let buffer = if !elements.is_empty() {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                rt_handle,
+                elem_size as u32,
+                elem_tydesc.align(),
+                elements.len() as u32,
+            )
+        }
+    } else {
+        std::ptr::null_mut()
+    };
+
+    // Write each element to the buffer.
+    for (i, elem_expr) in elements.iter().enumerate() {
+        let elem_ptr = if buffer.is_null() {
+            std::ptr::null_mut()
+        } else {
+            unsafe { buffer.add(i * elem_size) }
+        };
+        let elem_dest = Destination { ptr: elem_ptr, tydesc: elem_tydesc.as_ptr() };
+
+        if let Err(e) = write_datalit_to_dest(ctx, *elem_expr, elem_dest) {
+            // Clean up already-written elements on error.
+            for j in 0..i {
+                let cleanup_ptr = unsafe { buffer.add(j * elem_size) };
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        rt_handle,
+                        cleanup_ptr,
+                        elem_tydesc.as_ptr(),
+                    );
+                }
+            }
+            if !buffer.is_null() {
+                unsafe {
+                    datalove_rt::c::dtlv_rti_mem_free_local(
+                        rt_handle,
+                        elem_tydesc.as_ptr(),
+                        elements.len() as u32,
+                        buffer,
+                    );
+                }
+            }
+            return Err(e);
+        }
+    }
+
+    // Create the list structure at dest, cloning elements from the buffer.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_from_slice_local(
+            rt_handle,
+            buffer,
+            elements.len() as u32,
+            elem_tydesc.as_ptr(),
+            dest.ptr,
+            dest.tydesc,
+        )
+    };
+
+    // Clean up the source buffer after cloning (regardless of success).
+    for i in 0..elements.len() {
+        let cleanup_ptr = unsafe { buffer.add(i * elem_size) };
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                rt_handle,
+                cleanup_ptr,
+                elem_tydesc.as_ptr(),
+            );
+        }
+    }
+    if !buffer.is_null() {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt_handle,
+                elem_tydesc.as_ptr(),
+                elements.len() as u32,
+                buffer,
+            );
+        }
+    }
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create list".to_string()));
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
 }
 
 /// Look up a function by name in script scope or imported modules.
@@ -1908,7 +2137,7 @@ fn eval_expression_frame<'db>(
                 Some(d) => d,
                 None => get_destination_for_expr(ctx, expr)?,
             };
-            let result = eval_datalit_expression_to_dest(ctx, datalit_expr, result_dest)?;
+            let result = write_datalit_to_dest(ctx, datalit_expr, result_dest)?;
             // If using own temp slot, mark Available for cleanup.
             if dest.is_none() {
                 mark_temp_slot_available(ctx, expr);
@@ -1988,40 +2217,36 @@ fn eval_expression_frame<'db>(
         }
 
         ast::ExprFunKind::Tuple(tuple_expr) => {
-            // Evaluate each element in frame scope.
-            let elements = tuple_expr.elements(ctx.db);
-            let mut values = Vec::with_capacity(elements.len());
+            // Get result destination (from caller or own temp slot).
+            let result_dest = match dest {
+                Some(d) => d,
+                None => get_destination_for_expr(ctx, expr)?,
+            };
 
-            for elem in elements {
-                // Get temp slot for this element.
-                let elem_dest = match get_destination_for_expr(ctx, *elem) {
-                    Ok(d) => d,
-                    Err(e) => {
-                        for v in values {
-                            destroy_value(ctx, v);
-                        }
-                        return Err(e);
-                    }
-                };
-                match eval_expression_frame(ctx, *elem, Some(elem_dest)) {
-                    Ok(v) => {
-                        if v.location == ValueLocation::Borrowed {
-                            mark_temp_slot_available(ctx, *elem);
-                        }
-                        values.push(v);
-                    }
-                    Err(e) => {
-                        // Clean up already-evaluated values on error.
-                        for v in values {
-                            destroy_value(ctx, v);
-                        }
-                        return Err(e);
-                    }
+            let dest_tydesc = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(result_dest.tydesc) };
+            let elements = tuple_expr.elements(ctx.db);
+
+            // Evaluate each element directly to its field offset in the tuple.
+            for (elem_expr, field) in elements.iter().zip(dest_tydesc.iter_tuple_fields()) {
+                let field_ptr = unsafe { result_dest.ptr.add(field.offset() as usize) };
+                let field_dest = Destination { ptr: field_ptr, tydesc: field.tydesc().as_ptr() };
+
+                // Evaluate element directly to field destination.
+                let elem_value = eval_expression_frame(ctx, *elem_expr, Some(field_dest))?;
+
+                // If element used its own temp slot, it's been written to our field now.
+                // The element's temp slot is no longer needed.
+                if elem_value.location == ValueLocation::Borrowed {
+                    mark_temp_slot_available(ctx, *elem_expr);
                 }
             }
 
-            // TODO: Support dest for tuple allocation to avoid heap.
-            allocate_tuple_from_values(ctx, values)
+            // If using own temp slot, mark Available for cleanup.
+            if dest.is_none() {
+                mark_temp_slot_available(ctx, expr);
+            }
+
+            Ok(Value { ptr: result_dest.ptr, tydesc: result_dest.tydesc, location: ValueLocation::Borrowed })
         }
 
         _ => Err(InterpError::InvalidExpression(
@@ -2917,7 +3142,7 @@ fn eval_add<'db>(
         let b = unsafe { *(rhs.ptr as *const f32) };
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
-        return allocate_f32(ctx, a + b);
+        return write_f32_result(ctx, a + b, dest);
     }
 
     // Both u32: widen to Int and add.
@@ -3131,7 +3356,7 @@ fn eval_sub<'db>(
         let b = unsafe { *(rhs.ptr as *const f32) };
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
-        return allocate_f32(ctx, a - b);
+        return write_f32_result(ctx, a - b, dest);
     }
 
     // Helper to get result buffer.
@@ -3262,7 +3487,7 @@ fn eval_mul<'db>(
         let b = unsafe { *(rhs.ptr as *const f32) };
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
-        return allocate_f32(ctx, a * b);
+        return write_f32_result(ctx, a * b, dest);
     }
 
     let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
@@ -3350,7 +3575,7 @@ fn eval_div<'db>(
         let b = unsafe { *(rhs.ptr as *const f32) };
         destroy_value(ctx, lhs);
         destroy_value(ctx, rhs);
-        return allocate_f32(ctx, a / b);
+        return write_f32_result(ctx, a / b, dest);
     }
 
     let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
@@ -3563,6 +3788,26 @@ fn write_u32_result(ctx: &mut InterpContext<'_>, value: u32, dest: Option<Destin
     }
 }
 
+/// Write f32 result to destination or allocate new value.
+fn write_f32_result(ctx: &mut InterpContext<'_>, value: f32, dest: Option<Destination>) -> Result<Value, InterpError> {
+    if let Some(d) = dest {
+        unsafe { *(d.ptr as *mut f32) = value; }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        allocate_f32(ctx, value)
+    }
+}
+
+/// Write bool result to destination or allocate new value.
+fn write_bool_result(ctx: &mut InterpContext<'_>, value: bool, dest: Option<Destination>) -> Result<Value, InterpError> {
+    if let Some(d) = dest {
+        unsafe { *(d.ptr as *mut u8) = if value { 1 } else { 0 }; }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        allocate_bool(ctx, value)
+    }
+}
+
 /// Evaluate optional addition for u32.
 ///
 /// Returns result on success, OptionNone error on overflow.
@@ -3697,6 +3942,7 @@ fn eval_comparison<'db>(
     op: crate::ast::BinOp,
     lhs: Value,
     rhs: Value,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     use crate::ast::BinOp;
     use datalove_rt::c::RtOrdering;
@@ -3727,7 +3973,7 @@ fn eval_comparison<'db>(
         _ => false,
     };
 
-    allocate_bool(ctx, result)
+    write_bool_result(ctx, result, dest)
 }
 
 /// Execute a binary operation.
@@ -3755,7 +4001,7 @@ fn execute_binop<'db>(
 
         // Comparison operators.
         BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
-            eval_comparison(ctx, op, lhs, rhs)
+            eval_comparison(ctx, op, lhs, rhs, dest)
         }
 
         // Optional operators: preserve type, early-return on overflow/div0.
