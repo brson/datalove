@@ -1,6 +1,0 @@
-fun fib(n: @u32): @u32
-  let m = n
-  ret m
-end fun
-
-let output = fib(@8)

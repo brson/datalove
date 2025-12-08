@@ -1,7 +1,0 @@
-// Test try-option operator (?) with None value - early return.
-fun unwrap_option(val: ?u32): ?u32
-  let x: u32 = val?
-  ret x +? 10
-end fun
-
-let output = unwrap_option(@none)

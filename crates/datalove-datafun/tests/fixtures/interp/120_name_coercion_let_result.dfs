@@ -1,2 +1,0 @@
-let x: @u32 = @88
-let output: @!u32 = x

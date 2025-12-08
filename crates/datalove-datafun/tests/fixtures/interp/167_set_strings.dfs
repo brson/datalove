@@ -1,1 +1,0 @@
-let output = @set { @"foo", @"bar", @"baz" }

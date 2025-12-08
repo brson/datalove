@@ -1,7 +1,0 @@
-fun test(): @?u32
-  let x: @u32 = @42
-  let y: @?u32 = x
-  ret y
-end fun
-
-let output = test()

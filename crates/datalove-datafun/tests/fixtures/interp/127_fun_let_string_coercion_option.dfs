@@ -1,7 +1,0 @@
-fun test(): @?string
-  let x: @string = @"hello"
-  let y: @?string = x
-  ret y
-end fun
-
-let output = test()

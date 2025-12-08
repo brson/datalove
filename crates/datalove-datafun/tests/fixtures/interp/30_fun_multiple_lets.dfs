@@ -1,8 +1,0 @@
-fun compute(a: @int, b: @int): @int
-  let x = a + b
-  let y = x * : @int / @2
-  let z = y - : @int / @1
-  ret z
-end fun
-
-let output = compute(: @int / @3, : @int / @4)

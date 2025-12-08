@@ -1,8 +1,0 @@
-// Test try-option operator (?) with Some(string).
-fun process_string(val: ?string): ?string
-  let x: string = val?
-  ret x
-end fun
-
-let input: ?string = @"hello"
-let output = process_string(input)

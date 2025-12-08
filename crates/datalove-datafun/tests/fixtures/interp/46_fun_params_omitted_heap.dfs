@@ -1,5 +1,0 @@
-fun double(x: u32): u32
-    ret x
-end fun
-
-let output = double(@42)

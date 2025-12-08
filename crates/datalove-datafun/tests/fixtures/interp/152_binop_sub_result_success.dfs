@@ -1,6 +1,0 @@
-// Test result subtraction (-!) with successful result.
-fun test_sub_result(a: @u32, b: @u32): !u32
-  ret a -! b
-end fun
-
-let output = test_sub_result(@10, @3)

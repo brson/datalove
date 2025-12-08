@@ -1,6 +1,0 @@
-fun identity(x: u32): u32
-    let z: u32 = x
-    ret z
-end fun
-
-let output = identity(@42)

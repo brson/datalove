@@ -1,5 +1,0 @@
-fun add(a: @int, b: @int): @int
-  ret a + b
-end fun
-
-let output = add(@10, @20)

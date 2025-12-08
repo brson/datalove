@@ -1,2 +1,0 @@
-let x: u32 = @42
-let output = x

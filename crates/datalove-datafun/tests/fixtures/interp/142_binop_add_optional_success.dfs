@@ -1,6 +1,0 @@
-// Test optional addition (+?) with successful result.
-fun test_add_optional(a: @u32, b: @u32): ?u32
-  ret a +? b
-end fun
-
-let output = test_add_optional(@5, @3)

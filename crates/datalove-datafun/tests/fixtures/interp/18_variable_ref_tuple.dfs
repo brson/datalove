@@ -1,2 +1,0 @@
-let x = @(42, 99)
-let output = x

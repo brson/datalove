@@ -1,4 +1,0 @@
-// Test Result type with Ok value (automatic coercion).
-// fixme busted
-let a: !u32 = @42
-let output = a

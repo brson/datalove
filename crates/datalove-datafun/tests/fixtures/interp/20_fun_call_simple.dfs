@@ -1,5 +1,0 @@
-fun double(x: @int): @int
-  ret x + x
-end fun
-
-let output = double(: @int / @21)

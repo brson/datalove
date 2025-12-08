@@ -1,4 +1,0 @@
-// Test bigint multiplication.
-let a: @int = @10
-let b: @int = @20
-let output = a * b

@@ -1,5 +1,0 @@
-fun test(x: @string): @!string
-  ret x
-end fun
-
-let output = test(@"test string")

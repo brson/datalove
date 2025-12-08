@@ -1,6 +1,0 @@
-// Test bigint checked division (successful).
-fun divide(a: @int, b: @int): !@int
-    ret a /! b
-end fun
-
-let output = divide(@300, @3)

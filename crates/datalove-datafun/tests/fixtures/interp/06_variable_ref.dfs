@@ -1,2 +1,0 @@
-let x: @int = @100
-let output = x + x

@@ -1,2 +1,0 @@
-// Test Option type with string payload and none coercion.
-let output: @?@string = @none

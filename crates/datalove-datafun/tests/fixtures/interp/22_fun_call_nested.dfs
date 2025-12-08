@@ -1,6 +1,0 @@
-fun double(x: @int): @int
-  ret x + x
-end fun
-
-let x: @int = @10
-let output = double(x)

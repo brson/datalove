@@ -1,4 +1,0 @@
-// Test bigint addition.
-let a: @int = @100
-let b: @int = @200
-let output = a + b

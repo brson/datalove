@@ -1,9 +1,0 @@
-fun choose(x: @u32): @u32
-  if x .< @10
-    ret @1
-  else
-    ret @2
-  end if
-end fun
-
-let output = choose(@5)

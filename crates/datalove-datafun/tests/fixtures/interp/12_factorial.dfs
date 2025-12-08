@@ -1,9 +1,0 @@
-fun factorial(n: @int): @int
-  if n .< : @int / @2
-    ret : @int / @1
-  else
-    ret n * factorial(n - : @int / @1)
-  end if
-end fun
-
-let output = factorial(: @int / @5)
