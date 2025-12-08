@@ -6,7 +6,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 **New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs; lists; maps; sets.
 
-**95 tests passing** in interp2 vs **136 tests** in old interp.
+**96 tests passing** in interp2 vs **136 tests** in old interp.
 
 ## Progress
 
@@ -18,6 +18,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 4: @none literal, @error literal, Option/Result return type wrapping
 - Phase 5: If-destructuring for Option (80_if_option_some, 81_if_option_none)
 - Phase 5b: If-destructuring for Result (82_if_result_ok, 82a_result_ok_simple) - Ok case works
+- Phase 5c: Result else_binding (83_if_result_err) - Err case with |error| binding
 - Phase 6: Try operators (val? and val!) - tested via 62_fibonacci and 120-123 (try_option_some/none, try_result_ok/err)
 - Phase 7: Optional/Result unary negation (-?, -!) - tests 84a, 85, 87
 - Phase 8: Other integer types with Option/Result coercion - tests 94-97
@@ -139,7 +140,7 @@ Syntax: `if opt |value| ... else ... end if`
 ✓ `evaluate_branch_condition` handles:
 - Bool: simple truth check
 - Option: Some extracts payload to then_binding, None goes to else
-- Result: Ok extracts payload to then_binding, Err goes to else (else_binding TODO)
+- Result: Ok extracts payload to then_binding, Err extracts Error to else_binding
 
 ### Phase 6: Try Operators ✓
 **Tests:** 62_fibonacci uses try-result operator successfully
@@ -208,4 +209,4 @@ Old interpreter wraps checked ops in Result - WRONG. Correct: yield T directly, 
 
 **Known limitation:** Map/Set sorting uses byte-wise comparison (`std::slice::from_raw_parts().cmp()`) for B-tree construction. This works for simple numeric types but does NOT produce canonical ordering for strings, bigints, or nested collections. The datalit instantiate2 module uses `crate::canon::sorted_map_indices` / `sorted_set_indices` which implement proper canonical ordering. The interp2 implementation should eventually use similar comparison logic.
 
-**TODO:** Investigate 16-byte memory leak introduced with CFG Branch terminator and @none/@error argument handling changes. Tests pass with `DATALOVE_LEAK_CHECK=ignore` but fail with `DATALOVE_LEAK_CHECK=panic`. The leak appears even for tests that don't use the new code paths. Root cause unclear.
+**Resolved:** The 16-byte memory leak mentioned earlier appears to be fixed. All 96 interp2 tests now pass with `DATALOVE_LEAK_CHECK=panic`.

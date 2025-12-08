@@ -3718,9 +3718,34 @@ fn evaluate_branch_condition<'db>(
                 }
             } else {
                 // Err case - bind error to else_binding if present.
-                if let Some(_binding_name) = else_binding {
-                    // TODO: Extract Error payload and bind to else_binding slot.
-                    // For now, we just skip error binding.
+                if let Some(binding_name) = else_binding {
+                    // Extract Error from Result payload and bind to else_binding slot.
+                    let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+                    let layout = unsafe { compute_result_layout(tydesc_ref) };
+
+                    // Get the slot for else_binding.
+                    let frame_index = ctx.call_stack.len() - 1;
+                    let frame_layout = ctx.call_stack[frame_index].layout;
+                    if let Some(slot_info) = find_slot_by_name(ctx.db, frame_layout, binding_name) {
+                        let slot_offset = slot_info.offset(ctx.db) as usize;
+                        let slot_ptr = unsafe {
+                            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
+                        };
+
+                        // Copy Error payload (16 bytes: tydesc ptr + value ptr) to slot.
+                        let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                        let error_size = std::mem::size_of::<datalove_rt::rtdt::Error>();
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, error_size);
+                        }
+
+                        // Mark slot as available.
+                        let slot_index = frame_layout.slots(ctx.db)
+                            .iter()
+                            .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
+                            .unwrap_or(0);
+                        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    }
                 }
             }
 
