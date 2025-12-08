@@ -31,7 +31,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
 fn main() {
     datalove_exampletest::ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
-        .fixture_subdir("interp2")
+        .fixture_subdir("interp")
         .file_extension("world")
         .allow_errors(true)
         .run();
