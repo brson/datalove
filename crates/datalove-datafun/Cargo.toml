@@ -30,11 +30,6 @@ path = "tests/tycheck_tests.rs"
 harness = false
 
 [[test]]
-name = "old_interp_tests"
-path = "tests/old_interp_tests.rs"
-harness = false
-
-[[test]]
 name = "interp_tests"
 path = "tests/interp_tests.rs"
 harness = false
@@ -42,11 +37,6 @@ harness = false
 [[test]]
 name = "tycheck_world_tests"
 path = "tests/tycheck_world_tests.rs"
-harness = false
-
-[[test]]
-name = "old_interp_with_package_tests"
-path = "tests/old_interp_with_package_tests.rs"
 harness = false
 
 [[test]]

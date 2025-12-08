@@ -105,18 +105,9 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
-      }
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
     "environment": [
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
-      },
       {
         "name": "u8_max",
         "ty": "u8",
@@ -137,18 +128,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "i8",
-        "value": "@4294967168"
-      }
+      "Error": "type error(s): UnresolvedName(\"i8_min\")"
     },
     "environment": [
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
-      },
       {
         "name": "u8_max",
         "ty": "u8",
@@ -180,11 +162,6 @@
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u8_max",
@@ -219,11 +196,6 @@
         "value": "@127"
       },
       {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
-      },
-      {
         "name": "u8_max",
         "ty": "u8",
         "value": "@255"
@@ -254,11 +226,6 @@
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_min",
@@ -298,11 +265,6 @@
         "value": "@127"
       },
       {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
-      },
-      {
         "name": "u16_min",
         "ty": "u16",
         "value": "@0"
@@ -338,11 +300,6 @@
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -387,11 +344,6 @@
         "value": "@127"
       },
       {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
-      },
-      {
         "name": "u16_max",
         "ty": "u16",
         "value": "@65535"
@@ -421,27 +373,13 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      }
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
     "environment": [
-      {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
       {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -473,27 +411,13 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "i16",
-        "value": "@4294934528"
-      }
+      "Error": "type error(s): UnresolvedName(\"i16_min\")"
     },
     "environment": [
-      {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
       {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -538,19 +462,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -595,19 +509,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -652,19 +556,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -714,19 +608,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -776,19 +660,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -843,19 +717,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -897,11 +761,7 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      }
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
     "environment": [
       {
@@ -910,24 +770,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -969,11 +814,7 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "i32",
-        "value": "@2147483648"
-      }
+      "Error": "type error(s): UnresolvedName(\"i32_min\")"
     },
     "environment": [
       {
@@ -982,24 +823,9 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1054,29 +880,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1131,29 +942,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1195,7 +991,11 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Unsupported type tag: U64\")"
+      "SuccessLet": {
+        "name": "u64_min",
+        "ty": "u64",
+        "value": "@0"
+      }
     },
     "environment": [
       {
@@ -1204,29 +1004,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1246,6 +1031,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1268,7 +1058,11 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"u64_min\")"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u64",
+        "value": "@0"
+      }
     },
     "environment": [
       {
@@ -1277,29 +1071,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1319,6 +1098,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1341,7 +1125,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Unsupported type tag: U64\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: number too large to fit in target type\")"
     },
     "environment": [
       {
@@ -1350,29 +1134,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1392,6 +1161,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1423,29 +1197,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1465,6 +1224,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1487,7 +1251,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Unsupported type tag: I64\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
     "environment": [
       {
@@ -1496,29 +1260,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1538,6 +1287,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1569,29 +1323,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1611,6 +1350,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1633,7 +1377,7 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Unsupported type tag: I64\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: number too large to fit in target type\")"
     },
     "environment": [
       {
@@ -1642,29 +1386,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1684,6 +1413,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1715,29 +1449,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1757,6 +1476,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1788,29 +1512,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1830,6 +1539,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1861,29 +1575,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1903,6 +1602,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -1934,29 +1638,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -1976,6 +1665,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2007,29 +1701,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2049,6 +1728,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2080,29 +1764,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2122,6 +1791,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2153,29 +1827,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2195,6 +1854,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2226,29 +1890,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2268,6 +1917,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2299,29 +1953,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2341,6 +1980,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2372,29 +2016,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2414,6 +2043,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2445,29 +2079,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2487,6 +2106,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2518,29 +2142,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2560,6 +2169,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2591,29 +2205,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2633,6 +2232,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2664,29 +2268,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2706,6 +2295,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2737,29 +2331,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2779,6 +2358,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2810,29 +2394,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2852,6 +2421,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {
@@ -2883,29 +2457,14 @@
         "value": "@32767"
       },
       {
-        "name": "i16_min",
-        "ty": "i16",
-        "value": "@4294934528"
-      },
-      {
         "name": "i32_max",
         "ty": "i32",
         "value": "@2147483647"
       },
       {
-        "name": "i32_min",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
         "name": "i8_max",
         "ty": "i8",
         "value": "@127"
-      },
-      {
-        "name": "i8_min",
-        "ty": "i8",
-        "value": "@4294967168"
       },
       {
         "name": "u16_max",
@@ -2925,6 +2484,11 @@
       {
         "name": "u32_min",
         "ty": "u32",
+        "value": "@0"
+      },
+      {
+        "name": "u64_min",
+        "ty": "u64",
         "value": "@0"
       },
       {

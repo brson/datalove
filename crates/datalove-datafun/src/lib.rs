@@ -11,9 +11,8 @@ pub mod tycheck;
 pub mod function_analysis;
 pub mod spans;
 
-// Interpreter modules.
-pub mod interp_old;  // Old interpreter (to be deprecated).
-pub mod interp;      // New analysis-driven interpreter.
+// Interpreter module.
+pub mod interp;
 
 // Module system.
 pub mod package;
@@ -21,7 +20,6 @@ pub mod package_load;
 pub mod package_load_worldfile;
 pub mod import_demands;
 pub mod package_resolve;
-pub mod script_world;
 
 // Worldfile testing infrastructure.
 pub mod worldfile_analysis;

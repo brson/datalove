@@ -469,6 +469,7 @@ impl ScriptCommand {
     fn run_without_sys(&self) -> AnyResult<()> {
         use datalove_datafun as datafun;
         use bct::input::Source;
+        use std::collections::BTreeMap;
 
         let db = datafun::Database::default();
 
@@ -477,56 +478,60 @@ impl ScriptCommand {
         let source = Source::new(&db, source_text.S());
 
         // Create diagnostic context.
-        let diag_ctx = DiagnosticContext::from_file(self.file_path.clone(), source_text);
-
-        // Parse and get script.
-        let script = datafun::parser::parse_for_diagnostics(&db, source);
+        let diag_ctx = DiagnosticContext::from_file(self.file_path.clone(), source_text.clone());
 
         // Render parse diagnostics.
         self.render_diagnostics(&db, source, &diag_ctx)?;
 
-        // Type check and retrieve diagnostics.
-        let tycheck_result = datafun::tycheck::type_check_for_diagnostics(&db, source);
+        // Create script unit.
+        let unit = datafun::script::ScriptUnit::new(&db, source);
+        let script = datafun::script::Script::new(&db, vec![unit]);
 
-        // Retrieve and render type diagnostics.
-        let type_diags = datafun::tycheck::type_check_for_diagnostics::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, source);
-        if !type_diags.is_empty() {
-            eprintln!("Type errors:");
-            for diag_wrapper in &type_diags {
-                let diag = diag_wrapper.to_diagnostic(&db);
-                self.render_single_diagnostic(&db, &diag, &diag_ctx);
-            }
-            bail!("{} type error(s)", type_diags.len());
-        }
+        // Create empty package world.
+        let empty_package_world = datafun::package_load::PackageWorld {
+            pkglib_system: BTreeMap::new(),
+            pkglib_local: BTreeMap::new(),
+        };
+        let package_world = datafun::package::import_from_loader(&db, empty_package_world);
 
-        // Also check old-style errors for now (fallback).
-        if !tycheck_result.errors(&db).is_empty() {
-            bail!("Type check errors: {} error(s)", tycheck_result.errors(&db).len());
-        }
-
-        // Build type table.
-        let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = match datafun::interp_old::type_table::TypeTable::build(&db, script, tycheck_result, &mut tydesc_table) {
-            Ok(table) => table,
-            Err(e) => bail!("Failed to build type table: {}", e),
+        // Resolve and typecheck the empty package world.
+        let resolution = datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
+        let graph = match resolution.result(&db) {
+            Ok(g) => g,
+            Err(e) => bail!("Package resolution failed: {:?}", e),
         };
 
-        // Create interpreter context.
-        let mut ctx = datafun::interp_old::interp::InterpContext::new(&db, type_table);
+        let typecheck_result = datafun::tycheck::typecheck_package_world(&db, graph);
 
-        // Execute the script.
-        if let Err(e) = ctx.execute(script) {
-            bail!("Execution error: {:?}", e);
-        }
+        // Execute the script with the new interpreter.
+        let mut result = match datafun::interp::execute_script(&db, script, package_world, typecheck_result) {
+            Ok(r) => r,
+            Err(e) => bail!("Execution error: {:?}", e),
+        };
 
-        // Pretty-print the 'output' variable.
-        let output_name = bct::text::InternedText::new(&db, S("output"));
-        let result = match ctx.pretty_print_variable(output_name) {
-            Ok(res) => res,
+        // Pretty-print the output.
+        let output = match datafun::interp::pretty_print_value(&mut result) {
+            Ok(o) => o,
             Err(e) => bail!("Failed to pretty-print output: {:?}", e),
         };
 
-        println!("{}", result);
+        // Clean up the result value before returning.
+        unsafe {
+            let rt_handle = result.runtime.handle();
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                rt_handle,
+                result.value.ptr,
+                result.value.tydesc,
+            );
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt_handle,
+                result.value.tydesc,
+                1,
+                result.value.ptr,
+            );
+        }
+
+        println!("{}", output);
 
         Ok(())
     }
@@ -542,13 +547,14 @@ impl ScriptCommand {
         let source = Source::new(&db, script_text.S());
 
         // Create diagnostic context.
-        let diag_ctx = DiagnosticContext::from_file(self.file_path.clone(), script_text);
+        let diag_ctx = DiagnosticContext::from_file(self.file_path.clone(), script_text.clone());
 
-        // Parse and get script (tracked wrapper for diagnostic accumulation).
-        let script = datafun::parser::parse_for_diagnostics(&db, source);
-
-        // Render parse diagnostics.
+        // Render parse diagnostics (before creating script unit).
         self.render_diagnostics(&db, source, &diag_ctx)?;
+
+        // Create script unit.
+        let unit = datafun::script::ScriptUnit::new(&db, source);
+        let script = datafun::script::Script::new(&db, vec![unit]);
 
         // Load package world from sys/ directory.
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -574,20 +580,14 @@ impl ScriptCommand {
 
         let package_world = datafun::package::import_from_loader(&db, package_world_raw);
 
-        // Load and resolve script with package world.
-        let script_world = datafun::script_world::load_script_with_package_world(&db, script, package_world);
-
-        // Check if resolution succeeded.
-        let resolution = script_world.resolution(&db);
-        if let Err(e) = resolution.result(&db) {
-            bail!("Package resolution failed: {:?}", e);
-        }
-
-        // Get typecheck result.
-        let typecheck_result = match script_world.typecheck_result(&db) {
-            Some(res) => res,
-            None => bail!("Package world typecheck failed"),
+        // Resolve and typecheck the package world.
+        let resolution = datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
+        let graph = match resolution.result(&db) {
+            Ok(g) => g,
+            Err(e) => bail!("Package resolution failed: {:?}", e),
         };
+
+        let typecheck_result = datafun::tycheck::typecheck_package_world(&db, graph);
 
         // Check for package world typecheck errors.
         let module_errors = typecheck_result.module_errors(&db);
@@ -596,56 +596,35 @@ impl ScriptCommand {
             bail!("Package world has {} typecheck error(s)", error_count);
         }
 
-        // Typecheck the script with package world context using tracked wrapper.
-        let script_typecheck = datafun::tycheck::type_check_with_package_world_for_diagnostics(
-            &db,
-            source,
-            package_world,
-            *typecheck_result,
-        );
-
-        // Retrieve and render type diagnostics.
-        let type_diags = datafun::tycheck::type_check_with_package_world_for_diagnostics::accumulated::<datalove_diagnostic::TypeDiagnostic>(
-            &db, source, package_world, *typecheck_result
-        );
-        if !type_diags.is_empty() {
-            eprintln!("Type errors:");
-            for diag_wrapper in &type_diags {
-                let diag = diag_wrapper.to_diagnostic(&db);
-                self.render_single_diagnostic(&db, &diag, &diag_ctx);
-            }
-            bail!("{} type error(s)", type_diags.len());
-        }
-
-        // Build type table for the script.
-        let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(&db);
-        let type_table = match datafun::interp_old::type_table::TypeTable::build(&db, script, script_typecheck, &mut tydesc_table) {
-            Ok(table) => table,
-            Err(e) => bail!("Failed to build type table: {}", e),
+        // Execute the script with the new interpreter.
+        let mut result = match datafun::interp::execute_script(&db, script, package_world, typecheck_result) {
+            Ok(r) => r,
+            Err(e) => bail!("Execution error: {:?}", e),
         };
 
-        // Create interpreter context with package world support.
-        let mut ctx = datafun::interp_old::interp::InterpContext::with_package_world(
-            &db,
-            type_table,
-            &script,
-            package_world,
-            &typecheck_result,
-        );
-
-        // Execute the script.
-        if let Err(e) = ctx.execute(script) {
-            bail!("Execution error: {:?}", e);
-        }
-
-        // Pretty-print the 'output' variable.
-        let output_name = bct::text::InternedText::new(&db, S("output"));
-        let result = match ctx.pretty_print_variable(output_name) {
-            Ok(res) => res,
+        // Pretty-print the output.
+        let output = match datafun::interp::pretty_print_value(&mut result) {
+            Ok(o) => o,
             Err(e) => bail!("Failed to pretty-print output: {:?}", e),
         };
 
-        println!("{}", result);
+        // Clean up the result value before returning.
+        unsafe {
+            let rt_handle = result.runtime.handle();
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                rt_handle,
+                result.value.ptr,
+                result.value.tydesc,
+            );
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt_handle,
+                result.value.tydesc,
+                1,
+                result.value.ptr,
+            );
+        }
+
+        println!("{}", output);
 
         Ok(())
     }

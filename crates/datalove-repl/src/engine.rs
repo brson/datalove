@@ -3,6 +3,7 @@
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 use bct::input::Source;
+use std::collections::BTreeMap;
 
 use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, EvalFun, InputParse, Input};
 use crate::datafun;
@@ -11,7 +12,11 @@ pub struct Engine<'db> {
     db: &'db dyn datafun::Db,
     history: ReplHistory,
     /// Persistent interpreter context.
-    interp_ctx: datafun::interp_old::interp::InterpContext<'db>,
+    interp_ctx: datafun::interp::InterpContext<'db>,
+    /// Package world for the REPL (empty for now).
+    package_world: datafun::package::PackageWorld,
+    /// Typecheck result for the package world.
+    typecheck_result: datafun::tycheck::PackageWorldTypecheckResult<'db>,
 }
 
 struct ReplHistory {
@@ -97,18 +102,45 @@ impl ReplHistory {
 
 impl<'db> Engine<'db> {
     pub fn new(db: &'db dyn datafun::Db) -> AnyResult<Engine<'db>> {
-        let type_table = datafun::interp_old::type_table::TypeTable::empty();
+        // Create empty package world.
+        let empty_package_world = datafun::package_load::PackageWorld {
+            pkglib_system: BTreeMap::new(),
+            pkglib_local: BTreeMap::new(),
+        };
+        let package_world = datafun::package::import_from_loader(db, empty_package_world);
+
+        // Resolve and typecheck the empty package world.
+        let resolution = datafun::package_resolve::resolve_package_world_with_imports(db, package_world);
+        let graph = resolution.result(db)
+            .map_err(|e| rmx::anyhow::anyhow!("Package resolution failed: {:?}", e))?;
+
+        let typecheck_result = datafun::tycheck::typecheck_package_world(db, graph);
+
+        // Create interpreter context.
+        let interp_ctx = datafun::interp::InterpContext::new_with_typecheck(db, package_world, typecheck_result)
+            .map_err(|e| rmx::anyhow::anyhow!("Failed to create interpreter context: {:?}", e))?;
+
         Ok(Engine {
             db,
             history: ReplHistory::new(),
-            interp_ctx: datafun::interp_old::interp::InterpContext::new(db, type_table),
+            interp_ctx,
+            package_world,
+            typecheck_result,
         })
     }
 
     fn reset(&mut self) {
         self.history = ReplHistory::new();
-        let type_table = datafun::interp_old::type_table::TypeTable::empty();
-        self.interp_ctx = datafun::interp_old::interp::InterpContext::new(self.db, type_table);
+
+        // Create a fresh interpreter context.
+        // Note: We reuse the same package_world and typecheck_result.
+        if let Ok(ctx) = datafun::interp::InterpContext::new_with_typecheck(
+            self.db,
+            self.package_world,
+            self.typecheck_result,
+        ) {
+            self.interp_ctx = ctx;
+        }
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -266,16 +298,11 @@ impl<'db> Engine<'db> {
                 }
             }
 
-            // Run resolution to check if the unit is valid.
-            let fun_resolution = datafun::resolution::resolve_functions(db, new_script);
-            let let_resolution = datafun::resolution::resolve_let_statement(db, new_script, unit_index);
-            //todo check resolution
-
-            // Type check the script.
+            // Type check the full script to see all variable bindings.
             let dummy_source = bct::input::Source::new(db, String::new());
-            let tycheck_result = datafun::tycheck::type_check(db, dummy_source, parsed_script);
-            if !tycheck_result.errors(db).is_empty() {
-                let errors: Vec<_> = tycheck_result.errors(db)
+            let script_typecheck = datafun::tycheck::type_check(db, dummy_source, parsed_script);
+            if !script_typecheck.errors(db).is_empty() {
+                let errors: Vec<_> = script_typecheck.errors(db)
                     .iter()
                     .map(|e| format!("{:?}", e.error(db)))
                     .collect();
@@ -283,33 +310,12 @@ impl<'db> Engine<'db> {
             }
         }
 
-        // Build type table for the full script.
-        let dummy_source = bct::input::Source::new(db, String::new());
-        let tycheck_result = datafun::tycheck::type_check(db, dummy_source, parsed_script);
-        let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(db);
-        let type_table = match datafun::interp_old::type_table::TypeTable::build(db, parsed_script, tycheck_result, &mut tydesc_table) {
-            Ok(table) => table,
-            Err(e) => return Eval::Error(format!("type table error: {}", e)),
-        };
+        // Update context with new script.
+        self.interp_ctx.set_script(new_script);
 
-        // Update the interpreter context.
-        self.interp_ctx.update_type_table(type_table);
-
-        let ctx = &mut self.interp_ctx;
-
-        // Collect function definitions from the new unit.
-        for statement in unit_statements {
-            if let datafun::ast::Statement::Fun(fun) = statement {
-                let name = fun.name(db);
-                ctx.functions_mut().insert(name, *fun);
-            }
-        }
-
-        // Execute only the statements from the new unit.
-        for statement in unit_statements {
-            if let Err(e) = ctx.exec_stmt(statement) {
-                return Eval::Error(format!("execution error: {:?}", e));
-            }
+        // Execute the script unit using the new interpreter.
+        if let Err(e) = datafun::interp::execute_script_unit(&mut self.interp_ctx, new_script, unit_index) {
+            return Eval::Error(format!("execution error: {:?}", e));
         }
 
         // Return information about the last statement.
@@ -324,8 +330,15 @@ impl<'db> Engine<'db> {
                     "unknown".to_string()
                 };
 
-                let value_str = ctx.pretty_print_variable(name)
-                    .unwrap_or_else(|e| format!("error: {:?}", e));
+                // Pretty-print from the script scope.
+                // Extract value first to avoid borrow conflict.
+                let value_opt = self.interp_ctx.script_scope.variables.get(&name).map(|v| v.value);
+                let value_str = if let Some(value) = value_opt {
+                    self.interp_ctx.pretty_print_value(&value)
+                        .unwrap_or_else(|e| format!("error: {:?}", e))
+                } else {
+                    "error: variable not found".to_string()
+                };
 
                 return Eval::SuccessLet(EvalLet {
                     name: name_str,
@@ -360,39 +373,26 @@ impl<'db> Engine<'db> {
         );
 
         let parsed_script = parse_full_script(db, new_script);
+        let units = new_script.units(db);
+        let temp_unit_index = units.len() - 1;
+
+        // Type check the full script to see all variable bindings.
         let dummy_source = bct::input::Source::new(db, String::new());
-        let tycheck_result = datafun::tycheck::type_check(db, dummy_source, parsed_script);
-        if !tycheck_result.errors(db).is_empty() {
-            let errors: Vec<_> = tycheck_result.errors(db)
+        let script_typecheck = datafun::tycheck::type_check(db, dummy_source, parsed_script);
+        if !script_typecheck.errors(db).is_empty() {
+            let errors: Vec<_> = script_typecheck.errors(db)
                 .iter()
                 .map(|e| format!("{:?}", e.error(db)))
                 .collect();
             return Eval::Error(format!("type error(s): {}", errors.join(", ")));
         }
 
-        // Build type table for the full script (including temp expression).
-        let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(db);
-        let type_table = match datafun::interp_old::type_table::TypeTable::build(db, parsed_script, tycheck_result, &mut tydesc_table) {
-            Ok(table) => table,
-            Err(e) => return Eval::Error(format!("type table error: {}", e)),
-        };
+        // Update context with new script.
+        self.interp_ctx.set_script(new_script);
 
-        // Update the interpreter context.
-        self.interp_ctx.update_type_table(type_table);
-
-        let ctx = &mut self.interp_ctx;
-
-        // Parse the temporary unit to get the let statement.
-        let units = new_script.units(db);
-        let temp_unit_index = units.len() - 1;
-        let parsed_temp_unit = datafun::parser::parse_script_unit(db, new_script, temp_unit_index);
-        let temp_statements = parsed_temp_unit.statements(db);
-
-        // Execute the temporary let statement.
-        for statement in temp_statements {
-            if let Err(e) = ctx.exec_stmt(statement) {
-                return Eval::Error(format!("execution error: {:?}", e));
-            }
+        // Execute the temp unit using the new interpreter.
+        if let Err(e) = datafun::interp::execute_script_unit(&mut self.interp_ctx, new_script, temp_unit_index) {
+            return Eval::Error(format!("execution error: {:?}", e));
         }
 
         let name = bct::text::InternedText::new(db, S(temp_var));
@@ -403,14 +403,19 @@ impl<'db> Engine<'db> {
             "unknown".to_string()
         };
 
-        let value_str = ctx.pretty_print_variable(name)
-            .unwrap_or_else(|e| format!("error: {:?}", e));
+        // Pretty-print from the script scope.
+        // Extract value first to avoid borrow conflict.
+        let value_opt = self.interp_ctx.script_scope.variables.get(&name).map(|v| v.value);
+        let value_str = if let Some(value) = value_opt {
+            self.interp_ctx.pretty_print_value(&value)
+                .unwrap_or_else(|e| format!("error: {:?}", e))
+        } else {
+            "error: variable not found".to_string()
+        };
 
-        // Remove the temporary variable from the context.
-        if let Some(mut value) = ctx.variables_mut().remove(&name) {
-            unsafe {
-                value.free(&mut ctx.rt);
-            }
+        // Remove the temporary variable from the script scope.
+        if let Some(var) = self.interp_ctx.script_scope.variables.remove(&name) {
+            datafun::interp::destroy_value(&mut self.interp_ctx, var.value);
         }
 
         Eval::SuccessExpr(EvalExpr {
@@ -425,7 +430,6 @@ impl<'db> Engine<'db> {
     pub fn get_environment(&mut self) -> Vec<(String, String, String)> {
         let mut bindings = Vec::new();
 
-        let ctx = &mut self.interp_ctx;
         let db = self.db;
 
         // Build the full script for type lookup.
@@ -433,7 +437,7 @@ impl<'db> Engine<'db> {
         let parsed_script = parse_full_script(db, script);
 
         // Add functions.
-        for (name, _fun) in ctx.functions() {
+        for (name, _fun) in &self.interp_ctx.script_scope.functions {
             bindings.push((
                 name.as_str(db).to_string(),
                 "function".to_string(),
@@ -441,11 +445,16 @@ impl<'db> Engine<'db> {
             ));
         }
 
-        // Collect variable names first to avoid borrow checker issues.
-        let var_names: Vec<_> = ctx.variables().keys().copied().collect();
+        // Collect variable names and values for pretty-printing.
+        // We need to collect the value pointers first to avoid borrow conflicts.
+        // Only include Available variables - Moved ones have invalid pointers.
+        let var_data: Vec<_> = self.interp_ctx.script_scope.variables.iter()
+            .filter(|(_, var)| var.state == datafun::interp::ScriptVarState::Available)
+            .map(|(name, var)| (*name, var.value))
+            .collect();
 
         // Add variables with types and values.
-        for name in var_names {
+        for (name, value) in var_data {
             // Get the type from the typechecker.
             let ty_str = if let Some(type_and_heap) = datafun::tycheck::lookup_variable_type(db, parsed_script, name) {
                 datafun::tycheck::type_to_string(db, type_and_heap.ty(db))
@@ -454,7 +463,7 @@ impl<'db> Engine<'db> {
             };
 
             // Get the value by pretty-printing.
-            let value_str = ctx.pretty_print_variable(name)
+            let value_str = self.interp_ctx.pretty_print_value(&value)
                 .unwrap_or_else(|_| "error".to_string());
 
             bindings.push((
@@ -496,8 +505,20 @@ impl<'db> Engine<'db> {
     }
 }
 
+impl<'db> Drop for Engine<'db> {
+    fn drop(&mut self) {
+        // Clean up only Available variables (not Moved ones, which have been transferred).
+        let vars: Vec<_> = self.interp_ctx.script_scope.variables
+            .drain()
+            .filter(|(_, var)| var.state == datafun::interp::ScriptVarState::Available)
+            .map(|(_, var)| var.value)
+            .collect();
 
-
+        for value in vars {
+            datafun::interp::destroy_value(&mut self.interp_ctx, value);
+        }
+    }
+}
 
 /// Create a new script unit from source text.
 ///

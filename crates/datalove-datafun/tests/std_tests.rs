@@ -10,9 +10,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let script_text = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    // Parse the script.
+    // Create script unit.
     let source = bct::input::Source::new(&db, script_text.S());
-    let script = datafun::parser::parse_for_diagnostics(&db, source);
+    let unit = datafun::script::ScriptUnit::new(&db, source);
+    let script = datafun::script::Script::new(&db, vec![unit]);
 
     // Load package world from sys/ directory.
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -32,18 +33,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     let package_world = datafun::package::import_from_loader(&db, package_world_raw);
 
-    // Load and resolve script with package world.
-    let script_world = datafun::script_world::load_script_with_package_world(&db, script, package_world);
+    // Resolve and typecheck the package world.
+    let resolution = datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
+    let graph = resolution.result(&db)
+        .map_err(|e| format!("Package resolution failed: {:?}", e))?;
 
-    // Check if resolution succeeded.
-    let resolution = script_world.resolution(&db);
-    if let Err(e) = resolution.result(&db) {
-        return Err(format!("Package resolution failed: {:?}", e));
-    }
-
-    // Get typecheck result.
-    let typecheck_result = script_world.typecheck_result(&db)
-        .ok_or_else(|| "Package world typecheck failed".to_string())?;
+    let typecheck_result = datafun::tycheck::typecheck_package_world(&db, graph);
 
     // Check for package world typecheck errors.
     let module_errors = typecheck_result.module_errors(&db);
@@ -52,45 +47,31 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         return Err(format!("Package world has {} typecheck error(s)", error_count));
     }
 
-    // Typecheck the script with package world context.
-    let script_typecheck = datafun::tycheck::type_check_with_package_world(
-        &db,
-        source,
-        script,
-        package_world,
-        typecheck_result,
-    );
-
-    // Check for script typecheck errors.
-    if !script_typecheck.errors(&db).is_empty() {
-        let errors: Vec<_> = script_typecheck.errors(&db).iter()
-            .map(|e| format!("{:?}", e.error(&db)))
-            .collect();
-        return Err(format!("Script has {} typecheck error(s):\n{}", errors.len(), errors.join("\n")));
-    }
-
-    // Build type table for the script.
-    let mut tydesc_table = datafun::datalit::tydesc_table::TyDescTable::new(&db);
-    let type_table = datafun::interp_old::type_table::TypeTable::build(&db, script, script_typecheck, &mut tydesc_table)
-        .map_err(|e| format!("Failed to build type table: {}", e))?;
-
-    // Create interpreter context with package world support.
-    let mut ctx = datafun::interp_old::interp::InterpContext::with_package_world(
-        &db,
-        type_table,
-        &script,
-        package_world,
-        &typecheck_result,
-    );
-
-    // Execute the script.
-    ctx.execute(script)
+    // Execute the script with the new interpreter.
+    let mut result = datafun::interp::execute_script(&db, script, package_world, typecheck_result)
         .map_err(|e| format!("Execution error: {:?}", e))?;
 
-    // Pretty-print the 'output' variable.
-    let output_name = bct::text::InternedText::new(&db, S("output"));
-    ctx.pretty_print_variable(output_name)
-        .map_err(|e| format!("Failed to pretty-print output: {:?}", e))
+    // Pretty-print the output.
+    let output = datafun::interp::pretty_print_value(&mut result)
+        .map_err(|e| format!("Failed to pretty-print output: {:?}", e))?;
+
+    // Clean up the result value before returning.
+    unsafe {
+        let rt_handle = result.runtime.handle();
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt_handle,
+            result.value.ptr,
+            result.value.tydesc,
+        );
+        datalove_rt::c::dtlv_rti_mem_free_local(
+            rt_handle,
+            result.value.tydesc,
+            1,
+            result.value.ptr,
+        );
+    }
+
+    Ok(output)
 }
 
 fn main() {

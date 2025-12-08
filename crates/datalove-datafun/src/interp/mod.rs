@@ -265,6 +265,11 @@ impl InterpContext<'_> {
         }
     }
 
+    /// Set the current script for execution.
+    pub fn set_script(&mut self, script: crate::script::Script) {
+        self.script = Some(script);
+    }
+
     /// Pretty-print a value using this context's runtime and tydesc_table.
     pub fn pretty_print_value(&mut self, value: &Value) -> Result<String, InterpError> {
         use datalove_rt as rt;
@@ -807,33 +812,71 @@ fn execute_let_statement<'db>(
 ) -> Result<(), InterpError> {
     use crate::datalit::ast::TypeHint;
 
+    // Helper to check if expression is @none or @error.
+    let is_none_or_error = |expr: ast::ExprFun<'db>, db: &'db dyn crate::Db| -> bool {
+        if let ast::ExprFunKind::Datalit(datalit_expr) = expr.expr(db) {
+            let inner = datalit_expr.expr(db);
+            matches!(
+                inner.expr(db),
+                crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
+            )
+        } else {
+            false
+        }
+    };
+
     // Check if we need to coerce T → Option<T> or T → Result<T>.
     let final_value = if let Some(type_hint_and_heap) = let_stmt.type_hint(ctx.db) {
         let type_hint = type_hint_and_heap.type_hint(ctx.db);
         match type_hint {
             TypeHint::Option(_) | TypeHint::Result(_) => {
-                // Evaluate expression first.
-                let value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?;
-
                 // Get expected destination type.
                 let dest_tydesc = type_hint_to_tydesc(ctx, type_hint_and_heap);
-                let dest_ptr = unsafe {
-                    datalove_rt::c::dtlv_rti_mem_alloc_local(
-                        ctx.runtime.handle(),
-                        dest_tydesc,
-                        1,
-                    )
-                };
-                if dest_ptr.is_null() {
-                    destroy_value(ctx, value);
-                    return Err(InterpError::RuntimeError(
-                        "Failed to allocate destination for let coercion".to_string()
-                    ));
-                }
-                let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
 
-                // Coerce value to destination (T → Option<T> or T → Result<T>).
-                coerce_value_to_dest(ctx, value, dest)?
+                // Check if expression is @none or @error - these need the destination type for context.
+                if is_none_or_error(let_stmt.value(ctx.db), ctx.db) {
+                    // Allocate destination and evaluate with type context.
+                    let dest_ptr = unsafe {
+                        datalove_rt::c::dtlv_rti_mem_alloc_local(
+                            ctx.runtime.handle(),
+                            dest_tydesc,
+                            1,
+                        )
+                    };
+                    if dest_ptr.is_null() {
+                        return Err(InterpError::RuntimeError(
+                            "Failed to allocate destination for @none/@error".to_string()
+                        ));
+                    }
+                    let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+
+                    // Evaluate with destination - @none/@error will use the type context.
+                    let mut value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), Some(dest))?;
+                    // We allocated the destination, so we own it - mark as TempOwned.
+                    value.location = ValueLocation::TempOwned;
+                    value
+                } else {
+                    // Evaluate expression first (not @none/@error).
+                    let value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?;
+
+                    let dest_ptr = unsafe {
+                        datalove_rt::c::dtlv_rti_mem_alloc_local(
+                            ctx.runtime.handle(),
+                            dest_tydesc,
+                            1,
+                        )
+                    };
+                    if dest_ptr.is_null() {
+                        destroy_value(ctx, value);
+                        return Err(InterpError::RuntimeError(
+                            "Failed to allocate destination for let coercion".to_string()
+                        ));
+                    }
+                    let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+
+                    // Coerce value to destination (T → Option<T> or T → Result<T>).
+                    coerce_value_to_dest(ctx, value, dest)?
+                }
             }
             _ => {
                 // No coercion needed, evaluate normally.

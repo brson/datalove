@@ -35,13 +35,7 @@
         "value": "@{x = @10, y = @20}"
       }
     },
-    "environment": [
-      {
-        "name": "point",
-        "ty": "{x: @u32, y: @u32}",
-        "value": "@{x = @10, y = @20}"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let person = @{name = @\"Alice\", age = @30}",
@@ -54,19 +48,14 @@
       "SuccessLet": {
         "name": "person",
         "ty": "{name: @string, age: @u32}",
-        "value": "@{name = @\"Alice\", age = @30}"
+        "value": "@{age = @30, name = @\"Alice\"}"
       }
     },
     "environment": [
       {
         "name": "person",
         "ty": "{name: @string, age: @u32}",
-        "value": "@{name = @\"Alice\", age = @30}"
-      },
-      {
-        "name": "point",
-        "ty": "{x: @u32, y: @u32}",
-        "value": "@{x = @10, y = @20}"
+        "value": "@{age = @30, name = @\"Alice\"}"
       }
     ]
   },
@@ -81,21 +70,10 @@
       "SuccessExpr": {
         "expr_kind": "expression",
         "ty": "{name: @string, age: @u32}",
-        "value": "@{name = @\"Alice\", age = @30}"
+        "value": "@{age = @30, name = @\"Alice\"}"
       }
     },
-    "environment": [
-      {
-        "name": "person",
-        "ty": "{name: @string, age: @u32}",
-        "value": "@{name = @\"Alice\", age = @30}"
-      },
-      {
-        "name": "point",
-        "ty": "{x: @u32, y: @u32}",
-        "value": "@{x = @10, y = @20}"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let multifield = @{a = @1, b = @2, c = @3, d = @4}",
@@ -116,16 +94,6 @@
         "name": "multifield",
         "ty": "{a: @u32, b: @u32, c: @u32, d: @u32}",
         "value": "@{a = @1, b = @2, c = @3, d = @4}"
-      },
-      {
-        "name": "person",
-        "ty": "{name: @string, age: @u32}",
-        "value": "@{name = @\"Alice\", age = @30}"
-      },
-      {
-        "name": "point",
-        "ty": "{x: @u32, y: @u32}",
-        "value": "@{x = @10, y = @20}"
       }
     ]
   },
@@ -143,22 +111,6 @@
         "value": "@{a = @1, b = @2, c = @3, d = @4}"
       }
     },
-    "environment": [
-      {
-        "name": "multifield",
-        "ty": "{a: @u32, b: @u32, c: @u32, d: @u32}",
-        "value": "@{a = @1, b = @2, c = @3, d = @4}"
-      },
-      {
-        "name": "person",
-        "ty": "{name: @string, age: @u32}",
-        "value": "@{name = @\"Alice\", age = @30}"
-      },
-      {
-        "name": "point",
-        "ty": "{x: @u32, y: @u32}",
-        "value": "@{x = @10, y = @20}"
-      }
-    ]
+    "environment": []
   }
 ]

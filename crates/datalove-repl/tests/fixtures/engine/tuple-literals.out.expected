@@ -35,13 +35,7 @@
         "value": "@(@42, @\"hello\")"
       }
     },
-    "environment": [
-      {
-        "name": "pair",
-        "ty": "(@u32, @string)",
-        "value": "@(@42, @\"hello\")"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let triple = @(@1, @2, @3)",
@@ -58,11 +52,6 @@
       }
     },
     "environment": [
-      {
-        "name": "pair",
-        "ty": "(@u32, @string)",
-        "value": "@(@42, @\"hello\")"
-      },
       {
         "name": "triple",
         "ty": "(@u32, @u32, @u32)",
@@ -84,18 +73,7 @@
         "value": "@(@1, @2, @3)"
       }
     },
-    "environment": [
-      {
-        "name": "pair",
-        "ty": "(@u32, @string)",
-        "value": "@(@42, @\"hello\")"
-      },
-      {
-        "name": "triple",
-        "ty": "(@u32, @u32, @u32)",
-        "value": "@(@1, @2, @3)"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let mixed = @(@100, @\"test\", @true)",
@@ -116,16 +94,6 @@
         "name": "mixed",
         "ty": "(@u32, @string, @bool)",
         "value": "@(@100, @\"test\", @true)"
-      },
-      {
-        "name": "pair",
-        "ty": "(@u32, @string)",
-        "value": "@(@42, @\"hello\")"
-      },
-      {
-        "name": "triple",
-        "ty": "(@u32, @u32, @u32)",
-        "value": "@(@1, @2, @3)"
       }
     ]
   },
@@ -143,22 +111,6 @@
         "value": "@(@100, @\"test\", @true)"
       }
     },
-    "environment": [
-      {
-        "name": "mixed",
-        "ty": "(@u32, @string, @bool)",
-        "value": "@(@100, @\"test\", @true)"
-      },
-      {
-        "name": "pair",
-        "ty": "(@u32, @string)",
-        "value": "@(@42, @\"hello\")"
-      },
-      {
-        "name": "triple",
-        "ty": "(@u32, @u32, @u32)",
-        "value": "@(@1, @2, @3)"
-      }
-    ]
+    "environment": []
   }
 ]

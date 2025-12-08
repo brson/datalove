@@ -23,11 +23,7 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "i32",
-        "value": "@4294967291"
-      }
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
     "environment": []
   },
@@ -39,7 +35,11 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Unsupported type tag: U64\")"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u64",
+        "value": "@42"
+      }
     },
     "environment": []
   },
