@@ -1,0 +1,13 @@
+----------
+script
+----------
+
+// Test try-option operator (?) with Some value.
+fun unwrap_option(val: ?u32): ?u32
+  let x: u32 = val?
+  ret x
+end fun
+
+let input: ?u32 = @42
+let output = unwrap_option(input)
+

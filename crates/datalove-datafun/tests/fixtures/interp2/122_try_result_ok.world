@@ -1,0 +1,13 @@
+----------
+script
+----------
+
+// Test try-result operator (!) with Ok value.
+fun unwrap_result(val: !u32): !u32
+  let x: u32 = val!
+  ret x
+end fun
+
+let input: !u32 = @42
+let output = unwrap_result(input)
+

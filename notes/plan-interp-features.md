@@ -6,7 +6,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 **New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs; lists; maps; sets.
 
-**91 tests passing** in interp2 vs **136 tests** in old interp.
+**95 tests passing** in interp2 vs **136 tests** in old interp.
 
 ## Progress
 
@@ -18,7 +18,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 4: @none literal, @error literal, Option/Result return type wrapping
 - Phase 5: If-destructuring for Option (80_if_option_some, 81_if_option_none)
 - Phase 5b: If-destructuring for Result (82_if_result_ok, 82a_result_ok_simple) - Ok case works
-- Phase 6: Try operators (val? and val!) - tested via 62_fibonacci
+- Phase 6: Try operators (val? and val!) - tested via 62_fibonacci and 120-123 (try_option_some/none, try_result_ok/err)
 - Phase 7: Optional/Result unary negation (-?, -!) - tests 84a, 85, 87
 - Phase 8: Other integer types with Option/Result coercion - tests 94-97
 - Phase 9: Let binding coercion T → Option<T>/Result<T> - tests 100-105
@@ -45,6 +45,8 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Skip double-wrapping when return value is already Option/Result type
 - `execute_let_statement` coerces T → Option<T>/Result<T> in script scope
 - `execute_let_statement_frame` coerces T → Option<T>/Result<T> in function body
+- CFG Branch terminator now handles both If statements and Let statements with try operators
+- Function call argument handling for @none/@error expressions passes Option/Result destination directly
 
 **Key discoveries:**
 - Bare operators (`-`, `*`) widen u32 to Int
@@ -205,3 +207,5 @@ Old interpreter wraps checked ops in Result - WRONG. Correct: yield T directly, 
 **Fixed:** Script sections now properly check for typecheck errors. Tests 60-63 updated to use bare operators with int types.
 
 **Known limitation:** Map/Set sorting uses byte-wise comparison (`std::slice::from_raw_parts().cmp()`) for B-tree construction. This works for simple numeric types but does NOT produce canonical ordering for strings, bigints, or nested collections. The datalit instantiate2 module uses `crate::canon::sorted_map_indices` / `sorted_set_indices` which implement proper canonical ordering. The interp2 implementation should eventually use similar comparison logic.
+
+**TODO:** Investigate 16-byte memory leak introduced with CFG Branch terminator and @none/@error argument handling changes. Tests pass with `DATALOVE_LEAK_CHECK=ignore` but fail with `DATALOVE_LEAK_CHECK=panic`. The leak appears even for tests that don't use the new code paths. Root cause unclear.

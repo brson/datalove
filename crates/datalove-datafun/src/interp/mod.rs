@@ -1987,6 +1987,69 @@ fn eval_function_call_in_script_scope<'db>(
                           || param_tag == datalove_rt::rtdt::TyTag::Result;
 
         if needs_coercion {
+            // Check if argument is @none or @error - these should be evaluated directly
+            // with the parameter type, not the inner type.
+            let is_none_or_error = if let ast::ExprFunKind::Datalit(datalit_expr) = arg_expr.expr(ctx.db) {
+                let inner = datalit_expr.expr(ctx.db);
+                matches!(
+                    inner.expr(ctx.db),
+                    crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
+                )
+            } else {
+                false
+            };
+
+            if is_none_or_error {
+                // Evaluate @none/@error directly with parameter type destination.
+                let param_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(param_tydesc) };
+                let param_ptr = unsafe {
+                    datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                        ctx.runtime.handle(),
+                        param_ref.size(),
+                        param_ref.align(),
+                        1
+                    )
+                };
+                if param_ptr.is_null() {
+                    for val in arg_values { destroy_value(ctx, val); }
+                    return Err(InterpError::RuntimeError("Failed to allocate argument buffer".to_string()));
+                }
+                let param_dest = Destination { ptr: param_ptr, tydesc: param_tydesc };
+                let value = match eval_expression_in_script_scope(ctx, *arg_expr, Some(param_dest)) {
+                    Ok(v) => {
+                        if v.location == ValueLocation::Borrowed && v.ptr == param_ptr {
+                            // Expression wrote to destination and returned borrowed ref.
+                            Value { ptr: param_ptr, tydesc: param_tydesc, location: ValueLocation::TempOwned }
+                        } else {
+                            // Expression returned a different value - free param buffer and use value.
+                            unsafe {
+                                datalove_rt::c::dtlv_rti_mem_free_local(
+                                    ctx.runtime.handle(),
+                                    param_tydesc,
+                                    1,
+                                    param_ptr,
+                                );
+                            }
+                            v
+                        }
+                    }
+                    Err(e) => {
+                        unsafe {
+                            datalove_rt::c::dtlv_rti_mem_free_local(
+                                ctx.runtime.handle(),
+                                param_tydesc,
+                                1,
+                                param_ptr,
+                            );
+                        }
+                        for val in arg_values { destroy_value(ctx, val); }
+                        return Err(e);
+                    }
+                };
+                arg_values.push(value);
+                continue;
+            }
+
             // For Option<T>/Result<T> parameters, try to evaluate as inner type T first.
             let inner_tydesc = if param_tag == datalove_rt::rtdt::TyTag::Option {
                 let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(param_tydesc) };
@@ -2550,34 +2613,39 @@ fn execute_function_body_with_frame<'db>(
                 ));
             }
             Terminator::Branch { condition_stmt, then_block, else_block } => {
-                // Get the if-statement and evaluate its condition.
-                let if_stmt = cfg.get_stmt(ctx.db, *condition_stmt)
+                // Get the statement that caused the branch.
+                let stmt = cfg.get_stmt(ctx.db, *condition_stmt)
                     .ok_or_else(|| InterpError::RuntimeError(
                         format!("Invalid condition stmt ID {:?}", condition_stmt)
                     ))?;
 
-                let (if_s, condition_value) = match if_stmt {
+                match stmt {
                     ast::Statement::If(if_s) => {
-                        let value = eval_expression_frame(ctx, if_s.condition(ctx.db), None)?;
-                        let tag = unsafe { (*value.tydesc).type_tag };
-                        (if_s, value)
+                        // If-statement: evaluate condition and branch based on result.
+                        let condition_value = eval_expression_frame(ctx, if_s.condition(ctx.db), None)?;
+
+                        // Handle condition based on type (bool, Option, or Result).
+                        let is_true = evaluate_branch_condition(
+                            ctx,
+                            condition_value,
+                            if_s.then_binding(ctx.db),
+                            if_s.else_binding(ctx.db),
+                        )?;
+
+                        current_block_id = if is_true { *then_block } else { *else_block };
+                    }
+                    ast::Statement::Let(_) => {
+                        // Let-statement with try operator: branching decision already made.
+                        // If we reached this point, the try succeeded (otherwise an error
+                        // would have propagated). Go to then_block (continuation).
+                        current_block_id = *then_block;
                     }
                     _ => {
                         return Err(InterpError::RuntimeError(
-                            "Branch terminator without if-statement".to_string()
+                            "Branch terminator with unexpected statement type".to_string()
                         ));
                     }
-                };
-
-                // Handle condition based on type (bool, Option, or Result).
-                let is_true = evaluate_branch_condition(
-                    ctx,
-                    condition_value,
-                    if_s.then_binding(ctx.db),
-                    if_s.else_binding(ctx.db),
-                )?;
-
-                current_block_id = if is_true { *then_block } else { *else_block };
+                }
             }
             Terminator::Goto(next_block) => {
                 current_block_id = *next_block;
@@ -4062,6 +4130,16 @@ fn eval_try_result<'db>(
             unsafe {
                 std::ptr::copy_nonoverlapping(err_value_ptr, cloned_err_ptr, err_size);
             }
+        }
+
+        // Free the original error value allocation (data has been shallow-copied to clone).
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                err_tydesc,
+                1,
+                err_value_ptr as *mut u8,
+            );
         }
 
         // Free the Result container.
