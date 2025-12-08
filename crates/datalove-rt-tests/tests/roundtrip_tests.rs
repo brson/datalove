@@ -133,7 +133,7 @@ fn compile<'db>(
 
 fn compile_and_instantiate<'db, 't>(
     db: &'db datalit::Database,
-    rt: &mut rt::impls::rt_local::RtLocal,
+    rt: &rt::rust::Runtime,
     tydesc_table: &'t mut datalit::tydesc_table::TyDescTable<'db>,
     source_text: &str,
 ) -> Result<(datalit::instantiate2::InstantiatedValue<'t>, datalit::tycheck::TypecheckResult<'db>), String> {
@@ -151,7 +151,7 @@ fn compile_and_instantiate<'db, 't>(
         return Err(format!("Type check errors: {} error(s)", errors.len()));
     }
 
-    let inst_value = datalit::instantiate2::instantiate_value(db, rt as *mut _ as rt::c::LocalRtHandle, tydesc_table, typechecked)
+    let inst_value = datalit::instantiate2::instantiate_value(db, rt.handle(), tydesc_table, typechecked)
         .map_err(|e| format!("Instantiation error: {}", e))?;
 
     Ok((inst_value, typechecked))
@@ -176,10 +176,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Step 1: Parse, type check, and instantiate the original datalit.
     let db = datalit::Database::default();
-    let mut rt_inst = rt::impls::rt_local::RtLocal::new();
+    let rt_inst = rt::rust::Runtime::new();
     let mut tydesc_table = datalit::tydesc_table::TyDescTable::new(&db);
     let ((ptr1, tydesc1), tycheck1) = {
-        let (inst, tycheck) = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &source_text)?;
+        let (inst, tycheck) = compile_and_instantiate(&db, &rt_inst, &mut tydesc_table, &source_text)?;
         ((inst.ptr, inst.tydesc.as_ptr()), tycheck)
     };
 
@@ -191,7 +191,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Step 3: Parse, type check, and instantiate the pretty-printed output.
     let ((ptr2, tydesc2), tycheck2) = {
-        let (inst, tycheck) = compile_and_instantiate(&db, &mut rt_inst, &mut tydesc_table, &pretty1)?;
+        let (inst, tycheck) = compile_and_instantiate(&db, &rt_inst, &mut tydesc_table, &pretty1)?;
         ((inst.ptr, inst.tydesc.as_ptr()), tycheck)
     };
 
@@ -212,14 +212,14 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let heap2 = std::mem::discriminant(&type2.heap(&db));
     let heap3 = std::mem::discriminant(&type3.heap(&db));
 
+    let rt_handle = rt_inst.handle();
+
     if heap1 != heap2 || !types_equal(&db, type1.ty(&db), type2.ty(&db)) {
         unsafe {
-            let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
             rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, tydesc1);
             rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc1, 1, ptr1 as *mut u8);
             rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, tydesc2);
             rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc2, 1, ptr2 as *mut u8);
-            rt_inst.shutdown();
         }
         return Err(format!(
             "Types differ between original and first pretty-print:\nOriginal: {}\nFirst:    {}",
@@ -229,12 +229,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     if heap2 != heap3 || !types_equal(&db, type2.ty(&db), type3.ty(&db)) {
         unsafe {
-            let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
             rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, tydesc1);
             rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc1, 1, ptr1 as *mut u8);
             rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, tydesc2);
             rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc2, 1, ptr2 as *mut u8);
-            rt_inst.shutdown();
         }
         return Err(format!(
             "Types differ between first and second pretty-print:\nFirst:  {}\nSecond: {}",
@@ -245,12 +243,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Step 7: Check that both pretty-prints are identical.
     if pretty1 != pretty2 {
         unsafe {
-            let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
             rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, tydesc1);
             rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc1, 1, ptr1 as *mut u8);
             rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, tydesc2);
             rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc2, 1, ptr2 as *mut u8);
-            rt_inst.shutdown();
         }
         return Err(format!(
             "Pretty-prints differ:\nFirst:  {}\nSecond: {}",
@@ -258,14 +254,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         ));
     }
 
-    // Clean up instantiated values before shutdown.
+    // Clean up instantiated values before shutdown (Runtime drops on scope exit).
     unsafe {
-        let rt_handle = &mut *rt_inst as *mut rt::impls::rt_local::RtLocal as *mut u8;
         rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr1 as *mut u8, tydesc1);
         rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc1, 1, ptr1 as *mut u8);
         rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr2 as *mut u8, tydesc2);
         rt::c::dtlv_rti_mem_free_local(rt_handle, tydesc2, 1, ptr2 as *mut u8);
-        rt_inst.shutdown();
     }
     Ok(pretty1)
 }

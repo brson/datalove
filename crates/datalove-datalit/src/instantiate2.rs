@@ -12,7 +12,7 @@
 //!
 //! ```ignore
 //! // In datafun or other runtime-integrated code:
-//! let mut rt = datalove_rt::impls::rt_local::RtLocal::new();
+//! let mut rt = datalove_rt::rust::Runtime::new();
 //! let mut tydesc_table = TyDescTable::new(db);
 //! let result = instantiate_value(db, &mut rt, &mut tydesc_table, typechecked)?;
 //! // Values are owned by rt, cleaned up when rt.shutdown() is called
@@ -779,8 +779,7 @@ fn instantiate_list<'db>(
                         datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
                     }
                     // Free the array by calling the allocator's free through the rt handle.
-                    let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-                    rt_ref.alloc.free(element_size, element_align, elements.len() as u32, array_ptr);
+                    datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, element_size, element_align, elements.len() as u32, array_ptr);
                     return Err(e);
                 }
             }
@@ -1001,8 +1000,7 @@ fn instantiate_map<'db>(
 
         let values_buffer = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, values_buffer_size, value_align, 1);
         if values_buffer.is_null() {
-            let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-            rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
             return Err(anyhow!("Failed to allocate buffer for map values"));
         }
 
@@ -1028,9 +1026,8 @@ fn instantiate_map<'db>(
                     datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
                 }
                 // Free the buffers.
-                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
-                rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
                 return Err(e);
             }
 
@@ -1046,9 +1043,8 @@ fn instantiate_map<'db>(
                     datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
                 }
                 // Free the buffers.
-                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
-                rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
                 return Err(e);
             }
 
@@ -1067,9 +1063,8 @@ fn instantiate_map<'db>(
         );
 
         // Free the buffer memory (data has been moved to the tree).
-        let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-        rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
-        rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
 
         if status != datalove_rt::c::RtStatus::Ok {
             return Err(anyhow!("Failed to build map B-tree"));
@@ -1135,8 +1130,7 @@ fn instantiate_set<'db>(
                     datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
                 }
                 // Free the buffer.
-                let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt_ref.alloc.free(buffer_size, element_align, 1, buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, buffer);
                 return Err(e);
             }
             instantiated_count += 1;
@@ -1152,8 +1146,7 @@ fn instantiate_set<'db>(
         );
 
         // Free the buffer memory (elements have been moved to the tree).
-        let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-        rt_ref.alloc.free(buffer_size, element_align, 1, buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, buffer);
 
         if status != datalove_rt::c::RtStatus::Ok {
             return Err(anyhow!("Failed to build set B-tree"));
@@ -1199,8 +1192,7 @@ fn instantiate_tensor<'db>(
                         datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
                     }
                     // Free the array by calling the allocator's free through the rt handle.
-                    let rt_ref = &mut *(rt as *mut datalove_rt::impls::rt_local::RtLocal);
-                    rt_ref.alloc.free(element_size, element_align, total_elems as u32, array_ptr);
+                    datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, element_size, element_align, total_elems as u32, array_ptr);
                     return Err(e);
                 }
             }
@@ -1261,28 +1253,18 @@ mod tests {
     use super::*;
     use crate::Database;
 
-    /// RAII guard for RtLocal to prevent memory leaks on panic.
+    /// RAII guard for Runtime to prevent memory leaks on panic.
     struct RtGuard {
-        handle: datalove_rt::c::LocalRtHandle,
+        rt: datalove_rt::rust::Runtime,
     }
 
     impl RtGuard {
-        fn new(rt: Box<datalove_rt::impls::rt_local::RtLocal>) -> Self {
-            let handle = Box::into_raw(rt) as datalove_rt::c::LocalRtHandle;
-            Self { handle }
+        fn new(rt: datalove_rt::rust::Runtime) -> Self {
+            Self { rt }
         }
 
         fn handle(&self) -> datalove_rt::c::LocalRtHandle {
-            self.handle
-        }
-    }
-
-    impl Drop for RtGuard {
-        fn drop(&mut self) {
-            unsafe {
-                let rt = Box::from_raw(self.handle as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt.shutdown();
-            }
+            self.rt.handle()
         }
     }
 
@@ -1332,7 +1314,7 @@ mod tests {
     fn test_instantiate_bool_true() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, "@true")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1352,7 +1334,7 @@ mod tests {
     fn test_instantiate_bool_false() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, "@false")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1372,7 +1354,7 @@ mod tests {
     fn test_instantiate_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, "@42")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1392,7 +1374,7 @@ mod tests {
     fn test_instantiate_f32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, "@3.14")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1412,7 +1394,7 @@ mod tests {
     fn test_instantiate_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, r#"@"hello""#)?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1436,7 +1418,7 @@ mod tests {
     fn test_instantiate_empty_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, r#"@"""#)?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1459,7 +1441,7 @@ mod tests {
     fn test_instantiate_tuple_simple() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, "@(@true, @42)")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1487,7 +1469,7 @@ mod tests {
     fn test_instantiate_int_small() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @int / @42")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1511,7 +1493,7 @@ mod tests {
     fn test_instantiate_int_zero() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @int / @0")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1535,7 +1517,7 @@ mod tests {
     fn test_instantiate_anon_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, "@{x = @1, y = @2}")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1570,7 +1552,7 @@ mod tests {
     fn test_instantiate_enum_no_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1594,7 +1576,7 @@ mod tests {
     fn test_instantiate_enum_with_scalar_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1623,7 +1605,7 @@ mod tests {
     fn test_instantiate_list_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, "@[@1, @2, @3, @4, @5]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1652,7 +1634,7 @@ mod tests {
     fn test_instantiate_empty_list() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @[@u32] / @[]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1675,7 +1657,7 @@ mod tests {
     fn test_instantiate_option_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@u32 / @none")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1696,7 +1678,7 @@ mod tests {
     fn test_instantiate_option_some_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@u32 / @42")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1721,7 +1703,7 @@ mod tests {
     fn test_instantiate_list_string() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, r#"@[@"hello", @"world"]"#)?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1755,7 +1737,7 @@ mod tests {
     fn test_instantiate_nested_option_some_some() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@?@u32 / @42")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1789,7 +1771,7 @@ mod tests {
     fn test_instantiate_named_tuple() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @tuple Point(@u32, @u32) / @tuple Point(@1, @2)")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1817,7 +1799,7 @@ mod tests {
     fn test_instantiate_int_large() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @int / @1234567890123456789")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1846,7 +1828,7 @@ mod tests {
     fn test_instantiate_named_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @struct Point {x: @u32, y: @u32} / @struct Point {x = @10, y = @20}")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1874,7 +1856,7 @@ mod tests {
     fn test_instantiate_anon_to_named_struct() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @struct Point {x: @u32, y: @u32} / @{x = @5, y = @15}")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1902,7 +1884,7 @@ mod tests {
     fn test_instantiate_enum_anon_to_named_coercion() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @enum Status { Ok, Error } / @enum Error")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1923,7 +1905,7 @@ mod tests {
     fn test_instantiate_enum_with_tuple_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @enum { Ok(@(@u32, @u32)), Err(@string) } / @enum Ok(@(@10, @20))")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -1965,7 +1947,7 @@ mod tests {
     fn test_instantiate_enum_with_struct_payload() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @enum { Data(@{x: @u32, y: @u32}), None } / @enum Data(@{x = @5, y = @15})")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2007,7 +1989,7 @@ mod tests {
     fn test_instantiate_list_of_tuples() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, "@[@(@1, @2), @(@3, @4), @(@5, @6)]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2048,7 +2030,7 @@ mod tests {
     fn test_instantiate_option_of_tuple_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@(@u32, @u32) / @none")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2074,7 +2056,7 @@ mod tests {
     fn test_instantiate_option_of_tuple_some() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@(@u32, @u32) / @(@10, @20)")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2108,7 +2090,7 @@ mod tests {
     fn test_instantiate_option_of_struct_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@{x: @u32, y: @u32} / @none")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2134,7 +2116,7 @@ mod tests {
     fn test_instantiate_option_of_struct_some() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@{x: @u32, y: @u32} / @{x = @100, y = @200}")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2168,7 +2150,7 @@ mod tests {
     fn test_instantiate_option_of_list_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@[@u32] / @none")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2192,7 +2174,7 @@ mod tests {
     fn test_instantiate_option_of_list_some_empty() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@[@u32] / @[]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2221,7 +2203,7 @@ mod tests {
     fn test_instantiate_option_of_list_some_nonempty() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@[@u32] / @[@1, @2, @3]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2252,7 +2234,7 @@ mod tests {
     fn test_instantiate_option_of_string_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@string / @none")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2276,7 +2258,7 @@ mod tests {
     fn test_instantiate_option_of_enum_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@enum { Ok, Error } / @none")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2302,7 +2284,7 @@ mod tests {
     fn test_instantiate_option_of_enum_some() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@enum { Ok, Error(@string) } / @enum Error(@\"failed\")")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2340,7 +2322,7 @@ mod tests {
     fn test_instantiate_nested_option_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@?@u32 / @none")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2367,7 +2349,7 @@ mod tests {
     fn test_instantiate_nested_option_some_none() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@?@u32 / @none")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2388,7 +2370,7 @@ mod tests {
     fn test_instantiate_option_of_option_of_tuple() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @?@?@(@u32, @bool) / @(@5, @true)")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2431,7 +2413,7 @@ mod tests {
     fn test_instantiate_result_ok_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @!@u32 / @42")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2456,7 +2438,7 @@ mod tests {
     fn test_instantiate_result_err() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @!@u32 / @error @\"oops\"")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2490,7 +2472,7 @@ mod tests {
     fn test_instantiate_error() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, "@error @42")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2517,7 +2499,7 @@ mod tests {
     fn test_instantiate_tensor_2d_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": tensor<u32, 2> / @tensor [2, 3] [1 2 3, 4 5 6]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2553,7 +2535,7 @@ mod tests {
     fn test_instantiate_tensor_1d_f32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": tensor<f32, 1> / @tensor [5] [1.0, 2.0, 3.0, 4.0, 5.0]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2589,7 +2571,7 @@ mod tests {
     fn test_instantiate_tensor_rank4() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": tensor<u32, 4> / @tensor [2, 2, 2, 2] [1 2, 3 4, 5 6, 7 8, 9 10, 11 12, 13 14, 15 16]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2625,7 +2607,7 @@ mod tests {
     fn test_instantiate_tensor_3d_i32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": tensor<i32, 3> / @tensor [2, 2, 2] [1 2, 3 4, 5 6, 7 8]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2661,7 +2643,7 @@ mod tests {
     fn test_instantiate_tensor_of_tuples() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": tensor<(u32, f32), 2> / @tensor [2, 2] [(1, 1.0) (2, 2.0), (3, 3.0) (4, 4.0)]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2695,7 +2677,7 @@ mod tests {
     fn test_instantiate_list_of_tensors() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": [tensor<u32, 2>] / @[@tensor [2, 2] [1 2, 3 4], @tensor [2, 2] [5 6, 7 8]]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(
@@ -2719,7 +2701,7 @@ mod tests {
     fn test_instantiate_option_of_tensor() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": ?tensor<u32, 2> / @tensor [2, 2] [1 2, 3 4]")?;
-        let rt = datalove_rt::impls::rt_local::RtLocal::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
         let inst_guard = InstGuard::new(

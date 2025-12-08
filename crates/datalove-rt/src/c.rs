@@ -117,6 +117,27 @@ pub unsafe extern "C-unwind" fn dtlv_rti_mem_alloc_raw_local(
     }
 }
 
+/// Raw memory deallocation without requiring a type descriptor.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_mem_free_raw_local(
+    rt: LocalRtHandle,
+    size: u32,
+    align: u32,
+    count: u32,
+    ptr: *mut u8,
+) -> RtStatus {
+    if rt.is_null() {
+        return RtStatus::Error;
+    }
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        rt_ref.alloc.free(size, align, count, ptr);
+    }
+
+    RtStatus::Ok
+}
+
 /// Low-level allocator access.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_mem_free_local(

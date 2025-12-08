@@ -5,7 +5,7 @@
 //! migrate to the safe Rust API in the `rust` module.
 
 pub(crate) mod alloc;
-pub mod rt_local;
+pub(crate) mod rt_local;
 pub(crate) mod clone;
 pub(crate) mod string;
 pub(crate) mod pretty;

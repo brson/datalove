@@ -1600,8 +1600,7 @@ fn write_map_to_dest<'db>(
     };
     if values_buffer.is_null() {
         unsafe {
-            let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
-            rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
         }
         return Err(InterpError::RuntimeError("Failed to allocate values buffer".to_string()));
     }
@@ -1628,9 +1627,8 @@ fn write_map_to_dest<'db>(
                 }
             }
             unsafe {
-                let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
-                rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, values_buffer_size, value_align, 1, values_buffer);
             }
             return Err(e);
         }
@@ -1653,9 +1651,8 @@ fn write_map_to_dest<'db>(
                 }
             }
             unsafe {
-                let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
-                rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, values_buffer_size, value_align, 1, values_buffer);
             }
             return Err(e);
         }
@@ -1690,14 +1687,13 @@ fn write_map_to_dest<'db>(
             }
         }
         unsafe {
-            let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
-            rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
-            rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, values_buffer_size, value_align, 1, values_buffer);
             if !sorted_keys_buffer.is_null() {
-                rt_ref.alloc.free(keys_buffer_size, key_align, 1, sorted_keys_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, sorted_keys_buffer);
             }
             if !sorted_values_buffer.is_null() {
-                rt_ref.alloc.free(values_buffer_size, value_align, 1, sorted_values_buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, values_buffer_size, value_align, 1, sorted_values_buffer);
             }
         }
         return Err(InterpError::RuntimeError("Failed to allocate sorted buffers".to_string()));
@@ -1730,7 +1726,6 @@ fn write_map_to_dest<'db>(
 
     // Free all buffers (B-tree took ownership of sorted buffer data).
     unsafe {
-        let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
         // Destroy original unsorted buffer contents.
         for i in 0..entries.len() {
             let kp = keys_buffer.add(i * key_size);
@@ -1738,10 +1733,10 @@ fn write_map_to_dest<'db>(
             datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, kp, key_tydesc.as_ptr());
             datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, vp, value_tydesc.as_ptr());
         }
-        rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
-        rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
-        rt_ref.alloc.free(keys_buffer_size, key_align, 1, sorted_keys_buffer);
-        rt_ref.alloc.free(values_buffer_size, value_align, 1, sorted_values_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, values_buffer_size, value_align, 1, values_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, sorted_keys_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, values_buffer_size, value_align, 1, sorted_values_buffer);
     }
 
     if status != datalove_rt::c::RtStatus::Ok {
@@ -1800,8 +1795,7 @@ fn write_set_to_dest<'db>(
                 }
             }
             unsafe {
-                let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
-                rt_ref.alloc.free(buffer_size, elem_align, 1, buffer);
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, buffer_size, elem_align, 1, buffer);
             }
             return Err(e);
         }
@@ -1832,8 +1826,7 @@ fn write_set_to_dest<'db>(
             }
         }
         unsafe {
-            let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
-            rt_ref.alloc.free(buffer_size, elem_align, 1, buffer);
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, buffer_size, elem_align, 1, buffer);
         }
         return Err(InterpError::RuntimeError("Failed to allocate sorted buffer".to_string()));
     }
@@ -1860,14 +1853,13 @@ fn write_set_to_dest<'db>(
 
     // Free buffers.
     unsafe {
-        let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
         // Destroy original buffer contents.
         for i in 0..elements.len() {
             let cleanup_ptr = buffer.add(i * elem_size);
             datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, cleanup_ptr, elem_tydesc.as_ptr());
         }
-        rt_ref.alloc.free(buffer_size, elem_align, 1, buffer);
-        rt_ref.alloc.free(buffer_size, elem_align, 1, sorted_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, buffer_size, elem_align, 1, buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, buffer_size, elem_align, 1, sorted_buffer);
     }
 
     if status != datalove_rt::c::RtStatus::Ok {
@@ -4590,8 +4582,7 @@ fn allocate_map_from_values<'db>(
             destroy_value(ctx, v);
         }
         unsafe {
-            let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
-            rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
             datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr);
         }
         return Err(InterpError::RuntimeError("Failed to allocate values buffer".to_string()));
@@ -4622,9 +4613,8 @@ fn allocate_map_from_values<'db>(
 
     // Free buffers (data has been moved to tree).
     unsafe {
-        let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
-        rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
-        rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, values_buffer_size, value_align, 1, values_buffer);
     }
 
     if status != datalove_rt::c::RtStatus::Ok {
@@ -4734,8 +4724,7 @@ fn allocate_set_from_values<'db>(
 
     // Free buffer (data has been moved to tree).
     unsafe {
-        let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
-        rt_ref.alloc.free(buffer_size, element_align, 1, buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, buffer_size, element_align, 1, buffer);
     }
 
     if status != datalove_rt::c::RtStatus::Ok {
