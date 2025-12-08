@@ -1468,10 +1468,9 @@ fn write_list_to_dest<'db>(
     // dtlv_rti_list_create_from_slice_local clones from this buffer.
     let buffer = if !elements.is_empty() {
         unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            datalove_rt::c::dtlv_rti_mem_alloc_local(
                 rt_handle,
-                elem_size as u32,
-                elem_tydesc.align(),
+                elem_tydesc.as_ptr(),
                 elements.len() as u32,
             )
         }
@@ -2036,12 +2035,10 @@ fn eval_function_call_in_script_scope<'db>(
 
             if is_none_or_error {
                 // Evaluate @none/@error directly with parameter type destination.
-                let param_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(param_tydesc) };
                 let param_ptr = unsafe {
-                    datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                    datalove_rt::c::dtlv_rti_mem_alloc_local(
                         ctx.runtime.handle(),
-                        param_ref.size(),
-                        param_ref.align(),
+                        param_tydesc,
                         1
                     )
                 };
@@ -2095,12 +2092,10 @@ fn eval_function_call_in_script_scope<'db>(
             };
 
             // Allocate buffer for inner type.
-            let inner_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(inner_tydesc) };
             let inner_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                datalove_rt::c::dtlv_rti_mem_alloc_local(
                     ctx.runtime.handle(),
-                    inner_ref.size(),
-                    inner_ref.align(),
+                    inner_tydesc,
                     1
                 )
             };
@@ -2146,12 +2141,10 @@ fn eval_function_call_in_script_scope<'db>(
             // Now check if we need to wrap in Option/Result.
             if inner_value.tydesc == inner_tydesc {
                 // Value matches inner type - wrap in Option/Result.
-                let param_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(param_tydesc) };
                 let param_ptr = unsafe {
-                    datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                    datalove_rt::c::dtlv_rti_mem_alloc_local(
                         ctx.runtime.handle(),
-                        param_ref.size(),
-                        param_ref.align(),
+                        param_tydesc,
                         1
                     )
                 };
@@ -3256,13 +3249,11 @@ fn clone_value<'db>(
 ) -> Value {
     // Allocate memory for the clone.
     let rt_handle = ctx.runtime.handle();
-    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(value.tydesc) };
 
     let cloned_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+        datalove_rt::c::dtlv_rti_mem_alloc_local(
             rt_handle,
-            tydesc_ref.size(),
-            tydesc_ref.align(),
+            value.tydesc,
             1
         )
     };
@@ -3306,12 +3297,10 @@ fn eval_return_expression_frame<'db>(
             let func = ctx.call_stack[frame_index].func;
             if let Some(ret_type) = func.return_type(ctx.db) {
                 let ret_tydesc = type_hint_to_tydesc(ctx, ret_type);
-                let ret_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(ret_tydesc) };
                 let ret_ptr = unsafe {
-                    datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                    datalove_rt::c::dtlv_rti_mem_alloc_local(
                         ctx.runtime.handle(),
-                        ret_ref.size(),
-                        ret_ref.align(),
+                        ret_tydesc,
                         1
                     )
                 };
@@ -3386,16 +3375,10 @@ fn allocate_bool<'db>(
     use crate::datalit::tycheck::Type;
 
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::Bool);
-    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
 
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            tydesc_ref.size(),
-            tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
 
     unsafe {
@@ -3417,16 +3400,10 @@ fn allocate_f32<'db>(
     use crate::datalit::tycheck::Type;
 
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::F32);
-    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
 
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            tydesc_ref.size(),
-            tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
 
     unsafe {
@@ -3466,16 +3443,10 @@ fn allocate_int_literal<'db>(
         .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
 
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
-    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
 
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            tydesc_ref.size(),
-            tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
 
     unsafe {
@@ -3497,16 +3468,10 @@ fn allocate_u32_raw<'db>(
     use crate::datalit::tycheck::Type;
 
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
-    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
 
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            tydesc_ref.size(),
-            tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
 
     unsafe {
@@ -3537,18 +3502,12 @@ fn allocate_string<'db>(
     };
 
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
-    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
 
     let rt_handle = ctx.runtime.handle();
 
     // Allocate memory for the string structure.
     let string_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            tydesc_ref.size(),
-            tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
 
     // Initialize the string structure.
@@ -3556,7 +3515,7 @@ fn allocate_string<'db>(
         datalove_rt::c::dtlv_rti_string_create_local(
             rt_handle,
             string_ptr,
-            tydesc_ref.as_ptr(),
+            tydesc_ptr,
         )
     };
 
@@ -3570,7 +3529,7 @@ fn allocate_string<'db>(
             datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt_handle,
                 string_ptr,
-                tydesc_ref.as_ptr(),
+                tydesc_ptr,
                 string_value.as_ptr(),
                 string_value.len() as u32,
             )
@@ -3826,16 +3785,10 @@ fn allocate_bigint<'db>(
     use crate::datalit::tycheck::Type;
 
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::Int);
-    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
 
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            tydesc_ref.size(),
-            tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
 
     // Initialize to zero.
@@ -3862,17 +3815,11 @@ fn allocate_option_none<'db>(
 
     // Create Option tydesc from inner tydesc.
     let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_tydesc);
-    let option_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) };
 
     // Allocate memory.
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            option_tydesc_ref.size(),
-            option_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
     };
 
     if ptr.is_null() {
@@ -3908,12 +3855,7 @@ fn allocate_option_some_from_value<'db>(
     // Allocate memory.
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            option_tydesc_ref.size(),
-            option_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
     };
 
     if ptr.is_null() {
@@ -3967,12 +3909,7 @@ fn allocate_result_ok_from_value<'db>(
     // Allocate memory.
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            result_tydesc_ref.size(),
-            result_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, result_tydesc, 1)
     };
 
     if ptr.is_null() {
@@ -4028,12 +3965,7 @@ fn allocate_result_err<'db>(
     // Allocate memory.
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            result_tydesc_ref.size(),
-            result_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, result_tydesc, 1)
     };
 
     if ptr.is_null() {
@@ -4100,14 +4032,8 @@ fn eval_try_option<'db>(
 
     // Clone the payload to a new allocation.
     let rt_handle = ctx.runtime.handle();
-    let inner_tydesc_ref = unsafe { TyDescRef::from_ptr(inner_tydesc) };
     let result_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            inner_tydesc_ref.size(),
-            inner_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner_tydesc, 1)
     };
 
     if result_ptr.is_null() {
@@ -4178,12 +4104,7 @@ fn eval_try_result<'db>(
 
         let rt_handle = ctx.runtime.handle();
         let cloned_err_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-                rt_handle,
-                err_tydesc_ref.size(),
-                err_tydesc_ref.align(),
-                1
-            )
+            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, err_tydesc, 1)
         };
 
         if !cloned_err_ptr.is_null() {
@@ -4226,14 +4147,8 @@ fn eval_try_result<'db>(
 
     // Clone the payload to a new allocation.
     let rt_handle = ctx.runtime.handle();
-    let ok_tydesc_ref = unsafe { TyDescRef::from_ptr(ok_tydesc) };
     let result_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            ok_tydesc_ref.size(),
-            ok_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, ok_tydesc, 1)
     };
 
     if result_ptr.is_null() {
@@ -4294,12 +4209,7 @@ fn allocate_tuple_from_values<'db>(
     // Allocate memory for tuple.
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            tuple_tydesc_ref.size(),
-            tuple_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tuple_tydesc, 1)
     };
 
     if ptr.is_null() {
@@ -4370,12 +4280,7 @@ fn allocate_struct_from_values<'db>(
     // Allocate memory for struct.
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            struct_tydesc_ref.size(),
-            struct_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, struct_tydesc, 1)
     };
 
     if ptr.is_null() {
@@ -4436,7 +4341,6 @@ fn allocate_list_from_values<'db>(
 
     // Create list tydesc.
     let list_tydesc = ctx.tydesc_table.create_list_from_element_tydesc(element_tydesc);
-    let list_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(list_tydesc) };
 
     // Build contiguous buffer of element data.
     let mut buffer = Vec::with_capacity(values.len() * element_size);
@@ -4450,12 +4354,7 @@ fn allocate_list_from_values<'db>(
     // Allocate list value.
     let rt_handle = ctx.runtime.handle();
     let list_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            list_tydesc_ref.size(),
-            list_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, list_tydesc, 1)
     };
 
     if list_ptr.is_null() {
@@ -4525,17 +4424,11 @@ fn allocate_map_from_values<'db>(
 
     // Create map tydesc.
     let map_tydesc = ctx.tydesc_table.create_map_from_key_value_tydescs(key_tydesc, value_tydesc);
-    let map_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(map_tydesc) };
 
     // Allocate map structure.
     let rt_handle = ctx.runtime.handle();
     let map_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            map_tydesc_ref.size(),
-            map_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, map_tydesc, 1)
     };
 
     if map_ptr.is_null() {
@@ -4660,17 +4553,11 @@ fn allocate_set_from_values<'db>(
 
     // Create set tydesc.
     let set_tydesc = ctx.tydesc_table.create_set_from_element_tydesc(element_tydesc);
-    let set_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(set_tydesc) };
 
     // Allocate set structure.
     let rt_handle = ctx.runtime.handle();
     let set_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            set_tydesc_ref.size(),
-            set_tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, set_tydesc, 1)
     };
 
     if set_ptr.is_null() {
@@ -4827,16 +4714,10 @@ fn narrow_int_to_u32<'db>(
 
     // Allocate u32 result.
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
-    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
 
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            tydesc_ref.size(),
-            tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
 
     unsafe {
@@ -5629,12 +5510,7 @@ fn write_option_u32_result(ctx: &mut InterpContext<'_>, value: Option<u32>, dest
         // Allocate new Option<u32>.
         let rt_handle = ctx.runtime.handle();
         let ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-                rt_handle,
-                option_ref.size(),
-                option_ref.align(),
-                1
-            )
+            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
         };
 
         if ptr.is_null() {
@@ -6189,14 +6065,8 @@ fn write_typed_int_result(
         Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
     } else {
         // Allocate new value with the correct type.
-        let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc) };
         let ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-                ctx.runtime.handle(),
-                tydesc_ref.size(),
-                tydesc_ref.align(),
-                1
-            )
+            datalove_rt::c::dtlv_rti_mem_alloc_local(ctx.runtime.handle(), tydesc, 1)
         };
 
         if ptr.is_null() {
@@ -6216,17 +6086,11 @@ fn allocate_error_string<'db>(
     use crate::datalit::tycheck::Type;
 
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
-    let tydesc_ref = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(tydesc_ptr) };
 
     // Allocate memory for string.
     let rt_handle = ctx.runtime.handle();
     let string_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-            rt_handle,
-            tydesc_ref.size(),
-            tydesc_ref.align(),
-            1
-        )
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
 
     if string_ptr.is_null() {
@@ -6238,7 +6102,7 @@ fn allocate_error_string<'db>(
         datalove_rt::c::dtlv_rti_string_create_local(
             rt_handle,
             string_ptr,
-            tydesc_ref.as_ptr(),
+            tydesc_ptr,
         )
     };
 
@@ -6252,7 +6116,7 @@ fn allocate_error_string<'db>(
             datalove_rt::c::dtlv_rti_string_push_bytes_local(
                 rt_handle,
                 string_ptr,
-                tydesc_ref.as_ptr(),
+                tydesc_ptr,
                 content.as_ptr(),
                 content.len() as u32,
             )

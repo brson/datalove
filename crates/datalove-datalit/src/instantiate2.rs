@@ -78,12 +78,8 @@ fn instantiate_expr<'db>(
     resolved: ResolvedExpr<'db>,
 ) -> AnyResult<*const u8> {
     let tydesc_ptr = tydesc_table.get_or_create(ty);
-    let (size, align) = unsafe {
-        let td = rtdt::TyDescRef::from_ptr(tydesc_ptr);
-        (td.size(), td.align())
-    };
     let dest_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, size, align, 1)
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt, tydesc_ptr, 1)
     };
 
     // Try to instantiate the expression. If it fails, free the allocated memory.
@@ -765,9 +761,9 @@ fn instantiate_list<'db>(
     let element_align = element_tydesc_ref.align();
 
     unsafe {
-        // Allocate list data using size=element_size, align=element_align, count=len.
+        // Allocate list data array.
         let data_ptr = if !elements.is_empty() {
-            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, element_size, element_align, elements.len() as u32);
+            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, element_tydesc, elements.len() as u32);
 
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
@@ -778,8 +774,8 @@ fn instantiate_list<'db>(
                         let elem_to_destroy = array_ptr.add(j * element_size as usize);
                         datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
                     }
-                    // Free the array by calling the allocator's free through the rt handle.
-                    datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, element_size, element_align, elements.len() as u32, array_ptr);
+                    // Free the array.
+                    datalove_rt::c::dtlv_rti_mem_free_local(rt, element_tydesc, elements.len() as u32, array_ptr);
                     return Err(e);
                 }
             }
@@ -1180,7 +1176,7 @@ fn instantiate_tensor<'db>(
     unsafe {
         // Allocate tensor data array.
         let data_ptr = if total_elems > 0 {
-            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, element_size, element_align, total_elems as u32);
+            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, element_tydesc, total_elems as u32);
 
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
@@ -1191,8 +1187,8 @@ fn instantiate_tensor<'db>(
                         let elem_to_destroy = array_ptr.add(j * element_size as usize);
                         datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
                     }
-                    // Free the array by calling the allocator's free through the rt handle.
-                    datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, element_size, element_align, total_elems as u32, array_ptr);
+                    // Free the array.
+                    datalove_rt::c::dtlv_rti_mem_free_local(rt, element_tydesc, total_elems as u32, array_ptr);
                     return Err(e);
                 }
             }
