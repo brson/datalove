@@ -805,16 +805,53 @@ fn execute_let_statement<'db>(
     ctx: &mut InterpContext<'db>,
     let_stmt: ast::StmtLet<'db>,
 ) -> Result<(), InterpError> {
-    // Evaluate the expression (no destination - stored in HashMap).
-    let value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?;
+    use crate::datalit::ast::TypeHint;
+
+    // Check if we need to coerce T → Option<T> or T → Result<T>.
+    let final_value = if let Some(type_hint_and_heap) = let_stmt.type_hint(ctx.db) {
+        let type_hint = type_hint_and_heap.type_hint(ctx.db);
+        match type_hint {
+            TypeHint::Option(_) | TypeHint::Result(_) => {
+                // Evaluate expression first.
+                let value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?;
+
+                // Get expected destination type.
+                let dest_tydesc = type_hint_to_tydesc(ctx, type_hint_and_heap);
+                let dest_ptr = unsafe {
+                    datalove_rt::c::dtlv_rti_mem_alloc_local(
+                        ctx.runtime.handle(),
+                        dest_tydesc,
+                        1,
+                    )
+                };
+                if dest_ptr.is_null() {
+                    destroy_value(ctx, value);
+                    return Err(InterpError::RuntimeError(
+                        "Failed to allocate destination for let coercion".to_string()
+                    ));
+                }
+                let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+
+                // Coerce value to destination (T → Option<T> or T → Result<T>).
+                coerce_value_to_dest(ctx, value, dest)?
+            }
+            _ => {
+                // No coercion needed, evaluate normally.
+                eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?
+            }
+        }
+    } else {
+        // No type hint, evaluate normally.
+        eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?
+    };
 
     // Determine if the type is copy (basic detection).
-    let is_copy = is_copy_type(value);
+    let is_copy = is_copy_type(final_value);
 
     // Bind to script-level variable.
     let name = let_stmt.name(ctx.db);
     ctx.script_scope.variables.insert(name, ScriptVariable {
-        value,
+        value: final_value,
         state: ScriptVarState::Available,
         is_copy,
     });
@@ -2400,6 +2437,8 @@ fn execute_let_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
     let_stmt: ast::StmtLet<'db>,
 ) -> Result<(), InterpError> {
+    use datalove_rt::rtdt::TyTag;
+
     // Find destination slot FIRST so we can pass it to expression evaluation.
     let frame_index = ctx.call_stack.len() - 1;
     let name = let_stmt.name(ctx.db);
@@ -2428,10 +2467,47 @@ fn execute_let_statement_frame<'db>(
         }
     };
     let dest_tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-    let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+    let dest_tag = unsafe { (*dest_tydesc).type_tag };
 
-    // Evaluate RHS expression with destination.
-    let value = eval_expression_frame(ctx, let_stmt.value(ctx.db), Some(dest))?;
+    // Check if slot is Option/Result and may need coercion.
+    let needs_coercion_check = matches!(dest_tag, TyTag::Option | TyTag::Result);
+
+    let value = if needs_coercion_check {
+        // Evaluate without destination first to allow coercion.
+        let value = eval_expression_frame(ctx, let_stmt.value(ctx.db), None)?;
+
+        // Check if coercion needed (value type doesn't match dest type).
+        let value_tag = unsafe { (*value.tydesc).type_tag };
+        if value.tydesc != dest_tydesc && value_tag != dest_tag {
+            // Need to coerce T → Option<T> or T → Result<T>.
+            // coerce_value_to_dest writes directly to dest and cleans up value.
+            let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+            coerce_value_to_dest(ctx, value, dest)?;
+
+            // Mark slot as Available and return early - value already written.
+            ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+            return Ok(());
+        } else {
+            // No coercion needed, write to slot.
+            if value.location == ValueLocation::TempOwned {
+                if let Err(e) = write_value_to_slot(&mut ctx.call_stack[frame_index], slot_info, value, ctx.db) {
+                    destroy_value(ctx, value);
+                    return Err(e);
+                }
+                free_value_structure(ctx, value);
+            } else {
+                // Value is Borrowed - need to clone to slot.
+                let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+                clone_value_to_dest(ctx, value, dest);
+            }
+            ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+            return Ok(());
+        }
+    } else {
+        // No coercion possible, use standard DPS.
+        let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+        eval_expression_frame(ctx, let_stmt.value(ctx.db), Some(dest))?
+    };
 
     // If DPS was used (Borrowed), the value was written directly to slot.
     // If not (TempOwned), we need to write and free.

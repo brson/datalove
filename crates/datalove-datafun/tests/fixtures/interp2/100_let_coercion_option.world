@@ -1,0 +1,7 @@
+----------
+script
+----------
+
+// Test let binding coercion T → Option<T>.
+let x: @u32 = @99
+let output: @?u32 = x
