@@ -4,9 +4,9 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 ## Current State
 
-**New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs; lists.
+**New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs; lists; maps; sets.
 
-**89 tests passing** in interp2 vs **136 tests** in old interp.
+**91 tests passing** in interp2 vs **136 tests** in old interp.
 
 ## Progress
 
@@ -14,7 +14,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 1: Recursion tests (60-63: simple_recur, factorial, fibonacci, mutual_recursion)
 - Phase 2: Unary negation for int (64-65: int_neg, int_neg_neg)
 - Phase 2.5: Typechecker bug fix for checked/optional binary operators
-- Phase 3 (partial): Tuples, structs, and lists (70-77)
+- Phase 3: Collection literals - tuples, structs, lists, maps, sets (70-77, 110-111)
 - Phase 4: @none literal, @error literal, Option/Result return type wrapping
 - Phase 5: If-destructuring for Option (80_if_option_some, 81_if_option_none)
 - Phase 5b: If-destructuring for Result (82_if_result_ok, 82a_result_ok_simple) - Ok case works
@@ -38,6 +38,9 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - `write_typed_int_to_dest` writes integer literals based on destination type (u8, i8, u16, i16, etc.)
 - `type_hint_to_tydesc` extended for all integer types and Option/Result
 - `coerce_value_to_dest` handles T → Option<T> and T → Result<T> coercion
+- `allocate_map_from_values` / `write_map_to_dest` for map literal evaluation
+- `allocate_set_from_values` / `write_set_to_dest` for set literal evaluation
+- TyDescTable extended with `create_map_from_key_value_tydescs` and `create_set_from_element_tydesc`
 - `eval_return_expression_frame` provides typed destination for @none/@error literals
 - Skip double-wrapping when return value is already Option/Result type
 - `execute_let_statement` coerces T → Option<T>/Result<T> in script scope
@@ -85,7 +88,7 @@ Binary checked/optional operators (`+!`, `-?`, etc.) now validate that the enclo
 - tycheck tests 02, 06: Updated for new semantics
 - tycheck.rs unit tests: Updated to use Result return types
 
-### Phase 3: Collection Literals (partial ✓)
+### Phase 3: Collection Literals ✓
 **Tests:** 09-19, 162-171
 
 **Tuple** `@(@42, @"hello")`: ✓
@@ -107,15 +110,17 @@ Binary checked/optional operators (`+!`, `-?`, etc.) now validate that the enclo
 - Runtime clones elements; originals destroyed after
 - Tests: 75_list_simple, 76_list_nested, 77_list_of_tuples
 
-**Map** `@map { @k = @v }`: TODO
-1. Eval key-value pairs
-2. Sort by key (canonical order)
-3. Call `dtlv_rti_btreemap_build_from_sorted_slices_local()`
+**Map** `@map { @k = @v }`: ✓
+- `allocate_map_from_values()` / `write_map_to_dest()` in interp/mod.rs
+- `tydesc_table.create_map_from_key_value_tydescs()` for runtime map tydesc
+- Eval key-value pairs, sort by key bytes, call `dtlv_rti_btreemap_build_from_sorted_slices_local()`
+- Test: 110_map_simple
 
-**Set** `@set { @1, @2 }`: TODO
-1. Eval elements
-2. Sort (canonical order)
-3. Call `dtlv_rti_btreeset_build_from_sorted_slice_local()`
+**Set** `@set { @1, @2 }`: ✓
+- `allocate_set_from_values()` / `write_set_to_dest()` in interp/mod.rs
+- `tydesc_table.create_set_from_element_tydesc()` for runtime set tydesc
+- Eval elements, sort by bytes, call `dtlv_rti_btreeset_build_from_sorted_slice_local()`
+- Test: 111_set_simple
 
 ### Phase 4: Option/Result Basics ✓
 **Tests:** 51-56

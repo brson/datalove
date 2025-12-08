@@ -1,0 +1,6 @@
+----------
+script
+----------
+
+// Test simple map literal.
+let output = @map { @1 = @100, @2 = @200 }

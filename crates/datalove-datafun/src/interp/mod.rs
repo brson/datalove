@@ -1097,6 +1097,67 @@ fn eval_datalit_expression<'db>(
 
             allocate_list_from_values(ctx, values)
         }
+        Expr::Map(map_expr) => {
+            // Evaluate each key-value pair.
+            let entries = map_expr.entries(ctx.db);
+            let mut kv_pairs = Vec::with_capacity(entries.len());
+
+            for entry in entries {
+                let key_expr = entry.key(ctx.db);
+                let value_expr = entry.value(ctx.db);
+
+                // Evaluate key.
+                let key = match eval_datalit_expression(ctx, key_expr) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        // Clean up already-evaluated pairs on error.
+                        for (k, v) in kv_pairs {
+                            destroy_value(ctx, k);
+                            destroy_value(ctx, v);
+                        }
+                        return Err(e);
+                    }
+                };
+
+                // Evaluate value.
+                let value = match eval_datalit_expression(ctx, value_expr) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        destroy_value(ctx, key);
+                        // Clean up already-evaluated pairs on error.
+                        for (k, v) in kv_pairs {
+                            destroy_value(ctx, k);
+                            destroy_value(ctx, v);
+                        }
+                        return Err(e);
+                    }
+                };
+
+                kv_pairs.push((key, value));
+            }
+
+            allocate_map_from_values(ctx, kv_pairs)
+        }
+        Expr::Set(set_expr) => {
+            // Evaluate each element.
+            let elements = set_expr.elements(ctx.db);
+            let mut values = Vec::with_capacity(elements.len());
+
+            for elem in elements {
+                match eval_datalit_expression(ctx, elem) {
+                    Ok(v) => values.push(v),
+                    Err(e) => {
+                        // Clean up already-evaluated values on error.
+                        for v in values {
+                            destroy_value(ctx, v);
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+
+            allocate_set_from_values(ctx, values)
+        }
         Expr::None => {
             // @none without type context - this should be handled by write_datalit_to_dest
             // when we have a destination with type information.
@@ -1162,6 +1223,12 @@ fn write_datalit_to_dest<'db>(
         }
         Expr::List(list_expr) => {
             write_list_to_dest(ctx, &list_expr, dest)
+        }
+        Expr::Map(map_expr) => {
+            write_map_to_dest(ctx, &map_expr, dest)
+        }
+        Expr::Set(set_expr) => {
+            write_set_to_dest(ctx, &set_expr, dest)
         }
         Expr::None => {
             write_option_none_to_dest(dest)
@@ -1440,6 +1507,328 @@ fn write_list_to_dest<'db>(
 
     if status != datalove_rt::c::RtStatus::Ok {
         return Err(InterpError::RuntimeError("Failed to create list".to_string()));
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write a map literal directly to a destination.
+fn write_map_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    map_expr: &crate::datalit::ast::ExprMap<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::TyDescRef;
+
+    let dest_tydesc = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+    let key_tydesc = dest_tydesc.map_key_ty();
+    let value_tydesc = dest_tydesc.map_value_ty();
+    let key_size = key_tydesc.size() as usize;
+    let value_size = value_tydesc.size() as usize;
+    let key_align = key_tydesc.align();
+    let value_align = value_tydesc.align();
+
+    let entries = map_expr.entries(ctx.db);
+    if entries.is_empty() {
+        // Empty map: set root to null and len to 0.
+        let map_ptr = dest.ptr as *mut datalove_rt::rtdt::Map;
+        unsafe {
+            (*map_ptr).root = std::ptr::null();
+            (*map_ptr).len = 0;
+        }
+        return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed });
+    }
+
+    let rt_handle = ctx.runtime.handle();
+
+    // Allocate buffers for keys and values.
+    let keys_buffer_size = (entries.len() * key_size) as u32;
+    let values_buffer_size = (entries.len() * value_size) as u32;
+
+    let keys_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, keys_buffer_size, key_align, 1)
+    };
+    if keys_buffer.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate keys buffer".to_string()));
+    }
+
+    let values_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, values_buffer_size, value_align, 1)
+    };
+    if values_buffer.is_null() {
+        unsafe {
+            let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+            rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate values buffer".to_string()));
+    }
+
+    // Evaluate entries and collect into buffers.
+    // We need to evaluate in a temporary Vec first to sort them.
+    let mut eval_entries: Vec<(Vec<u8>, Vec<u8>)> = Vec::with_capacity(entries.len());
+
+    for (i, entry) in entries.iter().enumerate() {
+        let key_expr = entry.key(ctx.db);
+        let value_expr = entry.value(ctx.db);
+
+        // Evaluate key to temporary destination.
+        let key_dest_ptr = unsafe { keys_buffer.add(i * key_size) };
+        let key_dest = Destination { ptr: key_dest_ptr, tydesc: key_tydesc.as_ptr() };
+        if let Err(e) = write_datalit_to_dest(ctx, key_expr, key_dest) {
+            // Cleanup on error.
+            for j in 0..i {
+                let kp = unsafe { keys_buffer.add(j * key_size) };
+                let vp = unsafe { values_buffer.add(j * value_size) };
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, kp, key_tydesc.as_ptr());
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, vp, value_tydesc.as_ptr());
+                }
+            }
+            unsafe {
+                let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+                rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+            }
+            return Err(e);
+        }
+
+        // Evaluate value to temporary destination.
+        let value_dest_ptr = unsafe { values_buffer.add(i * value_size) };
+        let value_dest = Destination { ptr: value_dest_ptr, tydesc: value_tydesc.as_ptr() };
+        if let Err(e) = write_datalit_to_dest(ctx, value_expr, value_dest) {
+            // Destroy the key we just wrote.
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, key_dest_ptr, key_tydesc.as_ptr());
+            }
+            // Cleanup previous entries on error.
+            for j in 0..i {
+                let kp = unsafe { keys_buffer.add(j * key_size) };
+                let vp = unsafe { values_buffer.add(j * value_size) };
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, kp, key_tydesc.as_ptr());
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, vp, value_tydesc.as_ptr());
+                }
+            }
+            unsafe {
+                let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+                rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+            }
+            return Err(e);
+        }
+
+        // Copy key and value bytes for sorting.
+        let key_bytes = unsafe { std::slice::from_raw_parts(key_dest_ptr, key_size).to_vec() };
+        let value_bytes = unsafe { std::slice::from_raw_parts(value_dest_ptr, value_size).to_vec() };
+        eval_entries.push((key_bytes, value_bytes));
+    }
+
+    // Sort entries by key bytes.
+    let mut indices: Vec<usize> = (0..entries.len()).collect();
+    indices.sort_by(|&a, &b| eval_entries[a].0.cmp(&eval_entries[b].0));
+
+    // Reorder entries in buffers according to sorted order.
+    // We need temporary buffers for the reordering.
+    let sorted_keys_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, keys_buffer_size, key_align, 1)
+    };
+    let sorted_values_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, values_buffer_size, value_align, 1)
+    };
+
+    if sorted_keys_buffer.is_null() || sorted_values_buffer.is_null() {
+        // Cleanup on error.
+        for i in 0..entries.len() {
+            let kp = unsafe { keys_buffer.add(i * key_size) };
+            let vp = unsafe { values_buffer.add(i * value_size) };
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, kp, key_tydesc.as_ptr());
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, vp, value_tydesc.as_ptr());
+            }
+        }
+        unsafe {
+            let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+            rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+            rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+            if !sorted_keys_buffer.is_null() {
+                rt_ref.alloc.free(keys_buffer_size, key_align, 1, sorted_keys_buffer);
+            }
+            if !sorted_values_buffer.is_null() {
+                rt_ref.alloc.free(values_buffer_size, value_align, 1, sorted_values_buffer);
+            }
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate sorted buffers".to_string()));
+    }
+
+    // Copy data in sorted order.
+    for (sorted_idx, &orig_idx) in indices.iter().enumerate() {
+        unsafe {
+            let src_key = keys_buffer.add(orig_idx * key_size);
+            let src_val = values_buffer.add(orig_idx * value_size);
+            let dst_key = sorted_keys_buffer.add(sorted_idx * key_size);
+            let dst_val = sorted_values_buffer.add(sorted_idx * value_size);
+            std::ptr::copy_nonoverlapping(src_key, dst_key, key_size);
+            std::ptr::copy_nonoverlapping(src_val, dst_val, value_size);
+        }
+    }
+
+    // Build B-tree from sorted slices.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
+            rt_handle,
+            dest.ptr,
+            key_tydesc.as_ptr(),
+            value_tydesc.as_ptr(),
+            sorted_keys_buffer,
+            sorted_values_buffer,
+            entries.len() as u32,
+        )
+    };
+
+    // Free all buffers (B-tree took ownership of sorted buffer data).
+    unsafe {
+        let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+        // Destroy original unsorted buffer contents.
+        for i in 0..entries.len() {
+            let kp = keys_buffer.add(i * key_size);
+            let vp = values_buffer.add(i * value_size);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, kp, key_tydesc.as_ptr());
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, vp, value_tydesc.as_ptr());
+        }
+        rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+        rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+        rt_ref.alloc.free(keys_buffer_size, key_align, 1, sorted_keys_buffer);
+        rt_ref.alloc.free(values_buffer_size, value_align, 1, sorted_values_buffer);
+    }
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to build map B-tree".to_string()));
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write a set literal directly to a destination.
+fn write_set_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    set_expr: &crate::datalit::ast::ExprSet<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::TyDescRef;
+
+    let dest_tydesc = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+    let elem_tydesc = dest_tydesc.set_element_ty();
+    let elem_size = elem_tydesc.size() as usize;
+    let elem_align = elem_tydesc.align();
+
+    let elements = set_expr.elements(ctx.db);
+    if elements.is_empty() {
+        // Empty set: set root to null and len to 0.
+        let set_ptr = dest.ptr as *mut datalove_rt::rtdt::Set;
+        unsafe {
+            (*set_ptr).root = std::ptr::null();
+            (*set_ptr).len = 0;
+        }
+        return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed });
+    }
+
+    let rt_handle = ctx.runtime.handle();
+
+    // Allocate buffer for elements.
+    let buffer_size = (elements.len() * elem_size) as u32;
+    let buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, buffer_size, elem_align, 1)
+    };
+    if buffer.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate set buffer".to_string()));
+    }
+
+    // Evaluate elements into buffer.
+    for (i, elem_expr) in elements.iter().enumerate() {
+        let elem_dest_ptr = unsafe { buffer.add(i * elem_size) };
+        let elem_dest = Destination { ptr: elem_dest_ptr, tydesc: elem_tydesc.as_ptr() };
+
+        if let Err(e) = write_datalit_to_dest(ctx, *elem_expr, elem_dest) {
+            // Cleanup on error.
+            for j in 0..i {
+                let cleanup_ptr = unsafe { buffer.add(j * elem_size) };
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, cleanup_ptr, elem_tydesc.as_ptr());
+                }
+            }
+            unsafe {
+                let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(buffer_size, elem_align, 1, buffer);
+            }
+            return Err(e);
+        }
+    }
+
+    // Sort elements for B-tree construction.
+    let mut indices: Vec<usize> = (0..elements.len()).collect();
+    indices.sort_by(|&a, &b| {
+        unsafe {
+            let a_ptr = buffer.add(a * elem_size);
+            let b_ptr = buffer.add(b * elem_size);
+            let a_slice = std::slice::from_raw_parts(a_ptr, elem_size);
+            let b_slice = std::slice::from_raw_parts(b_ptr, elem_size);
+            a_slice.cmp(b_slice)
+        }
+    });
+
+    // Allocate sorted buffer.
+    let sorted_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, buffer_size, elem_align, 1)
+    };
+    if sorted_buffer.is_null() {
+        // Cleanup on error.
+        for i in 0..elements.len() {
+            let cleanup_ptr = unsafe { buffer.add(i * elem_size) };
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, cleanup_ptr, elem_tydesc.as_ptr());
+            }
+        }
+        unsafe {
+            let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+            rt_ref.alloc.free(buffer_size, elem_align, 1, buffer);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate sorted buffer".to_string()));
+    }
+
+    // Copy data in sorted order.
+    for (sorted_idx, &orig_idx) in indices.iter().enumerate() {
+        unsafe {
+            let src = buffer.add(orig_idx * elem_size);
+            let dst = sorted_buffer.add(sorted_idx * elem_size);
+            std::ptr::copy_nonoverlapping(src, dst, elem_size);
+        }
+    }
+
+    // Build B-tree from sorted slice.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
+            rt_handle,
+            dest.ptr,
+            elem_tydesc.as_ptr(),
+            sorted_buffer,
+            elements.len() as u32,
+        )
+    };
+
+    // Free buffers.
+    unsafe {
+        let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+        // Destroy original buffer contents.
+        for i in 0..elements.len() {
+            let cleanup_ptr = buffer.add(i * elem_size);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, cleanup_ptr, elem_tydesc.as_ptr());
+        }
+        rt_ref.alloc.free(buffer_size, elem_align, 1, buffer);
+        rt_ref.alloc.free(buffer_size, elem_align, 1, sorted_buffer);
+    }
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to build set B-tree".to_string()));
     }
 
     Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
@@ -3969,6 +4358,256 @@ fn allocate_list_from_values<'db>(
     Ok(Value {
         ptr: list_ptr,
         tydesc: list_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a map from a vector of key-value pairs.
+///
+/// Takes ownership of all key and value values. Keys and values are moved into the
+/// map's B-tree structure. All keys must have the same type and all values must have
+/// the same type.
+fn allocate_map_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    entries: Vec<(Value, Value)>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if entries.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty map".to_string()));
+    }
+
+    // All keys must have same type, all values must have same type.
+    let key_tydesc = entries[0].0.tydesc;
+    let value_tydesc = entries[0].1.tydesc;
+    let key_size = unsafe { (*key_tydesc).size as usize };
+    let value_size = unsafe { (*value_tydesc).size as usize };
+    let key_align = unsafe { (*key_tydesc).align };
+    let value_align = unsafe { (*value_tydesc).align };
+
+    // Create map tydesc.
+    let map_tydesc = ctx.tydesc_table.create_map_from_key_value_tydescs(key_tydesc, value_tydesc);
+    let map_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(map_tydesc) };
+
+    // Allocate map structure.
+    let rt_handle = ctx.runtime.handle();
+    let map_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            map_tydesc_ref.size(),
+            map_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if map_ptr.is_null() {
+        for (k, v) in entries {
+            destroy_value(ctx, k);
+            destroy_value(ctx, v);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate map".to_string()));
+    }
+
+    // Sort entries by key for B-tree construction.
+    // For now, use simple comparison based on raw bytes (works for simple numeric types).
+    let mut sorted_entries = entries;
+    sorted_entries.sort_by(|a, b| {
+        unsafe {
+            let a_slice = std::slice::from_raw_parts(a.0.ptr, key_size);
+            let b_slice = std::slice::from_raw_parts(b.0.ptr, key_size);
+            a_slice.cmp(b_slice)
+        }
+    });
+
+    // Allocate buffers for keys and values.
+    let keys_buffer_size = (sorted_entries.len() * key_size) as u32;
+    let values_buffer_size = (sorted_entries.len() * value_size) as u32;
+
+    let keys_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, keys_buffer_size, key_align, 1)
+    };
+    if keys_buffer.is_null() {
+        for (k, v) in sorted_entries {
+            destroy_value(ctx, k);
+            destroy_value(ctx, v);
+        }
+        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr); }
+        return Err(InterpError::RuntimeError("Failed to allocate keys buffer".to_string()));
+    }
+
+    let values_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, values_buffer_size, value_align, 1)
+    };
+    if values_buffer.is_null() {
+        for (k, v) in sorted_entries {
+            destroy_value(ctx, k);
+            destroy_value(ctx, v);
+        }
+        unsafe {
+            let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+            rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate values buffer".to_string()));
+    }
+
+    // Copy keys and values into buffers.
+    for (i, (key, value)) in sorted_entries.iter().enumerate() {
+        unsafe {
+            let key_dest = keys_buffer.add(i * key_size);
+            let value_dest = values_buffer.add(i * value_size);
+            std::ptr::copy_nonoverlapping(key.ptr, key_dest, key_size);
+            std::ptr::copy_nonoverlapping(value.ptr, value_dest, value_size);
+        }
+    }
+
+    // Build B-tree from sorted slices.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
+            rt_handle,
+            map_ptr,
+            key_tydesc,
+            value_tydesc,
+            keys_buffer,
+            values_buffer,
+            sorted_entries.len() as u32,
+        )
+    };
+
+    // Free buffers (data has been moved to tree).
+    unsafe {
+        let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+        rt_ref.alloc.free(keys_buffer_size, key_align, 1, keys_buffer);
+        rt_ref.alloc.free(values_buffer_size, value_align, 1, values_buffer);
+    }
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        for (k, v) in sorted_entries {
+            destroy_value(ctx, k);
+            destroy_value(ctx, v);
+        }
+        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr); }
+        return Err(InterpError::RuntimeError("Failed to build map B-tree".to_string()));
+    }
+
+    // Free original value containers (data has been moved).
+    for (k, v) in sorted_entries {
+        free_value_structure(ctx, k);
+        free_value_structure(ctx, v);
+    }
+
+    Ok(Value {
+        ptr: map_ptr,
+        tydesc: map_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a set from a vector of evaluated values.
+///
+/// Takes ownership of all element values. Elements are moved into the
+/// set's B-tree structure. All elements must have the same type.
+fn allocate_set_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    values: Vec<Value>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if values.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty set".to_string()));
+    }
+
+    // All elements must have same type.
+    let element_tydesc = values[0].tydesc;
+    let element_size = unsafe { (*element_tydesc).size as usize };
+    let element_align = unsafe { (*element_tydesc).align };
+
+    // Create set tydesc.
+    let set_tydesc = ctx.tydesc_table.create_set_from_element_tydesc(element_tydesc);
+    let set_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(set_tydesc) };
+
+    // Allocate set structure.
+    let rt_handle = ctx.runtime.handle();
+    let set_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+            rt_handle,
+            set_tydesc_ref.size(),
+            set_tydesc_ref.align(),
+            1
+        )
+    };
+
+    if set_ptr.is_null() {
+        for v in values {
+            destroy_value(ctx, v);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate set".to_string()));
+    }
+
+    // Sort elements for B-tree construction.
+    let mut sorted_values = values;
+    sorted_values.sort_by(|a, b| {
+        unsafe {
+            let a_slice = std::slice::from_raw_parts(a.ptr, element_size);
+            let b_slice = std::slice::from_raw_parts(b.ptr, element_size);
+            a_slice.cmp(b_slice)
+        }
+    });
+
+    // Allocate buffer for elements.
+    let buffer_size = (sorted_values.len() * element_size) as u32;
+    let buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, buffer_size, element_align, 1)
+    };
+    if buffer.is_null() {
+        for v in sorted_values {
+            destroy_value(ctx, v);
+        }
+        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, set_tydesc, 1, set_ptr); }
+        return Err(InterpError::RuntimeError("Failed to allocate set buffer".to_string()));
+    }
+
+    // Copy elements into buffer.
+    for (i, value) in sorted_values.iter().enumerate() {
+        unsafe {
+            let elem_dest = buffer.add(i * element_size);
+            std::ptr::copy_nonoverlapping(value.ptr, elem_dest, element_size);
+        }
+    }
+
+    // Build B-tree from sorted slice.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
+            rt_handle,
+            set_ptr,
+            element_tydesc,
+            buffer,
+            sorted_values.len() as u32,
+        )
+    };
+
+    // Free buffer (data has been moved to tree).
+    unsafe {
+        let rt_ref = &mut *(rt_handle as *mut datalove_rt::impls::rt_local::RtLocal);
+        rt_ref.alloc.free(buffer_size, element_align, 1, buffer);
+    }
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        for v in sorted_values {
+            destroy_value(ctx, v);
+        }
+        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, set_tydesc, 1, set_ptr); }
+        return Err(InterpError::RuntimeError("Failed to build set B-tree".to_string()));
+    }
+
+    // Free original value containers (data has been moved).
+    for v in sorted_values {
+        free_value_structure(ctx, v);
+    }
+
+    Ok(Value {
+        ptr: set_ptr,
+        tydesc: set_tydesc,
         location: ValueLocation::TempOwned,
     })
 }

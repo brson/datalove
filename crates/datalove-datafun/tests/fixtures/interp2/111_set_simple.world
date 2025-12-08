@@ -1,0 +1,6 @@
+----------
+script
+----------
+
+// Test simple set literal.
+let output = @set { @5, @10, @15 }

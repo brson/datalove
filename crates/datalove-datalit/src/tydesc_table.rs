@@ -23,6 +23,10 @@ pub struct TyDescTable<'db> {
     runtime_result_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Runtime-constructed List cache: element_tydesc → List<T> tydesc.
     runtime_list_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
+    /// Runtime-constructed Map cache: (key_tydesc, value_tydesc) → Map<K, V> tydesc.
+    runtime_map_cache: HashMap<(*const rtdt::TyDesc, *const rtdt::TyDesc), *const rtdt::TyDesc>,
+    /// Runtime-constructed Set cache: element_tydesc → Set<T> tydesc.
+    runtime_set_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Storage for TyDesc allocations.
     tydescs: Vec<Box<rtdt::TyDesc>>,
     /// Storage for flexible array members.
@@ -39,6 +43,8 @@ impl<'db> TyDescTable<'db> {
             runtime_option_cache: HashMap::new(),
             runtime_result_cache: HashMap::new(),
             runtime_list_cache: HashMap::new(),
+            runtime_map_cache: HashMap::new(),
+            runtime_set_cache: HashMap::new(),
             tydescs: Vec::new(),
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
@@ -758,6 +764,62 @@ impl<'db> TyDescTable<'db> {
         self.tydescs.push(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.runtime_list_cache.insert(element_tydesc, ptr);
+        ptr
+    }
+
+    /// Create TyDesc for Map<K, V> from existing key and value tydescs.
+    ///
+    /// Used when building maps from datafun expressions where we already have
+    /// the runtime type descriptors for the key and value types.
+    pub fn create_map_from_key_value_tydescs(
+        &mut self,
+        key_tydesc: *const rtdt::TyDesc,
+        value_tydesc: *const rtdt::TyDesc,
+    ) -> *const rtdt::TyDesc {
+        let cache_key = (key_tydesc, value_tydesc);
+        if let Some(&cached) = self.runtime_map_cache.get(&cache_key) {
+            return cached;
+        }
+
+        let tydesc = Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Map,
+            size: std::mem::size_of::<rtdt::Map>() as u32,
+            align: std::mem::align_of::<rtdt::Map>() as u32,
+            type_info: rtdt::TyInfo {
+                map: rtdt::TyInfoMap {
+                    key_tydesc,
+                    value_tydesc,
+                },
+            },
+        });
+
+        self.tydescs.push(tydesc);
+        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        self.runtime_map_cache.insert(cache_key, ptr);
+        ptr
+    }
+
+    /// Create TyDesc for Set<T> from an existing element tydesc.
+    ///
+    /// Used when building sets from datafun expressions where we already have
+    /// the runtime type descriptor for the element type.
+    pub fn create_set_from_element_tydesc(&mut self, element_tydesc: *const rtdt::TyDesc) -> *const rtdt::TyDesc {
+        if let Some(&cached) = self.runtime_set_cache.get(&element_tydesc) {
+            return cached;
+        }
+
+        let tydesc = Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Set,
+            size: std::mem::size_of::<rtdt::Set>() as u32,
+            align: std::mem::align_of::<rtdt::Set>() as u32,
+            type_info: rtdt::TyInfo {
+                set: rtdt::TyInfoSet { element_tydesc },
+            },
+        });
+
+        self.tydescs.push(tydesc);
+        let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
+        self.runtime_set_cache.insert(element_tydesc, ptr);
         ptr
     }
 
