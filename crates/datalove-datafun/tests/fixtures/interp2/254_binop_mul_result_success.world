@@ -1,0 +1,10 @@
+----------
+script
+----------
+
+// Test result multiplication (*!) with successful result.
+fun test_mul_result(a: u32, b: u32): !u32
+    ret a *! b
+end fun
+
+let output = test_mul_result(@5, @3)

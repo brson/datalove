@@ -1,0 +1,6 @@
+----------
+script
+----------
+
+// Test map with string keys.
+let output = @map { @"a" = @1, @"b" = @2 }

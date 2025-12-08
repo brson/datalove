@@ -1,0 +1,93 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: List(ExprList(
+                                        elements: [
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Map(ExprMap(
+                                                        entries: [
+                                                            ExprMapEntry(
+                                                                key: ExprFull(
+                                                                    type_hint: None,
+                                                                    expr: ExprAndHeap(
+                                                                        heap: Local,
+                                                                        expr: Int(ExprInt(
+                                                                            value: "1",
+                                                                        )),
+                                                                    ),
+                                                                ),
+                                                                value: ExprFull(
+                                                                    type_hint: None,
+                                                                    expr: ExprAndHeap(
+                                                                        heap: Local,
+                                                                        expr: Int(ExprInt(
+                                                                            value: "10",
+                                                                        )),
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                        ],
+                                                    )),
+                                                ),
+                                            ),
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Map(ExprMap(
+                                                        entries: [
+                                                            ExprMapEntry(
+                                                                key: ExprFull(
+                                                                    type_hint: None,
+                                                                    expr: ExprAndHeap(
+                                                                        heap: Local,
+                                                                        expr: Int(ExprInt(
+                                                                            value: "2",
+                                                                        )),
+                                                                    ),
+                                                                ),
+                                                                value: ExprFull(
+                                                                    type_hint: None,
+                                                                    expr: ExprAndHeap(
+                                                                        heap: Local,
+                                                                        expr: Int(ExprInt(
+                                                                            value: "20",
+                                                                        )),
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                        ],
+                                                    )),
+                                                ),
+                                            ),
+                                        ],
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@[@map {@1 = @10}, @map {@2 = @20}]",
+    ),
+]

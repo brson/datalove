@@ -1,0 +1,7 @@
+----------
+script
+----------
+
+// Test variable reference to map.
+let x = @map { @1 = @100, @2 = @200 }
+let output = x

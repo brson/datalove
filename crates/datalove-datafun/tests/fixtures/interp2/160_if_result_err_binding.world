@@ -1,0 +1,14 @@
+----------
+script
+----------
+
+// Test Result destructuring with Err variant and else binding.
+fun test(a: !u32): u32
+    if a |value|
+        ret value
+    else |error|
+        ret @888
+    end if
+end fun
+
+let output = test(@error @77)

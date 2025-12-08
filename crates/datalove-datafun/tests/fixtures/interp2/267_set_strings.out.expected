@@ -1,0 +1,60 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: Set(ExprSet(
+                                        elements: [
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: String(ExprString(
+                                                        value: "\"foo\"",
+                                                    )),
+                                                ),
+                                            ),
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: String(ExprString(
+                                                        value: "\"bar\"",
+                                                    )),
+                                                ),
+                                            ),
+                                            ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: String(ExprString(
+                                                        value: "\"baz\"",
+                                                    )),
+                                                ),
+                                            ),
+                                        ],
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@set {@\"baz\", @\"bar\", @\"foo\"}",
+    ),
+]

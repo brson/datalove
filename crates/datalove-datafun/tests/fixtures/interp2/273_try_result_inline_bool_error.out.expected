@@ -1,0 +1,106 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "returns_err",
+                    params: [],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Datalit",
+                                    value: ExprFull(
+                                        type_hint: None,
+                                        expr: ExprAndHeap(
+                                            heap: Local,
+                                            expr: Err(ExprErr(
+                                                value: ExprFull(
+                                                    type_hint: None,
+                                                    expr: ExprAndHeap(
+                                                        heap: Local,
+                                                        expr: True,
+                                                    ),
+                                                ),
+                                            )),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "try_err",
+                    params: [],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtLet(
+                            kind: "Let",
+                            name: "val",
+                            type_hint: None,
+                            value: ExprFun(
+                                expr: ExprTryResult(
+                                    kind: "TryResult",
+                                    operand: ExprFun(
+                                        expr: ExprFunctionCall(
+                                            kind: "FunctionCall",
+                                            name: "returns_err",
+                                            args: [],
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "val",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "try_err",
+                            args: [],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@error @true",
+    ),
+]

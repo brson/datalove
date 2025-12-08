@@ -1,0 +1,7 @@
+----------
+script
+----------
+
+// Test variable reference to set.
+let x = @set { @10, @20, @30 }
+let output = x

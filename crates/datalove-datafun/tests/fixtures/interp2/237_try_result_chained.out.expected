@@ -1,0 +1,185 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "chain_results",
+                    params: [
+                        FunParam(
+                            name: "val1",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: Result(TypeHintResult(
+                                    inner_type: TypeHintAndHeap(
+                                        heap: Omitted,
+                                        type_hint: U32,
+                                    ),
+                                )),
+                            ),
+                        ),
+                        FunParam(
+                            name: "val2",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: Result(TypeHintResult(
+                                    inner_type: TypeHintAndHeap(
+                                        heap: Omitted,
+                                        type_hint: U32,
+                                    ),
+                                )),
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtLet(
+                            kind: "Let",
+                            name: "a",
+                            type_hint: Some(TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            )),
+                            value: ExprFun(
+                                expr: ExprTryResult(
+                                    kind: "TryResult",
+                                    operand: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "val1",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        StmtLet(
+                            kind: "Let",
+                            name: "b",
+                            type_hint: Some(TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            )),
+                            value: ExprFun(
+                                expr: ExprTryResult(
+                                    kind: "TryResult",
+                                    operand: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "val2",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "a",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "input1",
+                    type_hint: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: Int(ExprInt(
+                                        value: "10",
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "input2",
+                    type_hint: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    value: ExprFun(
+                        expr: ExprFunKind(
+                            kind: "Datalit",
+                            value: ExprFull(
+                                type_hint: None,
+                                expr: ExprAndHeap(
+                                    heap: Local,
+                                    expr: Int(ExprInt(
+                                        value: "20",
+                                    )),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "chain_results",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "input1",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "input2",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "RuntimeError(\"Function \'chain_results\' has analysis errors: [UseAfterMove { slot: SlotId(1), use_location: ProgramPoint { stmt_id: StmtId(1), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
+            ],
+        ),
+        output: "",
+    ),
+]

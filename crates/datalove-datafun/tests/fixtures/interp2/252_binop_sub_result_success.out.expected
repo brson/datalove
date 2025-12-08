@@ -1,0 +1,108 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "test_sub_result",
+                    params: [
+                        FunParam(
+                            name: "a",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                        FunParam(
+                            name: "b",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: SubChecked,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "b",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "test_sub_result",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "10",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "3",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@7",
+    ),
+]

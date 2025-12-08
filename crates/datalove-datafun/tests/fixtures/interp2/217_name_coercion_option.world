@@ -1,0 +1,10 @@
+----------
+script
+----------
+
+// Test return type coercion: u32 -> Option<u32>.
+fun test(x: u32): ?u32
+    ret x
+end fun
+
+let output = test(@42)

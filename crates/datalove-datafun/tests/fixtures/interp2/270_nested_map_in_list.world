@@ -1,0 +1,6 @@
+----------
+script
+----------
+
+// Test nested map in list.
+let output = @[@map { @1 = @10 }, @map { @2 = @20 }]

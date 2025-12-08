@@ -1,0 +1,14 @@
+----------
+script
+----------
+
+// Test chained try-option operators.
+fun chain_options(val1: ?u32, val2: ?u32): ?u32
+    let a: u32 = val1?
+    let b: u32 = val2?
+    ret a
+end fun
+
+let input1: ?u32 = @10
+let input2: ?u32 = @20
+let output = chain_options(input1, input2)

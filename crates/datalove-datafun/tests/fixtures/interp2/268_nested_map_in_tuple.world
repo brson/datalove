@@ -1,0 +1,6 @@
+----------
+script
+----------
+
+// Test nested map in tuple.
+let output = @(@map { @1 = @100 }, @map { @2 = @200 })

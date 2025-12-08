@@ -6,7 +6,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 
 **New interpreter (interp2) supports:** u32, bool, string, int, f32 literals; arithmetic (+,-,*,/); checked (+!,-!,*!,/!); optional (+?,-?,*?,/?); comparison; if/else (bool only); function calls with params; module imports; unary negation (-x for int); tuples; anonymous structs; lists; maps; sets.
 
-**96 tests passing** in interp2 vs **136 tests** in old interp.
+**139 tests passing** in interp2 vs **136 tests** in old interp. Test migration complete.
 
 ## Progress
 
@@ -23,6 +23,7 @@ Complete the new interpreter to support all features tested by old interpreter, 
 - Phase 7: Optional/Result unary negation (-?, -!) - tests 84a, 85, 87
 - Phase 8: Other integer types with Option/Result coercion - tests 94-97
 - Phase 9: Let binding coercion T → Option<T>/Result<T> - tests 100-105
+- Phase 10: Test migration - 43 new tests added, interp2 now at 139 tests
 
 **Key implementations:**
 - `execute_function_body` wraps return values in Some/Ok for `?T`/`!T` return types
@@ -191,8 +192,19 @@ Implemented type-directed coercion during `let` binding and return:
 - Return coercion already implemented in `execute_function_body`
 - Note: Result let coercion in function body triggers function_analysis UseAfterMove bug (test 103 skipped)
 
-### Phase 10: Test Migration
-Convert old tests to worldfile format with correct expected outputs.
+### Phase 10: Test Migration ✓
+**Tests:** 130-273 (43 new tests migrated from old_interp format)
+
+Converted old tests to worldfile format:
+- Control flow: multiple lets, nested ifs, shadowing, else-if chains (130-139, 144)
+- Omitted heap tests (145)
+- Result/Option if-destructuring with bindings (159-160)
+- Name coercion tests (217-218)
+- Try operator chaining (235-238)
+- Binary ops with optional/result types (242-256)
+- Variable refs to map/set (262-263)
+- Map/set with string keys (266-267)
+- Nested collections (268-273)
 
 ## Key Files
 

@@ -1,0 +1,119 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "process",
+                    params: [
+                        FunParam(
+                            name: "n",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtIf(
+                            kind: "If",
+                            condition: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: Eq,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "n",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "0",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            then_body: [
+                                StmtRet(
+                                    kind: "Ret",
+                                    value: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "100",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                            else_body: Some([
+                                StmtRet(
+                                    kind: "Ret",
+                                    value: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "n",
+                                        ),
+                                    ),
+                                ),
+                            ]),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "process",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "0",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@100",
+    ),
+]

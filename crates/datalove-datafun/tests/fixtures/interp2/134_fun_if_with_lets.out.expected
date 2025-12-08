@@ -1,0 +1,167 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "process",
+                    params: [
+                        FunParam(
+                            name: "n",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: Int,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Int,
+                    )),
+                    body: [
+                        StmtIf(
+                            kind: "If",
+                            condition: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: Gt,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "n",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "0",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            then_body: [
+                                StmtLet(
+                                    kind: "Let",
+                                    name: "doubled",
+                                    type_hint: None,
+                                    value: ExprFun(
+                                        expr: ExprBinOp(
+                                            kind: "BinOp",
+                                            op: Mul,
+                                            lhs: ExprFun(
+                                                expr: ExprFunKind(
+                                                    kind: "Name",
+                                                    name: "n",
+                                                ),
+                                            ),
+                                            rhs: ExprFun(
+                                                expr: ExprFunKind(
+                                                    kind: "Datalit",
+                                                    value: ExprFull(
+                                                        type_hint: None,
+                                                        expr: ExprAndHeap(
+                                                            heap: Local,
+                                                            expr: Int(ExprInt(
+                                                                value: "2",
+                                                            )),
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                                StmtRet(
+                                    kind: "Ret",
+                                    value: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "doubled",
+                                        ),
+                                    ),
+                                ),
+                            ],
+                            else_body: Some([
+                                StmtLet(
+                                    kind: "Let",
+                                    name: "zero",
+                                    type_hint: Some(TypeHintAndHeap(
+                                        heap: Omitted,
+                                        type_hint: Int,
+                                    )),
+                                    value: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Datalit",
+                                            value: ExprFull(
+                                                type_hint: None,
+                                                expr: ExprAndHeap(
+                                                    heap: Local,
+                                                    expr: Int(ExprInt(
+                                                        value: "0",
+                                                    )),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                                StmtRet(
+                                    kind: "Ret",
+                                    value: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "zero",
+                                        ),
+                                    ),
+                                ),
+                            ]),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "process",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Datalit",
+                                        value: ExprFull(
+                                            type_hint: None,
+                                            expr: ExprAndHeap(
+                                                heap: Local,
+                                                expr: Int(ExprInt(
+                                                    value: "5",
+                                                )),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "TypecheckErrors(3)",
+            ],
+        ),
+        output: "",
+    ),
+]
