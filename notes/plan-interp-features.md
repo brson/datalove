@@ -203,3 +203,5 @@ Convert old tests to worldfile format with correct expected outputs.
 Old interpreter wraps checked ops in Result - WRONG. Correct: yield T directly, early-return on overflow.
 
 **Fixed:** Script sections now properly check for typecheck errors. Tests 60-63 updated to use bare operators with int types.
+
+**Known limitation:** Map/Set sorting uses byte-wise comparison (`std::slice::from_raw_parts().cmp()`) for B-tree construction. This works for simple numeric types but does NOT produce canonical ordering for strings, bigints, or nested collections. The datalit instantiate2 module uses `crate::canon::sorted_map_indices` / `sorted_set_indices` which implement proper canonical ordering. The interp2 implementation should eventually use similar comparison logic.
