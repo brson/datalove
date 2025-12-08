@@ -82,6 +82,23 @@ impl MemGuard {
         std::mem::forget(self);
         ptr
     }
+
+    /// Convert to a ValueGuard after the memory has been initialized.
+    ///
+    /// Only valid for single-element allocations (count=1).
+    ///
+    /// # Safety
+    /// The memory must be properly initialized before calling this.
+    pub unsafe fn into_value(self) -> ValueGuard {
+        debug_assert_eq!(self.count, 1, "into_value only valid for count=1");
+        let guard = ValueGuard {
+            rt: self.rt,
+            tydesc: self.tydesc,
+            ptr: self.ptr,
+        };
+        std::mem::forget(self);
+        guard
+    }
 }
 
 impl Drop for MemGuard {
