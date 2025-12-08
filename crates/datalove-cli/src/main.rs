@@ -284,12 +284,18 @@ impl LitOpCommand {
             bail!("Type errors in second expression: {:?}", errors);
         }
 
-        // Instantiate values.
+        // Instantiate values with RAII guards for cleanup.
         let mut rt = datalove_rt::rust::Runtime::new();
         let mut tydesc_table1 = datalit::tydesc_table::TyDescTable::new(&db);
         let inst1 = datalit::instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table1, typechecked1)?;
+        let _guard1 = unsafe {
+            datalove_rt::rust::ValueGuard::from_raw(rt.handle(), inst1.tydesc.as_ptr(), inst1.ptr as *mut u8)
+        };
         let mut tydesc_table2 = datalit::tydesc_table::TyDescTable::new(&db);
         let inst2 = datalit::instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table2, typechecked2)?;
+        let _guard2 = unsafe {
+            datalove_rt::rust::ValueGuard::from_raw(rt.handle(), inst2.tydesc.as_ptr(), inst2.ptr as *mut u8)
+        };
 
         // Execute the operation.
         match self.op.as_str() {
@@ -335,15 +341,7 @@ impl LitOpCommand {
             }
         }
 
-        // Clean up instantiated values before shutdown.
-        unsafe {
-            let rt_handle = rt.handle();
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, inst1.ptr as *mut u8, inst1.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, inst1.tydesc.as_ptr(), 1, inst1.ptr as *mut u8);
-            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, inst2.ptr as *mut u8, inst2.tydesc.as_ptr());
-            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, inst2.tydesc.as_ptr(), 1, inst2.ptr as *mut u8);
-            // Runtime shutdown handled by Drop
-        }
+        // Guards clean up automatically on drop.
         Ok(())
     }
 }
@@ -509,30 +507,24 @@ impl ScriptCommand {
             Err(e) => bail!("Execution error: {:?}", e),
         };
 
+        // Create RAII guard for automatic cleanup.
+        let _guard = unsafe {
+            datalove_rt::rust::ValueGuard::from_raw(
+                result.runtime.handle(),
+                result.value.tydesc,
+                result.value.ptr,
+            )
+        };
+
         // Pretty-print the output.
         let output = match datafun::interp::pretty_print_value(&mut result) {
             Ok(o) => o,
             Err(e) => bail!("Failed to pretty-print output: {:?}", e),
         };
 
-        // Clean up the result value before returning.
-        unsafe {
-            let rt_handle = result.runtime.handle();
-            datalove_rt::c::dtlv_rti_any_destroy_local(
-                rt_handle,
-                result.value.ptr,
-                result.value.tydesc,
-            );
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                rt_handle,
-                result.value.tydesc,
-                1,
-                result.value.ptr,
-            );
-        }
-
         println!("{}", output);
 
+        // Guard cleans up automatically on drop.
         Ok(())
     }
 
@@ -602,30 +594,24 @@ impl ScriptCommand {
             Err(e) => bail!("Execution error: {:?}", e),
         };
 
+        // Create RAII guard for automatic cleanup.
+        let _guard = unsafe {
+            datalove_rt::rust::ValueGuard::from_raw(
+                result.runtime.handle(),
+                result.value.tydesc,
+                result.value.ptr,
+            )
+        };
+
         // Pretty-print the output.
         let output = match datafun::interp::pretty_print_value(&mut result) {
             Ok(o) => o,
             Err(e) => bail!("Failed to pretty-print output: {:?}", e),
         };
 
-        // Clean up the result value before returning.
-        unsafe {
-            let rt_handle = result.runtime.handle();
-            datalove_rt::c::dtlv_rti_any_destroy_local(
-                rt_handle,
-                result.value.ptr,
-                result.value.tydesc,
-            );
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                rt_handle,
-                result.value.tydesc,
-                1,
-                result.value.ptr,
-            );
-        }
-
         println!("{}", output);
 
+        // Guard cleans up automatically on drop.
         Ok(())
     }
 }

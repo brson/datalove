@@ -51,26 +51,20 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let mut result = datafun::interp::execute_script(&db, script, package_world, typecheck_result)
         .map_err(|e| format!("Execution error: {:?}", e))?;
 
+    // Create RAII guard for automatic cleanup.
+    let _guard = unsafe {
+        datalove_rt::rust::ValueGuard::from_raw(
+            result.runtime.handle(),
+            result.value.tydesc,
+            result.value.ptr,
+        )
+    };
+
     // Pretty-print the output.
     let output = datafun::interp::pretty_print_value(&mut result)
         .map_err(|e| format!("Failed to pretty-print output: {:?}", e))?;
 
-    // Clean up the result value before returning.
-    unsafe {
-        let rt_handle = result.runtime.handle();
-        datalove_rt::c::dtlv_rti_any_destroy_local(
-            rt_handle,
-            result.value.ptr,
-            result.value.tydesc,
-        );
-        datalove_rt::c::dtlv_rti_mem_free_local(
-            rt_handle,
-            result.value.tydesc,
-            1,
-            result.value.ptr,
-        );
-    }
-
+    // Guard cleans up automatically on drop.
     Ok(output)
 }
 

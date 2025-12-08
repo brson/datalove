@@ -43,3 +43,103 @@ impl Drop for Runtime {
         self.handle = std::ptr::null_mut();
     }
 }
+
+/// Guard for typed local memory allocation.
+///
+/// Automatically frees memory on drop unless `leak()` is called.
+/// Does NOT call destroy - use this for uninitialized memory.
+pub struct MemGuard {
+    rt: LocalRtHandle,
+    tydesc: *const crate::rtdt::TyDesc,
+    count: u32,
+    ptr: *mut u8,
+}
+
+impl MemGuard {
+    /// Allocate typed memory. Returns None if allocation fails.
+    pub fn new(rt: LocalRtHandle, tydesc: *const crate::rtdt::TyDesc, count: u32) -> Option<Self> {
+        let ptr = unsafe { crate::c::dtlv_rti_mem_alloc_local(rt, tydesc, count) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(Self { rt, tydesc, count, ptr })
+        }
+    }
+
+    /// Get the raw pointer.
+    pub fn ptr(&self) -> *mut u8 {
+        self.ptr
+    }
+
+    /// Get the type descriptor.
+    pub fn tydesc(&self) -> *const crate::rtdt::TyDesc {
+        self.tydesc
+    }
+
+    /// Consume the guard without freeing. Returns the pointer.
+    pub fn leak(self) -> *mut u8 {
+        let ptr = self.ptr;
+        std::mem::forget(self);
+        ptr
+    }
+}
+
+impl Drop for MemGuard {
+    fn drop(&mut self) {
+        unsafe {
+            crate::c::dtlv_rti_mem_free_local(self.rt, self.tydesc, self.count, self.ptr);
+        }
+    }
+}
+
+/// Guard for an initialized typed value.
+///
+/// Automatically destroys and frees on drop unless `leak()` is called.
+/// Use this when you have ownership of an initialized value.
+pub struct ValueGuard {
+    rt: LocalRtHandle,
+    tydesc: *const crate::rtdt::TyDesc,
+    ptr: *mut u8,
+}
+
+impl ValueGuard {
+    /// Take ownership of an existing initialized value.
+    ///
+    /// # Safety
+    /// The pointer must be a valid initialized value of the given type,
+    /// allocated with the given runtime.
+    pub unsafe fn from_raw(
+        rt: LocalRtHandle,
+        tydesc: *const crate::rtdt::TyDesc,
+        ptr: *mut u8,
+    ) -> Self {
+        debug_assert!(!ptr.is_null());
+        Self { rt, tydesc, ptr }
+    }
+
+    /// Get the raw pointer.
+    pub fn ptr(&self) -> *mut u8 {
+        self.ptr
+    }
+
+    /// Get the type descriptor.
+    pub fn tydesc(&self) -> *const crate::rtdt::TyDesc {
+        self.tydesc
+    }
+
+    /// Consume the guard without destroying/freeing. Returns the pointer.
+    pub fn leak(self) -> *mut u8 {
+        let ptr = self.ptr;
+        std::mem::forget(self);
+        ptr
+    }
+}
+
+impl Drop for ValueGuard {
+    fn drop(&mut self) {
+        unsafe {
+            crate::c::dtlv_rti_any_destroy_local(self.rt, self.ptr, self.tydesc);
+            crate::c::dtlv_rti_mem_free_local(self.rt, self.tydesc, 1, self.ptr);
+        }
+    }
+}

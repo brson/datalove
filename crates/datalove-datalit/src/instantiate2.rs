@@ -78,26 +78,15 @@ fn instantiate_expr<'db>(
     resolved: ResolvedExpr<'db>,
 ) -> AnyResult<*const u8> {
     let tydesc_ptr = tydesc_table.get_or_create(ty);
-    let dest_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt, tydesc_ptr, 1)
-    };
 
-    // Try to instantiate the expression. If it fails, free the allocated memory.
-    match instantiate_expr_into(db, rt, expr, ty, tydesc_table, dest_ptr, resolved) {
-        Ok(_) => Ok(dest_ptr),
-        Err(e) => {
-            // Free the allocated memory on error to avoid leak.
-            unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(
-                    rt,
-                    tydesc_ptr,
-                    1,
-                    dest_ptr as *mut u8,
-                );
-            }
-            Err(e)
-        }
-    }
+    // Use RAII guard for automatic cleanup on error.
+    let guard = datalove_rt::rust::MemGuard::new(rt, tydesc_ptr, 1)
+        .ok_or_else(|| anyhow!("Failed to allocate memory"))?;
+    let dest_ptr = guard.ptr();
+
+    // Try to instantiate. On success, leak the guard to transfer ownership.
+    instantiate_expr_into(db, rt, expr, ty, tydesc_table, dest_ptr, resolved)?;
+    Ok(guard.leak())
 }
 
 /// Instantiate an expression into pre-allocated memory at dest_ptr.
