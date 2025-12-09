@@ -10,6 +10,7 @@ pub mod resolution;
 pub mod tycheck;
 pub mod function_analysis;
 pub mod spans;
+pub mod funlit_equiv;
 
 // Interpreter module.
 pub mod interp;
