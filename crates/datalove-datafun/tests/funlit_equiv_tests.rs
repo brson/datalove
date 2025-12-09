@@ -169,15 +169,22 @@ fn make_compatible_config() -> AstGenConfig {
     use datalove_datalit::ast_gen::{TypeWeights, NumericStrategy};
 
     AstGenConfig {
-        // Don't include type hints - datafun doesn't parse `: type / value` syntax.
-        include_type_hints: false,
+        // Type hints work with `: type / expr` syntax (Phase 5).
+        // However, bare `: type / expr` without heap sigil doesn't work in datafun
+        // because `:` is ambiguous (could be function return type annotation).
+        // So we disable omitted heap and require explicit @ or # sigils.
+        include_type_hints: true,
+        heap_distribution: datalove_datalit::ast_gen::HeapDistribution {
+            local: 2,
+            global: 1,
+            omitted: 0,  // Disable omitted heap to avoid ambiguity.
+        },
         max_depth: 2,
         // Minimum 1 to avoid empty lists (type inference differs for []).
         min_collection_size: 1,
         max_collection_size: 3,
         // Small non-negative values work without type hints (no negative literal issues).
         numeric_strategy: NumericStrategy::SmallNonNegative,
-        // Disable types that require special syntax or type hints.
         type_weights: TypeWeights {
             bool_type: 10,
             u8_type: 5,
@@ -200,17 +207,23 @@ fn make_compatible_config() -> AstGenConfig {
             // Map and set work with min_collection_size: 1.
             map_type: 10,
             set_type: 10,
-            option_type: 0,  // Requires type hint for @none
-            result_type: 0,  // Requires type hint for @error
+            // Option type works with type hints for @none.
+            option_type: 10,
+            // Result type works with type hints for @error.
+            result_type: 10,
             tensor_type: 10, // Works with min_collection_size: 1
             anon_tuple_type: 10,
-            named_tuple_type: 0,  // Requires type hint
+            // Named tuple works with type hints.
+            named_tuple_type: 10,
             anon_struct_type: 10,
-            named_struct_type: 0,  // Requires type hint
-            anon_enum_type: 0,    // Requires type hint
-            named_enum_type: 0,   // Requires type hint
-            data_type: 0,    // Requires type hint
-            error_type: 0,   // Requires type hint
+            // Named struct works with type hints.
+            named_struct_type: 10,
+            // Enums work with type hints.
+            anon_enum_type: 10,
+            named_enum_type: 10,
+            // Data and error types work with type hints.
+            data_type: 10,
+            error_type: 10,
         },
         ..Default::default()
     }

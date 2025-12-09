@@ -2,7 +2,10 @@
 
 The `make_compatible_config()` currently disables most types. Here's the remediation plan.
 
-## Currently Enabled (weight > 0)
+## All Types Now Enabled
+
+All types are now working in funlit_equiv tests:
+
 - `bool_type: 10` - working
 - `u8_type: 5` - working
 - `u16_type: 5` - working
@@ -21,6 +24,14 @@ The `make_compatible_config()` currently disables most types. Here's the remedia
 - `i64_type: 10` - **DONE** (Phase 3)
 - `int_type: 10` - **DONE** (Phase 3)
 - `f32_type: 10` - **DONE** (Phase 4)
+- `option_type: 10` - **DONE** (Phase 5)
+- `result_type: 10` - **DONE** (Phase 5)
+- `named_tuple_type: 10` - **DONE** (Phase 5)
+- `named_struct_type: 10` - **DONE** (Phase 5)
+- `anon_enum_type: 10` - **DONE** (Phase 5)
+- `named_enum_type: 10` - **DONE** (Phase 5)
+- `data_type: 10` - **DONE** (Phase 5)
+- `error_type: 10` - **DONE** (Phase 5)
 
 ## Disabled Types and Remediation
 
@@ -107,9 +118,20 @@ These require `: type / value` syntax which datafun doesn't support yet:
    - Fixed parser to consume dot before checking for decimal digits
    - Applied fix to both positive and negative number cases
 
-### Phase 5: Type Hint Syntax (largest change)
-10. Add `: type / expr` parsing to datafun parser
-11. Enable option, result, named tuple/struct, enums, data, error
+### Phase 5: Type Hint Syntax (largest change) - **DONE**
+10. ~~Add `: type / expr` parsing to datafun parser~~ - DONE
+    - Added `:` detection in `parse_expr_primary` via `peek_colon_type_hint`
+    - Fixed `parse_type_hint_and_heap` to stop at `/` delimiter
+    - Updated typechecker to use type hints from expression AST nodes
+    - Configured test to use explicit heap sigils (omitted=0) to avoid ambiguity with function return types
+11. ~~Enable option, result, named tuple/struct, enums, data, error~~ - DONE
+    - All types now work with type hints
+
+## Configuration Notes
+
+The funlit_equiv tests use `include_type_hints: true` and `omitted: 0` in heap distribution.
+This ensures all expressions have explicit heap sigils (`@` or `#`) to avoid ambiguity
+with function return type annotations (`: type` vs `: type / expr`).
 
 ## Testing Strategy
 

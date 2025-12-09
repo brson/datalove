@@ -624,7 +624,7 @@ impl<'db> Parser<'db> {
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> datalit::ast::TypeHintAndHeap<'db> {
         // Collect tokens for the type hint, stopping at delimiters that mark the end of a type.
-        // We stop at `=` (assignment) or `,` (parameter separator) at depth 0.
+        // We stop at `=` (assignment), `,` (parameter separator), or `/` (type/value separator).
         // These delimiters are NOT consumed, so they remain in the iterator.
         // fixme this is so brittle
         let mut collected = Vec::new();
@@ -634,7 +634,9 @@ impl<'db> Parser<'db> {
                 TreeToken::Token(t) => {
                     matches!(
                         t.kind(self.db),
-                        TokenKind::Sigil(Sigil::Equals) | TokenKind::Sigil(Sigil::Comma)
+                        TokenKind::Sigil(Sigil::Equals)
+                            | TokenKind::Sigil(Sigil::Comma)
+                            | TokenKind::Sigil(Sigil::SlashForward)
                     )
                 }
                 _ => false,
@@ -839,8 +841,12 @@ impl<'db> Parser<'db> {
             }
         }
 
-        // Check if it starts with a heap sigil (@ or #) - use new inline variants.
-        if self.peek_sigil(tokens, Sigil::At) || self.peek_sigil(tokens, Sigil::Hash) {
+        // Check if it starts with a heap sigil (@ or #) or type hint (`:`) - use new inline variants.
+        // Note: `: type / expr` syntax starts without a heap sigil.
+        if self.peek_sigil(tokens, Sigil::At)
+            || self.peek_sigil(tokens, Sigil::Hash)
+            || self.peek_colon_type_hint(tokens)
+        {
             return self.parse_lit_expr_full(tokens);
         }
 
@@ -1802,6 +1808,24 @@ impl<'db> Parser<'db> {
         sigil: Sigil,
     ) {
         self.eat_sigil(tokens, sigil)
+    }
+
+    /// Check if the current position starts a type-hinted expression (`: type / expr`).
+    ///
+    /// This checks for the `:` sigil which indicates a datalit type hint. In expression
+    /// context, `:` always starts a type-hinted datalit expression. This is different
+    /// from function return types or let annotations where `:` comes after an identifier
+    /// or closing paren.
+    fn peek_colon_type_hint(
+        &self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> bool {
+        match tokens.peek() {
+            Some(TreeToken::Token(token)) => {
+                matches!(token.kind(self.db), TokenKind::Sigil(Sigil::Colon))
+            }
+            _ => false,
+        }
     }
 
     /// Get the source Text for error reporting.

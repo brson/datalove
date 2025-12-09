@@ -1,28 +1,5 @@
 {
-  "errors": [
-    {
-      "kind": "CannotSynthesize"
-    },
-    {
-      "kind": "CannotSynthesize"
-    },
-    {
-      "kind": "UnresolvedName",
-      "name": "x"
-    },
-    {
-      "kind": "UnresolvedName",
-      "name": "x"
-    },
-    {
-      "kind": "UnresolvedName",
-      "name": "y"
-    },
-    {
-      "kind": "UnresolvedName",
-      "name": "x"
-    }
-  ],
+  "errors": [],
   "judgements": [
     {
       "kind": "function",

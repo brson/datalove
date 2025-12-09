@@ -7,7 +7,11 @@
       }
     },
     "eval": {
-      "Error": "type error(s): CannotSynthesize"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u32",
+        "value": "@1"
+      }
     },
     "environment": []
   },
@@ -19,7 +23,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): CannotSynthesize"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
     "environment": []
   },
@@ -31,7 +35,11 @@
       }
     },
     "eval": {
-      "Error": "type error(s): CannotSynthesize"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "u64",
+        "value": "@42"
+      }
     },
     "environment": []
   },
@@ -43,7 +51,11 @@
       }
     },
     "eval": {
-      "Error": "type error(s): CannotSynthesize"
+      "SuccessExpr": {
+        "expr_kind": "expression",
+        "ty": "int",
+        "value": "@30"
+      }
     },
     "environment": []
   },

@@ -111,15 +111,25 @@
                             name: "add_f32",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunParseError(
-                                        kind: "ParseError",
-                                        message: "unexpected token in expression",
+                                    expr: ExprFloat(
+                                        kind: "Float",
+                                        heap: Local,
+                                        type_hint: Some(TypeHintAndHeap(
+                                            heap: Omitted,
+                                            type_hint: F32,
+                                        )),
+                                        value: "2.5",
                                     ),
                                 ),
                                 ExprFun(
-                                    expr: ExprFunParseError(
-                                        kind: "ParseError",
-                                        message: "unexpected token in expression",
+                                    expr: ExprFloat(
+                                        kind: "Float",
+                                        heap: Local,
+                                        type_hint: Some(TypeHintAndHeap(
+                                            heap: Omitted,
+                                            type_hint: F32,
+                                        )),
+                                        value: "3.5",
                                     ),
                                 ),
                             ],
@@ -129,11 +139,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "TypecheckErrors(1)",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@6",
     ),
 ]

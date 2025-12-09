@@ -1013,21 +1013,35 @@ fn synthesize_expr<'db>(
         }
 
         // New inline variants - simple literals.
+        // All these check for type hints first.
         ExprFunKind::True(lit) => {
+            if let Some(type_hint) = lit.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             let heap = lit.heap(db);
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
             Ok(TypeAndHeap::new(db, heap, ty))
         }
         ExprFunKind::False(lit) => {
+            if let Some(type_hint) = lit.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             let heap = lit.heap(db);
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
             Ok(TypeAndHeap::new(db, heap, ty))
         }
-        ExprFunKind::None(_) => {
-            // None without type hint cannot be synthesized - needs context.
+        ExprFunKind::None(lit) => {
+            // None requires type hint to determine the inner type.
+            if let Some(type_hint) = lit.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             Err(ctx.error_cannot_synthesize(expr, "cannot infer type for None value"))
         }
         ExprFunKind::Int(int_expr) => {
+            // If type hint present, use it.
+            if let Some(type_hint) = int_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             let heap = int_expr.heap(db);
             let value_str = int_expr.value(db).as_str(db);
             // Parse as u32 by default.
@@ -1042,11 +1056,17 @@ fn synthesize_expr<'db>(
             }
         }
         ExprFunKind::Float(float_expr) => {
+            if let Some(type_hint) = float_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             let heap = float_expr.heap(db);
             let ty = Type::Datalit(datalit::tycheck::Type::F32);
             Ok(TypeAndHeap::new(db, heap, ty))
         }
         ExprFunKind::Hex(hex_expr) => {
+            if let Some(type_hint) = hex_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             let heap = hex_expr.heap(db);
             let value_str = hex_expr.value(db).as_str(db);
             let hex_part = value_str.trim_start_matches('-').trim_start_matches("0x").trim_start_matches("0X");
@@ -1058,6 +1078,9 @@ fn synthesize_expr<'db>(
             }
         }
         ExprFunKind::String(str_expr) => {
+            if let Some(type_hint) = str_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             let heap = str_expr.heap(db);
             let ty = Type::Datalit(datalit::tycheck::Type::String);
             Ok(TypeAndHeap::new(db, heap, ty))
@@ -1065,43 +1088,79 @@ fn synthesize_expr<'db>(
 
         // Collection types.
         ExprFunKind::List(list_expr) => {
+            if let Some(type_hint) = list_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             synthesize_inline_list(ctx, expr, list_expr)
         }
         ExprFunKind::Set(set_expr) => {
+            if let Some(type_hint) = set_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             synthesize_inline_set(ctx, expr, set_expr)
         }
         ExprFunKind::Map(map_expr) => {
+            if let Some(type_hint) = map_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             synthesize_inline_map(ctx, expr, map_expr)
         }
         ExprFunKind::Tensor(tensor_expr) => {
+            if let Some(type_hint) = tensor_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             synthesize_inline_tensor(ctx, expr, tensor_expr)
         }
 
         // Aggregate types.
         ExprFunKind::AnonTuple(tuple_expr) => {
+            if let Some(type_hint) = tuple_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             synthesize_inline_anon_tuple(ctx, expr, tuple_expr)
         }
-        ExprFunKind::NamedTuple(_) => {
+        ExprFunKind::NamedTuple(tuple_expr) => {
+            if let Some(type_hint) = tuple_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             Err(ctx.error_cannot_synthesize(expr, "named tuple requires type hint"))
         }
         ExprFunKind::AnonStruct(struct_expr) => {
+            if let Some(type_hint) = struct_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             synthesize_inline_anon_struct(ctx, expr, struct_expr)
         }
-        ExprFunKind::NamedStruct(_) => {
+        ExprFunKind::NamedStruct(struct_expr) => {
+            if let Some(type_hint) = struct_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             Err(ctx.error_cannot_synthesize(expr, "named struct requires type hint"))
         }
-        ExprFunKind::AnonEnum(_) => {
+        ExprFunKind::AnonEnum(enum_expr) => {
+            if let Some(type_hint) = enum_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             Err(ctx.error_cannot_synthesize(expr, "anonymous enum requires type hint"))
         }
-        ExprFunKind::NamedEnum(_) => {
+        ExprFunKind::NamedEnum(enum_expr) => {
+            if let Some(type_hint) = enum_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             Err(ctx.error_cannot_synthesize(expr, "named enum requires type hint"))
         }
 
         // Wrapper types.
         ExprFunKind::Data(data_expr) => {
+            if let Some(type_hint) = data_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             synthesize_inline_data(ctx, expr, data_expr)
         }
         ExprFunKind::Err(err_expr) => {
+            if let Some(type_hint) = err_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
             synthesize_inline_err(ctx, expr, err_expr)
         }
     }

@@ -8,20 +8,36 @@
                     name: "output",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprFunParseError(
-                            kind: "ParseError",
-                            message: "unexpected token in expression",
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Add,
+                            lhs: ExprFun(
+                                expr: ExprFloat(
+                                    kind: "Float",
+                                    heap: Local,
+                                    type_hint: Some(TypeHintAndHeap(
+                                        heap: Omitted,
+                                        type_hint: F32,
+                                    )),
+                                    value: "1.5",
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprFloat(
+                                    kind: "Float",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "2.5",
+                                ),
+                            ),
                         ),
                     ),
                 ),
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "TypecheckErrors(1)",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@4",
     ),
 ]
