@@ -31,6 +31,10 @@ pub struct BuildCommand {
     /// Source directory for markdown files.
     #[arg(long, short, default_value = "docs")]
     pub source: PathBuf,
+
+    /// Path to the HTML template file.
+    #[arg(long, short, default_value = "docs/template.html")]
+    pub template: PathBuf,
 }
 
 #[derive(clap::Args)]
@@ -54,6 +58,7 @@ impl BuildCommand {
         let config = BuildConfig {
             source_dir: self.source.clone(),
             output_dir: self.output.clone(),
+            template_path: self.template.clone(),
         };
 
         build_docs(config)?;

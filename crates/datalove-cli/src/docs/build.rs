@@ -8,6 +8,7 @@ use super::markdown;
 pub struct BuildConfig {
     pub source_dir: PathBuf,
     pub output_dir: PathBuf,
+    pub template_path: PathBuf,
 }
 
 /// Build the documentation site.
@@ -15,9 +16,14 @@ pub fn build_docs(config: BuildConfig) -> AnyResult<()> {
     println!("Building documentation...");
     println!("  Source: {}", config.source_dir.display());
     println!("  Output: {}", config.output_dir.display());
+    println!("  Template: {}", config.template_path.display());
 
     if !config.source_dir.exists() {
         bail!("Source directory does not exist: {}", config.source_dir.display());
+    }
+
+    if !config.template_path.exists() {
+        bail!("Template file does not exist: {}", config.template_path.display());
     }
 
     // Create output directory.
@@ -29,7 +35,7 @@ pub fn build_docs(config: BuildConfig) -> AnyResult<()> {
 
     // Process each markdown file.
     for md_path in &md_files {
-        process_markdown_file(&config, md_path, &md_files)?;
+        process_markdown_file(&config, md_path, &md_files, &config.template_path)?;
     }
 
     println!("Done!");
@@ -124,6 +130,7 @@ fn process_markdown_file(
     config: &BuildConfig,
     md_path: &Path,
     all_files: &[PathBuf],
+    template_path: &Path,
 ) -> AnyResult<()> {
     // Read markdown.
     let markdown_content = fs::read_to_string(md_path)?;
@@ -157,7 +164,7 @@ fn process_markdown_file(
         nav_html,
     };
 
-    let full_html = template::render_page(page_data);
+    let full_html = template::render_page(template_path, page_data)?;
 
     // Write output.
     fs::write(&html_path, full_html)?;
