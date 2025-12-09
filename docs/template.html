@@ -45,59 +45,13 @@ body {
 }
 
 .container {
-    display: flex;
     min-height: 100vh;
 }
 
-.sidebar {
-    width: 280px;
-    background-color: var(--bg-sidebar);
-    padding: 2rem 1.5rem;
-    border-right: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow-y: auto;
-}
-
-.logo h1 {
-    font-size: 1.8rem;
-    margin-bottom: 0.25rem;
-    color: var(--text-main);
-}
-
-.logo {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    margin-bottom: 2rem;
-    font-style: italic;
-}
-
-.sidebar nav ul {
-    list-style: none;
-}
-
-.sidebar nav li {
-    margin: 0.5rem 0;
-}
-
-.sidebar nav a {
-    color: var(--text-main);
-    text-decoration: none;
-    display: block;
-    padding: 0.5rem;
-    border-radius: 4px;
-    transition: background-color 0.2s;
-}
-
-.sidebar nav a:hover {
-    background-color: var(--bg-code);
-}
-
 .content {
-    flex: 1;
     padding: 3rem;
     max-width: 900px;
+    margin: 0 auto;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -203,16 +157,6 @@ hr {
 }
 
 @media (max-width: 768px) {
-    .container {
-        flex-direction: column;
-    }
-
-    .sidebar {
-        width: 100%;
-        height: auto;
-        position: relative;
-    }
-
     .content {
         padding: 1.5rem;
     }
@@ -221,12 +165,6 @@ hr {
 </head>
 <body>
     <div class="container">
-        <nav class="sidebar">
-            <div class="logo">
-                <h1>Datalove</h1>
-            </div>
-            {{nav}}
-        </nav>
         <main class="content">
             {{content}}
         </main>
