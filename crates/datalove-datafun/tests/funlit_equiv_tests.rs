@@ -169,15 +169,15 @@ fn make_compatible_config() -> AstGenConfig {
     use datalove_datalit::ast_gen::{TypeWeights, NumericStrategy};
 
     AstGenConfig {
-        // Type hints work with `: type / expr` syntax (Phase 5).
-        // However, bare `: type / expr` without heap sigil doesn't work in datafun
-        // because `:` is ambiguous (could be function return type annotation).
-        // So we disable omitted heap and require explicit @ or # sigils.
+        // Type hints work with `: type / expr` syntax.
+        // Omitted heap is allowed because function definitions (which also use `:`)
+        // are statements, not expressions. In expression context, `:` unambiguously
+        // starts a type hint.
         include_type_hints: true,
         heap_distribution: datalove_datalit::ast_gen::HeapDistribution {
             local: 2,
             global: 1,
-            omitted: 0,  // Disable omitted heap to avoid ambiguity.
+            omitted: 1,
         },
         max_depth: 2,
         // Minimum 1 to avoid empty lists (type inference differs for []).

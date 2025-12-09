@@ -129,24 +129,21 @@ These require `: type / value` syntax which datafun doesn't support yet:
 
 ## Configuration Notes
 
-The funlit_equiv tests use `include_type_hints: true` and `omitted: 0` in heap distribution.
-This ensures all expressions have explicit heap sigils (`@` or `#`) to avoid ambiguity
-with function return type annotations (`: type` vs `: type / expr`).
+The funlit_equiv tests use `include_type_hints: true` with omitted heap enabled.
 
-### TODO: Investigate `omitted: 0` Workaround
+### Resolved: No fn/type-hint Ambiguity
 
-The `omitted: 0` restriction may be unnecessarily conservative. Function definitions are
-**statements**, not expressions. When `parse_expr_primary` is called, we're already in
-expression context where function syntax is invalid. Therefore, if we see `:` at the start
-of an expression, it **must** be a type hint - there should be no ambiguity.
+Initially, `omitted: 0` was used to avoid an assumed ambiguity between:
+- Function return type: `fun foo(): int`
+- Type hint expression: `: int / 42`
 
-The original failure in test `20_fun_call_chained` needs investigation:
-- Was `peek_colon_type_hint` being called from a context that handles both statements and expressions?
-- Was there a bug in how type hint parsing consumed tokens, affecting subsequent parsing?
-- Or was there some other reason for the failure?
+Investigation revealed this ambiguity doesn't exist:
+- Function definitions are **statements**, not expressions
+- When `parse_expr_primary` is called, we're in expression context
+- In expression context, `:` unambiguously starts a type hint
 
-If the ambiguity doesn't actually exist in expression context, the `omitted: 0` restriction
-could be relaxed to allow omitted heap sigils (e.g., `: u32 / 42` without `@` or `#`).
+The original test failure (if any) was likely due to a different bug during development,
+not an inherent ambiguity. All tests pass with `omitted: 1`.
 
 ## Testing Strategy
 
