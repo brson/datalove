@@ -203,11 +203,11 @@ fn collect_reads_from_expr<'db>(
         ExprFunKind::TryResult(try_res) => {
             collect_reads_from_expr(db, try_res.operand(db), stmt_id, slots, reads);
         }
-        ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
+        ExprFunKind::ParseError(_) => {
             // No reads.
         }
 
-        // New inline variants.
+        // Inline literal variants.
         ExprFunKind::True(_) |
         ExprFunKind::False(_) |
         ExprFunKind::None(_) |
@@ -615,11 +615,11 @@ fn map_expr_ids<'db>(
         ExprFunKind::TryResult(try_res) => {
             map_expr_ids(db, try_res.operand(db), stmt_id, map, expr_counter);
         }
-        ExprFunKind::Name(_) | ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
+        ExprFunKind::Name(_) | ExprFunKind::ParseError(_) => {
             // No nested expressions.
         }
 
-        // New inline variants.
+        // Inline literal variants.
         ExprFunKind::True(_) |
         ExprFunKind::False(_) |
         ExprFunKind::None(_) |

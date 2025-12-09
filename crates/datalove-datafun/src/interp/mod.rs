@@ -814,19 +814,10 @@ fn execute_let_statement<'db>(
 
     // Helper to check if expression is @none or @error.
     let is_none_or_error = |expr: ast::ExprFun<'db>, db: &'db dyn crate::Db| -> bool {
-        match expr.expr(db) {
-            // Inline variants.
-            ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) => true,
-            // Legacy Datalit wrapper.
-            ast::ExprFunKind::Datalit(datalit_expr) => {
-                let inner = datalit_expr.expr(db);
-                matches!(
-                    inner.expr(db),
-                    crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
-                )
-            }
-            _ => false,
-        }
+        matches!(
+            expr.expr(db),
+            ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_)
+        )
     };
 
     // Check if we need to coerce T → Option<T> or T → Result<T>.
@@ -964,15 +955,6 @@ fn eval_expression_in_script_scope<'db>(
         ast::ExprFunKind::Name(name) => {
             // Read variable from script scope.
             read_script_variable(ctx, name)
-        }
-        ast::ExprFunKind::Datalit(datalit_expr) => {
-            // Evaluate datalit expression (literals, tuples, etc.).
-            // If a destination is provided, use type-guided evaluation.
-            if let Some(d) = dest {
-                write_datalit_to_dest(ctx, datalit_expr, d)
-            } else {
-                eval_datalit_expression(ctx, datalit_expr)
-            }
         }
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Evaluate function call in script scope.
@@ -2100,19 +2082,10 @@ fn eval_function_call_in_script_scope<'db>(
         if needs_coercion {
             // Check if argument is @none or @error - these should be evaluated directly
             // with the parameter type, not the inner type.
-            let is_none_or_error = match arg_expr.expr(ctx.db) {
-                // Inline variants.
-                ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) => true,
-                // Legacy Datalit wrapper.
-                ast::ExprFunKind::Datalit(datalit_expr) => {
-                    let inner = datalit_expr.expr(ctx.db);
-                    matches!(
-                        inner.expr(ctx.db),
-                        crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
-                    )
-                }
-                _ => false,
-            };
+            let is_none_or_error = matches!(
+                arg_expr.expr(ctx.db),
+                ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_)
+            );
 
             if is_none_or_error {
                 // Evaluate @none/@error directly with parameter type destination.
@@ -3185,20 +3158,6 @@ fn eval_expression_frame<'db>(
             }
         }
 
-        ast::ExprFunKind::Datalit(datalit_expr) => {
-            // Use provided dest or own temp slot.
-            let result_dest = match dest {
-                Some(d) => d,
-                None => get_destination_for_expr(ctx, expr)?,
-            };
-            let result = write_datalit_to_dest(ctx, datalit_expr, result_dest)?;
-            // If using own temp slot, mark Available for cleanup.
-            if dest.is_none() {
-                mark_temp_slot_available(ctx, expr);
-            }
-            Ok(result)
-        }
-
         ast::ExprFunKind::BinOp(binop_expr) => {
             // Get temp slot destinations for subexpressions.
             let lhs_expr = binop_expr.lhs(ctx.db);
@@ -3435,19 +3394,10 @@ fn eval_return_expression_frame<'db>(
     expr: ast::ExprFun<'db>,
 ) -> Result<Value, InterpError> {
     // Check if this is a @none or @error literal that needs typed context.
-    let needs_typed_dest = match expr.expr(ctx.db) {
-        // Inline variants.
-        ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) => true,
-        // Legacy Datalit wrapper.
-        ast::ExprFunKind::Datalit(datalit_expr) => {
-            let inner = datalit_expr.expr(ctx.db);
-            matches!(
-                inner.expr(ctx.db),
-                crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
-            )
-        }
-        _ => false,
-    };
+    let needs_typed_dest = matches!(
+        expr.expr(ctx.db),
+        ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_)
+    );
 
     if needs_typed_dest {
         // Get the function's return type to provide as destination.

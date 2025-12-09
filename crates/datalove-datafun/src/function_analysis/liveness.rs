@@ -449,11 +449,11 @@ fn collect_reads<'db>(
         ExprFunKind::TryResult(try_res) => {
             collect_reads(db, try_res.operand(db), stmt_id, slots, last_use_points);
         }
-        ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
-            // Literals don't read from slots.
+        ExprFunKind::ParseError(_) => {
+            // Parse errors don't read from slots.
         }
 
-        // New inline variants - collect reads from nested expressions.
+        // Inline literal variants - collect reads from nested expressions.
         ExprFunKind::True(_) |
         ExprFunKind::False(_) |
         ExprFunKind::None(_) |

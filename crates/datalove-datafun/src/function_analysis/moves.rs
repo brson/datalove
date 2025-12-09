@@ -294,11 +294,11 @@ fn collect_moves_from_expr<'db>(
             // Try result: operand might be moved.
             collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
         }
-        ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
-            // No moves in literals or parse errors.
+        ExprFunKind::ParseError(_) => {
+            // No moves in parse errors.
         }
 
-        // New inline variants - collect moves from nested expressions.
+        // Inline literal variants - collect moves from nested expressions.
         ExprFunKind::True(_) |
         ExprFunKind::False(_) |
         ExprFunKind::None(_) |
@@ -435,11 +435,11 @@ fn collect_moves_from_expr_for_return<'db>(
         ExprFunKind::TryResult(try_op) => {
             collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
-        ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
-            // No moves in literals or parse errors.
+        ExprFunKind::ParseError(_) => {
+            // No moves in parse errors.
         }
 
-        // New inline variants - collect moves from nested expressions.
+        // Inline literal variants - collect moves from nested expressions.
         ExprFunKind::True(_) |
         ExprFunKind::False(_) |
         ExprFunKind::None(_) |
@@ -631,11 +631,11 @@ fn collect_reads_from_expr<'db>(
             // Try result: operand is read.
             collect_reads_from_expr(db, try_op.operand(db), stmt_id, slots, reads, expr_counter);
         }
-        ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
-            // No reads in literals or parse errors.
+        ExprFunKind::ParseError(_) => {
+            // No reads in parse errors.
         }
 
-        // New inline variants - collect reads from nested expressions.
+        // Inline literal variants - collect reads from nested expressions.
         ExprFunKind::True(_) |
         ExprFunKind::False(_) |
         ExprFunKind::None(_) |

@@ -122,9 +122,6 @@ pub struct ExprFun<'db> {
 #[derive(Clone, Hash)]
 #[derive(salsa::Update)]
 pub enum ExprFunKind<'db> {
-    // Wrap datalit expression (literals, tuples, structs, etc.)
-    // TODO: Remove once migration to inline variants is complete.
-    Datalit(datalit::ast::ExprFull<'db>),
     // Bare name/identifier (for variables)
     Name(InternedText<'db>),
     // Binary operation

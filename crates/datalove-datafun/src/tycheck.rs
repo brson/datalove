@@ -309,17 +309,6 @@ impl<'db> TypeContext<'db> {
         }
     }
 
-    /// F050: Datalit type error (propagated from datalit type checker).
-    fn error_datalit_error(&self, expr: ExprFun<'db>, error_msg: &str) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, error_msg)
-                .code("F050")
-                .primary_label(text, span, "type error in datalit expression")
-                .emit_type();
-        }
-        TypeError::DatalitError(error_msg.to_string())
-    }
-
     /// Look up the source location for an expression.
     /// Look up span for a datafun expression (on-demand).
     fn get_span(&self, expr: ExprFun<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
@@ -961,30 +950,6 @@ fn synthesize_expr<'db>(
     let expr_kind = expr.expr(db);
 
     match expr_kind {
-        ExprFunKind::Datalit(datalit_expr) => {
-            // Delegate to datalit type checker.
-            let resolved = datalit::resolve::resolve_names(db, ctx.source, datalit_expr);
-            let tycheck_result = datalit::tycheck::type_check(db, datalit_expr, resolved);
-
-            // Check for errors.
-            if !tycheck_result.errors(db).is_empty() {
-                let first_error = &tycheck_result.errors(db)[0];
-                let error_msg = format!("{:?}", first_error.error(db));
-                return Err(ctx.error_datalit_error(expr, &error_msg));
-            }
-
-            // Get the synthesized type.
-            match tycheck_result.root_type(db) {
-                Some(datalit_ty) => {
-                    // Convert datalit TypeAndHeap to datafun TypeAndHeap.
-                    let heap = datalit_ty.heap(db);
-                    let ty = Type::Datalit(datalit_ty.ty(db).clone());
-                    Ok(TypeAndHeap::new(db, heap, ty))
-                }
-                None => Err(ctx.error_cannot_synthesize(expr, "cannot infer type for datalit expression")),
-            }
-        }
-
         ExprFunKind::Name(name) => {
             // F001: Undefined variable.
             ctx.lookup_variable(name)
@@ -1683,49 +1648,6 @@ fn check_expr<'db>(
     let expr_kind = expr.expr(db);
 
     match expr_kind {
-        ExprFunKind::Datalit(datalit_expr) => {
-            // If expected type is a datalit type, use bidirectional typing.
-            if let Type::Datalit(expected_datalit_ty) = expected.ty(db) {
-                // Convert datafun TypeAndHeap back to datalit TypeAndHeap.
-                let expected_datalit = datalit::tycheck::TypeAndHeap::new(
-                    db,
-                    expected.heap(db),
-                    expected_datalit_ty.clone(),
-                );
-
-                // Resolve names and type check with expected type.
-                let resolved = datalit::resolve::resolve_names(db, ctx.source, datalit_expr);
-                let tycheck_result = datalit::tycheck::type_check_with_expected(
-                    db,
-                    datalit_expr,
-                    resolved,
-                    Some(expected_datalit),
-                );
-
-                // Check for errors.
-                if !tycheck_result.errors(db).is_empty() {
-                    let first_error = &tycheck_result.errors(db)[0];
-                    let error_msg = format!("{:?}", first_error.error(db));
-                    return Err(ctx.error_datalit_error(expr, &error_msg));
-                }
-
-                // Store the expression type so temp slots get the correct type.
-                ctx.store_expr_type(expr, expected);
-                Ok(())
-            } else {
-                // Expected type is not a datalit type (e.g., function type).
-                // Fall back to synthesis + comparison.
-                let synthesized = ctx.synthesize_expr(expr)?;
-                if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
-                    Ok(())
-                } else {
-                    let expected_str = type_to_string(db, expected.ty(db));
-                    let actual_str = type_to_string(db, synthesized.ty(db));
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
-                }
-            }
-        }
-
         // Handle None literals specially - they can check against any Option type.
         ExprFunKind::None(lit) => {
             match expected.ty(db) {

@@ -98,10 +98,6 @@ impl<'db> SlotAllocationBuilder<'db> {
     /// Analyze an expression and allocate temporaries.
     fn analyze_expr(&mut self, db: &'db dyn crate::Db, expr: ExprFun<'db>) {
         match expr.expr(db) {
-            ExprFunKind::Datalit(_) => {
-                // Literals need a temporary slot.
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
-            }
             ExprFunKind::Name(_) => {
                 // Variable reads need a temp slot (for copy-type clones; unused for moves).
                 self.alloc_slot(None, SlotKind::Temporary, Some(expr));
