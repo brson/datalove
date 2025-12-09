@@ -10,6 +10,10 @@ The `make_compatible_config()` currently disables most types. Here's the remedia
 - `string_type: 10` - working
 - `anon_tuple_type: 10` - working
 - `anon_struct_type: 10` - working
+- `i8_type: 5` - **DONE** (Phase 1)
+- `i16_type: 5` - **DONE** (Phase 1)
+- `i32_type: 10` - **DONE** (Phase 1)
+- `list_type: 10` - **DONE** (Phase 1)
 
 ## Disabled Types and Remediation
 
@@ -68,9 +72,13 @@ These require `: type / value` syntax which datafun doesn't support yet:
 
 ## Implementation Order
 
-### Phase 1: Quick Wins (parser already supports, just enable)
-1. Enable signed ints (i8, i16, i32) - conversion already handles negation
-2. Enable list_type - test non-empty lists only
+### Phase 1: Quick Wins (parser already supports, just enable) - **DONE**
+1. ~~Enable signed ints (i8, i16, i32)~~ - DONE
+   - Added `NumericStrategy::SmallNonNegative` to ast_gen to avoid negative value issues
+   - Generates 0..=127 for signed types, 0..=255 for unsigned
+2. ~~Enable list_type~~ - DONE
+   - Added `min_collection_size` field to `AstGenConfig` to avoid empty lists
+   - Set `min_collection_size: 1` in test config
 
 ### Phase 2: Syntax Support (add missing keywords to parser)
 3. Add `map {...}` keyword parsing to datafun
@@ -78,7 +86,7 @@ These require `: type / value` syntax which datafun doesn't support yet:
 5. Add `tensor [shape] [elements]` parsing to datafun
 
 ### Phase 3: Numeric Edge Cases
-6. Add SmallValues numeric strategy to ast_gen
+6. ~~Add SmallValues numeric strategy to ast_gen~~ - DONE (merged into Phase 1)
 7. Enable u64, i64, int with small values
 
 ### Phase 4: Float Handling

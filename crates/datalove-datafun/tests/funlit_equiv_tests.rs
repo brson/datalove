@@ -172,19 +172,21 @@ fn make_compatible_config() -> AstGenConfig {
         // Don't include type hints - datafun doesn't parse `: type / value` syntax.
         include_type_hints: false,
         max_depth: 2,
+        // Minimum 1 to avoid empty lists (type inference differs for []).
+        min_collection_size: 1,
         max_collection_size: 3,
-        // Use corner cases to get predictable values, avoid large random ints.
-        numeric_strategy: NumericStrategy::CornerCases,
+        // Small non-negative values work without type hints (no negative literal issues).
+        numeric_strategy: NumericStrategy::SmallNonNegative,
         // Disable types that require special syntax or type hints.
         type_weights: TypeWeights {
             bool_type: 10,
             u8_type: 5,
-            // Disable signed ints - negative literal handling differs.
-            i8_type: 0,
+            // Signed ints work - datafun_expr_to_datalit_serde handles UnaryOp(Neg, Int).
+            i8_type: 5,
             u16_type: 5,
-            i16_type: 0,
+            i16_type: 5,
             u32_type: 10,
-            i32_type: 0,
+            i32_type: 10,
             // Disable 64-bit ints - large values cause error differences.
             u64_type: 0,
             i64_type: 0,
@@ -193,10 +195,8 @@ fn make_compatible_config() -> AstGenConfig {
             // Disable bigint - large values cause error differences.
             int_type: 0,
             string_type: 10,
-            // Disable lists - empty list type inference differs:
-            // datalit: CannotSynthesize for []
-            // datafun: infers List<()>
-            list_type: 0,
+            // Lists work with min_collection_size: 1 to avoid empty list type inference issues.
+            list_type: 10,
             // Disable problematic types.
             map_type: 0,     // Uses special syntax
             set_type: 0,     // Uses special syntax

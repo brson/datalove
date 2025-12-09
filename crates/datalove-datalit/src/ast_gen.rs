@@ -10,6 +10,9 @@ pub struct AstGenConfig {
     /// Maximum nesting depth for recursive types.
     pub max_depth: usize,
 
+    /// Minimum number of elements in collections.
+    pub min_collection_size: usize,
+
     /// Maximum number of elements in collections.
     pub max_collection_size: usize,
 
@@ -33,6 +36,7 @@ impl Default for AstGenConfig {
     fn default() -> Self {
         AstGenConfig {
             max_depth: 3,
+            min_collection_size: 0,
             max_collection_size: 5,
             include_type_hints: true,
             heap_distribution: HeapDistribution::default(),
@@ -175,6 +179,9 @@ pub enum NumericStrategy {
 
     /// Mix of corner cases and random values (80% random, 20% corner).
     Mixed,
+
+    /// Generate small non-negative values (0..=255) suitable for typechecking without hints.
+    SmallNonNegative,
 }
 
 /// Tensor generation configuration.
@@ -342,7 +349,7 @@ pub fn gen_type_hint<'db, R: Rng>(
             TypeHint::Tensor(TypeHintTensor::new(db, element_type, rank))
         }
         18 => {
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
                 .map(|_| gen_type_hint_and_heap(db, rng, config, depth + 1))
                 .collect();
@@ -350,14 +357,14 @@ pub fn gen_type_hint<'db, R: Rng>(
         }
         19 => {
             let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
                 .map(|_| gen_type_hint_and_heap(db, rng, config, depth + 1))
                 .collect();
             TypeHint::NamedTuple(TypeHintNamedTuple::new(db, name, fields))
         }
         20 => {
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
@@ -376,7 +383,7 @@ pub fn gen_type_hint<'db, R: Rng>(
         }
         21 => {
             let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
@@ -565,7 +572,7 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
             TypeHint::Tensor(TypeHintTensor::new(db, element_type, rank))
         }
         18 => {
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
                 .map(|_| TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
                 .collect();
@@ -573,14 +580,14 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
         }
         19 => {
             let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
                 .map(|_| TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
                 .collect();
             TypeHint::NamedTuple(TypeHintNamedTuple::new(db, name, fields))
         }
         20 => {
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
@@ -599,7 +606,7 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
         }
         21 => {
             let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
@@ -797,7 +804,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let element_type_and_heap = th.element_type(db);
             let element_type = element_type_and_heap.type_hint(db);
             let element_heap = element_type_and_heap.heap(db);
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
@@ -810,7 +817,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let value_type_and_heap = th.value_type(db);
             let value_type = value_type_and_heap.type_hint(db);
             let value_heap = value_type_and_heap.heap(db);
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let entries: Vec<_> = (0..count)
                 .map(|_| {
                     let key = gen_expr_full_with_heap(db, rng, key_type.clone(), key_heap, config, depth + 1);
@@ -824,7 +831,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let element_type_and_heap = th.element_type(db);
             let element_type = element_type_and_heap.type_hint(db);
             let element_heap = element_type_and_heap.heap(db);
-            let count = rng.gen_range(0..=config.max_collection_size);
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
@@ -926,7 +933,7 @@ fn gen_uint_expr<'db, R: Rng, T>(
     max: T,
 ) -> Expr<'db>
 where
-    T: std::fmt::Display + num_traits::Bounded + num_traits::One + std::ops::Sub<Output = T> + Copy + rand::distributions::uniform::SampleUniform + PartialOrd,
+    T: std::fmt::Display + num_traits::Bounded + num_traits::One + std::ops::Sub<Output = T> + Copy + rand::distributions::uniform::SampleUniform + PartialOrd + TryFrom<u8>,
 {
     let value_str = match &config.numeric_strategy {
         NumericStrategy::CornerCases => {
@@ -954,6 +961,12 @@ where
                 rng.gen_range(min..=max).to_string()
             }
         }
+        NumericStrategy::SmallNonNegative => {
+            // Clamp to 0..=255 range.
+            let small_max = T::try_from(255u8).unwrap_or(max);
+            let effective_max = if small_max < max { small_max } else { max };
+            rng.gen_range(min..=effective_max).to_string()
+        }
     };
 
     Expr::Int(ExprInt::new(db, InternedText::new(db, &value_str)))
@@ -968,7 +981,7 @@ fn gen_int_expr<'db, R: Rng, T>(
     max: T,
 ) -> Expr<'db>
 where
-    T: std::fmt::Display + num_traits::Bounded + num_traits::Zero + num_traits::One + std::ops::Sub<Output = T> + std::ops::Add<Output = T> + Copy + rand::distributions::uniform::SampleUniform + PartialOrd,
+    T: std::fmt::Display + num_traits::Bounded + num_traits::Zero + num_traits::One + std::ops::Sub<Output = T> + std::ops::Add<Output = T> + Copy + rand::distributions::uniform::SampleUniform + PartialOrd + TryFrom<u8>,
 {
     let value_str = match &config.numeric_strategy {
         NumericStrategy::CornerCases => {
@@ -997,6 +1010,12 @@ where
             } else {
                 rng.gen_range(min..=max).to_string()
             }
+        }
+        NumericStrategy::SmallNonNegative => {
+            // Generate 0..=127 to fit in all signed types without negation.
+            let small_max = T::try_from(127u8).unwrap_or(max);
+            let effective_max = if small_max < max { small_max } else { max };
+            rng.gen_range(T::zero()..=effective_max).to_string()
         }
     };
 
@@ -1090,6 +1109,12 @@ fn gen_f32_expr<'db, R: Rng>(
                     }
                 }
             }
+        }
+        NumericStrategy::SmallNonNegative => {
+            // Small positive floats 0.0..255.0.
+            let val = rng.gen_range(0.0f32..=255.0);
+            let value_str = format!("{:.1}", val);
+            Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)))
         }
     }
 }
