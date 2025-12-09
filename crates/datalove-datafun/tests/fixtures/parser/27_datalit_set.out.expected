@@ -6,52 +6,35 @@
       "type_hint": null,
       "value": {
         "expr": {
-          "kind": "Datalit",
-          "value": {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
+          "kind": "Set",
+          "heap": "Local",
+          "type_hint": null,
+          "elements": [
+            {
               "expr": {
-                "Set": {
-                  "elements": [
-                    {
-                      "type_hint": null,
-                      "expr": {
-                        "heap": "Local",
-                        "expr": {
-                          "Int": {
-                            "value": "1"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "type_hint": null,
-                      "expr": {
-                        "heap": "Local",
-                        "expr": {
-                          "Int": {
-                            "value": "2"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "type_hint": null,
-                      "expr": {
-                        "heap": "Local",
-                        "expr": {
-                          "Int": {
-                            "value": "3"
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
+                "kind": "Int",
+                "heap": "Local",
+                "type_hint": null,
+                "value": "1"
+              }
+            },
+            {
+              "expr": {
+                "kind": "Int",
+                "heap": "Local",
+                "type_hint": null,
+                "value": "2"
+              }
+            },
+            {
+              "expr": {
+                "kind": "Int",
+                "heap": "Local",
+                "type_hint": null,
+                "value": "3"
               }
             }
-          }
+          ]
         }
       }
     }

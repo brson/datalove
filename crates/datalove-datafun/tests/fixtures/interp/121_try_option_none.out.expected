@@ -63,17 +63,11 @@
                                         ),
                                     ),
                                     rhs: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Datalit",
-                                            value: ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Omitted,
-                                                    expr: Int(ExprInt(
-                                                        value: "10",
-                                                    )),
-                                                ),
-                                            ),
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Omitted,
+                                            type_hint: None,
+                                            value: "10",
                                         ),
                                     ),
                                 ),
@@ -91,15 +85,10 @@
                             name: "unwrap_option",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: None,
-                                            ),
-                                        ),
+                                    expr: ExprLit(
+                                        kind: "None",
+                                        heap: Local,
+                                        type_hint: None,
                                     ),
                                 ),
                             ],

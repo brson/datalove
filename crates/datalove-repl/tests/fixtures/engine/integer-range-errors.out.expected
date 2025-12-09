@@ -7,9 +7,19 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "SuccessLet": {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let u8_negative: @u8 = @-1",
@@ -19,9 +29,15 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let i8_overflow: @i8 = @128",
@@ -31,9 +47,24 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "SuccessLet": {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let i8_underflow: @i8 = @-129",
@@ -43,9 +74,20 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let u16_overflow: @u16 = @65536",
@@ -55,9 +97,29 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "SuccessLet": {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let u16_negative: @u16 = @-1",
@@ -67,9 +129,25 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let i16_overflow: @i16 = @32768",
@@ -79,9 +157,34 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "SuccessLet": {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let i16_underflow: @i16 = @-32769",
@@ -91,9 +194,30 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let u32_overflow: @u32 = @4294967296",
@@ -103,9 +227,30 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: number too large to fit in target type\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let u32_negative: @u32 = @-1",
@@ -115,9 +260,30 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let i32_overflow: @i32 = @2147483648",
@@ -127,9 +293,39 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "SuccessLet": {
+        "name": "i32_overflow",
+        "ty": "i32",
+        "value": "@2147483648"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let i32_underflow: @i32 = @-2147483649",
@@ -139,9 +335,35 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let u64_overflow: @u64 = @18446744073709551616",
@@ -151,9 +373,35 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: number too large to fit in target type\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let u64_negative: @u64 = @-1",
@@ -163,9 +411,35 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let i64_overflow: @i64 = @9223372036854775808",
@@ -175,9 +449,35 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: number too large to fit in target type\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   },
   {
     "input": "let i64_underflow: @i64 = @-9223372036854775809",
@@ -187,8 +487,34 @@
       }
     },
     "eval": {
-      "Error": "type error(s): DatalitError(\"IntOutOfRange\")"
+      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "i16_overflow",
+        "ty": "i16",
+        "value": "@32768"
+      },
+      {
+        "name": "i32_overflow",
+        "ty": "i32",
+        "value": "@2147483648"
+      },
+      {
+        "name": "i8_overflow",
+        "ty": "i8",
+        "value": "@128"
+      },
+      {
+        "name": "u16_overflow",
+        "ty": "u16",
+        "value": "@65536"
+      },
+      {
+        "name": "u8_overflow",
+        "ty": "u8",
+        "value": "@256"
+      }
+    ]
   }
 ]

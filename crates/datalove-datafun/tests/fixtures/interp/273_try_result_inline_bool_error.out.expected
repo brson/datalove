@@ -20,21 +20,15 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
+                                expr: ExprErr(
+                                    kind: "Err",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: ExprFun(
+                                        expr: ExprLit(
+                                            kind: "True",
                                             heap: Local,
-                                            expr: Err(ExprErr(
-                                                value: ExprFull(
-                                                    type_hint: None,
-                                                    expr: ExprAndHeap(
-                                                        heap: Local,
-                                                        expr: True,
-                                                    ),
-                                                ),
-                                            )),
+                                            type_hint: None,
                                         ),
                                     ),
                                 ),
@@ -99,8 +93,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "TypecheckErrors(1)",
+            ],
         ),
-        output: "@error @true",
+        output: "",
     ),
 ]

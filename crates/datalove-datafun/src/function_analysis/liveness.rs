@@ -452,6 +452,75 @@ fn collect_reads<'db>(
         ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
             // Literals don't read from slots.
         }
+
+        // New inline variants - collect reads from nested expressions.
+        ExprFunKind::True(_) |
+        ExprFunKind::False(_) |
+        ExprFunKind::None(_) |
+        ExprFunKind::Int(_) |
+        ExprFunKind::Float(_) |
+        ExprFunKind::Hex(_) |
+        ExprFunKind::String(_) => {
+            // Simple literals don't read from slots.
+        }
+
+        ExprFunKind::List(list) => {
+            for elem in list.elements(db) {
+                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::Set(set) => {
+            for elem in set.elements(db) {
+                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::Map(map) => {
+            for entry in map.entries(db) {
+                collect_reads(db, entry.key(db), stmt_id, slots, last_use_points);
+                collect_reads(db, entry.value(db), stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::Tensor(tensor) => {
+            for elem in tensor.elements(db) {
+                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::AnonTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::NamedTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::AnonStruct(s) => {
+            for field in s.fields(db) {
+                collect_reads(db, field.value(db), stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::NamedStruct(s) => {
+            for field in s.fields(db) {
+                collect_reads(db, field.value(db), stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::AnonEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_reads(db, payload, stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::NamedEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_reads(db, payload, stmt_id, slots, last_use_points);
+            }
+        }
+        ExprFunKind::Data(d) => {
+            collect_reads(db, d.value(db), stmt_id, slots, last_use_points);
+        }
+        ExprFunKind::Err(e) => {
+            collect_reads(db, e.value(db), stmt_id, slots, last_use_points);
+        }
     }
 }
 

@@ -8,58 +8,48 @@
                     name: "output",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprFunKind(
-                            kind: "Datalit",
-                            value: ExprFull(
-                                type_hint: None,
-                                expr: ExprAndHeap(
-                                    heap: Local,
-                                    expr: Map(ExprMap(
-                                        entries: [
-                                            ExprMapEntry(
-                                                key: ExprFull(
-                                                    type_hint: None,
-                                                    expr: ExprAndHeap(
-                                                        heap: Local,
-                                                        expr: String(ExprString(
-                                                            value: "\"a\"",
-                                                        )),
-                                                    ),
-                                                ),
-                                                value: ExprFull(
-                                                    type_hint: None,
-                                                    expr: ExprAndHeap(
-                                                        heap: Local,
-                                                        expr: Int(ExprInt(
-                                                            value: "1",
-                                                        )),
-                                                    ),
-                                                ),
-                                            ),
-                                            ExprMapEntry(
-                                                key: ExprFull(
-                                                    type_hint: None,
-                                                    expr: ExprAndHeap(
-                                                        heap: Local,
-                                                        expr: String(ExprString(
-                                                            value: "\"b\"",
-                                                        )),
-                                                    ),
-                                                ),
-                                                value: ExprFull(
-                                                    type_hint: None,
-                                                    expr: ExprAndHeap(
-                                                        heap: Local,
-                                                        expr: Int(ExprInt(
-                                                            value: "2",
-                                                        )),
-                                                    ),
-                                                ),
-                                            ),
-                                        ],
-                                    )),
+                        expr: ExprMap(
+                            kind: "Map",
+                            heap: Local,
+                            type_hint: None,
+                            entries: [
+                                ExprMapEntry(
+                                    key: ExprFun(
+                                        expr: ExprString(
+                                            kind: "String",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "\"a\"",
+                                        ),
+                                    ),
+                                    value: ExprFun(
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "1",
+                                        ),
+                                    ),
                                 ),
-                            ),
+                                ExprMapEntry(
+                                    key: ExprFun(
+                                        expr: ExprString(
+                                            kind: "String",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "\"b\"",
+                                        ),
+                                    ),
+                                    value: ExprFun(
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "2",
+                                        ),
+                                    ),
+                                ),
+                            ],
                         ),
                     ),
                 ),

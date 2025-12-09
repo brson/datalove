@@ -49,17 +49,11 @@
                                 StmtRet(
                                     kind: "Ret",
                                     value: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Datalit",
-                                            value: ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "0",
-                                                    )),
-                                                ),
-                                            ),
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "0",
                                         ),
                                     ),
                                 ),
@@ -77,17 +71,11 @@
                             name: "test",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "255",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "255",
                                     ),
                                 ),
                             ],

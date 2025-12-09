@@ -1,5 +1,11 @@
 {
-  "errors": [],
+  "errors": [
+    {
+      "actual": "error",
+      "expected": "@!string",
+      "kind": "TypeMismatch"
+    }
+  ],
   "judgements": [
     {
       "kind": "function",

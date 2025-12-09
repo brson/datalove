@@ -80,43 +80,26 @@
                             name: "pick_one",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Omitted,
-                                                expr: True,
-                                            ),
-                                        ),
+                                    expr: ExprLit(
+                                        kind: "True",
+                                        heap: Omitted,
+                                        type_hint: None,
                                     ),
                                 ),
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "10",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "10",
                                     ),
                                 ),
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "20",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "20",
                                     ),
                                 ),
                             ],

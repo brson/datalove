@@ -297,6 +297,74 @@ fn collect_moves_from_expr<'db>(
         ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
             // No moves in literals or parse errors.
         }
+
+        // New inline variants - collect moves from nested expressions.
+        ExprFunKind::True(_) |
+        ExprFunKind::False(_) |
+        ExprFunKind::None(_) |
+        ExprFunKind::Int(_) |
+        ExprFunKind::Float(_) |
+        ExprFunKind::Hex(_) |
+        ExprFunKind::String(_) => {
+            // Simple literals have no moves.
+        }
+        ExprFunKind::List(list) => {
+            for elem in list.elements(db) {
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Set(set) => {
+            for elem in set.elements(db) {
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Map(map) => {
+            for entry in map.entries(db) {
+                collect_moves_from_expr(db, entry.key(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, entry.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Tensor(tensor) => {
+            for elem in tensor.elements(db) {
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::AnonTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::NamedTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::AnonStruct(s) => {
+            for field in s.fields(db) {
+                collect_moves_from_expr(db, field.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::NamedStruct(s) => {
+            for field in s.fields(db) {
+                collect_moves_from_expr(db, field.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::AnonEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_moves_from_expr(db, payload, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::NamedEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_moves_from_expr(db, payload, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Data(d) => {
+            collect_moves_from_expr(db, d.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Err(e) => {
+            collect_moves_from_expr(db, e.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
     }
 }
 
@@ -369,6 +437,74 @@ fn collect_moves_from_expr_for_return<'db>(
         }
         ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
             // No moves in literals or parse errors.
+        }
+
+        // New inline variants - collect moves from nested expressions.
+        ExprFunKind::True(_) |
+        ExprFunKind::False(_) |
+        ExprFunKind::None(_) |
+        ExprFunKind::Int(_) |
+        ExprFunKind::Float(_) |
+        ExprFunKind::Hex(_) |
+        ExprFunKind::String(_) => {
+            // Simple literals have no moves.
+        }
+        ExprFunKind::List(list) => {
+            for elem in list.elements(db) {
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Set(set) => {
+            for elem in set.elements(db) {
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Map(map) => {
+            for entry in map.entries(db) {
+                collect_moves_from_expr_for_return(db, entry.key(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, entry.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Tensor(tensor) => {
+            for elem in tensor.elements(db) {
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::AnonTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::NamedTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::AnonStruct(s) => {
+            for field in s.fields(db) {
+                collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::NamedStruct(s) => {
+            for field in s.fields(db) {
+                collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::AnonEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_moves_from_expr_for_return(db, payload, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::NamedEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_moves_from_expr_for_return(db, payload, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Data(d) => {
+            collect_moves_from_expr_for_return(db, d.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Err(e) => {
+            collect_moves_from_expr_for_return(db, e.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
     }
 }
@@ -497,6 +633,74 @@ fn collect_reads_from_expr<'db>(
         }
         ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
             // No reads in literals or parse errors.
+        }
+
+        // New inline variants - collect reads from nested expressions.
+        ExprFunKind::True(_) |
+        ExprFunKind::False(_) |
+        ExprFunKind::None(_) |
+        ExprFunKind::Int(_) |
+        ExprFunKind::Float(_) |
+        ExprFunKind::Hex(_) |
+        ExprFunKind::String(_) => {
+            // Simple literals have no reads.
+        }
+        ExprFunKind::List(list) => {
+            for elem in list.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::Set(set) => {
+            for elem in set.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::Map(map) => {
+            for entry in map.entries(db) {
+                collect_reads_from_expr(db, entry.key(db), stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, entry.value(db), stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::Tensor(tensor) => {
+            for elem in tensor.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::AnonTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::NamedTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::AnonStruct(s) => {
+            for field in s.fields(db) {
+                collect_reads_from_expr(db, field.value(db), stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::NamedStruct(s) => {
+            for field in s.fields(db) {
+                collect_reads_from_expr(db, field.value(db), stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::AnonEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_reads_from_expr(db, payload, stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::NamedEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_reads_from_expr(db, payload, stmt_id, slots, reads, expr_counter);
+            }
+        }
+        ExprFunKind::Data(d) => {
+            collect_reads_from_expr(db, d.value(db), stmt_id, slots, reads, expr_counter);
+        }
+        ExprFunKind::Err(e) => {
+            collect_reads_from_expr(db, e.value(db), stmt_id, slots, reads, expr_counter);
         }
     }
 }

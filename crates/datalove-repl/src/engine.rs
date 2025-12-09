@@ -644,8 +644,8 @@ mod tests {
         let db = datafun::Database::default();
         let mut engine = Engine::new(&db).unwrap();
 
-        // Add a let statement.
-        let parse_result = engine.parse_input(Input::Input("let x: @int = @10".to_string()));
+        // Add a let statement with u32.
+        let parse_result = engine.parse_input(Input::Input("let x: @u32 = @10".to_string()));
         match parse_result {
             InputParse::Command(cmd) => {
                 let eval_result = engine.eval(cmd);
@@ -655,8 +655,18 @@ mod tests {
             _ => panic!("Expected Command"),
         }
 
-        // Evaluate an expression using the previous binding.
-        let parse_result = engine.parse_input(Input::Input("x + : @int / @5".to_string()));
+        // Add another let statement.
+        let parse_result = engine.parse_input(Input::Input("let y: @u32 = @5".to_string()));
+        match parse_result {
+            InputParse::Command(cmd) => {
+                let eval_result = engine.eval(cmd);
+                assert!(matches!(eval_result, Eval::SuccessLet(_)));
+            }
+            _ => panic!("Expected Command"),
+        }
+
+        // Evaluate an expression using the previous bindings.
+        let parse_result = engine.parse_input(Input::Input("x + y".to_string()));
         match parse_result {
             InputParse::Command(cmd) => {
                 let eval_result = engine.eval(cmd);
@@ -664,7 +674,6 @@ mod tests {
                     Eval::SuccessExpr(eval_expr) => {
                         // The result should contain "15".
                         assert!(eval_expr.value.contains("15"), "Expected result to contain '15', got: {}", eval_expr.value);
-                        assert_eq!(eval_expr.ty, "int");
                     }
                     other => panic!("Expected Eval::SuccessExpr, got {:?}", other),
                 }

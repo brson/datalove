@@ -12,31 +12,19 @@
                             kind: "BinOp",
                             op: Add,
                             lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "1000000000",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "1000000000",
                                 ),
                             ),
                             rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "2000000000",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "2000000000",
                                 ),
                             ),
                         ),
@@ -51,31 +39,19 @@
                             kind: "BinOp",
                             op: Add,
                             lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "3000000000",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "3000000000",
                                 ),
                             ),
                             rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "2000000000",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "2000000000",
                                 ),
                             ),
                         ),

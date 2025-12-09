@@ -15,20 +15,9 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: Some(TypeHintAndHeap(
-                                            heap: Omitted,
-                                            type_hint: Int,
-                                        )),
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "5",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprFunParseError(
+                                    kind: "ParseError",
+                                    message: "unexpected token in expression",
                                 ),
                             ),
                         ),
@@ -60,20 +49,9 @@
                             name: "y",
                             type_hint: None,
                             value: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: Some(TypeHintAndHeap(
-                                            heap: Omitted,
-                                            type_hint: Int,
-                                        )),
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "2",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprFunParseError(
+                                    kind: "ParseError",
+                                    message: "unexpected token in expression",
                                 ),
                             ),
                         ),
@@ -117,7 +95,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"Cannot write integer literal to destination type Int\")",
+                "TypecheckErrors(3)",
             ],
         ),
         output: "",

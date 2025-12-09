@@ -35,17 +35,11 @@
                                         ),
                                     ),
                                     rhs: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Datalit",
-                                            value: ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "3",
-                                                    )),
-                                                ),
-                                            ),
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "3",
                                         ),
                                     ),
                                 ),
@@ -69,17 +63,11 @@
                     name: "factor",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprFunKind(
-                            kind: "Datalit",
-                            value: ExprFull(
-                                type_hint: None,
-                                expr: ExprAndHeap(
-                                    heap: Local,
-                                    expr: Int(ExprInt(
-                                        value: "2",
-                                    )),
-                                ),
-                            ),
+                        expr: ExprInt(
+                            kind: "Int",
+                            heap: Local,
+                            type_hint: None,
+                            value: "2",
                         ),
                     ),
                 ),
@@ -113,17 +101,11 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "42",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "42",
                                 ),
                             ),
                         ),

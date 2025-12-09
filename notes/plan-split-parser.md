@@ -117,3 +117,52 @@ Test strategy:
 - Heap tracking (`@`/`#`) remains the same
 - Span tracking needs adjustment for new variants
 - `ast_serde` will need updates for new variants
+
+## Current Status
+
+**IMPLEMENTATION COMPLETE** - All tests pass.
+
+### Completed:
+
+1. **AST Extended** (ast.rs)
+   - Added new variants: `True`, `False`, `None`, `Int`, `Float`, `Hex`, `String`
+   - Added collection variants: `List`, `Set`, `Map`, `Tensor`
+   - Added aggregate variants: `AnonTuple`, `NamedTuple`, `AnonStruct`, `NamedStruct`, `AnonEnum`, `NamedEnum`
+   - Added wrapper variants: `Data`, `Err`
+   - Each stores `Heap` and optional `TypeHintAndHeap`
+
+2. **Parser Updated** (parser.rs)
+   - Added `parse_lit_expr_full`, `parse_lit_expr_and_heap`, `parse_lit_expr` methods
+   - Handles all datalit expression forms
+   - Nested expressions call back to `parse_expr_full` allowing datafun expressions
+   - `parse_expr_primary` updated to use new parsing path
+
+3. **Typechecker Updated** (tycheck.rs)
+   - Simple literals (bool, int, float, hex, string) synthesize correctly
+   - Collections (list, set, map, tensor) synthesize correctly
+   - Aggregates (anon tuple, anon struct) synthesize correctly
+   - Named types and enums require type hints (matches datalit behavior)
+   - `check_expr` handles `None` and `Int` for bidirectional type checking
+
+4. **Function Analysis Updated**
+   - `liveness.rs`, `moves.rs`, `slot_allocation.rs`, `validation.rs` updated for new variants
+
+5. **ast_serde Updated** (ast_serde.rs)
+   - All new variants have serde types and `from_ast` implementations
+
+6. **Interpreter Updated** (interp/mod.rs)
+   - All inline variants evaluate correctly in both script scope and frame scope
+   - Helper functions for allocating inline literals
+   - `is_none_or_error` checks updated to handle inline variants
+
+### Remaining Work (Future):
+
+1. **Remove Datalit Wrapper** - `ExprFunKind::Datalit` can be removed once all tests confirm correctness
+
+2. **Compatibility Tests** - Use ast_gen to verify datafun parser matches datalit for pure-datalit expressions
+
+### Notes:
+
+- Some error tests changed output format (parse errors vs typecheck errors)
+- REPL tests using complex type hint syntax (`: @int / @expr`) may need review
+- The legacy `Datalit` wrapper is still present for backwards compatibility

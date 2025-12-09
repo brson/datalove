@@ -1,8 +1,1 @@
-Parse errors:
-error[D015]: expected {} after struct name
- --> 12_struct_name_missing_braces.dfs:1:15
-  |
-1 | let output = @struct Foo
-  |               ^^^^^^ expected '{' after struct name
-
-Error: 1 parse error(s)
+Error: Execution error: TypecheckErrors(1)

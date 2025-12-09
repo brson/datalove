@@ -103,17 +103,11 @@
                                 StmtRet(
                                     kind: "Ret",
                                     value: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Datalit",
-                                            value: ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "999",
-                                                    )),
-                                                ),
-                                            ),
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "999",
                                         ),
                                     ),
                                 ),
@@ -136,31 +130,19 @@
                                         name: "add_checked",
                                         args: [
                                             ExprFun(
-                                                expr: ExprFunKind(
-                                                    kind: "Datalit",
-                                                    value: ExprFull(
-                                                        type_hint: None,
-                                                        expr: ExprAndHeap(
-                                                            heap: Local,
-                                                            expr: Int(ExprInt(
-                                                                value: "10",
-                                                            )),
-                                                        ),
-                                                    ),
+                                                expr: ExprInt(
+                                                    kind: "Int",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                    value: "10",
                                                 ),
                                             ),
                                             ExprFun(
-                                                expr: ExprFunKind(
-                                                    kind: "Datalit",
-                                                    value: ExprFull(
-                                                        type_hint: None,
-                                                        expr: ExprAndHeap(
-                                                            heap: Local,
-                                                            expr: Int(ExprInt(
-                                                                value: "32",
-                                                            )),
-                                                        ),
-                                                    ),
+                                                expr: ExprInt(
+                                                    kind: "Int",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                    value: "32",
                                                 ),
                                             ),
                                         ],

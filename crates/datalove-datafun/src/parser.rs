@@ -839,9 +839,9 @@ impl<'db> Parser<'db> {
             }
         }
 
-        // Check if it starts with a heap sigil (@ or #) - if so, it's definitely a datalit expression.
+        // Check if it starts with a heap sigil (@ or #) - use new inline variants.
         if self.peek_sigil(tokens, Sigil::At) || self.peek_sigil(tokens, Sigil::Hash) {
-            return self.parse_datalit_expr(tokens);
+            return self.parse_lit_expr_full(tokens);
         }
 
         // Peek the next token to determine how to parse this expression.
@@ -851,14 +851,17 @@ impl<'db> Parser<'db> {
                 match token.kind(self.db) {
                     TokenKind::Word => {
                         if let Some(word) = token.word_str(self.db) {
-                            // Check against datalit keywords.
+                            // Check against datalit keywords - use new inline variants.
                             match word {
                                 "true" | "false" | "tuple" | "struct" | "enum" |
-                                "option" | "result" | "error" | "map" | "set" | "none" | "data" => {
-                                    self.parse_datalit_expr(tokens)
+                                "option" | "result" | "error" | "map" | "set" | "none" | "data" |
+                                "tensor" => {
+                                    let expr_kind = self.parse_lit_expr(tokens, datalit::ast::Heap::Omitted, None);
+                                    ast::ExprFun::new(self.db, expr_kind)
                                 }
                                 num if num.chars().all(|c| char::is_ascii_digit(&c)) => {
-                                    self.parse_datalit_expr(tokens)
+                                    let expr_kind = self.parse_lit_expr(tokens, datalit::ast::Heap::Omitted, None);
+                                    ast::ExprFun::new(self.db, expr_kind)
                                 }
                                 _ => {
                                     // It's a datafun name or function call.
@@ -868,7 +871,7 @@ impl<'db> Parser<'db> {
                                     let name = InternedText::new(self.db, word.S());
 
                                     // Check if followed by parentheses (function call).
-                                    if let Some(TreeToken::Branch(Sigil::ParenOpen, args_iter)) = tokens.peek() {
+                                    if let Some(TreeToken::Branch(Sigil::ParenOpen, _)) = tokens.peek() {
                                         // It's a function call.
                                         let args_iter = match tokens.next() {
                                             Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
@@ -905,19 +908,41 @@ impl<'db> Parser<'db> {
                             )
                         }
                     }
+                    TokenKind::String => {
+                        // String literal - use new inline variant.
+                        let text_str = token.text(self.db).as_str(self.db).S();
+                        tokens.next();
+                        let value = InternedText::new(self.db, text_str);
+                        ast::ExprFun::new(
+                            self.db,
+                            ast::ExprFunKind::String(ast::ExprString::new(
+                                self.db,
+                                datalit::ast::Heap::Omitted,
+                                None,
+                                value
+                            ))
+                        )
+                    }
                     _ => {
-                        // Not a word, parse as datalit (might be a number literal, string, etc.).
-                        self.parse_datalit_expr(tokens)
+                        let (text, span) = self.peek_text_span(tokens);
+                        self.emit_expr_error(
+                            text,
+                            span,
+                            "unexpected token in expression",
+                            "P010",
+                            "unexpected token"
+                        )
                     }
                 }
             }
             Some(TreeToken::Branch(sigil, _)) => {
                 // Check if it's a tuple (ParenOpen) - parse as datafun tuple.
-                // Other branches like {}, [] are datalit expressions.
+                // Other branches like {}, [] are literal expressions.
                 if matches!(sigil, Sigil::ParenOpen) {
                     self.parse_datafun_tuple(tokens)
                 } else {
-                    self.parse_datalit_expr(tokens)
+                    let expr_kind = self.parse_lit_expr(tokens, datalit::ast::Heap::Omitted, None);
+                    ast::ExprFun::new(self.db, expr_kind)
                 }
             }
             None => {
@@ -1031,6 +1056,627 @@ impl<'db> Parser<'db> {
             self.db,
             ast::ExprFunKind::Datalit(datalit_expr)
         )
+    }
+
+    // Parse a literal expression into new inline variants.
+    // This handles the `: type / expr` pattern.
+    fn parse_lit_expr_full(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> ast::ExprFun<'db> {
+        // Check for `: type / expr` pattern.
+        if self.peek_sigil(tokens, Sigil::Colon) {
+            self.eat_sigil(tokens, Sigil::Colon);
+            let type_hint = self.parse_type_hint_and_heap(tokens);
+            self.need_sigil(tokens, Sigil::SlashForward);
+            let (heap, expr_kind) = self.parse_lit_expr_and_heap(tokens, Some(type_hint));
+            // The type_hint is already captured in the expr_kind, just return.
+            return ast::ExprFun::new(self.db, expr_kind);
+        }
+
+        let (heap, expr_kind) = self.parse_lit_expr_and_heap(tokens, None);
+        ast::ExprFun::new(self.db, expr_kind)
+    }
+
+    // Parse heap sigil and expression.
+    fn parse_lit_expr_and_heap(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> (datalit::ast::Heap, ast::ExprFunKind<'db>) {
+        // Heap sigils: @ for local, # for global.
+        let heap = if self.peek_sigil(tokens, Sigil::At) {
+            self.eat_sigil(tokens, Sigil::At);
+            datalit::ast::Heap::Local
+        } else if self.peek_sigil(tokens, Sigil::Hash) {
+            self.eat_sigil(tokens, Sigil::Hash);
+            datalit::ast::Heap::Global
+        } else {
+            datalit::ast::Heap::Omitted
+        };
+
+        let expr_kind = self.parse_lit_expr(tokens, heap, type_hint);
+        (heap, expr_kind)
+    }
+
+    // Parse a literal expression (keywords and literals).
+    fn parse_lit_expr(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        // Check for negative number.
+        if self.peek_sigil(tokens, Sigil::Minus) {
+            self.eat_sigil(tokens, Sigil::Minus);
+            if let Some(TreeToken::Token(token)) = tokens.peek() {
+                if let Some(word) = token.word_str(self.db) {
+                    if Self::is_numeric_literal(word) {
+                        tokens.next();
+                        let is_hex = word.starts_with("0x") || word.starts_with("0X");
+                        // Check for float.
+                        let is_float = !is_hex && self.peek_sigil(tokens, Sigil::Dot) && {
+                            if let Some(TreeToken::Token(next)) = tokens.peek() {
+                                if let Some(decimal) = next.word_str(self.db) {
+                                    decimal.chars().all(|c| c.is_ascii_digit())
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        };
+                        if is_float {
+                            self.eat_sigil(tokens, Sigil::Dot);
+                            let decimal = self.need_name(tokens);
+                            let float_str = format!("-{}.{}", word, decimal.as_str(self.db));
+                            let value = InternedText::new(self.db, float_str.S());
+                            return ast::ExprFunKind::Float(ast::ExprFloat::new(self.db, heap, type_hint, value));
+                        } else if is_hex {
+                            let hex_str = format!("-{}", word);
+                            let value = InternedText::new(self.db, hex_str.S());
+                            return ast::ExprFunKind::Hex(ast::ExprHex::new(self.db, heap, type_hint, value));
+                        } else {
+                            let int_str = format!("-{}", word);
+                            let value = InternedText::new(self.db, int_str.S());
+                            return ast::ExprFunKind::Int(ast::ExprInt::new(self.db, heap, type_hint, value));
+                        }
+                    }
+                }
+            }
+            // Not a negative number - error.
+            let (text, span) = self.peek_text_span(tokens);
+            return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                self.db,
+                text,
+                span,
+                InternedText::new(self.db, "unexpected minus sign".S()),
+            ));
+        }
+
+        // Check for keywords.
+        match self.peek_word(tokens) {
+            Some("true") => {
+                self.eat_word(tokens, "true");
+                return ast::ExprFunKind::True(ast::ExprLit::new(self.db, heap, type_hint));
+            }
+            Some("false") => {
+                self.eat_word(tokens, "false");
+                return ast::ExprFunKind::False(ast::ExprLit::new(self.db, heap, type_hint));
+            }
+            Some("none") => {
+                self.eat_word(tokens, "none");
+                return ast::ExprFunKind::None(ast::ExprLit::new(self.db, heap, type_hint));
+            }
+            Some("data") => {
+                self.eat_word(tokens, "data");
+                let value = self.parse_lit_expr_full(tokens);
+                return ast::ExprFunKind::Data(ast::ExprData::new(self.db, heap, type_hint, value));
+            }
+            Some("error") => {
+                self.eat_word(tokens, "error");
+                let value = self.parse_lit_expr_full(tokens);
+                return ast::ExprFunKind::Err(ast::ExprErr::new(self.db, heap, type_hint, value));
+            }
+            Some("tensor") => {
+                return self.parse_lit_tensor(tokens, heap, type_hint);
+            }
+            Some("tuple") => {
+                return self.parse_lit_named_tuple(tokens, heap, type_hint);
+            }
+            Some("struct") => {
+                return self.parse_lit_named_struct(tokens, heap, type_hint);
+            }
+            Some("enum") => {
+                return self.parse_lit_enum(tokens, heap, type_hint);
+            }
+            Some("map") => {
+                return self.parse_lit_map(tokens, heap, type_hint);
+            }
+            Some("set") => {
+                return self.parse_lit_set(tokens, heap, type_hint);
+            }
+            _ => {}
+        }
+
+        // Check for numbers, strings, or branches.
+        match tokens.peek() {
+            Some(TreeToken::Token(token)) => {
+                match token.kind(self.db) {
+                    TokenKind::Word => {
+                        let word = token.word_str(self.db).X();
+                        if Self::is_numeric_literal(word) {
+                            tokens.next();
+                            let is_hex = word.starts_with("0x") || word.starts_with("0X");
+                            // Check for float.
+                            if !is_hex && self.peek_sigil(tokens, Sigil::Dot) {
+                                if let Some(TreeToken::Token(next)) = tokens.peek() {
+                                    if let Some(decimal) = next.word_str(self.db) {
+                                        if decimal.chars().all(|c| c.is_ascii_digit()) {
+                                            self.eat_sigil(tokens, Sigil::Dot);
+                                            let decimal_name = self.need_name(tokens);
+                                            let float_str = format!("{}.{}", word, decimal_name.as_str(self.db));
+                                            let value = InternedText::new(self.db, float_str.S());
+                                            return ast::ExprFunKind::Float(ast::ExprFloat::new(self.db, heap, type_hint, value));
+                                        }
+                                    }
+                                }
+                            }
+                            let value = InternedText::new(self.db, word.S());
+                            if is_hex {
+                                return ast::ExprFunKind::Hex(ast::ExprHex::new(self.db, heap, type_hint, value));
+                            } else {
+                                return ast::ExprFunKind::Int(ast::ExprInt::new(self.db, heap, type_hint, value));
+                            }
+                        } else {
+                            // Unexpected identifier.
+                            let (text, span) = self.peek_text_span(tokens);
+                            tokens.next();
+                            return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                                self.db,
+                                text,
+                                span,
+                                InternedText::new(self.db, format!("unexpected identifier '{}'", word).S()),
+                            ));
+                        }
+                    }
+                    TokenKind::String => {
+                        // Get the text before consuming the token.
+                        let text_str = token.text(self.db).as_str(self.db).S();
+                        tokens.next();
+                        let value = InternedText::new(self.db, text_str);
+                        return ast::ExprFunKind::String(ast::ExprString::new(self.db, heap, type_hint, value));
+                    }
+                    _ => {
+                        let (text, span) = self.peek_text_span(tokens);
+                        return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                            self.db,
+                            text,
+                            span,
+                            InternedText::new(self.db, "unexpected token".S()),
+                        ));
+                    }
+                }
+            }
+            Some(TreeToken::Branch(Sigil::ParenOpen, _)) => {
+                // Anonymous tuple.
+                return self.parse_lit_anon_tuple(tokens, heap, type_hint);
+            }
+            Some(TreeToken::Branch(Sigil::BraceOpen, _)) => {
+                // Anonymous struct.
+                return self.parse_lit_anon_struct(tokens, heap, type_hint);
+            }
+            Some(TreeToken::Branch(Sigil::BracketOpen, _)) => {
+                // List.
+                return self.parse_lit_list(tokens, heap, type_hint);
+            }
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db,
+                    text,
+                    span,
+                    InternedText::new(self.db, "expected expression".S()),
+                ));
+            }
+        }
+    }
+
+    // Helper to check if a string is a numeric literal.
+    fn is_numeric_literal(s: &str) -> bool {
+        if s.is_empty() {
+            return false;
+        }
+        let s = if s.starts_with("0x") || s.starts_with("0X") {
+            &s[2..]
+        } else {
+            s
+        };
+        s.chars().all(|c| c.is_ascii_hexdigit() || c == '_')
+    }
+
+    // Parse anonymous tuple: (expr, expr, ...)
+    fn parse_lit_anon_tuple(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        let iter = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db, text, span,
+                    InternedText::new(self.db, "expected '('".S()),
+                ));
+            }
+        };
+
+        let elements = self.parse_comma_separated_exprs(iter);
+        ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple::new(self.db, heap, type_hint, elements))
+    }
+
+    // Parse named tuple: tuple Name(expr, expr, ...)
+    fn parse_lit_named_tuple(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        self.eat_word(tokens, "tuple");
+        let name = self.need_name(tokens);
+        let iter = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db, text, span,
+                    InternedText::new(self.db, "expected '(' after tuple name".S()),
+                ));
+            }
+        };
+
+        let elements = self.parse_comma_separated_exprs(iter);
+        ast::ExprFunKind::NamedTuple(ast::ExprNamedTuple::new(self.db, heap, type_hint, name, elements))
+    }
+
+    // Parse anonymous struct: { name = expr, ... }
+    fn parse_lit_anon_struct(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        let iter = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db, text, span,
+                    InternedText::new(self.db, "expected '{'".S()),
+                ));
+            }
+        };
+
+        let fields = self.parse_comma_separated_struct_fields(iter);
+        ast::ExprFunKind::AnonStruct(ast::ExprAnonStruct::new(self.db, heap, type_hint, fields))
+    }
+
+    // Parse named struct: struct Name { name = expr, ... }
+    fn parse_lit_named_struct(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        self.eat_word(tokens, "struct");
+        let name = self.need_name(tokens);
+        let iter = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db, text, span,
+                    InternedText::new(self.db, "expected '{' after struct name".S()),
+                ));
+            }
+        };
+
+        let fields = self.parse_comma_separated_struct_fields(iter);
+        ast::ExprFunKind::NamedStruct(ast::ExprNamedStruct::new(self.db, heap, type_hint, name, fields))
+    }
+
+    // Parse list: [expr, expr, ...]
+    fn parse_lit_list(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        let iter = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => iter,
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db, text, span,
+                    InternedText::new(self.db, "expected '['".S()),
+                ));
+            }
+        };
+
+        let elements = self.parse_comma_separated_exprs(iter);
+        ast::ExprFunKind::List(ast::ExprList::new(self.db, heap, type_hint, elements))
+    }
+
+    // Parse set: set { expr, expr, ... }
+    fn parse_lit_set(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        self.eat_word(tokens, "set");
+        let iter = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db, text, span,
+                    InternedText::new(self.db, "expected '{' after 'set'".S()),
+                ));
+            }
+        };
+
+        let elements = self.parse_comma_separated_exprs(iter);
+        ast::ExprFunKind::Set(ast::ExprSet::new(self.db, heap, type_hint, elements))
+    }
+
+    // Parse map: map { key = value, ... }
+    fn parse_lit_map(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        self.eat_word(tokens, "map");
+        let iter = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db, text, span,
+                    InternedText::new(self.db, "expected '{' after 'map'".S()),
+                ));
+            }
+        };
+
+        let entries = self.parse_comma_separated_map_entries(iter);
+        ast::ExprFunKind::Map(ast::ExprMap::new(self.db, heap, type_hint, entries))
+    }
+
+    // Parse enum: enum Variant or enum Name.Variant
+    fn parse_lit_enum(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        self.eat_word(tokens, "enum");
+        let first_name = self.need_name(tokens);
+
+        if self.peek_sigil(tokens, Sigil::Dot) {
+            // Named enum: enum EnumName.Variant
+            self.eat_sigil(tokens, Sigil::Dot);
+            let variant_name = self.need_name(tokens);
+            let payload = self.parse_optional_enum_payload(tokens);
+            ast::ExprFunKind::NamedEnum(ast::ExprNamedEnum::new(
+                self.db, heap, type_hint, first_name, variant_name, payload
+            ))
+        } else {
+            // Anonymous enum: enum Variant
+            let payload = self.parse_optional_enum_payload(tokens);
+            ast::ExprFunKind::AnonEnum(ast::ExprAnonEnum::new(
+                self.db, heap, type_hint, first_name, payload
+            ))
+        }
+    }
+
+    // Parse optional enum payload: (expr)
+    fn parse_optional_enum_payload(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> Option<ast::ExprFun<'db>> {
+        match tokens.peek() {
+            Some(TreeToken::Branch(Sigil::ParenOpen, _)) => {
+                let iter = match tokens.next() {
+                    Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
+                    _ => return None,
+                };
+                let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
+                if all_tokens.is_empty() {
+                    return None;
+                }
+                let mut group_iter = all_tokens.into_iter().peekable();
+                Some(self.parse_expr_full(&mut group_iter))
+            }
+            _ => None
+        }
+    }
+
+    // Parse tensor: tensor [shape] [data]
+    fn parse_lit_tensor(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    ) -> ast::ExprFunKind<'db> {
+        self.eat_word(tokens, "tensor");
+
+        // Parse shape: [dim1, dim2, ...]
+        let shape = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
+                let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
+                self.parse_tensor_shape(all_tokens)
+            }
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db, text, span,
+                    InternedText::new(self.db, "expected '[' for tensor shape".S()),
+                ));
+            }
+        };
+
+        // Parse data: [elements]
+        let elements = match tokens.next() {
+            Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
+                self.parse_comma_separated_exprs(iter)
+            }
+            _ => {
+                let (text, span) = self.peek_text_span(tokens);
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db, text, span,
+                    InternedText::new(self.db, "expected '[' for tensor data".S()),
+                ));
+            }
+        };
+
+        ast::ExprFunKind::Tensor(ast::ExprTensor::new(self.db, heap, type_hint, shape, elements))
+    }
+
+    // Parse tensor shape dimensions.
+    fn parse_tensor_shape(&mut self, tokens: Vec<TreeToken<'db>>) -> Vec<u32> {
+        let mut shape = Vec::new();
+        let mut current_num = String::new();
+
+        for token in tokens {
+            match token {
+                TreeToken::Token(t) => {
+                    if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) {
+                        if !current_num.is_empty() {
+                            if let Ok(dim) = current_num.parse::<u32>() {
+                                shape.push(dim);
+                            }
+                            current_num.clear();
+                        }
+                    } else if let Some(word) = t.word_str(self.db) {
+                        current_num.push_str(word);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if !current_num.is_empty() {
+            if let Ok(dim) = current_num.parse::<u32>() {
+                shape.push(dim);
+            }
+        }
+
+        shape
+    }
+
+    // Helper to parse comma-separated expressions from a branch.
+    fn parse_comma_separated_exprs(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
+        let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
+        if all_tokens.is_empty() {
+            return vec![];
+        }
+
+        let groups = self.split_by_comma(all_tokens);
+        let mut elements = Vec::new();
+        for group in groups {
+            if !group.is_empty() {
+                let mut group_iter = group.into_iter().peekable();
+                elements.push(self.parse_expr_full(&mut group_iter));
+            }
+        }
+        elements
+    }
+
+    // Helper to parse comma-separated struct fields.
+    fn parse_comma_separated_struct_fields(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprStructField<'db>> {
+        let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
+        if all_tokens.is_empty() {
+            return vec![];
+        }
+
+        let groups = self.split_by_comma(all_tokens);
+        let mut fields = Vec::new();
+        for group in groups {
+            if !group.is_empty() {
+                let mut group_iter = group.into_iter().peekable();
+                let name = self.need_name(&mut group_iter);
+                self.need_sigil(&mut group_iter, Sigil::Equals);
+                let value = self.parse_expr_full(&mut group_iter);
+                fields.push(ast::ExprStructField::new(self.db, name, value));
+            }
+        }
+        fields
+    }
+
+    // Helper to parse comma-separated map entries.
+    fn parse_comma_separated_map_entries(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprMapEntry<'db>> {
+        let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
+        if all_tokens.is_empty() {
+            return vec![];
+        }
+
+        let groups = self.split_by_comma(all_tokens);
+        let mut entries = Vec::new();
+        for group in groups {
+            if !group.is_empty() {
+                // Split by = to get key and value.
+                let (key_tokens, value_tokens) = self.split_by_equals(group);
+                let mut key_iter = key_tokens.into_iter().peekable();
+                let key = self.parse_expr_full(&mut key_iter);
+                let mut value_iter = value_tokens.into_iter().peekable();
+                let value = self.parse_expr_full(&mut value_iter);
+                entries.push(ast::ExprMapEntry::new(self.db, key, value));
+            }
+        }
+        entries
+    }
+
+    // Split tokens by comma.
+    fn split_by_comma(&self, tokens: Vec<TreeToken<'db>>) -> Vec<Vec<TreeToken<'db>>> {
+        let mut groups = Vec::new();
+        let mut current = Vec::new();
+        for token in tokens {
+            match token {
+                TreeToken::Token(t) if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) => {
+                    if !current.is_empty() {
+                        groups.push(current);
+                        current = Vec::new();
+                    }
+                }
+                _ => current.push(token),
+            }
+        }
+        if !current.is_empty() {
+            groups.push(current);
+        }
+        groups
+    }
+
+    // Split tokens by equals sign (for map entries).
+    fn split_by_equals(&self, tokens: Vec<TreeToken<'db>>) -> (Vec<TreeToken<'db>>, Vec<TreeToken<'db>>) {
+        let mut key = Vec::new();
+        let mut value = Vec::new();
+        let mut found_equals = false;
+        for token in tokens {
+            if !found_equals {
+                if matches!(&token, TreeToken::Token(t) if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Equals))) {
+                    found_equals = true;
+                } else {
+                    key.push(token);
+                }
+            } else {
+                value.push(token);
+            }
+        }
+        (key, value)
     }
 
     // Parse a datafun tuple: (expr1, expr2, ...).
@@ -1479,10 +2125,11 @@ mod tests {
             ast::Statement::Let(stmt) => {
                 assert_eq!(stmt.name(db).as_str(db), "x");
                 match stmt.value(db).expr(db) {
-                    ast::ExprFunKind::Datalit(_) => {
-                        // Successfully parsed as datalit
+                    ast::ExprFunKind::Int(int_expr) => {
+                        // Successfully parsed as inline int.
+                        assert_eq!(int_expr.value(db).as_str(db), "42");
                     }
-                    _ => panic!("expected datalit expression"),
+                    other => panic!("expected Int expression, got {:?}", std::mem::discriminant(&other)),
                 }
             }
             _ => panic!("expected let statement"),
@@ -1711,10 +2358,10 @@ mod tests {
             ast::Statement::Let(stmt) => {
                 assert_eq!(stmt.name(db).as_str(db), "x");
                 match stmt.value(db).expr(db) {
-                    ast::ExprFunKind::Datalit(_) => {
-                        // Successfully parsed tuple as datalit
+                    ast::ExprFunKind::AnonTuple(tuple) => {
+                        assert_eq!(tuple.elements(db).len(), 3);
                     }
-                    _ => panic!("expected datalit expression"),
+                    other => panic!("expected AnonTuple expression, got {:?}", std::mem::discriminant(&other)),
                 }
             }
             _ => panic!("expected let statement"),
@@ -1732,10 +2379,10 @@ mod tests {
             ast::Statement::Let(stmt) => {
                 assert_eq!(stmt.name(db).as_str(db), "x");
                 match stmt.value(db).expr(db) {
-                    ast::ExprFunKind::Datalit(_) => {
-                        // Successfully parsed list as datalit
+                    ast::ExprFunKind::List(list) => {
+                        assert_eq!(list.elements(db).len(), 3);
                     }
-                    _ => panic!("expected datalit expression"),
+                    other => panic!("expected List expression, got {:?}", std::mem::discriminant(&other)),
                 }
             }
             _ => panic!("expected let statement"),
@@ -1753,10 +2400,10 @@ mod tests {
             ast::Statement::Let(stmt) => {
                 assert_eq!(stmt.name(db).as_str(db), "x");
                 match stmt.value(db).expr(db) {
-                    ast::ExprFunKind::Datalit(_) => {
-                        // Successfully parsed map as datalit
+                    ast::ExprFunKind::Map(map) => {
+                        assert_eq!(map.entries(db).len(), 2);
                     }
-                    _ => panic!("expected datalit expression"),
+                    other => panic!("expected Map expression, got {:?}", std::mem::discriminant(&other)),
                 }
             }
             _ => panic!("expected let statement"),
@@ -1774,10 +2421,11 @@ mod tests {
             ast::Statement::Let(stmt) => {
                 assert_eq!(stmt.name(db).as_str(db), "x");
                 match stmt.value(db).expr(db) {
-                    ast::ExprFunKind::Datalit(_) => {
-                        // Successfully parsed nested structure
+                    ast::ExprFunKind::List(list) => {
+                        // List with nested tuples.
+                        assert_eq!(list.elements(db).len(), 2);
                     }
-                    _ => panic!("expected datalit expression"),
+                    other => panic!("expected List expression, got {:?}", std::mem::discriminant(&other)),
                 }
             }
             _ => panic!("expected let statement"),
@@ -1795,10 +2443,11 @@ mod tests {
             ast::Statement::Let(stmt) => {
                 assert_eq!(stmt.name(db).as_str(db), "x");
                 match stmt.value(db).expr(db) {
-                    ast::ExprFunKind::Datalit(_) => {
-                        // Successfully parsed nested list in tuple
+                    ast::ExprFunKind::AnonTuple(tuple) => {
+                        // Tuple with nested list.
+                        assert_eq!(tuple.elements(db).len(), 2);
                     }
-                    _ => panic!("expected datalit expression"),
+                    other => panic!("expected AnonTuple expression, got {:?}", std::mem::discriminant(&other)),
                 }
             }
             _ => panic!("expected let statement"),
@@ -1816,10 +2465,10 @@ mod tests {
             ast::Statement::Let(stmt) => {
                 assert_eq!(stmt.name(db).as_str(db), "x");
                 match stmt.value(db).expr(db) {
-                    ast::ExprFunKind::Datalit(_) => {
-                        // Successfully parsed set as datalit
+                    ast::ExprFunKind::Set(set) => {
+                        assert_eq!(set.elements(db).len(), 3);
                     }
-                    _ => panic!("expected datalit expression"),
+                    other => panic!("expected Set expression, got {:?}", std::mem::discriminant(&other)),
                 }
             }
             _ => panic!("expected let statement"),
@@ -1837,10 +2486,11 @@ mod tests {
             ast::Statement::Let(stmt) => {
                 assert_eq!(stmt.name(db).as_str(db), "x");
                 match stmt.value(db).expr(db) {
-                    ast::ExprFunKind::Datalit(_) => {
-                        // Successfully parsed deeply nested structure
+                    ast::ExprFunKind::AnonTuple(tuple) => {
+                        // Deeply nested tuple.
+                        assert_eq!(tuple.elements(db).len(), 2);
                     }
-                    _ => panic!("expected datalit expression"),
+                    other => panic!("expected AnonTuple expression, got {:?}", std::mem::discriminant(&other)),
                 }
             }
             _ => panic!("expected let statement"),

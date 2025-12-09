@@ -63,17 +63,11 @@
                                         ),
                                     ),
                                     rhs: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Datalit",
-                                            value: ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Omitted,
-                                                    expr: Int(ExprInt(
-                                                        value: "10",
-                                                    )),
-                                                ),
-                                            ),
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Omitted,
+                                            type_hint: None,
+                                            value: "10",
                                         ),
                                     ),
                                 ),
@@ -91,33 +85,25 @@
                             name: "unwrap_result",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Err(ExprErr(
-                                                    value: ExprFull(
-                                                        type_hint: None,
-                                                        expr: ExprAndHeap(
-                                                            heap: Omitted,
-                                                            expr: AnonTuple(ExprAnonTuple(
-                                                                elements: [
-                                                                    ExprFull(
-                                                                        type_hint: None,
-                                                                        expr: ExprAndHeap(
-                                                                            heap: Local,
-                                                                            expr: String(ExprString(
-                                                                                value: "\"test error\"",
-                                                                            )),
-                                                                        ),
-                                                                    ),
-                                                                ],
-                                                            )),
+                                    expr: ExprErr(
+                                        kind: "Err",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: ExprFun(
+                                            expr: ExprAnonTuple(
+                                                kind: "AnonTuple",
+                                                heap: Omitted,
+                                                type_hint: None,
+                                                elements: [
+                                                    ExprFun(
+                                                        expr: ExprString(
+                                                            kind: "String",
+                                                            heap: Local,
+                                                            type_hint: None,
+                                                            value: "\"test error\"",
                                                         ),
                                                     ),
-                                                )),
+                                                ],
                                             ),
                                         ),
                                     ),
@@ -129,8 +115,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "TypecheckErrors(1)",
+            ],
         ),
-        output: "@error @(@\"test error\")",
+        output: "",
     ),
 ]

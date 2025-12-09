@@ -32,18 +32,10 @@
               },
               "rhs": {
                 "expr": {
-                  "kind": "Datalit",
-                  "value": {
-                    "type_hint": null,
-                    "expr": {
-                      "heap": "Local",
-                      "expr": {
-                        "Int": {
-                          "value": "90"
-                        }
-                      }
-                    }
-                  }
+                  "kind": "Int",
+                  "heap": "Local",
+                  "type_hint": null,
+                  "value": "90"
                 }
               }
             }
@@ -53,18 +45,10 @@
               "kind": "Ret",
               "value": {
                 "expr": {
-                  "kind": "Datalit",
-                  "value": {
-                    "type_hint": null,
-                    "expr": {
-                      "heap": "Local",
-                      "expr": {
-                        "Int": {
-                          "value": "4"
-                        }
-                      }
-                    }
-                  }
+                  "kind": "Int",
+                  "heap": "Local",
+                  "type_hint": null,
+                  "value": "4"
                 }
               }
             }
@@ -84,18 +68,10 @@
                   },
                   "rhs": {
                     "expr": {
-                      "kind": "Datalit",
-                      "value": {
-                        "type_hint": null,
-                        "expr": {
-                          "heap": "Local",
-                          "expr": {
-                            "Int": {
-                              "value": "80"
-                            }
-                          }
-                        }
-                      }
+                      "kind": "Int",
+                      "heap": "Local",
+                      "type_hint": null,
+                      "value": "80"
                     }
                   }
                 }
@@ -105,18 +81,10 @@
                   "kind": "Ret",
                   "value": {
                     "expr": {
-                      "kind": "Datalit",
-                      "value": {
-                        "type_hint": null,
-                        "expr": {
-                          "heap": "Local",
-                          "expr": {
-                            "Int": {
-                              "value": "3"
-                            }
-                          }
-                        }
-                      }
+                      "kind": "Int",
+                      "heap": "Local",
+                      "type_hint": null,
+                      "value": "3"
                     }
                   }
                 }
@@ -136,18 +104,10 @@
                       },
                       "rhs": {
                         "expr": {
-                          "kind": "Datalit",
-                          "value": {
-                            "type_hint": null,
-                            "expr": {
-                              "heap": "Local",
-                              "expr": {
-                                "Int": {
-                                  "value": "70"
-                                }
-                              }
-                            }
-                          }
+                          "kind": "Int",
+                          "heap": "Local",
+                          "type_hint": null,
+                          "value": "70"
                         }
                       }
                     }
@@ -157,18 +117,10 @@
                       "kind": "Ret",
                       "value": {
                         "expr": {
-                          "kind": "Datalit",
-                          "value": {
-                            "type_hint": null,
-                            "expr": {
-                              "heap": "Local",
-                              "expr": {
-                                "Int": {
-                                  "value": "2"
-                                }
-                              }
-                            }
-                          }
+                          "kind": "Int",
+                          "heap": "Local",
+                          "type_hint": null,
+                          "value": "2"
                         }
                       }
                     }
@@ -178,18 +130,10 @@
                       "kind": "Ret",
                       "value": {
                         "expr": {
-                          "kind": "Datalit",
-                          "value": {
-                            "type_hint": null,
-                            "expr": {
-                              "heap": "Local",
-                              "expr": {
-                                "Int": {
-                                  "value": "1"
-                                }
-                              }
-                            }
-                          }
+                          "kind": "Int",
+                          "heap": "Local",
+                          "type_hint": null,
+                          "value": "1"
                         }
                       }
                     }

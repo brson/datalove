@@ -67,31 +67,19 @@
                             name: "test_mul_optional_overflow",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "4294967295",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "4294967295",
                                     ),
                                 ),
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "2",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "2",
                                     ),
                                 ),
                             ],

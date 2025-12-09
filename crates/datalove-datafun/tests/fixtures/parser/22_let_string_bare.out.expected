@@ -6,18 +6,10 @@
       "type_hint": null,
       "value": {
         "expr": {
-          "kind": "Datalit",
-          "value": {
-            "type_hint": null,
-            "expr": {
-              "heap": "Omitted",
-              "expr": {
-                "String": {
-                  "value": "\"hello\""
-                }
-              }
-            }
-          }
+          "kind": "String",
+          "heap": "Omitted",
+          "type_hint": null,
+          "value": "\"hello\""
         }
       }
     }

@@ -12,31 +12,19 @@
                             kind: "BinOp",
                             op: Lt,
                             lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "5",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "5",
                                 ),
                             ),
                             rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "10",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "10",
                                 ),
                             ),
                         ),

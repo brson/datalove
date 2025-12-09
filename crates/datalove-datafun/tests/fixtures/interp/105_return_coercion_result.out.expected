@@ -47,17 +47,11 @@
                             name: "test",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Int(ExprInt(
-                                                    value: "55",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "55",
                                     ),
                                 ),
                             ],

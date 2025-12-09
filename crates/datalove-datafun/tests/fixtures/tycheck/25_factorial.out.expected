@@ -1,5 +1,15 @@
 {
-  "errors": [],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
   "judgements": [
     {
       "kind": "function",

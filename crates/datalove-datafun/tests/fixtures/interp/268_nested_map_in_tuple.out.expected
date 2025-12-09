@@ -8,78 +8,66 @@
                     name: "output",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprFunKind(
-                            kind: "Datalit",
-                            value: ExprFull(
-                                type_hint: None,
-                                expr: ExprAndHeap(
-                                    heap: Local,
-                                    expr: AnonTuple(ExprAnonTuple(
-                                        elements: [
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Map(ExprMap(
-                                                        entries: [
-                                                            ExprMapEntry(
-                                                                key: ExprFull(
-                                                                    type_hint: None,
-                                                                    expr: ExprAndHeap(
-                                                                        heap: Local,
-                                                                        expr: Int(ExprInt(
-                                                                            value: "1",
-                                                                        )),
-                                                                    ),
-                                                                ),
-                                                                value: ExprFull(
-                                                                    type_hint: None,
-                                                                    expr: ExprAndHeap(
-                                                                        heap: Local,
-                                                                        expr: Int(ExprInt(
-                                                                            value: "100",
-                                                                        )),
-                                                                    ),
-                                                                ),
-                                                            ),
-                                                        ],
-                                                    )),
+                        expr: ExprAnonTuple(
+                            kind: "AnonTuple",
+                            heap: Local,
+                            type_hint: None,
+                            elements: [
+                                ExprFun(
+                                    expr: ExprMap(
+                                        kind: "Map",
+                                        heap: Local,
+                                        type_hint: None,
+                                        entries: [
+                                            ExprMapEntry(
+                                                key: ExprFun(
+                                                    expr: ExprInt(
+                                                        kind: "Int",
+                                                        heap: Local,
+                                                        type_hint: None,
+                                                        value: "1",
+                                                    ),
                                                 ),
-                                            ),
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Map(ExprMap(
-                                                        entries: [
-                                                            ExprMapEntry(
-                                                                key: ExprFull(
-                                                                    type_hint: None,
-                                                                    expr: ExprAndHeap(
-                                                                        heap: Local,
-                                                                        expr: Int(ExprInt(
-                                                                            value: "2",
-                                                                        )),
-                                                                    ),
-                                                                ),
-                                                                value: ExprFull(
-                                                                    type_hint: None,
-                                                                    expr: ExprAndHeap(
-                                                                        heap: Local,
-                                                                        expr: Int(ExprInt(
-                                                                            value: "200",
-                                                                        )),
-                                                                    ),
-                                                                ),
-                                                            ),
-                                                        ],
-                                                    )),
+                                                value: ExprFun(
+                                                    expr: ExprInt(
+                                                        kind: "Int",
+                                                        heap: Local,
+                                                        type_hint: None,
+                                                        value: "100",
+                                                    ),
                                                 ),
                                             ),
                                         ],
-                                    )),
+                                    ),
                                 ),
-                            ),
+                                ExprFun(
+                                    expr: ExprMap(
+                                        kind: "Map",
+                                        heap: Local,
+                                        type_hint: None,
+                                        entries: [
+                                            ExprMapEntry(
+                                                key: ExprFun(
+                                                    expr: ExprInt(
+                                                        kind: "Int",
+                                                        heap: Local,
+                                                        type_hint: None,
+                                                        value: "2",
+                                                    ),
+                                                ),
+                                                value: ExprFun(
+                                                    expr: ExprInt(
+                                                        kind: "Int",
+                                                        heap: Local,
+                                                        type_hint: None,
+                                                        value: "200",
+                                                    ),
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                ),
+                            ],
                         ),
                     ),
                 ),

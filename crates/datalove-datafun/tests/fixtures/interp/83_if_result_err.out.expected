@@ -49,17 +49,11 @@
                                 StmtRet(
                                     kind: "Ret",
                                     value: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Datalit",
-                                            value: ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "999",
-                                                    )),
-                                                ),
-                                            ),
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "999",
                                         ),
                                     ),
                                 ),
@@ -77,23 +71,16 @@
                             name: "unwrap_or_default",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
+                                    expr: ExprErr(
+                                        kind: "Err",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: ExprFun(
+                                            expr: ExprInt(
+                                                kind: "Int",
                                                 heap: Local,
-                                                expr: Err(ExprErr(
-                                                    value: ExprFull(
-                                                        type_hint: None,
-                                                        expr: ExprAndHeap(
-                                                            heap: Local,
-                                                            expr: Int(ExprInt(
-                                                                value: "42",
-                                                            )),
-                                                        ),
-                                                    ),
-                                                )),
+                                                type_hint: None,
+                                                value: "42",
                                             ),
                                         ),
                                     ),
@@ -105,8 +92,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "TypecheckErrors(1)",
+            ],
         ),
-        output: "@999",
+        output: "",
     ),
 ]

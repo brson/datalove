@@ -8,15 +8,10 @@
                     name: "output",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprFunKind(
-                            kind: "Datalit",
-                            value: ExprFull(
-                                type_hint: None,
-                                expr: ExprAndHeap(
-                                    heap: Local,
-                                    expr: True,
-                                ),
-                            ),
+                        expr: ExprLit(
+                            kind: "True",
+                            heap: Local,
+                            type_hint: None,
                         ),
                     ),
                 ),

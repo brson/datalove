@@ -6,87 +6,61 @@
       "type_hint": null,
       "value": {
         "expr": {
-          "kind": "Datalit",
-          "value": {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
+          "kind": "List",
+          "heap": "Local",
+          "type_hint": null,
+          "elements": [
+            {
               "expr": {
-                "List": {
-                  "elements": [
-                    {
+                "kind": "AnonTuple",
+                "heap": "Local",
+                "type_hint": null,
+                "elements": [
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "heap": "Omitted",
                       "type_hint": null,
-                      "expr": {
-                        "heap": "Local",
-                        "expr": {
-                          "AnonTuple": {
-                            "elements": [
-                              {
-                                "type_hint": null,
-                                "expr": {
-                                  "heap": "Omitted",
-                                  "expr": {
-                                    "Int": {
-                                      "value": "1"
-                                    }
-                                  }
-                                }
-                              },
-                              {
-                                "type_hint": null,
-                                "expr": {
-                                  "heap": "Omitted",
-                                  "expr": {
-                                    "Int": {
-                                      "value": "2"
-                                    }
-                                  }
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "type_hint": null,
-                      "expr": {
-                        "heap": "Local",
-                        "expr": {
-                          "AnonTuple": {
-                            "elements": [
-                              {
-                                "type_hint": null,
-                                "expr": {
-                                  "heap": "Omitted",
-                                  "expr": {
-                                    "Int": {
-                                      "value": "3"
-                                    }
-                                  }
-                                }
-                              },
-                              {
-                                "type_hint": null,
-                                "expr": {
-                                  "heap": "Omitted",
-                                  "expr": {
-                                    "Int": {
-                                      "value": "4"
-                                    }
-                                  }
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
+                      "value": "1"
                     }
-                  ]
-                }
+                  },
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "heap": "Omitted",
+                      "type_hint": null,
+                      "value": "2"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "expr": {
+                "kind": "AnonTuple",
+                "heap": "Local",
+                "type_hint": null,
+                "elements": [
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "heap": "Omitted",
+                      "type_hint": null,
+                      "value": "3"
+                    }
+                  },
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "heap": "Omitted",
+                      "type_hint": null,
+                      "value": "4"
+                    }
+                  }
+                ]
               }
             }
-          }
+          ]
         }
       }
     }

@@ -814,14 +814,18 @@ fn execute_let_statement<'db>(
 
     // Helper to check if expression is @none or @error.
     let is_none_or_error = |expr: ast::ExprFun<'db>, db: &'db dyn crate::Db| -> bool {
-        if let ast::ExprFunKind::Datalit(datalit_expr) = expr.expr(db) {
-            let inner = datalit_expr.expr(db);
-            matches!(
-                inner.expr(db),
-                crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
-            )
-        } else {
-            false
+        match expr.expr(db) {
+            // Inline variants.
+            ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) => true,
+            // Legacy Datalit wrapper.
+            ast::ExprFunKind::Datalit(datalit_expr) => {
+                let inner = datalit_expr.expr(db);
+                matches!(
+                    inner.expr(db),
+                    crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
+                )
+            }
+            _ => false,
         }
     };
 
@@ -1026,6 +1030,79 @@ fn eval_expression_in_script_scope<'db>(
         }
         ast::ExprFunKind::ParseError(_) => {
             Err(InterpError::InvalidExpression("Parse error in expression".to_string()))
+        }
+
+        // Inline literal variants.
+        ast::ExprFunKind::True(_) => allocate_bool(ctx, true),
+        ast::ExprFunKind::False(_) => allocate_bool(ctx, false),
+        ast::ExprFunKind::None(_) => {
+            // @none without destination - requires type context.
+            if let Some(d) = dest {
+                write_option_none_to_dest(d)
+            } else {
+                Err(InterpError::InvalidExpression(
+                    "@none literal requires type context".to_string()
+                ))
+            }
+        }
+        ast::ExprFunKind::Int(int_expr) => {
+            if let Some(d) = dest {
+                write_inline_int_to_dest(ctx, &int_expr, d)
+            } else {
+                allocate_inline_int_literal(ctx, &int_expr)
+            }
+        }
+        ast::ExprFunKind::Float(float_expr) => {
+            let value_str = float_expr.value(ctx.db).as_str(ctx.db);
+            let value: f32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
+            allocate_f32(ctx, value)
+        }
+        ast::ExprFunKind::Hex(hex_expr) => {
+            let value_str = hex_expr.value(ctx.db).as_str(ctx.db);
+            let hex_digits = value_str.trim_start_matches("0x").trim_start_matches("0X");
+            let value: u32 = u32::from_str_radix(hex_digits, 16)
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse hex: {}", e)))?;
+            allocate_u32_raw(ctx, value)
+        }
+        ast::ExprFunKind::String(string_expr) => {
+            allocate_inline_string(ctx, &string_expr)
+        }
+        ast::ExprFunKind::List(list_expr) => {
+            eval_inline_list_script_scope(ctx, &list_expr, dest)
+        }
+        ast::ExprFunKind::Set(set_expr) => {
+            eval_inline_set_script_scope(ctx, &set_expr, dest)
+        }
+        ast::ExprFunKind::Map(map_expr) => {
+            eval_inline_map_script_scope(ctx, &map_expr, dest)
+        }
+        ast::ExprFunKind::Tensor(_) => {
+            Err(InterpError::InvalidExpression("Tensor not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::AnonTuple(tuple_expr) => {
+            eval_inline_anon_tuple_script_scope(ctx, &tuple_expr, dest)
+        }
+        ast::ExprFunKind::NamedTuple(_) => {
+            Err(InterpError::InvalidExpression("Named tuple not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::AnonStruct(struct_expr) => {
+            eval_inline_anon_struct_script_scope(ctx, &struct_expr, dest)
+        }
+        ast::ExprFunKind::NamedStruct(_) => {
+            Err(InterpError::InvalidExpression("Named struct not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::AnonEnum(_) | ast::ExprFunKind::NamedEnum(_) => {
+            Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::Data(_) => {
+            Err(InterpError::InvalidExpression("Data wrapper not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::Err(_) => {
+            // @error without destination - requires type context.
+            Err(InterpError::InvalidExpression(
+                "@error literal requires type context".to_string()
+            ))
         }
     }
 }
@@ -2023,14 +2100,18 @@ fn eval_function_call_in_script_scope<'db>(
         if needs_coercion {
             // Check if argument is @none or @error - these should be evaluated directly
             // with the parameter type, not the inner type.
-            let is_none_or_error = if let ast::ExprFunKind::Datalit(datalit_expr) = arg_expr.expr(ctx.db) {
-                let inner = datalit_expr.expr(ctx.db);
-                matches!(
-                    inner.expr(ctx.db),
-                    crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
-                )
-            } else {
-                false
+            let is_none_or_error = match arg_expr.expr(ctx.db) {
+                // Inline variants.
+                ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) => true,
+                // Legacy Datalit wrapper.
+                ast::ExprFunKind::Datalit(datalit_expr) => {
+                    let inner = datalit_expr.expr(ctx.db);
+                    matches!(
+                        inner.expr(ctx.db),
+                        crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
+                    )
+                }
+                _ => false,
             };
 
             if is_none_or_error {
@@ -3236,9 +3317,79 @@ fn eval_expression_frame<'db>(
             eval_try_result(ctx, operand)
         }
 
-        _ => Err(InterpError::InvalidExpression(
-            "Expression type not yet implemented in frame mode".to_string()
-        ))
+        // Inline literal variants - delegate to script scope evaluation.
+        ast::ExprFunKind::True(_) => allocate_bool(ctx, true),
+        ast::ExprFunKind::False(_) => allocate_bool(ctx, false),
+        ast::ExprFunKind::None(_) => {
+            if let Some(d) = dest {
+                write_option_none_to_dest(d)
+            } else {
+                Err(InterpError::InvalidExpression(
+                    "@none literal requires type context".to_string()
+                ))
+            }
+        }
+        ast::ExprFunKind::Int(int_expr) => {
+            if let Some(d) = dest {
+                write_inline_int_to_dest(ctx, &int_expr, d)
+            } else {
+                allocate_inline_int_literal(ctx, &int_expr)
+            }
+        }
+        ast::ExprFunKind::Float(float_expr) => {
+            let value_str = float_expr.value(ctx.db).as_str(ctx.db);
+            let value: f32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
+            allocate_f32(ctx, value)
+        }
+        ast::ExprFunKind::Hex(hex_expr) => {
+            let value_str = hex_expr.value(ctx.db).as_str(ctx.db);
+            let hex_digits = value_str.trim_start_matches("0x").trim_start_matches("0X");
+            let value: u32 = u32::from_str_radix(hex_digits, 16)
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse hex: {}", e)))?;
+            allocate_u32_raw(ctx, value)
+        }
+        ast::ExprFunKind::String(string_expr) => {
+            allocate_inline_string(ctx, &string_expr)
+        }
+        ast::ExprFunKind::List(list_expr) => {
+            eval_inline_list_frame(ctx, &list_expr, dest)
+        }
+        ast::ExprFunKind::Set(set_expr) => {
+            eval_inline_set_frame(ctx, &set_expr, dest)
+        }
+        ast::ExprFunKind::Map(map_expr) => {
+            eval_inline_map_frame(ctx, &map_expr, dest)
+        }
+        ast::ExprFunKind::Tensor(_) => {
+            Err(InterpError::InvalidExpression("Tensor not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::AnonTuple(tuple_expr) => {
+            eval_inline_anon_tuple_frame(ctx, &tuple_expr, dest)
+        }
+        ast::ExprFunKind::NamedTuple(_) => {
+            Err(InterpError::InvalidExpression("Named tuple not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::AnonStruct(struct_expr) => {
+            eval_inline_anon_struct_frame(ctx, &struct_expr, dest)
+        }
+        ast::ExprFunKind::NamedStruct(_) => {
+            Err(InterpError::InvalidExpression("Named struct not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::AnonEnum(_) | ast::ExprFunKind::NamedEnum(_) => {
+            Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::Data(_) => {
+            Err(InterpError::InvalidExpression("Data wrapper not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::Err(_) => {
+            Err(InterpError::InvalidExpression(
+                "@error literal requires type context".to_string()
+            ))
+        }
+        ast::ExprFunKind::ParseError(_) => {
+            Err(InterpError::InvalidExpression("Parse error in expression".to_string()))
+        }
     }
 }
 
@@ -3284,40 +3435,46 @@ fn eval_return_expression_frame<'db>(
     expr: ast::ExprFun<'db>,
 ) -> Result<Value, InterpError> {
     // Check if this is a @none or @error literal that needs typed context.
-    if let ast::ExprFunKind::Datalit(datalit_expr) = expr.expr(ctx.db) {
-        let inner = datalit_expr.expr(ctx.db);
-        let needs_typed_dest = matches!(
-            inner.expr(ctx.db),
-            crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
-        );
+    let needs_typed_dest = match expr.expr(ctx.db) {
+        // Inline variants.
+        ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) => true,
+        // Legacy Datalit wrapper.
+        ast::ExprFunKind::Datalit(datalit_expr) => {
+            let inner = datalit_expr.expr(ctx.db);
+            matches!(
+                inner.expr(ctx.db),
+                crate::datalit::ast::Expr::None | crate::datalit::ast::Expr::Err(_)
+            )
+        }
+        _ => false,
+    };
 
-        if needs_typed_dest {
-            // Get the function's return type to provide as destination.
-            let frame_index = ctx.call_stack.len() - 1;
-            let func = ctx.call_stack[frame_index].func;
-            if let Some(ret_type) = func.return_type(ctx.db) {
-                let ret_tydesc = type_hint_to_tydesc(ctx, ret_type);
-                let ret_ptr = unsafe {
-                    datalove_rt::c::dtlv_rti_mem_alloc_local(
-                        ctx.runtime.handle(),
-                        ret_tydesc,
-                        1
-                    )
-                };
-                if ret_ptr.is_null() {
-                    return Err(InterpError::RuntimeError("Failed to allocate return buffer".to_string()));
-                }
+    if needs_typed_dest {
+        // Get the function's return type to provide as destination.
+        let frame_index = ctx.call_stack.len() - 1;
+        let func = ctx.call_stack[frame_index].func;
+        if let Some(ret_type) = func.return_type(ctx.db) {
+            let ret_tydesc = type_hint_to_tydesc(ctx, ret_type);
+            let ret_ptr = unsafe {
+                datalove_rt::c::dtlv_rti_mem_alloc_local(
+                    ctx.runtime.handle(),
+                    ret_tydesc,
+                    1
+                )
+            };
+            if ret_ptr.is_null() {
+                return Err(InterpError::RuntimeError("Failed to allocate return buffer".to_string()));
+            }
 
-                let dest = Destination { ptr: ret_ptr, tydesc: ret_tydesc };
-                let value = write_datalit_to_dest(ctx, datalit_expr, dest)?;
+            let dest = Destination { ptr: ret_ptr, tydesc: ret_tydesc };
+            // Evaluate expression with the typed destination.
+            let value = eval_expression_frame(ctx, expr, Some(dest))?;
 
-                // Convert Borrowed to TempOwned since this escapes the frame.
-                if value.location == ValueLocation::Borrowed && value.ptr == ret_ptr {
-                    return Ok(Value { ptr: ret_ptr, tydesc: ret_tydesc, location: ValueLocation::TempOwned });
-                } else {
-                    // This shouldn't happen for @none/@error.
-                    return Ok(value);
-                }
+            // Convert Borrowed to TempOwned since this escapes the frame.
+            if value.location == ValueLocation::Borrowed && value.ptr == ret_ptr {
+                return Ok(Value { ptr: ret_ptr, tydesc: ret_tydesc, location: ValueLocation::TempOwned });
+            } else {
+                return Ok(value);
             }
         }
     }
@@ -3545,6 +3702,435 @@ fn allocate_string<'db>(
         tydesc: tydesc_ptr,
         location: ValueLocation::TempOwned,
     })
+}
+
+/// Allocate an inline integer literal (from datafun AST).
+fn allocate_inline_int_literal<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_expr: &ast::ExprInt<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+    let value: u32 = value_str.parse()
+        .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    unsafe {
+        *(ptr as *mut u32) = value;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Write inline integer literal to destination.
+fn write_inline_int_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_expr: &ast::ExprInt<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+
+    // Determine the destination type and parse accordingly.
+    let type_tag = unsafe { (*dest.tydesc).type_tag };
+    match type_tag {
+        datalove_rt::rtdt::TyTag::U8 => {
+            let value: u8 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u8: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u8) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I8 => {
+            let value: i8 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i8: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i8) = value; }
+        }
+        datalove_rt::rtdt::TyTag::U16 => {
+            let value: u16 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u16: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u16) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I16 => {
+            let value: i16 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i16: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i16) = value; }
+        }
+        datalove_rt::rtdt::TyTag::U32 => {
+            let value: u32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u32: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u32) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I32 => {
+            let value: i32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i32: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i32) = value; }
+        }
+        datalove_rt::rtdt::TyTag::U64 => {
+            let value: u64 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u64: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u64) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I64 => {
+            let value: i64 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i64: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i64) = value; }
+        }
+        _ => {
+            return Err(InterpError::RuntimeError(
+                format!("Cannot write integer to destination type {:?}", type_tag)
+            ));
+        }
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Allocate an inline string literal (from datafun AST).
+fn allocate_inline_string<'db>(
+    ctx: &mut InterpContext<'db>,
+    string_expr: &ast::ExprString<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let string_value_raw = string_expr.value(ctx.db).as_str(ctx.db);
+
+    // Strip quotes if present.
+    let string_value = if string_value_raw.starts_with('"') && string_value_raw.ends_with('"') {
+        &string_value_raw[1..string_value_raw.len()-1]
+    } else {
+        string_value_raw
+    };
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
+
+    let rt_handle = ctx.runtime.handle();
+
+    let string_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            string_ptr,
+            tydesc_ptr,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create string".to_string()));
+    }
+
+    if !string_value.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                string_ptr,
+                tydesc_ptr,
+                string_value.as_ptr(),
+                string_value.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push string bytes".to_string()));
+        }
+    }
+
+    Ok(Value {
+        ptr: string_ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Evaluate inline list expression in script scope.
+fn eval_inline_list_script_scope<'db>(
+    ctx: &mut InterpContext<'db>,
+    list_expr: &ast::ExprList<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let elements = list_expr.elements(ctx.db);
+    let mut values = Vec::with_capacity(elements.len());
+
+    for elem in elements {
+        match eval_expression_in_script_scope(ctx, *elem, None) {
+            Ok(v) => values.push(v),
+            Err(e) => {
+                for v in values {
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    allocate_list_from_values(ctx, values)
+}
+
+/// Evaluate inline set expression in script scope.
+fn eval_inline_set_script_scope<'db>(
+    ctx: &mut InterpContext<'db>,
+    set_expr: &ast::ExprSet<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let elements = set_expr.elements(ctx.db);
+    let mut values = Vec::with_capacity(elements.len());
+
+    for elem in elements {
+        match eval_expression_in_script_scope(ctx, *elem, None) {
+            Ok(v) => values.push(v),
+            Err(e) => {
+                for v in values {
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    allocate_set_from_values(ctx, values)
+}
+
+/// Evaluate inline map expression in script scope.
+fn eval_inline_map_script_scope<'db>(
+    ctx: &mut InterpContext<'db>,
+    map_expr: &ast::ExprMap<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let entries = map_expr.entries(ctx.db);
+    let mut kv_pairs = Vec::with_capacity(entries.len());
+
+    for entry in entries {
+        let key = match eval_expression_in_script_scope(ctx, entry.key(ctx.db), None) {
+            Ok(v) => v,
+            Err(e) => {
+                for (k, v) in kv_pairs {
+                    destroy_value(ctx, k);
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        };
+
+        let value = match eval_expression_in_script_scope(ctx, entry.value(ctx.db), None) {
+            Ok(v) => v,
+            Err(e) => {
+                destroy_value(ctx, key);
+                for (k, v) in kv_pairs {
+                    destroy_value(ctx, k);
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        };
+
+        kv_pairs.push((key, value));
+    }
+
+    allocate_map_from_values(ctx, kv_pairs)
+}
+
+/// Evaluate inline anonymous tuple expression in script scope.
+fn eval_inline_anon_tuple_script_scope<'db>(
+    ctx: &mut InterpContext<'db>,
+    tuple_expr: &ast::ExprAnonTuple<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let elements = tuple_expr.elements(ctx.db);
+    let mut values = Vec::with_capacity(elements.len());
+
+    for elem in elements {
+        match eval_expression_in_script_scope(ctx, *elem, None) {
+            Ok(v) => values.push(v),
+            Err(e) => {
+                for v in values {
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    allocate_tuple_from_values(ctx, values)
+}
+
+/// Evaluate inline anonymous struct expression in script scope.
+fn eval_inline_anon_struct_script_scope<'db>(
+    ctx: &mut InterpContext<'db>,
+    struct_expr: &ast::ExprAnonStruct<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let expr_fields = struct_expr.fields(ctx.db);
+    let mut sorted_fields: Vec<_> = expr_fields.iter()
+        .map(|f| (f.name(ctx.db), f.value(ctx.db)))
+        .collect();
+    sorted_fields.sort_by_key(|(name, _)| name.as_str(ctx.db));
+
+    let mut field_values = Vec::with_capacity(sorted_fields.len());
+
+    for (name, value_expr) in sorted_fields {
+        match eval_expression_in_script_scope(ctx, value_expr, None) {
+            Ok(v) => field_values.push((name, v)),
+            Err(e) => {
+                for (_, v) in field_values {
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    allocate_struct_from_values(ctx, field_values)
+}
+
+/// Evaluate inline list expression in frame scope.
+fn eval_inline_list_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    list_expr: &ast::ExprList<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let elements = list_expr.elements(ctx.db);
+    let mut values = Vec::with_capacity(elements.len());
+
+    for elem in elements {
+        match eval_expression_frame(ctx, *elem, None) {
+            Ok(v) => values.push(v),
+            Err(e) => {
+                for v in values {
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    allocate_list_from_values(ctx, values)
+}
+
+/// Evaluate inline set expression in frame scope.
+fn eval_inline_set_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    set_expr: &ast::ExprSet<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let elements = set_expr.elements(ctx.db);
+    let mut values = Vec::with_capacity(elements.len());
+
+    for elem in elements {
+        match eval_expression_frame(ctx, *elem, None) {
+            Ok(v) => values.push(v),
+            Err(e) => {
+                for v in values {
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    allocate_set_from_values(ctx, values)
+}
+
+/// Evaluate inline map expression in frame scope.
+fn eval_inline_map_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    map_expr: &ast::ExprMap<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let entries = map_expr.entries(ctx.db);
+    let mut kv_pairs = Vec::with_capacity(entries.len());
+
+    for entry in entries {
+        let key = match eval_expression_frame(ctx, entry.key(ctx.db), None) {
+            Ok(v) => v,
+            Err(e) => {
+                for (k, v) in kv_pairs {
+                    destroy_value(ctx, k);
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        };
+
+        let value = match eval_expression_frame(ctx, entry.value(ctx.db), None) {
+            Ok(v) => v,
+            Err(e) => {
+                destroy_value(ctx, key);
+                for (k, v) in kv_pairs {
+                    destroy_value(ctx, k);
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        };
+
+        kv_pairs.push((key, value));
+    }
+
+    allocate_map_from_values(ctx, kv_pairs)
+}
+
+/// Evaluate inline anonymous tuple expression in frame scope.
+fn eval_inline_anon_tuple_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    tuple_expr: &ast::ExprAnonTuple<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let elements = tuple_expr.elements(ctx.db);
+    let mut values = Vec::with_capacity(elements.len());
+
+    for elem in elements {
+        match eval_expression_frame(ctx, *elem, None) {
+            Ok(v) => values.push(v),
+            Err(e) => {
+                for v in values {
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    allocate_tuple_from_values(ctx, values)
+}
+
+/// Evaluate inline anonymous struct expression in frame scope.
+fn eval_inline_anon_struct_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    struct_expr: &ast::ExprAnonStruct<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let expr_fields = struct_expr.fields(ctx.db);
+    let mut sorted_fields: Vec<_> = expr_fields.iter()
+        .map(|f| (f.name(ctx.db), f.value(ctx.db)))
+        .collect();
+    sorted_fields.sort_by_key(|(name, _)| name.as_str(ctx.db));
+
+    let mut field_values = Vec::with_capacity(sorted_fields.len());
+
+    for (name, value_expr) in sorted_fields {
+        match eval_expression_frame(ctx, value_expr, None) {
+            Ok(v) => field_values.push((name, v)),
+            Err(e) => {
+                for (_, v) in field_values {
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    allocate_struct_from_values(ctx, field_values)
 }
 
 /// Check if a value is a u32 type.

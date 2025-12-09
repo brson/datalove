@@ -206,6 +206,74 @@ fn collect_reads_from_expr<'db>(
         ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
             // No reads.
         }
+
+        // New inline variants.
+        ExprFunKind::True(_) |
+        ExprFunKind::False(_) |
+        ExprFunKind::None(_) |
+        ExprFunKind::Int(_) |
+        ExprFunKind::Float(_) |
+        ExprFunKind::Hex(_) |
+        ExprFunKind::String(_) => {
+            // Simple literals have no reads.
+        }
+        ExprFunKind::List(list) => {
+            for elem in list.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::Set(set) => {
+            for elem in set.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::Map(map) => {
+            for entry in map.entries(db) {
+                collect_reads_from_expr(db, entry.key(db), stmt_id, slots, reads);
+                collect_reads_from_expr(db, entry.value(db), stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::Tensor(tensor) => {
+            for elem in tensor.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::AnonTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::NamedTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_reads_from_expr(db, *elem, stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::AnonStruct(s) => {
+            for field in s.fields(db) {
+                collect_reads_from_expr(db, field.value(db), stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::NamedStruct(s) => {
+            for field in s.fields(db) {
+                collect_reads_from_expr(db, field.value(db), stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::AnonEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_reads_from_expr(db, payload, stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::NamedEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_reads_from_expr(db, payload, stmt_id, slots, reads);
+            }
+        }
+        ExprFunKind::Data(d) => {
+            collect_reads_from_expr(db, d.value(db), stmt_id, slots, reads);
+        }
+        ExprFunKind::Err(e) => {
+            collect_reads_from_expr(db, e.value(db), stmt_id, slots, reads);
+        }
     }
 }
 
@@ -549,6 +617,74 @@ fn map_expr_ids<'db>(
         }
         ExprFunKind::Name(_) | ExprFunKind::Datalit(_) | ExprFunKind::ParseError(_) => {
             // No nested expressions.
+        }
+
+        // New inline variants.
+        ExprFunKind::True(_) |
+        ExprFunKind::False(_) |
+        ExprFunKind::None(_) |
+        ExprFunKind::Int(_) |
+        ExprFunKind::Float(_) |
+        ExprFunKind::Hex(_) |
+        ExprFunKind::String(_) => {
+            // Simple literals have no nested expressions.
+        }
+        ExprFunKind::List(list) => {
+            for elem in list.elements(db) {
+                map_expr_ids(db, *elem, stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::Set(set) => {
+            for elem in set.elements(db) {
+                map_expr_ids(db, *elem, stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::Map(map_expr) => {
+            for entry in map_expr.entries(db) {
+                map_expr_ids(db, entry.key(db), stmt_id, map, expr_counter);
+                map_expr_ids(db, entry.value(db), stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::Tensor(tensor) => {
+            for elem in tensor.elements(db) {
+                map_expr_ids(db, *elem, stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::AnonTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                map_expr_ids(db, *elem, stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::NamedTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                map_expr_ids(db, *elem, stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::AnonStruct(s) => {
+            for field in s.fields(db) {
+                map_expr_ids(db, field.value(db), stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::NamedStruct(s) => {
+            for field in s.fields(db) {
+                map_expr_ids(db, field.value(db), stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::AnonEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                map_expr_ids(db, payload, stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::NamedEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                map_expr_ids(db, payload, stmt_id, map, expr_counter);
+            }
+        }
+        ExprFunKind::Data(d) => {
+            map_expr_ids(db, d.value(db), stmt_id, map, expr_counter);
+        }
+        ExprFunKind::Err(e) => {
+            map_expr_ids(db, e.value(db), stmt_id, map, expr_counter);
         }
     }
 }

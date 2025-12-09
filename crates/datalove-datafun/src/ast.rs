@@ -123,6 +123,7 @@ pub struct ExprFun<'db> {
 #[derive(salsa::Update)]
 pub enum ExprFunKind<'db> {
     // Wrap datalit expression (literals, tuples, structs, etc.)
+    // TODO: Remove once migration to inline variants is complete.
     Datalit(datalit::ast::ExprFull<'db>),
     // Bare name/identifier (for variables)
     Name(InternedText<'db>),
@@ -137,6 +138,34 @@ pub enum ExprFunKind<'db> {
     // Try operators (postfix ? and !)
     TryOption(ExprTryOption<'db>),
     TryResult(ExprTryResult<'db>),
+
+    // Literal expressions (formerly delegated to datalit).
+    True(ExprLit<'db>),
+    False(ExprLit<'db>),
+    None(ExprLit<'db>),
+    Int(ExprInt<'db>),
+    Float(ExprFloat<'db>),
+    Hex(ExprHex<'db>),
+    String(ExprString<'db>),
+
+    // Collection expressions.
+    List(ExprList<'db>),
+    Set(ExprSet<'db>),
+    Map(ExprMap<'db>),
+    Tensor(ExprTensor<'db>),
+
+    // Aggregate expressions.
+    AnonTuple(ExprAnonTuple<'db>),
+    NamedTuple(ExprNamedTuple<'db>),
+    AnonStruct(ExprAnonStruct<'db>),
+    NamedStruct(ExprNamedStruct<'db>),
+    AnonEnum(ExprAnonEnum<'db>),
+    NamedEnum(ExprNamedEnum<'db>),
+
+    // Wrapper expressions.
+    Data(ExprData<'db>),
+    Err(ExprErr<'db>),
+
     // Parse error
     ParseError(ExprFunParseError<'db>),
 }
@@ -213,6 +242,152 @@ pub struct ExprTryOption<'db> {
 #[salsa::tracked]
 pub struct ExprTryResult<'db> {
     pub operand: ExprFun<'db>,
+}
+
+// Base struct for simple literals (true, false, none).
+#[salsa::tracked]
+pub struct ExprLit<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprInt<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub value: InternedText<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprFloat<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub value: InternedText<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprHex<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub value: InternedText<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprString<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub value: InternedText<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprList<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    #[returns(ref)]
+    pub elements: Vec<ExprFun<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprSet<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    #[returns(ref)]
+    pub elements: Vec<ExprFun<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprMap<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    #[returns(ref)]
+    pub entries: Vec<ExprMapEntry<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprMapEntry<'db> {
+    pub key: ExprFun<'db>,
+    pub value: ExprFun<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprTensor<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    #[returns(ref)]
+    pub shape: Vec<u32>,
+    #[returns(ref)]
+    pub elements: Vec<ExprFun<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprAnonTuple<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    #[returns(ref)]
+    pub elements: Vec<ExprFun<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprNamedTuple<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub name: InternedText<'db>,
+    #[returns(ref)]
+    pub elements: Vec<ExprFun<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprAnonStruct<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    #[returns(ref)]
+    pub fields: Vec<ExprStructField<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprNamedStruct<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub name: InternedText<'db>,
+    #[returns(ref)]
+    pub fields: Vec<ExprStructField<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprStructField<'db> {
+    pub name: InternedText<'db>,
+    pub value: ExprFun<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprAnonEnum<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub variant_name: InternedText<'db>,
+    pub payload: Option<ExprFun<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprNamedEnum<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub enum_name: InternedText<'db>,
+    pub variant_name: InternedText<'db>,
+    pub payload: Option<ExprFun<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprData<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub value: ExprFun<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprErr<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub value: ExprFun<'db>,
 }
 
 #[salsa::tracked]

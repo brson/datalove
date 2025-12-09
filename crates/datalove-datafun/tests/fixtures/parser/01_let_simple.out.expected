@@ -6,18 +6,10 @@
       "type_hint": null,
       "value": {
         "expr": {
-          "kind": "Datalit",
-          "value": {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "42"
-                }
-              }
-            }
-          }
+          "kind": "Int",
+          "heap": "Local",
+          "type_hint": null,
+          "value": "42"
         }
       }
     }

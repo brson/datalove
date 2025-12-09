@@ -9,36 +9,28 @@
                     name: "pair",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprFunKind(
-                            kind: "Datalit",
-                            value: ExprFull(
-                                type_hint: None,
-                                expr: ExprAndHeap(
-                                    heap: Local,
-                                    expr: AnonTuple(ExprAnonTuple(
-                                        elements: [
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "100",
-                                                    )),
-                                                ),
-                                            ),
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "200",
-                                                    )),
-                                                ),
-                                            ),
-                                        ],
-                                    )),
+                        expr: ExprAnonTuple(
+                            kind: "AnonTuple",
+                            heap: Local,
+                            type_hint: None,
+                            elements: [
+                                ExprFun(
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "100",
+                                    ),
                                 ),
-                            ),
+                                ExprFun(
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "200",
+                                    ),
+                                ),
+                            ],
                         ),
                     ),
                 ),
@@ -54,17 +46,11 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "42",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "42",
                                 ),
                             ),
                         ),

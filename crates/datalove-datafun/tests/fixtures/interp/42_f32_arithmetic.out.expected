@@ -8,40 +8,9 @@
                     name: "add",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprBinOp(
-                            kind: "BinOp",
-                            op: Add,
-                            lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: Some(TypeHintAndHeap(
-                                            heap: Omitted,
-                                            type_hint: F32,
-                                        )),
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Float(ExprFloat(
-                                                value: "3.5",
-                                            )),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                            rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Float(ExprFloat(
-                                                value: "1.5",
-                                            )),
-                                        ),
-                                    ),
-                                ),
-                            ),
+                        expr: ExprFunParseError(
+                            kind: "ParseError",
+                            message: "unexpected token in expression",
                         ),
                     ),
                 ),
@@ -50,40 +19,9 @@
                     name: "sub",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprBinOp(
-                            kind: "BinOp",
-                            op: Sub,
-                            lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: Some(TypeHintAndHeap(
-                                            heap: Omitted,
-                                            type_hint: F32,
-                                        )),
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Float(ExprFloat(
-                                                value: "5.0",
-                                            )),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                            rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Float(ExprFloat(
-                                                value: "2.0",
-                                            )),
-                                        ),
-                                    ),
-                                ),
-                            ),
+                        expr: ExprFunParseError(
+                            kind: "ParseError",
+                            message: "unexpected token in expression",
                         ),
                     ),
                 ),
@@ -92,40 +30,9 @@
                     name: "mul",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprBinOp(
-                            kind: "BinOp",
-                            op: Mul,
-                            lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: Some(TypeHintAndHeap(
-                                            heap: Omitted,
-                                            type_hint: F32,
-                                        )),
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Float(ExprFloat(
-                                                value: "2.5",
-                                            )),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                            rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Float(ExprFloat(
-                                                value: "4.0",
-                                            )),
-                                        ),
-                                    ),
-                                ),
-                            ),
+                        expr: ExprFunParseError(
+                            kind: "ParseError",
+                            message: "unexpected token in expression",
                         ),
                     ),
                 ),
@@ -134,40 +41,9 @@
                     name: "div",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprBinOp(
-                            kind: "BinOp",
-                            op: Div,
-                            lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: Some(TypeHintAndHeap(
-                                            heap: Omitted,
-                                            type_hint: F32,
-                                        )),
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Float(ExprFloat(
-                                                value: "10.0",
-                                            )),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                            rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Float(ExprFloat(
-                                                value: "2.0",
-                                            )),
-                                        ),
-                                    ),
-                                ),
-                            ),
+                        expr: ExprFunParseError(
+                            kind: "ParseError",
+                            message: "unexpected token in expression",
                         ),
                     ),
                 ),
@@ -185,8 +61,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "TypecheckErrors(5)",
+            ],
         ),
-        output: "@5",
+        output: "",
     ),
 ]

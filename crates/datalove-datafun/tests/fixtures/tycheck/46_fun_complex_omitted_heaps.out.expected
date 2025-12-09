@@ -6,8 +6,7 @@
       "kind": "TypeMismatch"
     },
     {
-      "kind": "DatalitError",
-      "message": "CannotSynthesize"
+      "kind": "CannotSynthesize"
     }
   ],
   "judgements": [

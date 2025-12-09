@@ -8,45 +8,36 @@
                     name: "output",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprFunKind(
-                            kind: "Datalit",
-                            value: ExprFull(
-                                type_hint: None,
-                                expr: ExprAndHeap(
-                                    heap: Local,
-                                    expr: Set(ExprSet(
-                                        elements: [
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: String(ExprString(
-                                                        value: "\"foo\"",
-                                                    )),
-                                                ),
-                                            ),
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: String(ExprString(
-                                                        value: "\"bar\"",
-                                                    )),
-                                                ),
-                                            ),
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: String(ExprString(
-                                                        value: "\"baz\"",
-                                                    )),
-                                                ),
-                                            ),
-                                        ],
-                                    )),
+                        expr: ExprSet(
+                            kind: "Set",
+                            heap: Local,
+                            type_hint: None,
+                            elements: [
+                                ExprFun(
+                                    expr: ExprString(
+                                        kind: "String",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "\"foo\"",
+                                    ),
                                 ),
-                            ),
+                                ExprFun(
+                                    expr: ExprString(
+                                        kind: "String",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "\"bar\"",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprString(
+                                        kind: "String",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "\"baz\"",
+                                    ),
+                                ),
+                            ],
                         ),
                     ),
                 ),

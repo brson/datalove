@@ -6,52 +6,35 @@
       "type_hint": null,
       "value": {
         "expr": {
-          "kind": "Datalit",
-          "value": {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
+          "kind": "AnonTuple",
+          "heap": "Local",
+          "type_hint": null,
+          "elements": [
+            {
               "expr": {
-                "AnonTuple": {
-                  "elements": [
-                    {
-                      "type_hint": null,
-                      "expr": {
-                        "heap": "Omitted",
-                        "expr": {
-                          "Int": {
-                            "value": "1"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "type_hint": null,
-                      "expr": {
-                        "heap": "Omitted",
-                        "expr": {
-                          "Int": {
-                            "value": "2"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "type_hint": null,
-                      "expr": {
-                        "heap": "Omitted",
-                        "expr": {
-                          "Int": {
-                            "value": "3"
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
+                "kind": "Int",
+                "heap": "Omitted",
+                "type_hint": null,
+                "value": "1"
+              }
+            },
+            {
+              "expr": {
+                "kind": "Int",
+                "heap": "Omitted",
+                "type_hint": null,
+                "value": "2"
+              }
+            },
+            {
+              "expr": {
+                "kind": "Int",
+                "heap": "Omitted",
+                "type_hint": null,
+                "value": "3"
               }
             }
-          }
+          ]
         }
       }
     }

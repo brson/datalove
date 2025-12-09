@@ -15,17 +15,11 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Omitted,
-                                            expr: String(ExprString(
-                                                value: "\"hello\"",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprString(
+                                    kind: "String",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    value: "\"hello\"",
                                 ),
                             ),
                         ),

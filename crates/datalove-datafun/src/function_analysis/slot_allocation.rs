@@ -144,6 +144,87 @@ impl<'db> SlotAllocationBuilder<'db> {
             ExprFunKind::ParseError(_) => {
                 // No slots needed.
             }
+
+            // New inline variants - allocate slots for nested expressions.
+            ExprFunKind::True(_) |
+            ExprFunKind::False(_) |
+            ExprFunKind::None(_) |
+            ExprFunKind::Int(_) |
+            ExprFunKind::Float(_) |
+            ExprFunKind::Hex(_) |
+            ExprFunKind::String(_) => {
+                // Simple literals need a temporary slot.
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::List(list) => {
+                for elem in list.elements(db) {
+                    self.analyze_expr(db, *elem);
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::Set(set) => {
+                for elem in set.elements(db) {
+                    self.analyze_expr(db, *elem);
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::Map(map) => {
+                for entry in map.entries(db) {
+                    self.analyze_expr(db, entry.key(db));
+                    self.analyze_expr(db, entry.value(db));
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::Tensor(tensor) => {
+                for elem in tensor.elements(db) {
+                    self.analyze_expr(db, *elem);
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::AnonTuple(tuple) => {
+                for elem in tuple.elements(db) {
+                    self.analyze_expr(db, *elem);
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::NamedTuple(tuple) => {
+                for elem in tuple.elements(db) {
+                    self.analyze_expr(db, *elem);
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::AnonStruct(s) => {
+                for field in s.fields(db) {
+                    self.analyze_expr(db, field.value(db));
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::NamedStruct(s) => {
+                for field in s.fields(db) {
+                    self.analyze_expr(db, field.value(db));
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::AnonEnum(e) => {
+                if let Some(payload) = e.payload(db) {
+                    self.analyze_expr(db, payload);
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::NamedEnum(e) => {
+                if let Some(payload) = e.payload(db) {
+                    self.analyze_expr(db, payload);
+                }
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::Data(d) => {
+                self.analyze_expr(db, d.value(db));
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+            ExprFunKind::Err(e) => {
+                self.analyze_expr(db, e.value(db));
+                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
         }
     }
 }

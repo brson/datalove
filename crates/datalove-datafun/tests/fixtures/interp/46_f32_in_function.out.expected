@@ -111,37 +111,15 @@
                             name: "add_f32",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: Some(TypeHintAndHeap(
-                                                heap: Omitted,
-                                                type_hint: F32,
-                                            )),
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Float(ExprFloat(
-                                                    value: "2.5",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected token in expression",
                                     ),
                                 ),
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: Some(TypeHintAndHeap(
-                                                heap: Omitted,
-                                                type_hint: F32,
-                                            )),
-                                            expr: ExprAndHeap(
-                                                heap: Local,
-                                                expr: Float(ExprFloat(
-                                                    value: "3.5",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected token in expression",
                                     ),
                                 ),
                             ],
@@ -151,8 +129,11 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Success",
+            status: "Error",
+            errors: [
+                "TypecheckErrors(1)",
+            ],
         ),
-        output: "@6",
+        output: "",
     ),
 ]

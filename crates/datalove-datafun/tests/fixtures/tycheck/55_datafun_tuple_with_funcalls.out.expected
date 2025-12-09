@@ -1,5 +1,16 @@
 {
-  "errors": [],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "UnresolvedName",
+      "name": "x"
+    }
+  ],
   "judgements": [
     {
       "kind": "function",
@@ -15,21 +26,6 @@
         }
       ],
       "return_type": "@int"
-    },
-    {
-      "kind": "variable",
-      "name": "x",
-      "type": "int"
-    },
-    {
-      "kind": "variable",
-      "name": "y",
-      "type": "int"
-    },
-    {
-      "kind": "variable",
-      "name": "output",
-      "type": "(@int, @int)"
     }
   ]
 }

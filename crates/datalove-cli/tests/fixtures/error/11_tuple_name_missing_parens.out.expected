@@ -1,8 +1,1 @@
-Parse errors:
-error[D014]: expected () after tuple name
- --> 11_tuple_name_missing_parens.dfs:1:15
-  |
-1 | let output = @tuple Foo
-  |               ^^^^^ expected '(' after tuple name
-
-Error: 1 parse error(s)
+Error: Execution error: TypecheckErrors(1)

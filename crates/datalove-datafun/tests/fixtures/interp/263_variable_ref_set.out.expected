@@ -8,45 +8,36 @@
                     name: "x",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprFunKind(
-                            kind: "Datalit",
-                            value: ExprFull(
-                                type_hint: None,
-                                expr: ExprAndHeap(
-                                    heap: Local,
-                                    expr: Set(ExprSet(
-                                        elements: [
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "10",
-                                                    )),
-                                                ),
-                                            ),
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "20",
-                                                    )),
-                                                ),
-                                            ),
-                                            ExprFull(
-                                                type_hint: None,
-                                                expr: ExprAndHeap(
-                                                    heap: Local,
-                                                    expr: Int(ExprInt(
-                                                        value: "30",
-                                                    )),
-                                                ),
-                                            ),
-                                        ],
-                                    )),
+                        expr: ExprSet(
+                            kind: "Set",
+                            heap: Local,
+                            type_hint: None,
+                            elements: [
+                                ExprFun(
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "10",
+                                    ),
                                 ),
-                            ),
+                                ExprFun(
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "20",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "30",
+                                    ),
+                                ),
+                            ],
                         ),
                     ),
                 ),

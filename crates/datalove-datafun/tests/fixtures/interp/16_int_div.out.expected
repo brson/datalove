@@ -66,31 +66,19 @@
                             kind: "BinOp",
                             op: Add,
                             lhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "2000000000",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "2000000000",
                                 ),
                             ),
                             rhs: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Datalit",
-                                    value: ExprFull(
-                                        type_hint: None,
-                                        expr: ExprAndHeap(
-                                            heap: Local,
-                                            expr: Int(ExprInt(
-                                                value: "4000000000",
-                                            )),
-                                        ),
-                                    ),
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "4000000000",
                                 ),
                             ),
                         ),
@@ -116,31 +104,19 @@
                                         kind: "BinOp",
                                         op: Add,
                                         lhs: ExprFun(
-                                            expr: ExprFunKind(
-                                                kind: "Datalit",
-                                                value: ExprFull(
-                                                    type_hint: None,
-                                                    expr: ExprAndHeap(
-                                                        heap: Local,
-                                                        expr: Int(ExprInt(
-                                                            value: "3",
-                                                        )),
-                                                    ),
-                                                ),
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: None,
+                                                value: "3",
                                             ),
                                         ),
                                         rhs: ExprFun(
-                                            expr: ExprFunKind(
-                                                kind: "Datalit",
-                                                value: ExprFull(
-                                                    type_hint: None,
-                                                    expr: ExprAndHeap(
-                                                        heap: Local,
-                                                        expr: Int(ExprInt(
-                                                            value: "0",
-                                                        )),
-                                                    ),
-                                                ),
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: None,
+                                                value: "0",
                                             ),
                                         ),
                                     ),

@@ -108,17 +108,11 @@
                             name: "greet",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Omitted,
-                                                expr: String(ExprString(
-                                                    value: "\"World\"",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprString(
+                                        kind: "String",
+                                        heap: Omitted,
+                                        type_hint: None,
+                                        value: "\"World\"",
                                     ),
                                 ),
                             ],
@@ -135,31 +129,19 @@
                             name: "make_message",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Omitted,
-                                                expr: String(ExprString(
-                                                    value: "\"Hello\"",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprString(
+                                        kind: "String",
+                                        heap: Omitted,
+                                        type_hint: None,
+                                        value: "\"Hello\"",
                                     ),
                                 ),
                                 ExprFun(
-                                    expr: ExprFunKind(
-                                        kind: "Datalit",
-                                        value: ExprFull(
-                                            type_hint: None,
-                                            expr: ExprAndHeap(
-                                                heap: Omitted,
-                                                expr: String(ExprString(
-                                                    value: "\"!\"",
-                                                )),
-                                            ),
-                                        ),
+                                    expr: ExprString(
+                                        kind: "String",
+                                        heap: Omitted,
+                                        type_hint: None,
+                                        value: "\"!\"",
                                     ),
                                 ),
                             ],

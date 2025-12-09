@@ -1053,6 +1053,99 @@ fn synthesize_expr<'db>(
         ExprFunKind::ParseError(_) => {
             Err(ctx.error_cannot_synthesize(expr, "cannot type check parse error"))
         }
+
+        // New inline variants - simple literals.
+        ExprFunKind::True(lit) => {
+            let heap = lit.heap(db);
+            let ty = Type::Datalit(datalit::tycheck::Type::Bool);
+            Ok(TypeAndHeap::new(db, heap, ty))
+        }
+        ExprFunKind::False(lit) => {
+            let heap = lit.heap(db);
+            let ty = Type::Datalit(datalit::tycheck::Type::Bool);
+            Ok(TypeAndHeap::new(db, heap, ty))
+        }
+        ExprFunKind::None(_) => {
+            // None without type hint cannot be synthesized - needs context.
+            Err(ctx.error_cannot_synthesize(expr, "cannot infer type for None value"))
+        }
+        ExprFunKind::Int(int_expr) => {
+            let heap = int_expr.heap(db);
+            let value_str = int_expr.value(db).as_str(db);
+            // Parse as u32 by default.
+            if value_str.parse::<u32>().is_ok() {
+                let ty = Type::Datalit(datalit::tycheck::Type::U32);
+                Ok(TypeAndHeap::new(db, heap, ty))
+            } else if value_str.parse::<i32>().is_ok() {
+                let ty = Type::Datalit(datalit::tycheck::Type::I32);
+                Ok(TypeAndHeap::new(db, heap, ty))
+            } else {
+                Err(ctx.error_cannot_synthesize(expr, "integer literal out of range"))
+            }
+        }
+        ExprFunKind::Float(float_expr) => {
+            let heap = float_expr.heap(db);
+            let ty = Type::Datalit(datalit::tycheck::Type::F32);
+            Ok(TypeAndHeap::new(db, heap, ty))
+        }
+        ExprFunKind::Hex(hex_expr) => {
+            let heap = hex_expr.heap(db);
+            let value_str = hex_expr.value(db).as_str(db);
+            let hex_part = value_str.trim_start_matches('-').trim_start_matches("0x").trim_start_matches("0X");
+            if u32::from_str_radix(hex_part, 16).is_ok() && !value_str.starts_with('-') {
+                let ty = Type::Datalit(datalit::tycheck::Type::U32);
+                Ok(TypeAndHeap::new(db, heap, ty))
+            } else {
+                Err(ctx.error_cannot_synthesize(expr, "hex literal out of range"))
+            }
+        }
+        ExprFunKind::String(str_expr) => {
+            let heap = str_expr.heap(db);
+            let ty = Type::Datalit(datalit::tycheck::Type::String);
+            Ok(TypeAndHeap::new(db, heap, ty))
+        }
+
+        // Collection types.
+        ExprFunKind::List(list_expr) => {
+            synthesize_inline_list(ctx, expr, list_expr)
+        }
+        ExprFunKind::Set(set_expr) => {
+            synthesize_inline_set(ctx, expr, set_expr)
+        }
+        ExprFunKind::Map(map_expr) => {
+            synthesize_inline_map(ctx, expr, map_expr)
+        }
+        ExprFunKind::Tensor(tensor_expr) => {
+            synthesize_inline_tensor(ctx, expr, tensor_expr)
+        }
+
+        // Aggregate types.
+        ExprFunKind::AnonTuple(tuple_expr) => {
+            synthesize_inline_anon_tuple(ctx, expr, tuple_expr)
+        }
+        ExprFunKind::NamedTuple(_) => {
+            Err(ctx.error_cannot_synthesize(expr, "named tuple requires type hint"))
+        }
+        ExprFunKind::AnonStruct(struct_expr) => {
+            synthesize_inline_anon_struct(ctx, expr, struct_expr)
+        }
+        ExprFunKind::NamedStruct(_) => {
+            Err(ctx.error_cannot_synthesize(expr, "named struct requires type hint"))
+        }
+        ExprFunKind::AnonEnum(_) => {
+            Err(ctx.error_cannot_synthesize(expr, "anonymous enum requires type hint"))
+        }
+        ExprFunKind::NamedEnum(_) => {
+            Err(ctx.error_cannot_synthesize(expr, "named enum requires type hint"))
+        }
+
+        // Wrapper types.
+        ExprFunKind::Data(data_expr) => {
+            synthesize_inline_data(ctx, expr, data_expr)
+        }
+        ExprFunKind::Err(err_expr) => {
+            synthesize_inline_err(ctx, expr, err_expr)
+        }
     }
 }
 
@@ -1633,7 +1726,58 @@ fn check_expr<'db>(
             }
         }
 
-        // For non-datalit expressions, use synthesis + comparison with coercion support.
+        // Handle None literals specially - they can check against any Option type.
+        ExprFunKind::None(lit) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Option(_)) => {
+                    // None checks against any Option<T>.
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "None", "None requires Option type"))
+                }
+            }
+        }
+
+        // Handle integer literals specially - they can coerce to expected integer types.
+        ExprFunKind::Int(int_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(expected_datalit_ty) => {
+                    // Check if expected type is a numeric type.
+                    if is_numeric_type(expected.ty(db)) {
+                        ctx.store_expr_type(expr, expected);
+                        return Ok(());
+                    }
+                    // If expected is Option<numeric>, allow coercion.
+                    if let datalit::tycheck::Type::Option(opt) = expected_datalit_ty {
+                        let inner_ty = opt.inner_type(db);
+                        if is_numeric_type(&Type::Datalit(inner_ty.ty(db).clone())) {
+                            ctx.store_expr_type(expr, expected);
+                            return Ok(());
+                        }
+                    }
+                    // Otherwise, synthesize and compare.
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+                        Ok(())
+                    } else {
+                        let expected_str = type_to_string(db, expected.ty(db));
+                        let actual_str = type_to_string(db, synthesized.ty(db));
+                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    }
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
+        // For other non-datalit expressions, use synthesis + comparison with coercion support.
         _ => {
             let synthesized = ctx.synthesize_expr(expr)?;
 
@@ -1952,6 +2096,246 @@ fn collect_module_exports<'db>(
     }
 
     functions
+}
+
+// Helper functions for synthesizing inline expression types.
+
+/// Convert datafun TypeAndHeap to datalit TypeAndHeap.
+fn to_datalit_type_and_heap<'db>(
+    db: &'db dyn crate::Db,
+    ty: TypeAndHeap<'db>,
+) -> Result<datalit::tycheck::TypeAndHeap<'db>, TypeError> {
+    match ty.ty(db) {
+        Type::Datalit(datalit_ty) => {
+            Ok(datalit::tycheck::TypeAndHeap::new(db, ty.heap(db), datalit_ty.clone()))
+        }
+        _ => Err(TypeError::CannotSynthesize),
+    }
+}
+
+/// Synthesize type for inline list expression.
+fn synthesize_inline_list<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    list_expr: crate::ast::ExprList<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let heap = list_expr.heap(db);
+    let elements = list_expr.elements(db);
+
+    if elements.is_empty() {
+        // Empty list - can't synthesize element type.
+        // Default to List<()>.
+        let elem_ty = datalit::tycheck::TypeAndHeap::new(
+            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple::new(db, vec![]))
+        );
+        let ty = Type::Datalit(datalit::tycheck::Type::List(
+            datalit::tycheck::TypeList::new(db, elem_ty)
+        ));
+        return Ok(TypeAndHeap::new(db, heap, ty));
+    }
+
+    // Synthesize type of first element.
+    let first_ty = ctx.synthesize_expr(elements[0])?;
+    let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
+
+    // Check remaining elements.
+    for elem in &elements[1..] {
+        let _ = ctx.synthesize_expr(*elem)?;
+    }
+
+    let ty = Type::Datalit(datalit::tycheck::Type::List(
+        datalit::tycheck::TypeList::new(db, first_datalit)
+    ));
+    Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+/// Synthesize type for inline set expression.
+fn synthesize_inline_set<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    set_expr: crate::ast::ExprSet<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let heap = set_expr.heap(db);
+    let elements = set_expr.elements(db);
+
+    if elements.is_empty() {
+        let elem_ty = datalit::tycheck::TypeAndHeap::new(
+            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple::new(db, vec![]))
+        );
+        let ty = Type::Datalit(datalit::tycheck::Type::Set(
+            datalit::tycheck::TypeSet::new(db, elem_ty)
+        ));
+        return Ok(TypeAndHeap::new(db, heap, ty));
+    }
+
+    let first_ty = ctx.synthesize_expr(elements[0])?;
+    let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
+
+    for elem in &elements[1..] {
+        let _ = ctx.synthesize_expr(*elem)?;
+    }
+
+    let ty = Type::Datalit(datalit::tycheck::Type::Set(
+        datalit::tycheck::TypeSet::new(db, first_datalit)
+    ));
+    Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+/// Synthesize type for inline map expression.
+fn synthesize_inline_map<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    map_expr: crate::ast::ExprMap<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let heap = map_expr.heap(db);
+    let entries = map_expr.entries(db);
+
+    if entries.is_empty() {
+        let unit_ty = datalit::tycheck::TypeAndHeap::new(
+            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple::new(db, vec![]))
+        );
+        let ty = Type::Datalit(datalit::tycheck::Type::Map(
+            datalit::tycheck::TypeMap::new(db, unit_ty.clone(), unit_ty)
+        ));
+        return Ok(TypeAndHeap::new(db, heap, ty));
+    }
+
+    let first_key_ty = ctx.synthesize_expr(entries[0].key(db))?;
+    let first_key_datalit = to_datalit_type_and_heap(db, first_key_ty)?;
+    let first_value_ty = ctx.synthesize_expr(entries[0].value(db))?;
+    let first_value_datalit = to_datalit_type_and_heap(db, first_value_ty)?;
+
+    for entry in &entries[1..] {
+        let _ = ctx.synthesize_expr(entry.key(db))?;
+        let _ = ctx.synthesize_expr(entry.value(db))?;
+    }
+
+    let ty = Type::Datalit(datalit::tycheck::Type::Map(
+        datalit::tycheck::TypeMap::new(db, first_key_datalit, first_value_datalit)
+    ));
+    Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+/// Synthesize type for inline tensor expression.
+fn synthesize_inline_tensor<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    tensor_expr: crate::ast::ExprTensor<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let heap = tensor_expr.heap(db);
+    let shape = tensor_expr.shape(db);
+    let elements = tensor_expr.elements(db);
+
+    // Rank is the number of dimensions in the shape.
+    let rank = shape.len() as u32;
+
+    if elements.is_empty() {
+        let elem_ty = datalit::tycheck::TypeAndHeap::new(
+            db, heap, datalit::tycheck::Type::F32
+        );
+        let ty = Type::Datalit(datalit::tycheck::Type::Tensor(
+            datalit::tycheck::TypeTensor::new(db, elem_ty, rank)
+        ));
+        return Ok(TypeAndHeap::new(db, heap, ty));
+    }
+
+    let first_ty = ctx.synthesize_expr(elements[0])?;
+    let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
+
+    for elem in &elements[1..] {
+        let _ = ctx.synthesize_expr(*elem)?;
+    }
+
+    let ty = Type::Datalit(datalit::tycheck::Type::Tensor(
+        datalit::tycheck::TypeTensor::new(db, first_datalit, rank)
+    ));
+    Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+/// Synthesize type for inline anonymous tuple.
+fn synthesize_inline_anon_tuple<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    tuple_expr: crate::ast::ExprAnonTuple<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let heap = tuple_expr.heap(db);
+    let elements = tuple_expr.elements(db);
+
+    let mut elem_types = Vec::new();
+    for elem in elements {
+        let elem_ty = ctx.synthesize_expr(*elem)?;
+        let elem_datalit = to_datalit_type_and_heap(db, elem_ty)?;
+        elem_types.push(elem_datalit);
+    }
+
+    let ty = Type::Datalit(datalit::tycheck::Type::AnonTuple(
+        datalit::tycheck::TypeAnonTuple::new(db, elem_types)
+    ));
+    Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+/// Synthesize type for inline anonymous struct.
+fn synthesize_inline_anon_struct<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    struct_expr: crate::ast::ExprAnonStruct<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let heap = struct_expr.heap(db);
+    let fields = struct_expr.fields(db);
+
+    let mut field_types = Vec::new();
+    for field in fields {
+        let field_ty = ctx.synthesize_expr(field.value(db))?;
+        let field_datalit = to_datalit_type_and_heap(db, field_ty)?;
+        field_types.push(datalit::tycheck::TypeNamedField::new(db, field.name(db), field_datalit));
+    }
+
+    let ty = Type::Datalit(datalit::tycheck::Type::AnonStruct(
+        datalit::tycheck::TypeAnonStruct::new(db, field_types)
+    ));
+    Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+/// Synthesize type for inline data expression.
+fn synthesize_inline_data<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    data_expr: crate::ast::ExprData<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let heap = data_expr.heap(db);
+    let value = data_expr.value(db);
+
+    // Type-check the inner value.
+    let _ = ctx.synthesize_expr(value)?;
+
+    // Data synthesizes to Type::Data (unit type).
+    let ty = Type::Datalit(datalit::tycheck::Type::Data);
+    Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+/// Synthesize type for inline err expression.
+fn synthesize_inline_err<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    err_expr: crate::ast::ExprErr<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let heap = err_expr.heap(db);
+    let value = err_expr.value(db);
+
+    // Type-check the inner value.
+    let _ = ctx.synthesize_expr(value)?;
+
+    // Error synthesizes to Type::Error (unit type).
+    let ty = Type::Datalit(datalit::tycheck::Type::Error);
+    Ok(TypeAndHeap::new(db, heap, ty))
 }
 
 #[cfg(test)]

@@ -8,42 +8,34 @@
                     name: "output",
                     type_hint: None,
                     value: ExprFun(
-                        expr: ExprFunKind(
-                            kind: "Datalit",
-                            value: ExprFull(
-                                type_hint: None,
-                                expr: ExprAndHeap(
-                                    heap: Local,
-                                    expr: AnonStruct(ExprAnonStruct(
-                                        fields: [
-                                            ExprStructField(
-                                                name: "x",
-                                                value: ExprFull(
-                                                    type_hint: None,
-                                                    expr: ExprAndHeap(
-                                                        heap: Local,
-                                                        expr: Int(ExprInt(
-                                                            value: "1",
-                                                        )),
-                                                    ),
-                                                ),
-                                            ),
-                                            ExprStructField(
-                                                name: "y",
-                                                value: ExprFull(
-                                                    type_hint: None,
-                                                    expr: ExprAndHeap(
-                                                        heap: Local,
-                                                        expr: Int(ExprInt(
-                                                            value: "2",
-                                                        )),
-                                                    ),
-                                                ),
-                                            ),
-                                        ],
-                                    )),
+                        expr: ExprAnonStruct(
+                            kind: "AnonStruct",
+                            heap: Local,
+                            type_hint: None,
+                            fields: [
+                                ExprStructField(
+                                    name: "x",
+                                    value: ExprFun(
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "1",
+                                        ),
+                                    ),
                                 ),
-                            ),
+                                ExprStructField(
+                                    name: "y",
+                                    value: ExprFun(
+                                        expr: ExprInt(
+                                            kind: "Int",
+                                            heap: Local,
+                                            type_hint: None,
+                                            value: "2",
+                                        ),
+                                    ),
+                                ),
+                            ],
                         ),
                     ),
                 ),

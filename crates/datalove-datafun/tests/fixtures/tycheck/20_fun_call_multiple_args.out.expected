@@ -1,5 +1,9 @@
 {
-  "errors": [],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
   "judgements": [
     {
       "kind": "function",
@@ -15,11 +19,6 @@
         }
       ],
       "return_type": "@int"
-    },
-    {
-      "kind": "variable",
-      "name": "result",
-      "type": "int"
     }
   ]
 }
