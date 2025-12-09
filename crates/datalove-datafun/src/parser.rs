@@ -1014,25 +1014,29 @@ impl<'db> Parser<'db> {
                     if Self::is_numeric_literal(word) {
                         tokens.next();
                         let is_hex = word.starts_with("0x") || word.starts_with("0X");
-                        // Check for float.
-                        let is_float = !is_hex && self.peek_sigil(tokens, Sigil::Dot) && {
+                        // Check for float: consume dot, then check for decimal digits.
+                        if !is_hex && self.peek_sigil(tokens, Sigil::Dot) {
+                            self.eat_sigil(tokens, Sigil::Dot);
                             if let Some(TreeToken::Token(next)) = tokens.peek() {
                                 if let Some(decimal) = next.word_str(self.db) {
-                                    decimal.chars().all(|c| c.is_ascii_digit())
-                                } else {
-                                    false
+                                    if decimal.chars().all(|c| c.is_ascii_digit()) {
+                                        let decimal_name = self.need_name(tokens);
+                                        let float_str = format!("-{}.{}", word, decimal_name.as_str(self.db));
+                                        let value = InternedText::new(self.db, float_str.S());
+                                        return ast::ExprFunKind::Float(ast::ExprFloat::new(self.db, heap, type_hint, value));
+                                    }
                                 }
-                            } else {
-                                false
                             }
-                        };
-                        if is_float {
-                            self.eat_sigil(tokens, Sigil::Dot);
-                            let decimal = self.need_name(tokens);
-                            let float_str = format!("-{}.{}", word, decimal.as_str(self.db));
-                            let value = InternedText::new(self.db, float_str.S());
-                            return ast::ExprFunKind::Float(ast::ExprFloat::new(self.db, heap, type_hint, value));
-                        } else if is_hex {
+                            // Dot was consumed but no valid decimal follows.
+                            let (text, span) = self.peek_text_span(tokens);
+                            return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                                self.db,
+                                text,
+                                span,
+                                InternedText::new(self.db, "expected decimal digits after '.'".S()),
+                            ));
+                        }
+                        if is_hex {
                             let hex_str = format!("-{}", word);
                             let value = InternedText::new(self.db, hex_str.S());
                             return ast::ExprFunKind::Hex(ast::ExprHex::new(self.db, heap, type_hint, value));
@@ -1108,12 +1112,12 @@ impl<'db> Parser<'db> {
                         if Self::is_numeric_literal(word) {
                             tokens.next();
                             let is_hex = word.starts_with("0x") || word.starts_with("0X");
-                            // Check for float.
+                            // Check for float: consume dot, then check for decimal digits.
                             if !is_hex && self.peek_sigil(tokens, Sigil::Dot) {
+                                self.eat_sigil(tokens, Sigil::Dot);
                                 if let Some(TreeToken::Token(next)) = tokens.peek() {
                                     if let Some(decimal) = next.word_str(self.db) {
                                         if decimal.chars().all(|c| c.is_ascii_digit()) {
-                                            self.eat_sigil(tokens, Sigil::Dot);
                                             let decimal_name = self.need_name(tokens);
                                             let float_str = format!("{}.{}", word, decimal_name.as_str(self.db));
                                             let value = InternedText::new(self.db, float_str.S());
@@ -1121,6 +1125,16 @@ impl<'db> Parser<'db> {
                                         }
                                     }
                                 }
+                                // Dot was consumed but no valid decimal follows - treat as member access.
+                                // This is a parse error for datalit, but we need to handle it.
+                                // For now, return an error.
+                                let (text, span) = self.peek_text_span(tokens);
+                                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                                    self.db,
+                                    text,
+                                    span,
+                                    InternedText::new(self.db, "expected decimal digits after '.'".S()),
+                                ));
                             }
                             let value = InternedText::new(self.db, word.S());
                             if is_hex {

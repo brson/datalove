@@ -9,7 +9,7 @@
     {
       "kind": "variable",
       "name": "b",
-      "type": "u32"
+      "type": "f32"
     },
     {
       "kind": "variable",
@@ -19,7 +19,7 @@
     {
       "kind": "variable",
       "name": "output",
-      "type": "(@u32, @u32, @bool)"
+      "type": "(@u32, @f32, @bool)"
     }
   ]
 }

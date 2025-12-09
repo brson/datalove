@@ -187,13 +187,13 @@ fn make_compatible_config() -> AstGenConfig {
             i16_type: 5,
             u32_type: 10,
             i32_type: 10,
-            // Disable 64-bit ints - large values cause error differences.
-            u64_type: 0,
-            i64_type: 0,
-            // Disable float - parsing differences between datalit and datafun.
-            f32_type: 0,
-            // Disable bigint - large values cause error differences.
-            int_type: 0,
+            // 64-bit ints work with SmallNonNegative strategy (values 0-255).
+            u64_type: 10,
+            i64_type: 10,
+            // Float works after fixing parser to consume dot before checking decimal.
+            f32_type: 10,
+            // BigInt works with SmallNonNegative strategy.
+            int_type: 10,
             string_type: 10,
             // Lists work with min_collection_size: 1 to avoid empty list type inference issues.
             list_type: 10,

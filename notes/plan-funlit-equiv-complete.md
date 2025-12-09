@@ -17,6 +17,10 @@ The `make_compatible_config()` currently disables most types. Here's the remedia
 - `map_type: 10` - **DONE** (Phase 2)
 - `set_type: 10` - **DONE** (Phase 2)
 - `tensor_type: 10` - **DONE** (Phase 2)
+- `u64_type: 10` - **DONE** (Phase 3)
+- `i64_type: 10` - **DONE** (Phase 3)
+- `int_type: 10` - **DONE** (Phase 3)
+- `f32_type: 10` - **DONE** (Phase 4)
 
 ## Disabled Types and Remediation
 
@@ -90,13 +94,18 @@ These require `: type / value` syntax which datafun doesn't support yet:
    - Fixed 2D+ tensor data parsing to handle space-separated rows
    - Added `parse_tensor_data_2d_plus` and `split_tokens_by_comma_with_spaces` methods
 
-### Phase 3: Numeric Edge Cases
+### Phase 3: Numeric Edge Cases - **DONE**
 6. ~~Add SmallValues numeric strategy to ast_gen~~ - DONE (merged into Phase 1)
-7. Enable u64, i64, int with small values
+7. ~~Enable u64, i64, int with small values~~ - DONE
+   - SmallNonNegative strategy generates values 0-255 which avoids overflow issues
 
-### Phase 4: Float Handling
-8. Investigate float parsing differences
-9. Fix and enable f32
+### Phase 4: Float Handling - **DONE**
+8. ~~Investigate float parsing differences~~ - DONE
+   - Bug: after checking peek_sigil for Dot, code peeked again but got Dot (not consumed)
+   - This caused word_str() to return None, skipping float parsing
+9. ~~Fix and enable f32~~ - DONE
+   - Fixed parser to consume dot before checking for decimal digits
+   - Applied fix to both positive and negative number cases
 
 ### Phase 5: Type Hint Syntax (largest change)
 10. Add `: type / expr` parsing to datafun parser
