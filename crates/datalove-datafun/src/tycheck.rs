@@ -309,16 +309,9 @@ impl<'db> TypeContext<'db> {
         }
     }
 
-    /// Look up the source location for an expression.
     /// Look up span for a datafun expression (on-demand).
     fn get_span(&self, expr: ExprFun<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
         let spans = crate::spans::datafun_spans(self.db, self.source);
-        spans.lookup(self.db, expr).map(|entry| entry.to_text_and_span(self.db))
-    }
-
-    /// Look up span for a datalit expression (on-demand).
-    fn get_datalit_span(&self, expr: datalit::ast::ExprFull<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
-        let spans = crate::spans::datalit_spans(self.db, self.source);
         spans.lookup(self.db, expr).map(|entry| entry.to_text_and_span(self.db))
     }
 
