@@ -197,12 +197,12 @@ fn make_compatible_config() -> AstGenConfig {
             string_type: 10,
             // Lists work with min_collection_size: 1 to avoid empty list type inference issues.
             list_type: 10,
-            // Disable problematic types.
-            map_type: 0,     // Uses special syntax
-            set_type: 0,     // Uses special syntax
+            // Map and set work with min_collection_size: 1.
+            map_type: 10,
+            set_type: 10,
             option_type: 0,  // Requires type hint for @none
             result_type: 0,  // Requires type hint for @error
-            tensor_type: 0,  // Complex syntax
+            tensor_type: 10, // Works with min_collection_size: 1
             anon_tuple_type: 10,
             named_tuple_type: 0,  // Requires type hint
             anon_struct_type: 10,

@@ -14,6 +14,9 @@ The `make_compatible_config()` currently disables most types. Here's the remedia
 - `i16_type: 5` - **DONE** (Phase 1)
 - `i32_type: 10` - **DONE** (Phase 1)
 - `list_type: 10` - **DONE** (Phase 1)
+- `map_type: 10` - **DONE** (Phase 2)
+- `set_type: 10` - **DONE** (Phase 2)
+- `tensor_type: 10` - **DONE** (Phase 2)
 
 ## Disabled Types and Remediation
 
@@ -80,10 +83,12 @@ These require `: type / value` syntax which datafun doesn't support yet:
    - Added `min_collection_size` field to `AstGenConfig` to avoid empty lists
    - Set `min_collection_size: 1` in test config
 
-### Phase 2: Syntax Support (add missing keywords to parser)
-3. Add `map {...}` keyword parsing to datafun
-4. Add `set {...}` keyword parsing to datafun
-5. Add `tensor [shape] [elements]` parsing to datafun
+### Phase 2: Syntax Support (add missing keywords to parser) - **DONE**
+3. ~~Add `map {...}` keyword parsing to datafun~~ - DONE (already existed)
+4. ~~Add `set {...}` keyword parsing to datafun~~ - DONE (already existed)
+5. ~~Add `tensor [shape] [elements]` parsing to datafun~~ - DONE
+   - Fixed 2D+ tensor data parsing to handle space-separated rows
+   - Added `parse_tensor_data_2d_plus` and `split_tokens_by_comma_with_spaces` methods
 
 ### Phase 3: Numeric Edge Cases
 6. ~~Add SmallValues numeric strategy to ast_gen~~ - DONE (merged into Phase 1)

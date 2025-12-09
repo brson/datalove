@@ -1428,10 +1428,18 @@ impl<'db> Parser<'db> {
             }
         };
 
+        let rank = shape.len();
+
         // Parse data: [elements]
+        // For rank 1: comma-separated elements.
+        // For rank 2+: comma-separated rows, space-separated elements within each row.
         let elements = match tokens.next() {
             Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
-                self.parse_comma_separated_exprs(iter)
+                if rank <= 1 {
+                    self.parse_comma_separated_exprs(iter)
+                } else {
+                    self.parse_tensor_data_2d_plus(iter)
+                }
             }
             _ => {
                 let (text, span) = self.peek_text_span(tokens);
@@ -1443,6 +1451,59 @@ impl<'db> Parser<'db> {
         };
 
         ast::ExprFunKind::Tensor(ast::ExprTensor::new(self.db, heap, type_hint, shape, elements))
+    }
+
+    // Parse tensor data for 2D+ tensors: comma-separated rows, space-separated elements.
+    fn parse_tensor_data_2d_plus(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
+        let all_tokens: Vec<_> = iter.collect();
+        if all_tokens.is_empty() {
+            return vec![];
+        }
+
+        // Split by comma to get rows.
+        let rows = self.split_tokens_by_comma_with_spaces(&all_tokens);
+        let mut elements = Vec::new();
+
+        for row_tokens in rows {
+            // Each row contains space-separated elements.
+            // Filter spaces to get element tokens, then parse greedily.
+            let elem_tokens: Vec<_> = row_tokens.into_iter()
+                .filter_map(|t| t.without_space(self.db))
+                .collect();
+
+            // Parse all elements in the row by feeding all tokens to a peekable iterator
+            // and calling parse_expr_full repeatedly until exhausted.
+            let mut row_iter = elem_tokens.into_iter().peekable();
+            while row_iter.peek().is_some() {
+                elements.push(self.parse_expr_full(&mut row_iter));
+            }
+        }
+
+        elements
+    }
+
+    // Split tokens by comma, preserving spaces within groups (for tensor row parsing).
+    fn split_tokens_by_comma_with_spaces(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
+        let mut groups = Vec::new();
+        let mut current = Vec::new();
+
+        for token in tokens {
+            if let TreeToken::Token(t) = token {
+                if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) {
+                    if !current.is_empty() {
+                        groups.push(std::mem::take(&mut current));
+                    }
+                    continue;
+                }
+            }
+            current.push(token.clone());
+        }
+
+        if !current.is_empty() {
+            groups.push(current);
+        }
+
+        groups
     }
 
     // Parse tensor shape dimensions.
