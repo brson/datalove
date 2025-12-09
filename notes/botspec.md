@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2025-11-25
+Last verified: 2025-12-09
 
 ## Overview
 
@@ -21,10 +21,9 @@ Uses Salsa for incremental compilation. REPL-first design.
 | Type | Description | Interpreter Status |
 |------|-------------|-------------------|
 | `bool` | Boolean | Implemented |
-| `u8`, `u16`, `u64` | Unsigned integers | [NOT IMPLEMENTED] |
-| `u32` | 32-bit unsigned integer | Implemented |
-| `i8`, `i16`, `i32`, `i64` | Signed integers | [NOT IMPLEMENTED] |
-| `f32` | 32-bit float | [NOT IMPLEMENTED] |
+| `u8`, `u16`, `u32`, `u64` | Unsigned integers | Implemented |
+| `i8`, `i16`, `i32`, `i64` | Signed integers | Implemented |
+| `f32` | 32-bit float | Implemented |
 | `int` | Arbitrary precision signed integer (bigint) | Implemented |
 | `string` | UTF-8 string | Implemented |
 
@@ -32,43 +31,43 @@ Uses Salsa for incremental compilation. REPL-first design.
 
 | Type | Syntax | Example | Interpreter Status |
 |------|--------|---------|-------------------|
-| List | `[@T]` | `[1, 2, 3]` | [NOT IMPLEMENTED] |
-| Map | `@map<@K, @V>` | `@map { 0 = 5, 2 = 2 }` | [NOT IMPLEMENTED] |
-| Set | `@set<@T>` | `@set { 1, 2, 3 }` | [NOT IMPLEMENTED] |
+| List | `[@T]` | `[1, 2, 3]` | Implemented |
+| Map | `@map<@K, @V>` | `@map { 0 = 5, 2 = 2 }` | Implemented |
+| Set | `@set<@T>` | `@set { 1, 2, 3 }` | Implemented |
 | Tensor | `@tensor<@T, N>` | - | [PARTIAL: parsed only] |
 
 ### 1.3 Aggregate Types
 
-**Interpreter Status:** All aggregate types are [NOT IMPLEMENTED] in the new interpreter.
+**Interpreter Status:** Anonymous tuples and structs are implemented. Named tuples/structs/enums are [NOT IMPLEMENTED].
 
-**Anonymous Tuple:**
+**Anonymous Tuple:** (Implemented)
 ```
 : (@bool, @u32) / (@true, 1)
 : () / ()
 ```
 
-**Named Tuple:**
+**Named Tuple:** [NOT IMPLEMENTED]
 ```
 : @tuple Bar (@bool, @u32) / @tuple Bar (@true, 1)
 ```
 
-**Anonymous Struct:**
+**Anonymous Struct:** (Implemented)
 ```
 : { field1: @bool, field2: @u32 } / { field1 = @true, field2 = 1 }
 ```
 
-**Named Struct:**
+**Named Struct:** [NOT IMPLEMENTED]
 ```
 : @struct Foo { field1: @bool } / @struct Foo { field1 = @true }
 ```
 
-**Anonymous Enum:**
+**Anonymous Enum:** [NOT IMPLEMENTED]
 ```
 : @enum { Foo, Bar(@u32) } / @enum Foo
 : @enum { Bar(@u32) } / @enum Bar(2)
 ```
 
-**Named Enum:**
+**Named Enum:** [NOT IMPLEMENTED]
 ```
 : @enum Quux { Bar(@u32) } / @enum Quux.Bar(1)
 ```
@@ -77,10 +76,10 @@ Uses Salsa for incremental compilation. REPL-first design.
 
 | Type | Syntax | Values | Interpreter Status |
 |------|--------|--------|-------------------|
-| Option | `@?@T` | value or `@none` | [NOT IMPLEMENTED] |
-| Result | `@!@T` | value or `@error "msg"` | [NOT IMPLEMENTED] |
+| Option | `?@T` | value or `@none` | Implemented |
+| Result | `!@T` | value or `@error "msg"` | Implemented |
 | Data | `@data` | `@data 1`, `@data : int / 1` | [NOT IMPLEMENTED] |
-| Error | `@error` | `@error "oops"`, `@error : int / 1` | [NOT IMPLEMENTED] |
+| Error | `@error` | `@error "oops"`, `@error : int / 1` | Implemented (as result payload) |
 
 ### 1.5 Heap Annotations
 
@@ -124,7 +123,8 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | `require module` | `require module sys/std/bool` | Implemented |
 | `require data` | `require data name` | [PARTIAL: parsed] |
 | `import` | `import module_name.item_name` | Implemented |
-| `if` | `if cond ... end if` | [PARTIAL: parsed, not interpreted] |
+| `if` | `if cond ... end if` | Implemented (in function bodies) |
+| `if` with binding | `if opt \|value\| ... end if` | Implemented (option/result unwrap) |
 
 ### 2.2 Expressions
 
@@ -134,10 +134,12 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | Name/variable | `foo` | Implemented |
 | Binary op | `a + b` | Implemented |
 | Function call | `foo(a, b)` | Implemented |
-| Tuple | `(a, b)` | [NOT IMPLEMENTED in interpreter] |
-| Unary op | `-x`, `-? x`, `-! x` | [PARTIAL: parsed, not interpreted] |
-| Try option | `expr?` | [PARTIAL: parsed, not interpreted] |
-| Try result | `expr!` | [PARTIAL: parsed, not interpreted] |
+| Tuple | `(a, b)` | Implemented |
+| Unary negation | `-x` | Implemented (int only) |
+| Unary optional | `-?x` | Implemented (signed fixed ints) |
+| Unary result | `-!x` | Implemented (signed fixed ints) |
+| Try option | `expr?` | Implemented (early-return on none) |
+| Try result | `expr!` | Implemented (early-return on error) |
 
 ### 2.3 Operators
 
@@ -167,7 +169,7 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 These operators early-return on overflow/div0, requiring the enclosing function to return `!T`.
 
 **Tycheck:** Correct per spec.
-**Interpreter:** [DEVIATION] Treats `+!` same as `+` (widens to int instead of checked fixed-int math).
+**Interpreter:** Correct per spec (early-returns error on overflow).
 
 #### Optional Arithmetic (`+? -? *? /?`) - Early-return Option
 
@@ -194,7 +196,7 @@ These operators early-return `none` on overflow/div0. `-?` disallowed for unsign
 | `!=` | Not equal |
 
 **Tycheck:** Returns `bool` for any numeric operands.
-**Interpreter:** [NOT IMPLEMENTED]
+**Interpreter:** Implemented for all numeric types.
 
 ### 2.4 Function Definitions
 
@@ -296,13 +298,12 @@ Features from documentation that have no or minimal implementation:
 | Tensor operations | notes/arrays.md | Parsed only, no runtime |
 | Zipper heaps | notes/zipper-heaps.md | Design only |
 | `panic` statement | notes/panicking.md | Not implemented |
-| Comparison operators | demo-datafun-script.dfs | Parsed, not interpreted |
-| Try operators `?` `!` | demo-datafun-script.dfs | Parsed, not interpreted |
-| `if` in function body | demo-datafun-script.dfs | Not interpreted |
 | Pattern matching / match | demo-datafun-script.dfs | Not implemented |
 | `loop`/`break`/`continue` | demo-datafun-script.dfs | Not implemented |
 | `arena` blocks | demo-datafun-script.dfs | Not implemented |
 | `memoize` | demo-datafun-script.dfs | Not implemented |
 | `var`/`set` mutation | demo-datafun-script.dfs | Not implemented |
 | `@type` introspection | demo-datafun-script.dfs | Not implemented |
+| `@data` dynamic type | README.md | Not implemented |
+| Named aggregates | README.md | Not implemented (named tuples, structs, enums) |
 | Full Datalove layer | README.md | Not implemented |
