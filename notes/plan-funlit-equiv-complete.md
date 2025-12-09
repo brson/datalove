@@ -133,6 +133,21 @@ The funlit_equiv tests use `include_type_hints: true` and `omitted: 0` in heap d
 This ensures all expressions have explicit heap sigils (`@` or `#`) to avoid ambiguity
 with function return type annotations (`: type` vs `: type / expr`).
 
+### TODO: Investigate `omitted: 0` Workaround
+
+The `omitted: 0` restriction may be unnecessarily conservative. Function definitions are
+**statements**, not expressions. When `parse_expr_primary` is called, we're already in
+expression context where function syntax is invalid. Therefore, if we see `:` at the start
+of an expression, it **must** be a type hint - there should be no ambiguity.
+
+The original failure in test `20_fun_call_chained` needs investigation:
+- Was `peek_colon_type_hint` being called from a context that handles both statements and expressions?
+- Was there a bug in how type hint parsing consumed tokens, affecting subsequent parsing?
+- Or was there some other reason for the failure?
+
+If the ambiguity doesn't actually exist in expression context, the `omitted: 0` restriction
+could be relaxed to allow omitted heap sigils (e.g., `: u32 / 42` without `@` or `#`).
+
 ## Testing Strategy
 
 For each phase:
