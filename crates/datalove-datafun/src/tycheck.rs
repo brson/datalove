@@ -1076,6 +1076,15 @@ fn synthesize_expr<'db>(
                 if let Type::Datalit(datalit_ty) = result_ty.ty(db) {
                     check_int_fits_wrapped_type(value_str, datalit_ty, db)?;
                 }
+                // Validate heap compatibility between type hint and expression.
+                let expected_heap = unwrap_wrapper_heap(db, result_ty);
+                let actual_heap = int_expr.heap(db);
+                if !heaps_compatible(expected_heap, actual_heap) {
+                    return Err(TypeError::HeapMismatch {
+                        expected_heap: heap_to_string(expected_heap),
+                        actual_heap: heap_to_string(actual_heap),
+                    });
+                }
                 return Ok(result_ty);
             }
             let heap = int_expr.heap(db);
@@ -1108,6 +1117,15 @@ fn synthesize_expr<'db>(
                 if let Type::Datalit(datalit_ty) = result_ty.ty(db) {
                     check_hex_fits_wrapped_type(value_str, datalit_ty, db)?;
                 }
+                // Validate heap compatibility between type hint and expression.
+                let expected_heap = unwrap_wrapper_heap(db, result_ty);
+                let actual_heap = hex_expr.heap(db);
+                if !heaps_compatible(expected_heap, actual_heap) {
+                    return Err(TypeError::HeapMismatch {
+                        expected_heap: heap_to_string(expected_heap),
+                        actual_heap: heap_to_string(actual_heap),
+                    });
+                }
                 return Ok(result_ty);
             }
             let heap = hex_expr.heap(db);
@@ -1132,25 +1150,37 @@ fn synthesize_expr<'db>(
         // Collection types.
         ExprFunKind::List(list_expr) => {
             if let Some(type_hint) = list_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let expected_ty = convert_type_hint(db, type_hint)?;
+                // Check elements against expected type (catches heap mismatches).
+                check_list_elements(ctx, list_expr.elements(db), expected_ty)?;
+                return Ok(expected_ty);
             }
             synthesize_inline_list(ctx, expr, list_expr)
         }
         ExprFunKind::Set(set_expr) => {
             if let Some(type_hint) = set_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let expected_ty = convert_type_hint(db, type_hint)?;
+                // Check elements against expected type (catches heap mismatches).
+                check_set_elements(ctx, set_expr.elements(db), expected_ty)?;
+                return Ok(expected_ty);
             }
             synthesize_inline_set(ctx, expr, set_expr)
         }
         ExprFunKind::Map(map_expr) => {
             if let Some(type_hint) = map_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let expected_ty = convert_type_hint(db, type_hint)?;
+                // Check entries against expected type (catches heap mismatches).
+                check_map_entries(ctx, map_expr.entries(db), expected_ty)?;
+                return Ok(expected_ty);
             }
             synthesize_inline_map(ctx, expr, map_expr)
         }
         ExprFunKind::Tensor(tensor_expr) => {
             if let Some(type_hint) = tensor_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let expected_ty = convert_type_hint(db, type_hint)?;
+                // Check elements against expected type (catches heap mismatches).
+                check_tensor_elements(ctx, tensor_expr.elements(db), expected_ty)?;
+                return Ok(expected_ty);
             }
             synthesize_inline_tensor(ctx, expr, tensor_expr)
         }
@@ -1975,6 +2005,39 @@ fn check_hex_fits_wrapped_type(value_str: &str, ty: &datalit::tycheck::Type<'_>,
     }
 }
 
+/// Unwrap Option/Result types to get the innermost heap.
+/// Used when checking heap compatibility for typed literals.
+fn unwrap_wrapper_heap<'db>(
+    db: &'db dyn crate::Db,
+    ty: TypeAndHeap<'db>,
+) -> datalit::ast::Heap {
+    match ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
+            unwrap_wrapper_heap_datalit(db, opt.inner_type(db))
+        }
+        Type::Datalit(datalit::tycheck::Type::Result(res)) => {
+            unwrap_wrapper_heap_datalit(db, res.inner_type(db))
+        }
+        _ => ty.heap(db),
+    }
+}
+
+/// Unwrap Option/Result types from a datalit TypeAndHeap.
+fn unwrap_wrapper_heap_datalit<'db>(
+    db: &'db dyn crate::Db,
+    ty: datalit::tycheck::TypeAndHeap<'db>,
+) -> datalit::ast::Heap {
+    match ty.ty(db) {
+        datalit::tycheck::Type::Option(opt) => {
+            unwrap_wrapper_heap_datalit(db, opt.inner_type(db))
+        }
+        datalit::tycheck::Type::Result(res) => {
+            unwrap_wrapper_heap_datalit(db, res.inner_type(db))
+        }
+        _ => ty.heap(db),
+    }
+}
+
 /// Check if two heaps are compatible.
 /// Omitted heap is generic and compatible with any heap.
 fn heaps_compatible(h1: datalit::ast::Heap, h2: datalit::ast::Heap) -> bool {
@@ -2536,6 +2599,185 @@ fn synthesize_inline_err<'db>(
     // Error synthesizes to Type::Error (unit type).
     let ty = Type::Datalit(datalit::tycheck::Type::Error);
     Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+// Helper functions for checking collection elements against expected types.
+
+/// Unwrap Option/Result wrappers to get inner type.
+/// Used to check collection elements when type hint includes Option/Result.
+fn unwrap_wrapper_types<'db>(
+    db: &'db dyn crate::Db,
+    ty: TypeAndHeap<'db>,
+) -> TypeAndHeap<'db> {
+    match ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
+            // Convert datalit TypeAndHeap to datafun TypeAndHeap.
+            let inner = opt.inner_type(db);
+            let datafun_inner = TypeAndHeap::new(
+                db,
+                inner.heap(db),
+                Type::Datalit(inner.ty(db).clone()),
+            );
+            unwrap_wrapper_types(db, datafun_inner)
+        }
+        Type::Datalit(datalit::tycheck::Type::Result(res)) => {
+            // Convert datalit TypeAndHeap to datafun TypeAndHeap.
+            let inner = res.inner_type(db);
+            let datafun_inner = TypeAndHeap::new(
+                db,
+                inner.heap(db),
+                Type::Datalit(inner.ty(db).clone()),
+            );
+            unwrap_wrapper_types(db, datafun_inner)
+        }
+        _ => ty,
+    }
+}
+
+/// Check list elements against expected type.
+fn check_list_elements<'db>(
+    ctx: &mut TypeContext<'db>,
+    elements: &[ExprFun<'db>],
+    expected_ty: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    let db = ctx.db;
+
+    // Unwrap Option/Result wrappers to get the actual list type.
+    let inner_ty = unwrap_wrapper_types(db, expected_ty);
+
+    // Extract the element type from the list type.
+    let elem_type = match inner_ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::List(list_ty)) => {
+            list_ty.element_type(db)
+        }
+        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+    };
+
+    // Check each element against expected element type.
+    for elem in elements {
+        let elem_ty = ctx.synthesize_expr(*elem)?;
+        // Check heap compatibility.
+        if !heaps_compatible(elem_type.heap(db), elem_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(elem_type.heap(db)),
+                actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Check set elements against expected type.
+fn check_set_elements<'db>(
+    ctx: &mut TypeContext<'db>,
+    elements: &[ExprFun<'db>],
+    expected_ty: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    let db = ctx.db;
+
+    // Unwrap Option/Result wrappers to get the actual set type.
+    let inner_ty = unwrap_wrapper_types(db, expected_ty);
+
+    // Extract the element type from the set type.
+    let elem_type = match inner_ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Set(set_ty)) => {
+            set_ty.element_type(db)
+        }
+        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+    };
+
+    // Check each element against expected element type.
+    for elem in elements {
+        let elem_ty = ctx.synthesize_expr(*elem)?;
+        // Check heap compatibility.
+        if !heaps_compatible(elem_type.heap(db), elem_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(elem_type.heap(db)),
+                actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Check map entries against expected type.
+fn check_map_entries<'db>(
+    ctx: &mut TypeContext<'db>,
+    entries: &[crate::ast::ExprMapEntry<'db>],
+    expected_ty: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    let db = ctx.db;
+
+    // Unwrap Option/Result wrappers to get the actual map type.
+    let inner_ty = unwrap_wrapper_types(db, expected_ty);
+
+    // Extract the key and value types from the map type.
+    let (key_type, value_type) = match inner_ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Map(map_ty)) => {
+            (map_ty.key_type(db), map_ty.value_type(db))
+        }
+        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+    };
+
+    // Check each entry against expected types.
+    for entry in entries {
+        let key_ty = ctx.synthesize_expr(entry.key(db))?;
+        let value_ty = ctx.synthesize_expr(entry.value(db))?;
+
+        // Check key heap compatibility.
+        if !heaps_compatible(key_type.heap(db), key_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(key_type.heap(db)),
+                actual_heap: heap_to_string(key_ty.heap(db)),
+            });
+        }
+
+        // Check value heap compatibility.
+        if !heaps_compatible(value_type.heap(db), value_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(value_type.heap(db)),
+                actual_heap: heap_to_string(value_ty.heap(db)),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Check tensor elements against expected type.
+fn check_tensor_elements<'db>(
+    ctx: &mut TypeContext<'db>,
+    elements: &[ExprFun<'db>],
+    expected_ty: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    let db = ctx.db;
+
+    // Unwrap Option/Result wrappers to get the actual tensor type.
+    let inner_ty = unwrap_wrapper_types(db, expected_ty);
+
+    // Extract the element type from the tensor type.
+    let elem_type = match inner_ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Tensor(tensor_ty)) => {
+            tensor_ty.element_type(db)
+        }
+        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+    };
+
+    // Check each element against expected element type.
+    for elem in elements {
+        let elem_ty = ctx.synthesize_expr(*elem)?;
+        // Check heap compatibility.
+        if !heaps_compatible(elem_type.heap(db), elem_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(elem_type.heap(db)),
+                actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

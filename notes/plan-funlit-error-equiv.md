@@ -155,12 +155,13 @@ The tests reveal real differences between datalit and datafun:
 
 # Remediation Plan
 
-**Status: PHASE 1 COMPLETE**
+**Status: PHASE 1.5 COMPLETE**
 
 ## Root Causes
 
 1. ~~Datafun doesn't call datalit's `check()` function for typed literals~~ FIXED
-2. Parser panics on malformed input instead of returning ParseError nodes (TBD)
+2. ~~Datafun doesn't check heap compatibility for typed literals~~ FIXED
+3. Parser panics on malformed input instead of returning ParseError nodes (TBD)
 
 ## Phase 1: Type Error Fixes - COMPLETED
 
@@ -182,6 +183,20 @@ Added heap compatibility checks to `synthesize_inline_list`, `synthesize_inline_
 
 Added `From<datalit::tycheck::TypeError> for datafun::tycheck::TypeError` implementation.
 
+## Phase 1.5: HeapMismatch Fix - COMPLETED
+
+### Task 1.5.1: Fix mutation_gen to avoid salsa panics - DONE
+
+Converted `apply_heap_mismatch` from AST manipulation to source-level string manipulation to avoid "cannot create tracked struct outside tracked function" errors.
+
+### Task 1.5.2: Add heap checking for type-hinted collections - DONE
+
+Added `check_list_elements`, `check_set_elements`, `check_map_entries`, `check_tensor_elements` helper functions to validate heap compatibility when collections have type hints.
+
+### Task 1.5.3: Add heap checking for type-hinted literals - DONE
+
+Added heap compatibility validation for Int and Hex literals when they have type hints. Added `unwrap_wrapper_heap` and `unwrap_wrapper_heap_datalit` helpers to extract the innermost heap from Option/Result wrapped types.
+
 ## Phase 2: Parser Panic Fixes (TBD)
 
 Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return errors instead of panicking. ~40 call sites affected. Exact approach TBD.
@@ -191,13 +206,27 @@ Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return err
 1. ~~Task 1.1 - Add error types~~ DONE
 2. ~~Task 1.4 - Add error converter~~ DONE
 3. ~~Task 1.2 - Add check() delegation (fixes OutOfRangeInt)~~ DONE
-4. ~~Task 1.3 - Add heap checks (fixes HeapMismatch)~~ DONE
-5. Task 2.x - Parser panic fixes (TBD)
+4. ~~Task 1.3 - Add heap checks (fixes HeapMismatch for synthesized collections)~~ DONE
+5. ~~Task 1.5.1 - Fix mutation_gen salsa panics~~ DONE
+6. ~~Task 1.5.2 - Add heap checking for type-hinted collections~~ DONE
+7. ~~Task 1.5.3 - Add heap checking for type-hinted literals~~ DONE
+8. Task 2.x - Parser panic fixes (TBD)
+
+## Current Results
+
+| Mutation | Previous | Current |
+|----------|----------|---------|
+| OutOfRangeInt | 0% | 100% |
+| HeapMismatch | 0% | 100% |
+| DeleteHeapSigil | 100% | 100% |
+| WrongElementType | 0% | 0% |
+| ArityMismatch | 0% | 0% |
+| Overall | 61.6% | 62.7% |
 
 ## Success Criteria
 
-- OutOfRangeInt: 0% → 100% (expected improvement)
-- HeapMismatch: 0% → 100% (expected improvement)
-- WrongElementType: 0% → 100% (no change - requires type checking elements)
-- ArityMismatch: 0% → 100% (no change - requires struct/tuple checking)
+- ~~OutOfRangeInt: 0% → 100%~~ ACHIEVED
+- ~~HeapMismatch: 0% → 100%~~ ACHIEVED
+- WrongElementType: 0% → 100% (requires type checking elements - not part of Phase 1)
+- ArityMismatch: 0% → 100% (requires struct/tuple checking - not part of Phase 1)
 - Source mutations: significant improvement pending Phase 2

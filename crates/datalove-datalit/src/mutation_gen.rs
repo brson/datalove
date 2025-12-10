@@ -415,13 +415,15 @@ fn apply_wrong_element_type<'db>(
 }
 
 /// Change one element's heap from @ to # or vice versa.
+///
+/// Uses source-level string manipulation to avoid salsa tracked function issues.
 fn apply_heap_mismatch<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
     _rng: &mut impl Rng,
 ) -> Option<MutationResult> {
     let expr_and_heap = expr.expr(db);
-    let heap = expr_and_heap.heap(db);
+    let outer_heap = expr_and_heap.heap(db);
 
     // Check if this is a list with at least 2 elements.
     if let Expr::List(list) = expr_and_heap.expr(db) {
@@ -437,30 +439,61 @@ fn apply_heap_mismatch<'db>(
             Heap::Global => Heap::Local,
             Heap::Omitted => Heap::Local, // Change omitted to explicit.
         };
+        let new_heap_char = match new_heap {
+            Heap::Local => '@',
+            Heap::Global => '#',
+            Heap::Omitted => return None, // Can't set to omitted.
+        };
 
-        // Create modified last element with different heap.
-        let last_idx = elements.len() - 1;
-        let last_elem = elements[last_idx];
-        let last_expr = last_elem.expr(db).expr(db);
+        // Build list source via string manipulation.
+        let mut elem_strs: Vec<String> = elements.iter().map(|e| pretty_print(db, *e)).collect();
 
-        let modified_elem = ExprFull::new(
-            db,
-            last_elem.type_hint(db),
-            ExprAndHeap::new(db, new_heap, last_expr),
-        );
+        // Modify the last element's heap.
+        // Format is: [: type / @value] or [@value] (without type hint).
+        // The heap sigil is either after " / " (with type hint) or at the start (without).
+        let last_idx = elem_strs.len() - 1;
+        let last_str = &elem_strs[last_idx];
 
-        // Build new list with modified element.
-        let mut new_elements = elements.clone();
-        new_elements[last_idx] = modified_elem;
+        let modified = if let Some(sep_idx) = last_str.find(" / ") {
+            // Has type hint: modify the heap after " / ".
+            let value_start = sep_idx + 3; // Skip " / ".
+            let value_part = &last_str[value_start..];
+            let stripped_value = if value_part.starts_with('@') || value_part.starts_with('#') {
+                &value_part[1..]
+            } else {
+                value_part
+            };
+            format!("{}{}{}", &last_str[..value_start], new_heap_char, stripped_value)
+        } else {
+            // No type hint: modify the heap at start.
+            let stripped = if last_str.starts_with('@') || last_str.starts_with('#') {
+                &last_str[1..]
+            } else {
+                last_str.as_str()
+            };
+            format!("{}{}", new_heap_char, stripped)
+        };
+        elem_strs[last_idx] = modified;
 
-        let new_list = ExprList::new(db, new_elements);
-        let new_expr = ExprFull::new(
-            db,
-            expr.type_hint(db),
-            ExprAndHeap::new(db, heap, Expr::List(new_list)),
-        );
+        // Build outer heap prefix.
+        let outer_heap_str = match outer_heap {
+            Heap::Local => "@",
+            Heap::Global => "#",
+            Heap::Omitted => "",
+        };
 
-        let source = pretty_print(db, new_expr);
+        // Build type hint if present.
+        let type_hint_str = if let Some(th) = expr.type_hint(db) {
+            let mut s = String::new();
+            s.push_str("<");
+            pretty_type_hint_and_heap(db, th, &mut s);
+            s.push_str(">");
+            s
+        } else {
+            String::new()
+        };
+
+        let source = format!("{}[{}]{}", outer_heap_str, elem_strs.join(", "), type_hint_str);
 
         Some(MutationResult {
             source,

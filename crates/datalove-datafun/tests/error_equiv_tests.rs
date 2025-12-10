@@ -608,3 +608,40 @@ fn test_error_equiv_source_mutations_detailed() {
         panic!("{} source mutation tests failed", total_failures.len());
     }
 }
+
+/// Debug test for HeapMismatch - shows raw errors from both systems.
+#[test]
+#[ignore] // Run with --ignored to investigate
+fn test_debug_heap_mismatch() {
+    let config = make_mutation_config();
+
+    for seed in 0..50 {
+        let config_clone = config.clone();
+        let result = std::thread::spawn(move || {
+            let db = datalove_datafun::Database::default();
+            let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
+            let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+
+            if let Some(result) = Mutation::HeapMismatch.apply(&db, expr, &mut rng) {
+                let (datalit_errs, datalit_parse) = get_datalit_errors(&db, &result.source);
+                let (datafun_errs, datafun_parse) = get_datafun_errors(&db, &result.source);
+                Some((result.source, datalit_errs, datalit_parse, datafun_errs, datafun_parse))
+            } else {
+                None
+            }
+        }).join();
+
+        match result {
+            Ok(Some((source, datalit_errs, datalit_parse, datafun_errs, datafun_parse))) => {
+                eprintln!("Seed {}: source = {}", seed, source);
+                eprintln!("  Datalit: {:?} (parse_err={})", datalit_errs, datalit_parse);
+                eprintln!("  Datafun: {:?} (parse_err={})", datafun_errs, datafun_parse);
+                eprintln!();
+            }
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("Seed {}: PANIC - {:?}", seed, e);
+            }
+        }
+    }
+}
