@@ -13,6 +13,7 @@ pub mod instantiate2;
 pub mod pretty;
 pub mod ast_gen;
 pub mod spans;
+pub mod mutation_gen;
 
 pub use datalove_rtdt as rtdt;
 

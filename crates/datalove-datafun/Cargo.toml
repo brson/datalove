@@ -18,6 +18,7 @@ datalove-rtdt.path = "../datalove-rtdt"
 
 [dev-dependencies]
 datalove-exampletest.path = "../datalove-exampletest"
+rand = "0.8"
 
 [[test]]
 name = "parser_tests"

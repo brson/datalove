@@ -1423,6 +1423,7 @@ dependencies = [
  "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
+ "rand 0.8.5",
  "ron",
  "rustmax",
  "salsa",
