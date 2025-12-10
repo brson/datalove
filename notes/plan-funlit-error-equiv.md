@@ -155,32 +155,32 @@ The tests reveal real differences between datalit and datafun:
 
 # Remediation Plan
 
-**Status: PLANNED**
+**Status: PHASE 1 COMPLETE**
 
 ## Root Causes
 
-1. Datafun doesn't call datalit's `check()` function for typed literals
-2. Parser panics on malformed input instead of returning ParseError nodes
+1. ~~Datafun doesn't call datalit's `check()` function for typed literals~~ FIXED
+2. Parser panics on malformed input instead of returning ParseError nodes (TBD)
 
-## Phase 1: Type Error Fixes
+## Phase 1: Type Error Fixes - COMPLETED
 
-### Task 1.1: Add specific error types to datafun
+### Task 1.1: Add specific error types to datafun - DONE
 
 **File:** `crates/datalove-datafun/src/tycheck.rs`
 
-Add datalit-compatible error variants: `IntOutOfRange`, `HeapMismatch`, `MissingField`, `ExtraField`, `FieldOrderMismatch`, `VariantNotFound`
+Added datalit-compatible error variants: `IntOutOfRange`, `HeapMismatch`, `MissingField`, `ExtraField`, `FieldOrderMismatch`, `VariantNotFound`
 
-### Task 1.2: Add check() delegation for typed literals
+### Task 1.2: Add check() delegation for typed literals - DONE
 
-When synthesizing datalit literals with type hints, call datalit's `check()` to validate integer ranges, etc.
+Added integer range validation when synthesizing typed integer/hex literals with type hints.
 
-### Task 1.3: Add heap compatibility checks for collections
+### Task 1.3: Add heap compatibility checks for collections - DONE
 
-In `synthesize_inline_list/set/map`, check heap compatibility between elements.
+Added heap compatibility checks to `synthesize_inline_list`, `synthesize_inline_set`, `synthesize_inline_map`, `synthesize_inline_tensor`.
 
-### Task 1.4: Add helper to convert datalit errors
+### Task 1.4: Add helper to convert datalit errors - DONE
 
-Map `datalit::tycheck::TypeError` variants to `datafun::tycheck::TypeError`.
+Added `From<datalit::tycheck::TypeError> for datafun::tycheck::TypeError` implementation.
 
 ## Phase 2: Parser Panic Fixes (TBD)
 
@@ -188,16 +188,16 @@ Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return err
 
 ## Implementation Order
 
-1. Task 1.1 - Add error types
-2. Task 1.4 - Add error converter
-3. Task 1.2 - Add check() delegation (fixes OutOfRangeInt)
-4. Task 1.3 - Add heap checks (fixes HeapMismatch)
-5. Task 2.x - Parser panic fixes
+1. ~~Task 1.1 - Add error types~~ DONE
+2. ~~Task 1.4 - Add error converter~~ DONE
+3. ~~Task 1.2 - Add check() delegation (fixes OutOfRangeInt)~~ DONE
+4. ~~Task 1.3 - Add heap checks (fixes HeapMismatch)~~ DONE
+5. Task 2.x - Parser panic fixes (TBD)
 
 ## Success Criteria
 
-- OutOfRangeInt: 0% → 100%
-- HeapMismatch: 0% → 100%
-- WrongElementType: 0% → 100%
-- ArityMismatch: 0% → 100%
-- Source mutations: significant improvement
+- OutOfRangeInt: 0% → 100% (expected improvement)
+- HeapMismatch: 0% → 100% (expected improvement)
+- WrongElementType: 0% → 100% (no change - requires type checking elements)
+- ArityMismatch: 0% → 100% (no change - requires struct/tuple checking)
+- Source mutations: significant improvement pending Phase 2

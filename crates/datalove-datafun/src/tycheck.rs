@@ -47,6 +47,36 @@ pub enum TypeError {
     TryOutsideFunction { operator: String },
     TryTypeMismatch { operator: String, actual_type: String },
     TryReturnTypeMismatch { operator: String, return_type: String },
+    // Datalit-compatible error types for error equivalence.
+    IntOutOfRange,
+    HeapMismatch { expected_heap: String, actual_heap: String },
+    MissingField(String),
+    ExtraField(String),
+    FieldOrderMismatch,
+    VariantNotFound(String),
+}
+
+impl From<datalit::tycheck::TypeError> for TypeError {
+    fn from(err: datalit::tycheck::TypeError) -> Self {
+        match err {
+            datalit::tycheck::TypeError::TypeMismatch { expected, actual } => {
+                TypeError::TypeMismatch { expected, actual }
+            }
+            datalit::tycheck::TypeError::HeapMismatch { expected_heap, actual_heap } => {
+                TypeError::HeapMismatch { expected_heap, actual_heap }
+            }
+            datalit::tycheck::TypeError::CannotSynthesize => TypeError::CannotSynthesize,
+            datalit::tycheck::TypeError::UnresolvedName(name) => TypeError::UnresolvedName(name),
+            datalit::tycheck::TypeError::MissingField(name) => TypeError::MissingField(name),
+            datalit::tycheck::TypeError::ExtraField(name) => TypeError::ExtraField(name),
+            datalit::tycheck::TypeError::FieldOrderMismatch => TypeError::FieldOrderMismatch,
+            datalit::tycheck::TypeError::IntOutOfRange => TypeError::IntOutOfRange,
+            datalit::tycheck::TypeError::VariantNotFound(name) => TypeError::VariantNotFound(name),
+            datalit::tycheck::TypeError::ArityMismatch { expected, actual } => {
+                TypeError::ArityMismatch { expected, actual }
+            }
+        }
+    }
 }
 
 /// Type error entry with location info.
@@ -1038,9 +1068,15 @@ fn synthesize_expr<'db>(
             Err(ctx.error_cannot_synthesize(expr, "cannot infer type for None value"))
         }
         ExprFunKind::Int(int_expr) => {
-            // If type hint present, use it.
+            // If type hint present, use it and validate the value fits.
             if let Some(type_hint) = int_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let result_ty = convert_type_hint(db, type_hint)?;
+                // Validate integer value fits within the type.
+                let value_str = int_expr.value(db).as_str(db);
+                if let Type::Datalit(datalit_ty) = result_ty.ty(db) {
+                    check_int_fits_wrapped_type(value_str, datalit_ty, db)?;
+                }
+                return Ok(result_ty);
             }
             let heap = int_expr.heap(db);
             let value_str = int_expr.value(db).as_str(db);
@@ -1064,8 +1100,15 @@ fn synthesize_expr<'db>(
             Ok(TypeAndHeap::new(db, heap, ty))
         }
         ExprFunKind::Hex(hex_expr) => {
+            // If type hint present, use it and validate the value fits.
             if let Some(type_hint) = hex_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let result_ty = convert_type_hint(db, type_hint)?;
+                // Validate hex value fits within the type.
+                let value_str = hex_expr.value(db).as_str(db);
+                if let Type::Datalit(datalit_ty) = result_ty.ty(db) {
+                    check_hex_fits_wrapped_type(value_str, datalit_ty, db)?;
+                }
+                return Ok(result_ty);
             }
             let heap = hex_expr.heap(db);
             let value_str = hex_expr.value(db).as_str(db);
@@ -1809,6 +1852,153 @@ pub fn convert_type_hint<'db>(
     Ok(TypeAndHeap::new(db, heap, ty))
 }
 
+/// Check if an integer value fits within a given type.
+/// Returns Ok(()) if the value fits, Err(IntOutOfRange) if not.
+fn check_int_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> Result<(), TypeError> {
+    match ty {
+        datalit::tycheck::Type::U8 => {
+            value_str.parse::<u8>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::I8 => {
+            value_str.parse::<i8>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::U16 => {
+            value_str.parse::<u16>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::I16 => {
+            value_str.parse::<i16>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::U32 => {
+            value_str.parse::<u32>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::I32 => {
+            value_str.parse::<i32>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::U64 => {
+            value_str.parse::<u64>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::I64 => {
+            value_str.parse::<i64>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::Int => {
+            // Int is arbitrary precision, always fits.
+            Ok(())
+        }
+        _ => Ok(()), // Non-integer types don't need range checking.
+    }
+}
+
+/// Check if an integer value fits within the innermost integer type of a possibly wrapped type.
+/// Handles Option<u8>, Result<u8>, etc.
+fn check_int_fits_wrapped_type(value_str: &str, ty: &datalit::tycheck::Type<'_>, db: &dyn crate::Db) -> Result<(), TypeError> {
+    match ty {
+        datalit::tycheck::Type::Option(opt) => {
+            check_int_fits_wrapped_type(value_str, opt.inner_type(db).ty(db), db)
+        }
+        datalit::tycheck::Type::Result(res) => {
+            check_int_fits_wrapped_type(value_str, res.inner_type(db).ty(db), db)
+        }
+        _ => check_int_fits_type(value_str, ty),
+    }
+}
+
+/// Check if a hex value fits within a given type.
+fn check_hex_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> Result<(), TypeError> {
+    let is_negative = value_str.starts_with('-');
+    let hex_part = value_str
+        .trim_start_matches('-')
+        .trim_start_matches("0x")
+        .trim_start_matches("0X");
+
+    match ty {
+        datalit::tycheck::Type::U8 if !is_negative => {
+            u8::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::I8 => {
+            // For signed types, parse as unsigned first then check range.
+            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+            if is_negative {
+                if value <= 128 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            } else {
+                if value <= 127 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            }
+        }
+        datalit::tycheck::Type::U16 if !is_negative => {
+            u16::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::I16 => {
+            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+            if is_negative {
+                if value <= 32768 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            } else {
+                if value <= 32767 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            }
+        }
+        datalit::tycheck::Type::U32 if !is_negative => {
+            u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::I32 => {
+            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+            if is_negative {
+                if value <= 2147483648 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            } else {
+                if value <= 2147483647 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            }
+        }
+        datalit::tycheck::Type::U64 if !is_negative => {
+            u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::I64 => {
+            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+            if is_negative {
+                if value <= 9223372036854775808 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            } else {
+                if value <= 9223372036854775807 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            }
+        }
+        datalit::tycheck::Type::Int => Ok(()), // Arbitrary precision.
+        _ if is_negative => Err(TypeError::IntOutOfRange), // Unsigned type with negative value.
+        _ => Ok(()), // Non-integer types.
+    }
+}
+
+/// Check if a hex value fits within the innermost integer type of a possibly wrapped type.
+fn check_hex_fits_wrapped_type(value_str: &str, ty: &datalit::tycheck::Type<'_>, db: &dyn crate::Db) -> Result<(), TypeError> {
+    match ty {
+        datalit::tycheck::Type::Option(opt) => {
+            check_hex_fits_wrapped_type(value_str, opt.inner_type(db).ty(db), db)
+        }
+        datalit::tycheck::Type::Result(res) => {
+            check_hex_fits_wrapped_type(value_str, res.inner_type(db).ty(db), db)
+        }
+        _ => check_hex_fits_type(value_str, ty),
+    }
+}
+
+/// Check if two heaps are compatible.
+/// Omitted heap is generic and compatible with any heap.
+fn heaps_compatible(h1: datalit::ast::Heap, h2: datalit::ast::Heap) -> bool {
+    use datalit::ast::Heap;
+    match (h1, h2) {
+        (Heap::Local, Heap::Local) => true,
+        (Heap::Global, Heap::Global) => true,
+        // Omitted is compatible with any heap (generic).
+        (Heap::Omitted, _) => true,
+        (_, Heap::Omitted) => true,
+        _ => false,
+    }
+}
+
+/// Convert a heap to a string for error messages.
+fn heap_to_string(heap: datalit::ast::Heap) -> String {
+    use datalit::ast::Heap;
+    match heap {
+        Heap::Local => "@".to_string(),
+        Heap::Global => "#".to_string(),
+        Heap::Omitted => "".to_string(),
+    }
+}
+
 /// Check if two types are equivalent.
 fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
     match (t1, t2) {
@@ -2113,9 +2303,16 @@ fn synthesize_inline_list<'db>(
     let first_ty = ctx.synthesize_expr(elements[0])?;
     let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
 
-    // Check remaining elements.
+    // Check remaining elements for type and heap compatibility.
     for elem in &elements[1..] {
-        let _ = ctx.synthesize_expr(*elem)?;
+        let elem_ty = ctx.synthesize_expr(*elem)?;
+        // Check heap compatibility.
+        if !heaps_compatible(first_ty.heap(db), elem_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(first_ty.heap(db)),
+                actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::List(
@@ -2147,8 +2344,15 @@ fn synthesize_inline_set<'db>(
     let first_ty = ctx.synthesize_expr(elements[0])?;
     let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
 
+    // Check remaining elements for heap compatibility.
     for elem in &elements[1..] {
-        let _ = ctx.synthesize_expr(*elem)?;
+        let elem_ty = ctx.synthesize_expr(*elem)?;
+        if !heaps_compatible(first_ty.heap(db), elem_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(first_ty.heap(db)),
+                actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Set(
@@ -2182,9 +2386,24 @@ fn synthesize_inline_map<'db>(
     let first_value_ty = ctx.synthesize_expr(entries[0].value(db))?;
     let first_value_datalit = to_datalit_type_and_heap(db, first_value_ty)?;
 
+    // Check remaining entries for heap compatibility.
     for entry in &entries[1..] {
-        let _ = ctx.synthesize_expr(entry.key(db))?;
-        let _ = ctx.synthesize_expr(entry.value(db))?;
+        let key_ty = ctx.synthesize_expr(entry.key(db))?;
+        let value_ty = ctx.synthesize_expr(entry.value(db))?;
+        // Check key heap compatibility.
+        if !heaps_compatible(first_key_ty.heap(db), key_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(first_key_ty.heap(db)),
+                actual_heap: heap_to_string(key_ty.heap(db)),
+            });
+        }
+        // Check value heap compatibility.
+        if !heaps_compatible(first_value_ty.heap(db), value_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(first_value_ty.heap(db)),
+                actual_heap: heap_to_string(value_ty.heap(db)),
+            });
+        }
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Map(
@@ -2220,8 +2439,15 @@ fn synthesize_inline_tensor<'db>(
     let first_ty = ctx.synthesize_expr(elements[0])?;
     let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
 
+    // Check remaining elements for heap compatibility.
     for elem in &elements[1..] {
-        let _ = ctx.synthesize_expr(*elem)?;
+        let elem_ty = ctx.synthesize_expr(*elem)?;
+        if !heaps_compatible(first_ty.heap(db), elem_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(first_ty.heap(db)),
+                actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Tensor(

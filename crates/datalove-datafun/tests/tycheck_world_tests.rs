@@ -80,6 +80,41 @@ fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_jso
                 "return_type": return_type
             })
         }
+        TypeError::IntOutOfRange => {
+            json!({
+                "kind": "IntOutOfRange"
+            })
+        }
+        TypeError::HeapMismatch { expected_heap, actual_heap } => {
+            json!({
+                "kind": "HeapMismatch",
+                "expected_heap": expected_heap,
+                "actual_heap": actual_heap
+            })
+        }
+        TypeError::MissingField(name) => {
+            json!({
+                "kind": "MissingField",
+                "name": name
+            })
+        }
+        TypeError::ExtraField(name) => {
+            json!({
+                "kind": "ExtraField",
+                "name": name
+            })
+        }
+        TypeError::FieldOrderMismatch => {
+            json!({
+                "kind": "FieldOrderMismatch"
+            })
+        }
+        TypeError::VariantNotFound(name) => {
+            json!({
+                "kind": "VariantNotFound",
+                "name": name
+            })
+        }
     }
 }
 
