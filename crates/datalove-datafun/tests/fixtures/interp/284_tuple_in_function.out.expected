@@ -1,0 +1,75 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "make_tuple",
+                    params: [],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: AnonTuple(TypeHintAnonTuple(
+                            fields: [
+                                TypeHintAndHeap(
+                                    heap: Omitted,
+                                    type_hint: U32,
+                                ),
+                                TypeHintAndHeap(
+                                    heap: Omitted,
+                                    type_hint: U32,
+                                ),
+                            ],
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprAnonTuple(
+                                    kind: "AnonTuple",
+                                    heap: Local,
+                                    type_hint: None,
+                                    elements: [
+                                        ExprFun(
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: None,
+                                                value: "42",
+                                            ),
+                                        ),
+                                        ExprFun(
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: None,
+                                                value: "100",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "make_tuple",
+                            args: [],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@(@42, @100)",
+    ),
+]

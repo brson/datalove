@@ -135,6 +135,18 @@ impl Destination {
     }
 }
 
+/// Evaluation context for unified expression evaluation.
+///
+/// This enum allows sharing expression evaluation code between script scope
+/// and frame-based execution while keeping context-specific operations separate.
+#[derive(Copy, Clone, Debug)]
+pub enum EvalContext {
+    /// Script scope evaluation - uses ScriptScope for variables.
+    ScriptScope,
+    /// Frame-based evaluation - uses the current stack frame.
+    Frame,
+}
+
 /// Result of script execution containing the value and runtime.
 ///
 /// The runtime and tydesc_table must be kept alive for the value pointer to remain valid.
@@ -1051,25 +1063,25 @@ fn eval_expression_in_script_scope<'db>(
             allocate_inline_string(ctx, &string_expr)
         }
         ast::ExprFunKind::List(list_expr) => {
-            eval_inline_list_script_scope(ctx, &list_expr, dest)
+            eval_inline_list(ctx, EvalContext::ScriptScope, &list_expr, dest)
         }
         ast::ExprFunKind::Set(set_expr) => {
-            eval_inline_set_script_scope(ctx, &set_expr, dest)
+            eval_inline_set(ctx, EvalContext::ScriptScope, &set_expr, dest)
         }
         ast::ExprFunKind::Map(map_expr) => {
-            eval_inline_map_script_scope(ctx, &map_expr, dest)
+            eval_inline_map(ctx, EvalContext::ScriptScope, &map_expr, dest)
         }
         ast::ExprFunKind::Tensor(_) => {
             Err(InterpError::InvalidExpression("Tensor not yet implemented".to_string()))
         }
         ast::ExprFunKind::AnonTuple(tuple_expr) => {
-            eval_inline_anon_tuple_script_scope(ctx, &tuple_expr, dest)
+            eval_inline_anon_tuple(ctx, EvalContext::ScriptScope, &tuple_expr, dest)
         }
         ast::ExprFunKind::NamedTuple(_) => {
             Err(InterpError::InvalidExpression("Named tuple not yet implemented".to_string()))
         }
         ast::ExprFunKind::AnonStruct(struct_expr) => {
-            eval_inline_anon_struct_script_scope(ctx, &struct_expr, dest)
+            eval_inline_anon_struct(ctx, EvalContext::ScriptScope, &struct_expr, dest)
         }
         ast::ExprFunKind::NamedStruct(_) => {
             Err(InterpError::InvalidExpression("Named struct not yet implemented".to_string()))
@@ -2436,25 +2448,25 @@ fn eval_expression_frame<'db>(
             allocate_inline_string(ctx, &string_expr)
         }
         ast::ExprFunKind::List(list_expr) => {
-            eval_inline_list_frame(ctx, &list_expr, dest)
+            eval_inline_list(ctx, EvalContext::Frame, &list_expr, dest)
         }
         ast::ExprFunKind::Set(set_expr) => {
-            eval_inline_set_frame(ctx, &set_expr, dest)
+            eval_inline_set(ctx, EvalContext::Frame, &set_expr, dest)
         }
         ast::ExprFunKind::Map(map_expr) => {
-            eval_inline_map_frame(ctx, &map_expr, dest)
+            eval_inline_map(ctx, EvalContext::Frame, &map_expr, dest)
         }
         ast::ExprFunKind::Tensor(_) => {
             Err(InterpError::InvalidExpression("Tensor not yet implemented".to_string()))
         }
         ast::ExprFunKind::AnonTuple(tuple_expr) => {
-            eval_inline_anon_tuple_frame(ctx, &tuple_expr, dest)
+            eval_inline_anon_tuple(ctx, EvalContext::Frame, &tuple_expr, dest)
         }
         ast::ExprFunKind::NamedTuple(_) => {
             Err(InterpError::InvalidExpression("Named tuple not yet implemented".to_string()))
         }
         ast::ExprFunKind::AnonStruct(struct_expr) => {
-            eval_inline_anon_struct_frame(ctx, &struct_expr, dest)
+            eval_inline_anon_struct(ctx, EvalContext::Frame, &struct_expr, dest)
         }
         ast::ExprFunKind::NamedStruct(_) => {
             Err(InterpError::InvalidExpression("Named struct not yet implemented".to_string()))
@@ -2948,9 +2960,29 @@ fn allocate_inline_string<'db>(
     })
 }
 
-/// Evaluate inline list expression in script scope.
-fn eval_inline_list_script_scope<'db>(
+// --- Unified expression evaluation dispatch ---
+
+/// Evaluate an expression in the given context.
+///
+/// This is the unified entry point for expression evaluation that dispatches
+/// to context-specific implementations for variable lookup while sharing
+/// code for literals and operations.
+fn eval_expression<'db>(
     ctx: &mut InterpContext<'db>,
+    eval_ctx: EvalContext,
+    expr: ast::ExprFun<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    match eval_ctx {
+        EvalContext::ScriptScope => eval_expression_in_script_scope(ctx, expr, dest),
+        EvalContext::Frame => eval_expression_frame(ctx, expr, dest),
+    }
+}
+
+/// Evaluate inline list expression in the given context.
+fn eval_inline_list<'db>(
+    ctx: &mut InterpContext<'db>,
+    eval_ctx: EvalContext,
     list_expr: &ast::ExprList<'db>,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
@@ -2958,7 +2990,7 @@ fn eval_inline_list_script_scope<'db>(
     let mut values = Vec::with_capacity(elements.len());
 
     for elem in elements {
-        match eval_expression_in_script_scope(ctx, *elem, None) {
+        match eval_expression(ctx, eval_ctx, *elem, None) {
             Ok(v) => values.push(v),
             Err(e) => {
                 for v in values {
@@ -2972,9 +3004,10 @@ fn eval_inline_list_script_scope<'db>(
     allocate_list_from_values(ctx, values)
 }
 
-/// Evaluate inline set expression in script scope.
-fn eval_inline_set_script_scope<'db>(
+/// Evaluate inline set expression in the given context.
+fn eval_inline_set<'db>(
     ctx: &mut InterpContext<'db>,
+    eval_ctx: EvalContext,
     set_expr: &ast::ExprSet<'db>,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
@@ -2982,7 +3015,7 @@ fn eval_inline_set_script_scope<'db>(
     let mut values = Vec::with_capacity(elements.len());
 
     for elem in elements {
-        match eval_expression_in_script_scope(ctx, *elem, None) {
+        match eval_expression(ctx, eval_ctx, *elem, None) {
             Ok(v) => values.push(v),
             Err(e) => {
                 for v in values {
@@ -2996,9 +3029,10 @@ fn eval_inline_set_script_scope<'db>(
     allocate_set_from_values(ctx, values)
 }
 
-/// Evaluate inline map expression in script scope.
-fn eval_inline_map_script_scope<'db>(
+/// Evaluate inline map expression in the given context.
+fn eval_inline_map<'db>(
     ctx: &mut InterpContext<'db>,
+    eval_ctx: EvalContext,
     map_expr: &ast::ExprMap<'db>,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
@@ -3006,7 +3040,7 @@ fn eval_inline_map_script_scope<'db>(
     let mut kv_pairs = Vec::with_capacity(entries.len());
 
     for entry in entries {
-        let key = match eval_expression_in_script_scope(ctx, entry.key(ctx.db), None) {
+        let key = match eval_expression(ctx, eval_ctx, entry.key(ctx.db), None) {
             Ok(v) => v,
             Err(e) => {
                 for (k, v) in kv_pairs {
@@ -3017,7 +3051,7 @@ fn eval_inline_map_script_scope<'db>(
             }
         };
 
-        let value = match eval_expression_in_script_scope(ctx, entry.value(ctx.db), None) {
+        let value = match eval_expression(ctx, eval_ctx, entry.value(ctx.db), None) {
             Ok(v) => v,
             Err(e) => {
                 destroy_value(ctx, key);
@@ -3035,9 +3069,10 @@ fn eval_inline_map_script_scope<'db>(
     allocate_map_from_values(ctx, kv_pairs)
 }
 
-/// Evaluate inline anonymous tuple expression in script scope.
-fn eval_inline_anon_tuple_script_scope<'db>(
+/// Evaluate inline anonymous tuple expression in the given context.
+fn eval_inline_anon_tuple<'db>(
     ctx: &mut InterpContext<'db>,
+    eval_ctx: EvalContext,
     tuple_expr: &ast::ExprAnonTuple<'db>,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
@@ -3045,7 +3080,7 @@ fn eval_inline_anon_tuple_script_scope<'db>(
     let mut values = Vec::with_capacity(elements.len());
 
     for elem in elements {
-        match eval_expression_in_script_scope(ctx, *elem, None) {
+        match eval_expression(ctx, eval_ctx, *elem, None) {
             Ok(v) => values.push(v),
             Err(e) => {
                 for v in values {
@@ -3059,9 +3094,10 @@ fn eval_inline_anon_tuple_script_scope<'db>(
     allocate_tuple_from_values(ctx, values)
 }
 
-/// Evaluate inline anonymous struct expression in script scope.
-fn eval_inline_anon_struct_script_scope<'db>(
+/// Evaluate inline anonymous struct expression in the given context.
+fn eval_inline_anon_struct<'db>(
     ctx: &mut InterpContext<'db>,
+    eval_ctx: EvalContext,
     struct_expr: &ast::ExprAnonStruct<'db>,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
@@ -3074,147 +3110,7 @@ fn eval_inline_anon_struct_script_scope<'db>(
     let mut field_values = Vec::with_capacity(sorted_fields.len());
 
     for (name, value_expr) in sorted_fields {
-        match eval_expression_in_script_scope(ctx, value_expr, None) {
-            Ok(v) => field_values.push((name, v)),
-            Err(e) => {
-                for (_, v) in field_values {
-                    destroy_value(ctx, v);
-                }
-                return Err(e);
-            }
-        }
-    }
-
-    allocate_struct_from_values(ctx, field_values)
-}
-
-/// Evaluate inline list expression in frame scope.
-fn eval_inline_list_frame<'db>(
-    ctx: &mut InterpContext<'db>,
-    list_expr: &ast::ExprList<'db>,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
-    let elements = list_expr.elements(ctx.db);
-    let mut values = Vec::with_capacity(elements.len());
-
-    for elem in elements {
-        match eval_expression_frame(ctx, *elem, None) {
-            Ok(v) => values.push(v),
-            Err(e) => {
-                for v in values {
-                    destroy_value(ctx, v);
-                }
-                return Err(e);
-            }
-        }
-    }
-
-    allocate_list_from_values(ctx, values)
-}
-
-/// Evaluate inline set expression in frame scope.
-fn eval_inline_set_frame<'db>(
-    ctx: &mut InterpContext<'db>,
-    set_expr: &ast::ExprSet<'db>,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
-    let elements = set_expr.elements(ctx.db);
-    let mut values = Vec::with_capacity(elements.len());
-
-    for elem in elements {
-        match eval_expression_frame(ctx, *elem, None) {
-            Ok(v) => values.push(v),
-            Err(e) => {
-                for v in values {
-                    destroy_value(ctx, v);
-                }
-                return Err(e);
-            }
-        }
-    }
-
-    allocate_set_from_values(ctx, values)
-}
-
-/// Evaluate inline map expression in frame scope.
-fn eval_inline_map_frame<'db>(
-    ctx: &mut InterpContext<'db>,
-    map_expr: &ast::ExprMap<'db>,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
-    let entries = map_expr.entries(ctx.db);
-    let mut kv_pairs = Vec::with_capacity(entries.len());
-
-    for entry in entries {
-        let key = match eval_expression_frame(ctx, entry.key(ctx.db), None) {
-            Ok(v) => v,
-            Err(e) => {
-                for (k, v) in kv_pairs {
-                    destroy_value(ctx, k);
-                    destroy_value(ctx, v);
-                }
-                return Err(e);
-            }
-        };
-
-        let value = match eval_expression_frame(ctx, entry.value(ctx.db), None) {
-            Ok(v) => v,
-            Err(e) => {
-                destroy_value(ctx, key);
-                for (k, v) in kv_pairs {
-                    destroy_value(ctx, k);
-                    destroy_value(ctx, v);
-                }
-                return Err(e);
-            }
-        };
-
-        kv_pairs.push((key, value));
-    }
-
-    allocate_map_from_values(ctx, kv_pairs)
-}
-
-/// Evaluate inline anonymous tuple expression in frame scope.
-fn eval_inline_anon_tuple_frame<'db>(
-    ctx: &mut InterpContext<'db>,
-    tuple_expr: &ast::ExprAnonTuple<'db>,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
-    let elements = tuple_expr.elements(ctx.db);
-    let mut values = Vec::with_capacity(elements.len());
-
-    for elem in elements {
-        match eval_expression_frame(ctx, *elem, None) {
-            Ok(v) => values.push(v),
-            Err(e) => {
-                for v in values {
-                    destroy_value(ctx, v);
-                }
-                return Err(e);
-            }
-        }
-    }
-
-    allocate_tuple_from_values(ctx, values)
-}
-
-/// Evaluate inline anonymous struct expression in frame scope.
-fn eval_inline_anon_struct_frame<'db>(
-    ctx: &mut InterpContext<'db>,
-    struct_expr: &ast::ExprAnonStruct<'db>,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
-    let expr_fields = struct_expr.fields(ctx.db);
-    let mut sorted_fields: Vec<_> = expr_fields.iter()
-        .map(|f| (f.name(ctx.db), f.value(ctx.db)))
-        .collect();
-    sorted_fields.sort_by_key(|(name, _)| name.as_str(ctx.db));
-
-    let mut field_values = Vec::with_capacity(sorted_fields.len());
-
-    for (name, value_expr) in sorted_fields {
-        match eval_expression_frame(ctx, value_expr, None) {
+        match eval_expression(ctx, eval_ctx, value_expr, None) {
             Ok(v) => field_values.push((name, v)),
             Err(e) => {
                 for (_, v) in field_values {

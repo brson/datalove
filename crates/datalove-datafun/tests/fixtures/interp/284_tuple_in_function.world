@@ -1,0 +1,10 @@
+----------
+script
+----------
+
+// Test tuple literal inside a function.
+fun make_tuple(): (u32, u32)
+    ret @(@42, @100)
+end fun
+
+let output = make_tuple()

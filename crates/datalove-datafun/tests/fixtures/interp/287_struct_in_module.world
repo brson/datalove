@@ -1,0 +1,16 @@
+----------
+module sys/test/structmod
+----------
+
+fun make_struct(): {x: u32, y: u32}
+    ret @{x = @1, y = @2}
+end fun
+
+----------
+script
+----------
+
+require module sys/test/structmod
+import structmod.make_struct
+
+let output = make_struct()

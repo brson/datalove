@@ -227,3 +227,40 @@ Add new tests to fill coverage gaps identified in Phase 5 matrix.
 4. All expression/statement types tested in all three contexts
 5. All existing tests pass
 6. No memory leaks (verified by DATALOVE_LEAK_CHECK=panic)
+
+## Progress (2025-12-10)
+
+### Phase 1: Clone Audit - COMPLETE
+Found that existing clones are for:
+- Copy types (semantically correct)
+- Type metadata (Type::Datalit clones, not values)
+- Slot state vectors (for cleanup tracking)
+No value clone bugs identified.
+
+### Phase 2: Unified Expression Evaluation - PARTIAL
+- Added `EvalContext` enum (ScriptScope | Frame) for dispatch
+- Created unified collection evaluators:
+  - `eval_inline_list()` - replaces both `_script_scope` and `_frame` versions
+  - `eval_inline_set()` - replaces both `_script_scope` and `_frame` versions
+  - `eval_inline_map()` - replaces both `_script_scope` and `_frame` versions
+  - `eval_inline_anon_tuple()` - replaces both `_script_scope` and `_frame` versions
+  - `eval_inline_anon_struct()` - replaces both `_script_scope` and `_frame` versions
+- Removed ~100 lines of duplicate code
+- Variable lookup/binop/etc remain separate (require deeper architectural changes)
+
+### Phase 3 & 4: Script Scope Analysis - NOT STARTED
+Requires extending function_analysis to cover script-level statements.
+This is a significant architectural change.
+
+### Phase 5: Test Coverage - COMPLETE
+Added 6 new tests for collections in functions:
+- 280_map_in_function.world
+- 281_set_in_function.world
+- 282_struct_in_function.world
+- 283_list_in_function.world
+- 284_tuple_in_function.world
+- 287_struct_in_module.world
+
+Note: Module tests for Map/Set/List not possible yet due to missing type syntax.
+
+### Tests: 145 passing with DATALOVE_LEAK_CHECK=panic

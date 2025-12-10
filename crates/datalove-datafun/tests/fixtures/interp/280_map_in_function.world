@@ -1,0 +1,10 @@
+----------
+script
+----------
+
+// Test map literal inside a function.
+fun make_map()
+    ret @map { @1 = @100, @2 = @200 }
+end fun
+
+let output = make_map()

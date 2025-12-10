@@ -1,0 +1,10 @@
+----------
+script
+----------
+
+// Test set literal inside a function.
+fun make_set()
+    ret @set { @5, @10, @15 }
+end fun
+
+let output = make_set()
