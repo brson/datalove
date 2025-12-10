@@ -197,6 +197,20 @@ Added `check_list_elements`, `check_set_elements`, `check_map_entries`, `check_t
 
 Added heap compatibility validation for Int and Hex literals when they have type hints. Added `unwrap_wrapper_heap` and `unwrap_wrapper_heap_datalit` helpers to extract the innermost heap from Option/Result wrapped types.
 
+## Phase 1.6: WrongElementType Fix - COMPLETED
+
+### Task 1.6.1: Fix mutation_gen to avoid salsa panics - DONE
+
+Converted `apply_wrong_element_type` from AST manipulation to source-level string manipulation.
+
+### Task 1.6.2: Fix type hint format - DONE
+
+Changed mutation output from trailing `<type>` format to prefix `: type / expr` format to match parser expectations.
+
+### Task 1.6.3: Add element type checking with coercion - DONE
+
+Added `check_type_coercion` helper function that follows datalit's coercion rules for Option/Result types. Updated `check_list_elements`, `check_set_elements`, `check_map_entries`, and `check_tensor_elements` to use this helper for type checking with proper coercion support.
+
 ## Phase 2: Parser Panic Fixes (TBD)
 
 Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return errors instead of panicking. ~40 call sites affected. Exact approach TBD.
@@ -210,7 +224,10 @@ Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return err
 5. ~~Task 1.5.1 - Fix mutation_gen salsa panics~~ DONE
 6. ~~Task 1.5.2 - Add heap checking for type-hinted collections~~ DONE
 7. ~~Task 1.5.3 - Add heap checking for type-hinted literals~~ DONE
-8. Task 2.x - Parser panic fixes (TBD)
+8. ~~Task 1.6.1 - Fix mutation_gen salsa panics for WrongElementType~~ DONE
+9. ~~Task 1.6.2 - Fix type hint format~~ DONE
+10. ~~Task 1.6.3 - Add element type checking with coercion~~ DONE
+11. Task 2.x - Parser panic fixes (TBD)
 
 ## Current Results
 
@@ -219,14 +236,14 @@ Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return err
 | OutOfRangeInt | 0% | 100% |
 | HeapMismatch | 0% | 100% |
 | DeleteHeapSigil | 100% | 100% |
-| WrongElementType | 0% | 0% |
+| WrongElementType | 0% | 100% |
 | ArityMismatch | 0% | 0% |
-| Overall | 61.6% | 62.7% |
+| Overall | 62.7% | 63.2% |
 
 ## Success Criteria
 
 - ~~OutOfRangeInt: 0% → 100%~~ ACHIEVED
 - ~~HeapMismatch: 0% → 100%~~ ACHIEVED
-- WrongElementType: 0% → 100% (requires type checking elements - not part of Phase 1)
-- ArityMismatch: 0% → 100% (requires struct/tuple checking - not part of Phase 1)
+- ~~WrongElementType: 0% → 100%~~ ACHIEVED
+- ArityMismatch: 0% → 100% (requires struct/tuple checking - TBD)
 - Source mutations: significant improvement pending Phase 2

@@ -327,13 +327,15 @@ fn apply_out_of_range_int<'db>(
 }
 
 /// Insert a wrong-typed element in a collection.
+///
+/// Uses source-level string manipulation to avoid salsa tracked function issues.
 fn apply_wrong_element_type<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
     _rng: &mut impl Rng,
 ) -> Option<MutationResult> {
     let expr_and_heap = expr.expr(db);
-    let heap = expr_and_heap.heap(db);
+    let outer_heap = expr_and_heap.heap(db);
 
     // Check if this is a list with at least one element.
     if let Expr::List(list) = expr_and_heap.expr(db) {
@@ -342,67 +344,66 @@ fn apply_wrong_element_type<'db>(
             return None;
         }
 
-        // Get the type of first element (to determine what's "wrong").
+        // Get the type of first element to determine what's "wrong".
         let first_elem = elements[0];
         let first_heap = first_elem.expr(db).heap(db);
         let first_expr = first_elem.expr(db).expr(db);
 
-        // Create a wrong-typed element (string if first is int, int if first is string).
-        let wrong_elem = match first_expr {
+        // Determine the wrong element to insert based on first element's type.
+        let wrong_elem_str = match first_expr {
             Expr::Int(_) | Expr::Hex(_) | Expr::Float(_) => {
                 // Add a string where number expected.
-                let wrong = ExprFull::new(
-                    db,
-                    None,
-                    ExprAndHeap::new(
-                        db,
-                        first_heap,
-                        Expr::String(ExprString::new(db, InternedText::new(db, "\"wrong\""))),
-                    ),
-                );
-                wrong
+                let heap_str = match first_heap {
+                    Heap::Local => "@",
+                    Heap::Global => "#",
+                    Heap::Omitted => "",
+                };
+                format!("{}\"wrong\"", heap_str)
             }
             Expr::String(_) => {
                 // Add an int where string expected.
-                let wrong = ExprFull::new(
-                    db,
-                    None,
-                    ExprAndHeap::new(
-                        db,
-                        first_heap,
-                        Expr::Int(ExprInt::new(db, InternedText::new(db, "42"))),
-                    ),
-                );
-                wrong
+                let heap_str = match first_heap {
+                    Heap::Local => "@",
+                    Heap::Global => "#",
+                    Heap::Omitted => "",
+                };
+                format!("{}42", heap_str)
             }
             Expr::True | Expr::False => {
                 // Add an int where bool expected.
-                let wrong = ExprFull::new(
-                    db,
-                    None,
-                    ExprAndHeap::new(
-                        db,
-                        first_heap,
-                        Expr::Int(ExprInt::new(db, InternedText::new(db, "42"))),
-                    ),
-                );
-                wrong
+                let heap_str = match first_heap {
+                    Heap::Local => "@",
+                    Heap::Global => "#",
+                    Heap::Omitted => "",
+                };
+                format!("{}42", heap_str)
             }
             _ => return None, // Complex nested type, skip.
         };
 
-        // Build new list with wrong element appended.
-        let mut new_elements = elements.clone();
-        new_elements.push(wrong_elem);
+        // Build list source via string manipulation.
+        let elem_strs: Vec<String> = elements.iter().map(|e| pretty_print(db, *e)).collect();
 
-        let new_list = ExprList::new(db, new_elements);
-        let new_expr = ExprFull::new(
-            db,
-            expr.type_hint(db),
-            ExprAndHeap::new(db, heap, Expr::List(new_list)),
-        );
+        // Build outer heap prefix.
+        let outer_heap_str = match outer_heap {
+            Heap::Local => "@",
+            Heap::Global => "#",
+            Heap::Omitted => "",
+        };
 
-        let source = pretty_print(db, new_expr);
+        // Build final source with wrong element appended.
+        // Use prefix type hint format: ": type / expr"
+        let mut all_elems = elem_strs;
+        all_elems.push(wrong_elem_str);
+        let list_body = format!("{}[{}]", outer_heap_str, all_elems.join(", "));
+
+        let source = if let Some(th) = expr.type_hint(db) {
+            let mut type_str = String::new();
+            pretty_type_hint_and_heap(db, th, &mut type_str);
+            format!(": {} / {}", type_str, list_body)
+        } else {
+            list_body
+        };
 
         Some(MutationResult {
             source,
