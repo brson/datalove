@@ -150,3 +150,54 @@ The tests reveal real differences between datalit and datafun:
 - Fresh database instances per test to avoid salsa state corruption
 - Discovery test passes CI; detailed tests are `#[ignore]` for investigation
 - Parser panics on malformed input are counted as failures
+
+---
+
+# Remediation Plan
+
+**Status: PLANNED**
+
+## Root Causes
+
+1. Datafun doesn't call datalit's `check()` function for typed literals
+2. Parser panics on malformed input instead of returning ParseError nodes
+
+## Phase 1: Type Error Fixes
+
+### Task 1.1: Add specific error types to datafun
+
+**File:** `crates/datalove-datafun/src/tycheck.rs`
+
+Add datalit-compatible error variants: `IntOutOfRange`, `HeapMismatch`, `MissingField`, `ExtraField`, `FieldOrderMismatch`, `VariantNotFound`
+
+### Task 1.2: Add check() delegation for typed literals
+
+When synthesizing datalit literals with type hints, call datalit's `check()` to validate integer ranges, etc.
+
+### Task 1.3: Add heap compatibility checks for collections
+
+In `synthesize_inline_list/set/map`, check heap compatibility between elements.
+
+### Task 1.4: Add helper to convert datalit errors
+
+Map `datalit::tycheck::TypeError` variants to `datafun::tycheck::TypeError`.
+
+## Phase 2: Parser Panic Fixes (TBD)
+
+Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return errors instead of panicking. ~40 call sites affected. Exact approach TBD.
+
+## Implementation Order
+
+1. Task 1.1 - Add error types
+2. Task 1.4 - Add error converter
+3. Task 1.2 - Add check() delegation (fixes OutOfRangeInt)
+4. Task 1.3 - Add heap checks (fixes HeapMismatch)
+5. Task 2.x - Parser panic fixes
+
+## Success Criteria
+
+- OutOfRangeInt: 0% → 100%
+- HeapMismatch: 0% → 100%
+- WrongElementType: 0% → 100%
+- ArityMismatch: 0% → 100%
+- Source mutations: significant improvement
