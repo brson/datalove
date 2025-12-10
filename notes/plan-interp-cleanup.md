@@ -36,3 +36,7 @@ Function in script units
 and functions in modules should share the same code path.
 script statements and expressions should share as much
 code with functions as reasonable.
+
+Review the datafun interpreter
+and look for opportunities to simplify
+and cleanup along these design guidelines.
