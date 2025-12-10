@@ -365,10 +365,15 @@ fn test_error_equiv_discovery() {
 
     // Report known discrepancy categories.
     println!("\n=== Known Discrepancies ===");
-    println!("1. OutOfRangeInt: Datafun doesn't check integer literal ranges against type hints");
-    println!("2. HeapMismatch: Datafun may handle heap annotation checking differently");
-    println!("3. WrongElementType: Collection type mismatch detection may differ");
-    println!("4. Source mutations: Parser may panic on malformed input (counted as failures)");
+    println!("1. Source mutations: Parser may panic on malformed input (counted as failures)");
+    println!("   - This accounts for failures in DeleteOpeningBracket, TruncateSource, etc.");
+    println!("2. RemoveTypeHint, WrongVariant: Low sample rates, may show 0 tests");
+    println!();
+    println!("=== Fixed Discrepancies ===");
+    println!("- OutOfRangeInt: 100% (fixed in Phase 1)");
+    println!("- HeapMismatch: 100% (fixed in Phase 1.5)");
+    println!("- WrongElementType: 100% (fixed in Phase 1.6)");
+    println!("- ArityMismatch: 100% (fixed in Phase 1.7)");
     println!();
 }
 
@@ -644,4 +649,50 @@ fn test_debug_heap_mismatch() {
             }
         }
     }
+}
+
+/// Debug test for ArityMismatch - shows raw errors from both systems.
+#[test]
+#[ignore] // Run with --ignored to investigate
+fn test_debug_arity_mismatch() {
+    let config = make_mutation_config();
+
+    let mut applied_count = 0;
+    for seed in 0..200 {
+        let config_clone = config.clone();
+        let result = std::thread::spawn(move || {
+            let db = datalove_datafun::Database::default();
+            let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
+            let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+
+            // For debugging, also print what type of expr was generated.
+            let original = datalove_datalit::pretty::pretty_print(&db, expr);
+
+            if let Some(result) = Mutation::ArityMismatch.apply(&db, expr, &mut rng) {
+                let (datalit_errs, datalit_parse) = get_datalit_errors(&db, &result.source);
+                let (datafun_errs, datafun_parse) = get_datafun_errors(&db, &result.source);
+                Some((original, result.source, datalit_errs, datalit_parse, datafun_errs, datafun_parse, true))
+            } else {
+                Some((original, String::new(), vec![], false, vec![], false, false))
+            }
+        }).join();
+
+        match result {
+            Ok(Some((original, source, datalit_errs, datalit_parse, datafun_errs, datafun_parse, applied))) => {
+                if applied {
+                    applied_count += 1;
+                    eprintln!("Seed {}: original = {}", seed, original);
+                    eprintln!("         mutated  = {}", source);
+                    eprintln!("  Datalit: {:?} (parse_err={})", datalit_errs, datalit_parse);
+                    eprintln!("  Datafun: {:?} (parse_err={})", datafun_errs, datafun_parse);
+                    eprintln!();
+                }
+            }
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("Seed {}: PANIC - {:?}", seed, e);
+            }
+        }
+    }
+    eprintln!("Total mutations applied: {}", applied_count);
 }

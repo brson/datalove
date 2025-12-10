@@ -1188,25 +1188,37 @@ fn synthesize_expr<'db>(
         // Aggregate types.
         ExprFunKind::AnonTuple(tuple_expr) => {
             if let Some(type_hint) = tuple_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let expected_ty = convert_type_hint(db, type_hint)?;
+                // Check elements against expected type (catches arity mismatches).
+                check_tuple_elements(ctx, tuple_expr.elements(db), expected_ty)?;
+                return Ok(expected_ty);
             }
             synthesize_inline_anon_tuple(ctx, expr, tuple_expr)
         }
         ExprFunKind::NamedTuple(tuple_expr) => {
             if let Some(type_hint) = tuple_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let expected_ty = convert_type_hint(db, type_hint)?;
+                // Check elements against expected type (catches arity mismatches).
+                check_tuple_elements(ctx, tuple_expr.elements(db), expected_ty)?;
+                return Ok(expected_ty);
             }
             Err(ctx.error_cannot_synthesize(expr, "named tuple requires type hint"))
         }
         ExprFunKind::AnonStruct(struct_expr) => {
             if let Some(type_hint) = struct_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let expected_ty = convert_type_hint(db, type_hint)?;
+                // Check fields against expected type (catches arity mismatches).
+                check_struct_fields(ctx, struct_expr.fields(db), expected_ty)?;
+                return Ok(expected_ty);
             }
             synthesize_inline_anon_struct(ctx, expr, struct_expr)
         }
         ExprFunKind::NamedStruct(struct_expr) => {
             if let Some(type_hint) = struct_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                let expected_ty = convert_type_hint(db, type_hint)?;
+                // Check fields against expected type (catches arity mismatches).
+                check_struct_fields(ctx, struct_expr.fields(db), expected_ty)?;
+                return Ok(expected_ty);
             }
             Err(ctx.error_cannot_synthesize(expr, "named struct requires type hint"))
         }
@@ -2900,6 +2912,130 @@ fn check_tensor_elements<'db>(
             return Err(TypeError::HeapMismatch {
                 expected_heap: heap_to_string(expected_heap),
                 actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Check tuple elements against expected type.
+fn check_tuple_elements<'db>(
+    ctx: &mut TypeContext<'db>,
+    elements: &[ExprFun<'db>],
+    expected_ty: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    let db = ctx.db;
+
+    // Unwrap Option/Result wrappers to get the actual tuple type.
+    let inner_ty = unwrap_wrapper_types(db, expected_ty);
+
+    // Extract the field types from the tuple type.
+    let expected_fields = match inner_ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple_ty)) => {
+            tuple_ty.fields(db)
+        }
+        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+    };
+
+    // Check arity.
+    if elements.len() != expected_fields.len() {
+        return Err(TypeError::ArityMismatch {
+            expected: expected_fields.len(),
+            actual: elements.len(),
+        });
+    }
+
+    // Check each element against expected field type.
+    for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
+        let elem_ty = ctx.synthesize_expr(*elem)?;
+
+        // Extract actual datalit type.
+        let actual_datalit_ty = match elem_ty.ty(db) {
+            Type::Datalit(dt) => dt,
+            _ => continue, // Skip non-datalit types.
+        };
+
+        // Check type compatibility with coercion.
+        if let Err((expected_str, actual_str)) = check_type_coercion(db, actual_datalit_ty, expected_field) {
+            return Err(TypeError::TypeMismatch {
+                expected: expected_str,
+                actual: actual_str,
+            });
+        }
+
+        // Check heap compatibility.
+        let expected_heap = unwrap_wrapper_heap_datalit(db, *expected_field);
+        if !heaps_compatible(expected_heap, elem_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(expected_heap),
+                actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Check struct fields against expected type.
+fn check_struct_fields<'db>(
+    ctx: &mut TypeContext<'db>,
+    fields: &[crate::ast::ExprStructField<'db>],
+    expected_ty: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    let db = ctx.db;
+
+    // Unwrap Option/Result wrappers to get the actual struct type.
+    let inner_ty = unwrap_wrapper_types(db, expected_ty);
+
+    // Extract the field types from the struct type.
+    let expected_fields = match inner_ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::AnonStruct(struct_ty)) => {
+            struct_ty.fields(db)
+        }
+        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+    };
+
+    // Check arity.
+    if fields.len() != expected_fields.len() {
+        return Err(TypeError::ArityMismatch {
+            expected: expected_fields.len(),
+            actual: fields.len(),
+        });
+    }
+
+    // Check each field against expected field type.
+    for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
+        // Check field name matches.
+        let field_name = field.name(db);
+        let expected_name = expected_field.name(db);
+        if field_name != expected_name {
+            return Err(TypeError::FieldOrderMismatch);
+        }
+
+        let field_value_ty = ctx.synthesize_expr(field.value(db))?;
+
+        // Extract actual datalit type.
+        let actual_datalit_ty = match field_value_ty.ty(db) {
+            Type::Datalit(dt) => dt,
+            _ => continue, // Skip non-datalit types.
+        };
+
+        // Check type compatibility with coercion.
+        let expected_field_ty = expected_field.ty(db);
+        if let Err((expected_str, actual_str)) = check_type_coercion(db, actual_datalit_ty, &expected_field_ty) {
+            return Err(TypeError::TypeMismatch {
+                expected: expected_str,
+                actual: actual_str,
+            });
+        }
+
+        // Check heap compatibility.
+        let expected_heap = unwrap_wrapper_heap_datalit(db, expected_field_ty);
+        if !heaps_compatible(expected_heap, field_value_ty.heap(db)) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(expected_heap),
+                actual_heap: heap_to_string(field_value_ty.heap(db)),
             });
         }
     }

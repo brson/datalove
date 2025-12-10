@@ -155,13 +155,14 @@ The tests reveal real differences between datalit and datafun:
 
 # Remediation Plan
 
-**Status: PHASE 1.5 COMPLETE**
+**Status: PHASE 1.7 COMPLETE**
 
 ## Root Causes
 
 1. ~~Datafun doesn't call datalit's `check()` function for typed literals~~ FIXED
 2. ~~Datafun doesn't check heap compatibility for typed literals~~ FIXED
-3. Parser panics on malformed input instead of returning ParseError nodes (TBD)
+3. ~~Datafun doesn't check arity for tuples/structs against type hints~~ FIXED
+4. Parser panics on malformed input instead of returning ParseError nodes (TBD)
 
 ## Phase 1: Type Error Fixes - COMPLETED
 
@@ -211,6 +212,20 @@ Changed mutation output from trailing `<type>` format to prefix `: type / expr` 
 
 Added `check_type_coercion` helper function that follows datalit's coercion rules for Option/Result types. Updated `check_list_elements`, `check_set_elements`, `check_map_entries`, and `check_tensor_elements` to use this helper for type checking with proper coercion support.
 
+## Phase 1.7: ArityMismatch Fix - COMPLETED
+
+### Task 1.7.1: Fix mutation_gen to avoid salsa panics - DONE
+
+Converted `apply_arity_mismatch` from AST manipulation to source-level string manipulation to avoid "cannot create tracked struct outside tracked function" errors.
+
+### Task 1.7.2: Add arity checking for tuples - DONE
+
+Added `check_tuple_elements` helper function to validate that tuple element count matches the type hint. Updated `ExprFunKind::AnonTuple` and `ExprFunKind::NamedTuple` handling to call this function when type hints are present.
+
+### Task 1.7.3: Add arity checking for structs - DONE
+
+Added `check_struct_fields` helper function to validate that struct field count and names match the type hint. Updated `ExprFunKind::AnonStruct` and `ExprFunKind::NamedStruct` handling to call this function when type hints are present.
+
 ## Phase 2: Parser Panic Fixes (TBD)
 
 Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return errors instead of panicking. ~40 call sites affected. Exact approach TBD.
@@ -227,7 +242,10 @@ Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return err
 8. ~~Task 1.6.1 - Fix mutation_gen salsa panics for WrongElementType~~ DONE
 9. ~~Task 1.6.2 - Fix type hint format~~ DONE
 10. ~~Task 1.6.3 - Add element type checking with coercion~~ DONE
-11. Task 2.x - Parser panic fixes (TBD)
+11. ~~Task 1.7.1 - Fix mutation_gen salsa panics for ArityMismatch~~ DONE
+12. ~~Task 1.7.2 - Add tuple arity checking~~ DONE
+13. ~~Task 1.7.3 - Add struct arity checking~~ DONE
+14. Task 2.x - Parser panic fixes (TBD)
 
 ## Current Results
 
@@ -237,13 +255,13 @@ Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return err
 | HeapMismatch | 0% | 100% |
 | DeleteHeapSigil | 100% | 100% |
 | WrongElementType | 0% | 100% |
-| ArityMismatch | 0% | 0% |
-| Overall | 62.7% | 63.2% |
+| ArityMismatch | 0% | 100% |
+| Overall | 62.7% | 63.4% |
 
 ## Success Criteria
 
 - ~~OutOfRangeInt: 0% → 100%~~ ACHIEVED
 - ~~HeapMismatch: 0% → 100%~~ ACHIEVED
 - ~~WrongElementType: 0% → 100%~~ ACHIEVED
-- ArityMismatch: 0% → 100% (requires struct/tuple checking - TBD)
+- ~~ArityMismatch: 0% → 100%~~ ACHIEVED
 - Source mutations: significant improvement pending Phase 2

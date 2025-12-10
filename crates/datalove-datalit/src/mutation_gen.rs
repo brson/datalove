@@ -507,6 +507,8 @@ fn apply_heap_mismatch<'db>(
 }
 
 /// Add or remove tuple/struct field to cause arity mismatch.
+///
+/// Uses source-level string manipulation to avoid salsa tracked function issues.
 fn apply_arity_mismatch<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
@@ -516,23 +518,32 @@ fn apply_arity_mismatch<'db>(
     let expr_and_heap = expr.expr(db);
     let heap = expr_and_heap.heap(db);
 
+    let heap_str = match heap {
+        Heap::Local => "@",
+        Heap::Global => "#",
+        Heap::Omitted => "",
+    };
+
     match (type_hint.type_hint(db), expr_and_heap.expr(db)) {
-        (TypeHint::AnonTuple(th), Expr::AnonTuple(t)) => {
+        (TypeHint::AnonTuple(_th), Expr::AnonTuple(t)) => {
             let elements = t.elements(db);
-            if elements.is_empty() {
+            if elements.len() < 2 {
+                // Need at least 2 elements to remove one and still have a tuple.
                 return None;
             }
 
-            // Remove last element but keep type hint (causing arity mismatch).
-            let new_elements: Vec<_> = elements[..elements.len() - 1].to_vec();
-            let new_tuple = ExprAnonTuple::new(db, new_elements);
-            let new_expr = ExprFull::new(
-                db,
-                Some(type_hint),
-                ExprAndHeap::new(db, heap, Expr::AnonTuple(new_tuple)),
-            );
+            // Pretty-print elements, then remove last one.
+            let elem_strs: Vec<String> = elements[..elements.len() - 1]
+                .iter()
+                .map(|e| pretty_print(db, *e))
+                .collect();
 
-            let source = pretty_print(db, new_expr);
+            // Build type hint string.
+            let mut type_str = String::new();
+            pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+
+            // Build tuple with fewer elements: `: type / @(elem1, elem2)`
+            let source = format!(": {} / {}({})", type_str, heap_str, elem_strs.join(", "));
 
             Some(MutationResult {
                 source,
@@ -540,26 +551,33 @@ fn apply_arity_mismatch<'db>(
                 description: "Removed tuple element to cause arity mismatch".to_string(),
             })
         }
-        (TypeHint::AnonStruct(th), Expr::AnonStruct(s)) => {
+        (TypeHint::AnonStruct(_th), Expr::AnonStruct(s)) => {
             let fields = s.fields(db);
-            if fields.is_empty() {
+            if fields.len() < 2 {
+                // Need at least 2 fields to remove one.
                 return None;
             }
 
-            // Remove last field but keep type hint (causing arity mismatch).
-            let new_fields: Vec<_> = fields[..fields.len() - 1].to_vec();
-            let new_struct = ExprAnonStruct::new(db, new_fields);
-            let new_expr = ExprFull::new(
-                db,
-                Some(type_hint),
-                ExprAndHeap::new(db, heap, Expr::AnonStruct(new_struct)),
-            );
+            // Pretty-print fields, then remove last one.
+            let field_strs: Vec<String> = fields[..fields.len() - 1]
+                .iter()
+                .map(|f| {
+                    let name = f.name(db).as_str(db);
+                    let value = pretty_print(db, f.value(db));
+                    format!("{}: {}", name, value)
+                })
+                .collect();
 
-            let source = pretty_print(db, new_expr);
+            // Build type hint string.
+            let mut type_str = String::new();
+            pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+
+            // Build struct with fewer fields: `: type / @{field1: v1, field2: v2}`
+            let source = format!(": {} / {}{{{}}}", type_str, heap_str, field_strs.join(", "));
 
             Some(MutationResult {
                 source,
-                expected_errors: vec!["T039"], // Struct arity mismatch.
+                expected_errors: vec!["T039"], // Struct missing field.
                 description: "Removed struct field to cause arity mismatch".to_string(),
             })
         }
