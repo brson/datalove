@@ -1,0 +1,5 @@
+require module sys/std/bool
+
+import bool.and
+
+let output = (and(@true, @true), and(@true, @false), and(@false, @true), and(@false, @false))
