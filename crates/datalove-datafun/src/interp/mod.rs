@@ -1,7 +1,43 @@
-//! New analysis-driven interpreter.
+//! Analysis-driven interpreter with linear type semantics.
 //!
-//! This interpreter uses the function_analysis framework to achieve safe,
-//! leak-free execution with proper linear type semantics and package world integration.
+//! # Architecture
+//!
+//! The interpreter executes datafun code in two modes:
+//!
+//! - **Script scope**: Top-level statements (let bindings, function definitions)
+//!   execute directly with script-level variable tracking.
+//!
+//! - **Frame-based execution**: Function bodies execute using a stack frame with
+//!   slots computed by `function_analysis`. This enables destination-passing style
+//!   (DPS) to minimize heap allocations.
+//!
+//! # Value Ownership
+//!
+//! Values track ownership via `ValueLocation`:
+//! - `Borrowed`: Points into frame memory or caller's data. Don't free.
+//! - `TempOwned`: Heap-allocated temporary. Must free structure after use.
+//!
+//! Linear types are enforced by marking slots as `Moved` after use.
+//! Copy types are cloned transparently.
+//!
+//! # Key Types
+//!
+//! - [`InterpContext`]: Main interpreter state (runtime, package world, call stack)
+//! - [`Value`]: Runtime value with pointer, type descriptor, and ownership
+//! - [`StackFrame`]: Function execution frame with slot storage
+//! - [`ScriptScope`]: Top-level variable bindings for REPL/script execution
+
+mod value;
+mod error;
+mod frame;
+mod memory;
+
+pub use value::{Value, Destination, ValueLocation, EvalContext};
+pub use error::InterpError;
+pub use frame::{SlotState, StackFrame};
+pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
+use frame::CfgControl;
+use memory::{clone_value, clone_value_to_dest};
 
 use rmx::prelude::*;
 use rmx::std::collections::HashMap;
@@ -10,6 +46,10 @@ use bct::text::InternedText;
 use crate::package::PackageWorld;
 use crate::ast::{self, StmtFun};
 use crate::function_analysis::{ControlFlowGraph, Terminator, BlockId};
+
+// ============================================================================
+// Context Types
+// ============================================================================
 
 /// Interpreter context for script execution.
 pub struct InterpContext<'db> {
@@ -62,91 +102,6 @@ pub enum ScriptVarState {
     Moved,
 }
 
-/// Slot state for frame-based execution.
-///
-/// Tracks whether a slot is available for use or has been moved.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum SlotState {
-    /// Slot is available for reading (either reference or owned value).
-    Available,
-    /// Slot has been moved from (only applicable to non-copy types).
-    Moved,
-}
-
-/// Control flow result from executing a CFG statement.
-enum CfgControl {
-    /// Continue to the next statement in the block.
-    Continue,
-    /// Return from the function with a value.
-    Return(Value),
-}
-
-/// Stack frame for function execution.
-///
-/// Contains the packed frame data buffer and per-slot state tracking.
-pub struct StackFrame<'db> {
-    /// Packed frame data containing all slot values at computed offsets.
-    pub frame_data: Vec<u8>,
-    /// Per-slot state tracking for move semantics.
-    pub slot_states: Vec<SlotState>,
-    /// Function being executed (for debugging).
-    pub func: crate::ast::StmtFun<'db>,
-    /// Frame layout providing slot offsets and types.
-    pub layout: crate::function_analysis::FrameLayout<'db>,
-    /// Control flow graph for CFG-based execution.
-    pub cfg: ControlFlowGraph<'db>,
-}
-
-/// Tracks whether a Value's memory needs freeing after use.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ValueLocation {
-    /// Points to frame buffer or caller's data via reference. Don't free.
-    Borrowed,
-    /// Temp heap allocation for expression evaluation. Free structure after use.
-    TempOwned,
-}
-
-/// Value representation.
-#[derive(Copy, Clone, Debug)]
-pub struct Value {
-    pub ptr: *mut u8,
-    pub tydesc: *const datalove_rt::rtdt::TyDesc,
-    pub location: ValueLocation,
-}
-
-/// Destination for DPS (Destination-Passing Style) expression evaluation.
-///
-/// When provided, expression evaluation writes directly to this location
-/// instead of allocating a temporary.
-#[derive(Copy, Clone, Debug)]
-pub struct Destination {
-    pub ptr: *mut u8,
-    pub tydesc: *const datalove_rt::rtdt::TyDesc,
-}
-
-impl Destination {
-    /// Create a Value pointing to this destination (Borrowed, since caller owns memory).
-    pub fn to_borrowed_value(self) -> Value {
-        Value {
-            ptr: self.ptr,
-            tydesc: self.tydesc,
-            location: ValueLocation::Borrowed,
-        }
-    }
-}
-
-/// Evaluation context for unified expression evaluation.
-///
-/// This enum allows sharing expression evaluation code between script scope
-/// and frame-based execution while keeping context-specific operations separate.
-#[derive(Copy, Clone, Debug)]
-pub enum EvalContext {
-    /// Script scope evaluation - uses ScriptScope for variables.
-    ScriptScope,
-    /// Frame-based evaluation - uses the current stack frame.
-    Frame,
-}
-
 /// Result of script execution containing the value and runtime.
 ///
 /// The runtime and tydesc_table must be kept alive for the value pointer to remain valid.
@@ -173,42 +128,6 @@ impl Drop for ScriptResult<'_> {
         // after the runtime had already started shutting down.
         // The manual cleanup happens in worldfile_analysis.rs.
     }
-}
-
-/// Interpreter errors.
-#[derive(Debug)]
-pub enum InterpError {
-    // Analysis-time errors.
-    TypeErrors,
-    TypecheckErrors(usize),  // Number of typecheck errors found.
-    AnalysisErrors(Vec<String>),
-
-    // Runtime errors.
-    VariableNotFound(String),
-    UseAfterMove(String),
-    FunctionNotFound(String),
-    ModuleNotFound(String),
-    InvalidExpression(String),
-    RuntimeError(String),
-
-    // Control flow.
-    ReturnOutsideFunction,
-    IfOutsideFunction,
-    FunctionReturn(Value),  // Used internally to propagate return values.
-    EarlyReturn,  // Used for try operator (? or !) early return from CFG.
-
-    // Checked arithmetic overflow - triggers early return with Err.
-    Overflow,
-    DivisionByZero,
-
-    // Optional arithmetic overflow - triggers early return with None.
-    OptionNone,
-    // Result error - triggers early return with Err.
-    // Carries the error value (tydesc + ptr) to be wrapped in Result::Err.
-    ResultErr { tydesc: *const datalove_rt::rtdt::TyDesc, ptr: *mut u8 },
-
-    // Result type.
-    NoOutputVariable,
 }
 
 impl InterpContext<'_> {
@@ -494,9 +413,11 @@ impl<'db> ModuleFunctionTable<'db> {
     }
 }
 
+// ============================================================================
+// Module Loading
+// ============================================================================
+
 /// Parse a module and extract all function definitions.
-///
-/// This is a tracked function to satisfy Salsa's requirements.
 #[salsa::tracked]
 fn parse_module_functions<'db>(
     db: &'db dyn crate::Db,
@@ -572,6 +493,10 @@ fn build_module_alias_map<'db>(
 
     alias_map
 }
+
+// ============================================================================
+// Script Execution Entry Points
+// ============================================================================
 
 /// Execute a complete script in batch mode.
 ///
@@ -786,6 +711,10 @@ fn execute_unit<'db>(
     Ok(())
 }
 
+// ============================================================================
+// Statement Execution
+// ============================================================================
+
 /// Execute a single statement at script level.
 fn execute_statement<'db>(
     ctx: &mut InterpContext<'db>,
@@ -956,6 +885,10 @@ fn execute_fun_statement<'db>(
 
     Ok(())
 }
+
+// ============================================================================
+// Expression Evaluation - Script Scope
+// ============================================================================
 
 /// Evaluate an expression in script scope.
 fn eval_expression_in_script_scope<'db>(
@@ -1128,6 +1061,10 @@ fn read_script_variable<'db>(
         Ok(value)
     }
 }
+
+// ============================================================================
+// Function Calls and Execution
+// ============================================================================
 
 /// Look up a function by name in script scope or imported modules.
 ///
@@ -2488,40 +2425,6 @@ fn eval_expression_frame<'db>(
     }
 }
 
-/// Clone a value (for copy types or explicit cloning).
-fn clone_value<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: Value,
-) -> Value {
-    // Allocate memory for the clone.
-    let rt_handle = ctx.runtime.handle();
-
-    let cloned_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(
-            rt_handle,
-            value.tydesc,
-            1
-        )
-    };
-
-    // Clone into the allocated memory.
-    unsafe {
-        datalove_rt::c::dtlv_rti_clone_local(
-            rt_handle,
-            value.ptr,
-            value.tydesc,
-            cloned_ptr,
-            value.tydesc,
-        );
-    }
-
-    Value {
-        ptr: cloned_ptr,
-        tydesc: value.tydesc,
-        location: ValueLocation::TempOwned,
-    }
-}
-
 /// Evaluate a return expression with the function's return type as context.
 ///
 /// This is needed for @none/@error literals which require a typed destination.
@@ -2569,46 +2472,9 @@ fn eval_return_expression_frame<'db>(
     eval_expression_frame(ctx, expr, None)
 }
 
-/// Clone a value into a pre-allocated destination.
-fn clone_value_to_dest<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: Value,
-    dest: Destination,
-) -> Value {
-    use datalove_rt::rtdt::TyDescRef;
-
-    // If tydescs are identical, use the runtime clone directly.
-    if value.tydesc == dest.tydesc {
-        let rt_handle = ctx.runtime.handle();
-        unsafe {
-            datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, dest.ptr, dest.tydesc);
-        }
-    } else {
-        // Tydescs differ but might represent the same type. Check if they're compatible
-        // (same type_tag and size) and use raw memcpy for simple copy types.
-        let src_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
-        let dst_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
-
-        if src_ref.type_tag() == dst_ref.type_tag() && src_ref.size() == dst_ref.size() {
-            // Types are structurally compatible, use raw memcpy.
-            unsafe {
-                std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, src_ref.size() as usize);
-            }
-        } else {
-            // Types are incompatible, this is an error.
-            panic!(
-                "clone_value_to_dest: incompatible types {:?} (size {}) vs {:?} (size {})",
-                src_ref.type_tag(), src_ref.size(),
-                dst_ref.type_tag(), dst_ref.size()
-            );
-        }
-    }
-    Value {
-        ptr: dest.ptr,
-        tydesc: dest.tydesc,
-        location: ValueLocation::Borrowed,
-    }
-}
+// ============================================================================
+// Value Allocation
+// ============================================================================
 
 /// Allocate a boolean value.
 fn allocate_bool<'db>(
@@ -3123,6 +2989,10 @@ fn eval_inline_anon_struct<'db>(
 
     allocate_struct_from_values(ctx, field_values)
 }
+
+// ============================================================================
+// Type Checking Utilities
+// ============================================================================
 
 /// Check if a value is a u32 type.
 fn is_u32_value(value: Value) -> bool {
@@ -4307,88 +4177,9 @@ fn narrow_int_to_u32<'db>(
     Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
 }
 
-/// Destroy a value using the runtime's destroy function.
-/// Destroy only the contents of a value without freeing its memory.
-///
-/// Use this for values stored inline in frame buffers, where the memory
-/// is owned by the frame Vec<u8> and should not be freed individually.
-pub fn destroy_value_contents_only<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: Value,
-) {
-    unsafe {
-        let rt_handle = ctx.runtime.handle();
-
-        // Destroy contents using runtime's type-specific destroy logic.
-        // This handles Int limbs, String buffers, and other complex types.
-        // Does NOT free the value structure itself.
-        datalove_rt::c::dtlv_rti_any_destroy_local(
-            rt_handle,
-            value.ptr,
-            value.tydesc,
-        );
-    }
-}
-
-/// Destroy a value, respecting its location.
-///
-/// For HeapOwned values: destroys contents AND frees the memory structure.
-/// For FrameSlot values: destroys contents only (frame owns the memory).
-pub fn destroy_value<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: Value,
-) {
-    unsafe {
-        let rt_handle = ctx.runtime.handle();
-
-        // Destroy contents using runtime's type-specific destroy logic.
-        // This handles Int limbs, String buffers, and other complex types.
-        datalove_rt::c::dtlv_rti_any_destroy_local(
-            rt_handle,
-            value.ptr,
-            value.tydesc,
-        );
-
-        // Only free the structure for heap-owned values.
-        // Frame slot values are freed when the frame is dropped.
-        if value.location == ValueLocation::TempOwned {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                rt_handle,
-                value.tydesc,
-                1,
-                value.ptr,
-            );
-        }
-    }
-}
-
-/// Free only the value structure without destroying contents.
-///
-/// Use this when a value's bytes have been copied to a frame slot,
-/// and the frame now owns the pointers. This frees the temporary
-/// heap-allocated structure but leaves sub-allocations intact.
-pub fn free_value_structure<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: Value,
-) {
-    // Only free temp allocations. Borrowed values point into frames.
-    if value.location != ValueLocation::TempOwned {
-        return;
-    }
-
-    unsafe {
-        let rt_handle = ctx.runtime.handle();
-
-        // Free only the structure memory, not the contents.
-        // The frame slot now owns any pointers in the structure.
-        datalove_rt::c::dtlv_rti_mem_free_local(
-            rt_handle,
-            value.tydesc,
-            1,
-            value.ptr,
-        );
-    }
-}
+// ============================================================================
+// Arithmetic Operations
+// ============================================================================
 
 /// Evaluate addition with automatic widening to int.
 fn eval_add<'db>(
@@ -5513,6 +5304,10 @@ fn eval_neg_result<'db>(
         }
     }
 }
+
+// ============================================================================
+// Type Coercion
+// ============================================================================
 
 /// Coerce a value to a destination type.
 ///
