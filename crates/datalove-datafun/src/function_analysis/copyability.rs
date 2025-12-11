@@ -394,8 +394,8 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(): u32?
-    let a: u32? = some(42u32)
+fun test(): ?u32
+    let a: ?u32 = some(42u32)
     ret a
 end fun
         "#;
@@ -410,8 +410,8 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(): String?
-    let a: String? = some("hello")
+fun test(): ?String
+    let a: ?String = some("hello")
     ret a
 end fun
         "#;

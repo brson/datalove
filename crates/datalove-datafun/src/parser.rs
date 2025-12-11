@@ -660,12 +660,43 @@ impl<'db> Parser<'db> {
             tokens.next();
         }
 
+        let collected_len = collected.len();
+
         // Delegate to datalit parser.
-        // The parser should consume exactly the tokens we collected.
-        let (type_hint, _consumed) = datalit::parser::parse_type_hint_and_heap_from_tokens(
+        let (type_hint, consumed) = datalit::parser::parse_type_hint_and_heap_from_tokens(
             self.db,
             collected,
         );
+
+        // Check for unconsumed tokens - this indicates a parse error in the type hint.
+        // But only emit a new error if the type hint isn't already a ParseError
+        // (to avoid duplicate errors).
+        if consumed < collected_len {
+            if !matches!(type_hint.type_hint(self.db), datalit::ast::TypeHint::ParseError(_)) {
+                // Get text/span info from the first unconsumed token for the error.
+                let text = self.bracer.chunk(self.db).tokens(self.db).first()
+                    .map(|t| t.text(self.db).text(self.db))
+                    .unwrap_or_else(|| bct::text::Text::new(self.db, String::new()));
+                let message = InternedText::new(self.db, "unexpected tokens in type hint".S());
+
+                DiagnosticBuilder::error(self.db, "unexpected tokens in type hint")
+                    .code("D021")
+                    .primary_label(text, 0..1, "unexpected tokens")
+                    .emit_parse();
+
+                let error = datalit::ast::TypeHintParseError::new(
+                    self.db,
+                    text,
+                    0..1, // placeholder span
+                    message,
+                );
+                return datalit::ast::TypeHintAndHeap::new(
+                    self.db,
+                    datalit::ast::Heap::Omitted,
+                    datalit::ast::TypeHint::ParseError(error),
+                );
+            }
+        }
 
         type_hint
     }

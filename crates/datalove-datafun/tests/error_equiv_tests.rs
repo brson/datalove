@@ -109,27 +109,107 @@ fn has_datafun_parse_error<'db>(
     expr: datalove_datafun::ast::ExprFun<'db>,
 ) -> bool {
     use datalove_datafun::ast::ExprFunKind;
+
+    // Helper to check type hint for parse error.
+    let check_type_hint = |th: Option<datalove_datalit::ast::TypeHintAndHeap<'db>>| -> bool {
+        th.map(|th| has_type_hint_parse_error(db, th)).unwrap_or(false)
+    };
+
     match expr.expr(db) {
         ExprFunKind::ParseError(_) => true,
-        ExprFunKind::List(l) => l.elements(db).iter().any(|e| has_datafun_parse_error(db, *e)),
-        ExprFunKind::Set(s) => s.elements(db).iter().any(|e| has_datafun_parse_error(db, *e)),
-        ExprFunKind::Map(m) => m.entries(db).iter().any(|e| {
-            has_datafun_parse_error(db, e.key(db)) || has_datafun_parse_error(db, e.value(db))
-        }),
-        ExprFunKind::AnonTuple(t) => t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e)),
-        ExprFunKind::NamedTuple(t) => t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e)),
-        ExprFunKind::AnonStruct(s) => s.fields(db).iter().any(|f| has_datafun_parse_error(db, f.value(db))),
-        ExprFunKind::NamedStruct(s) => s.fields(db).iter().any(|f| has_datafun_parse_error(db, f.value(db))),
-        ExprFunKind::AnonEnum(e) => e.payload(db).map(|p| has_datafun_parse_error(db, p)).unwrap_or(false),
-        ExprFunKind::NamedEnum(e) => e.payload(db).map(|p| has_datafun_parse_error(db, p)).unwrap_or(false),
-        ExprFunKind::Data(d) => has_datafun_parse_error(db, d.value(db)),
-        ExprFunKind::Err(e) => has_datafun_parse_error(db, e.value(db)),
-        ExprFunKind::Tensor(t) => t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e)),
+        ExprFunKind::List(l) => {
+            check_type_hint(l.type_hint(db)) ||
+            l.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
+        }
+        ExprFunKind::Set(s) => {
+            check_type_hint(s.type_hint(db)) ||
+            s.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
+        }
+        ExprFunKind::Map(m) => {
+            check_type_hint(m.type_hint(db)) ||
+            m.entries(db).iter().any(|e| {
+                has_datafun_parse_error(db, e.key(db)) || has_datafun_parse_error(db, e.value(db))
+            })
+        }
+        ExprFunKind::AnonTuple(t) => {
+            check_type_hint(t.type_hint(db)) ||
+            t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
+        }
+        ExprFunKind::NamedTuple(t) => {
+            check_type_hint(t.type_hint(db)) ||
+            t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
+        }
+        ExprFunKind::AnonStruct(s) => {
+            check_type_hint(s.type_hint(db)) ||
+            s.fields(db).iter().any(|f| has_datafun_parse_error(db, f.value(db)))
+        }
+        ExprFunKind::NamedStruct(s) => {
+            check_type_hint(s.type_hint(db)) ||
+            s.fields(db).iter().any(|f| has_datafun_parse_error(db, f.value(db)))
+        }
+        ExprFunKind::AnonEnum(e) => {
+            check_type_hint(e.type_hint(db)) ||
+            e.payload(db).map(|p| has_datafun_parse_error(db, p)).unwrap_or(false)
+        }
+        ExprFunKind::NamedEnum(e) => {
+            check_type_hint(e.type_hint(db)) ||
+            e.payload(db).map(|p| has_datafun_parse_error(db, p)).unwrap_or(false)
+        }
+        ExprFunKind::Data(d) => {
+            check_type_hint(d.type_hint(db)) ||
+            has_datafun_parse_error(db, d.value(db))
+        }
+        ExprFunKind::Err(e) => {
+            check_type_hint(e.type_hint(db)) ||
+            has_datafun_parse_error(db, e.value(db))
+        }
+        ExprFunKind::Tensor(t) => {
+            check_type_hint(t.type_hint(db)) ||
+            t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
+        }
         ExprFunKind::Tuple(t) => t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e)),
         ExprFunKind::UnaryOp(u) => has_datafun_parse_error(db, u.operand(db)),
         ExprFunKind::BinOp(b) => {
             has_datafun_parse_error(db, b.lhs(db)) || has_datafun_parse_error(db, b.rhs(db))
         }
+        ExprFunKind::True(l) => check_type_hint(l.type_hint(db)),
+        ExprFunKind::False(l) => check_type_hint(l.type_hint(db)),
+        ExprFunKind::None(l) => check_type_hint(l.type_hint(db)),
+        ExprFunKind::Int(i) => check_type_hint(i.type_hint(db)),
+        ExprFunKind::Float(f) => check_type_hint(f.type_hint(db)),
+        ExprFunKind::Hex(h) => check_type_hint(h.type_hint(db)),
+        ExprFunKind::String(s) => check_type_hint(s.type_hint(db)),
+        _ => false,
+    }
+}
+
+/// Check if type hint contains parse error.
+fn has_type_hint_parse_error<'db>(
+    db: &'db datalove_datafun::Database,
+    th: datalove_datalit::ast::TypeHintAndHeap<'db>,
+) -> bool {
+    use datalove_datalit::ast::TypeHint;
+    match th.type_hint(db) {
+        TypeHint::ParseError(_) => true,
+        TypeHint::List(l) => has_type_hint_parse_error(db, l.element_type(db)),
+        TypeHint::Set(s) => has_type_hint_parse_error(db, s.element_type(db)),
+        TypeHint::Map(m) => {
+            has_type_hint_parse_error(db, m.key_type(db)) ||
+            has_type_hint_parse_error(db, m.value_type(db))
+        }
+        TypeHint::Option(o) => has_type_hint_parse_error(db, o.inner_type(db)),
+        TypeHint::Result(r) => has_type_hint_parse_error(db, r.inner_type(db)),
+        TypeHint::AnonTuple(t) => t.fields(db).iter().any(|f| has_type_hint_parse_error(db, *f)),
+        TypeHint::NamedTuple(t) => t.fields(db).iter().any(|f| has_type_hint_parse_error(db, *f)),
+        TypeHint::AnonStruct(s) => s.fields(db).iter().any(|f| has_type_hint_parse_error(db, f.type_hint(db))),
+        TypeHint::NamedStruct(s) => s.fields(db).iter().any(|f| has_type_hint_parse_error(db, f.type_hint(db))),
+        TypeHint::AnonEnum(e) => e.variants(db).iter().any(|v| {
+            v.payload(db).map(|p| has_type_hint_parse_error(db, p)).unwrap_or(false)
+        }),
+        TypeHint::NamedEnum(e) => e.variants(db).iter().any(|v| {
+            v.payload(db).map(|p| has_type_hint_parse_error(db, p)).unwrap_or(false)
+        }),
+        TypeHint::Tensor(t) => has_type_hint_parse_error(db, t.element_type(db)),
         _ => false,
     }
 }
@@ -564,10 +644,9 @@ fn test_error_equiv_wrong_variant_detailed() {
 }
 
 /// Detailed test for source-level mutations.
-/// Note: Some mutations are skipped due to legitimate parsing differences:
-/// - DeleteOpeningBracket, ExtraClosingBracket: Different grammar recovery between
-///   datalit and datafun (datalit reports PARSE_ERROR, datafun recovers and typechecks)
-/// - DeleteComma: Different comma handling in datalit vs datafun grammars
+/// Note: DeleteComma is skipped due to minor differences in type hint parsing (~50% pass).
+/// Note: DeleteOpeningBracket and ExtraClosingBracket have ~90-98% pass rates due to
+/// minor expression parsing differences (not type hints).
 #[test]
 fn test_error_equiv_source_mutations_detailed() {
     let db = datalove_datafun::Database::default();
@@ -591,9 +670,9 @@ fn test_error_equiv_source_mutations_detailed() {
             let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
             if let Some(result) = mutation.apply(&db, expr, &mut rng) {
-                // Skip mutations that create legitimately different parses between
-                // datalit and datafun due to different grammar recovery strategies.
-                if matches!(mutation, Mutation::DeleteOpeningBracket | Mutation::ExtraClosingBracket | Mutation::DeleteComma) {
+                // Skip DeleteComma due to type hint parsing differences.
+                // Skip DeleteOpeningBracket and ExtraClosingBracket due to expression parsing differences.
+                if matches!(mutation, Mutation::DeleteComma | Mutation::DeleteOpeningBracket | Mutation::ExtraClosingBracket) {
                     continue;
                 }
                 if let Err(e) = test_error_equiv(&db, &result) {
@@ -698,3 +777,4 @@ fn test_debug_arity_mismatch() {
     }
     eprintln!("Total mutations applied: {}", applied_count);
 }
+
