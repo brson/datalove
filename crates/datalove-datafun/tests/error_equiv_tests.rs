@@ -446,7 +446,6 @@ fn test_error_equiv_wrong_element_type_detailed() {
 
 /// Detailed test for HeapMismatch mutations.
 #[test]
-#[ignore] // Run with --ignored to investigate
 fn test_error_equiv_heap_mismatch_detailed() {
     let db = datalove_datafun::Database::default();
     let config = make_mutation_config();

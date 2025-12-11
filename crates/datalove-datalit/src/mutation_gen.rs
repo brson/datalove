@@ -483,18 +483,17 @@ fn apply_heap_mismatch<'db>(
             Heap::Omitted => "",
         };
 
-        // Build type hint if present.
-        let type_hint_str = if let Some(th) = expr.type_hint(db) {
-            let mut s = String::new();
-            s.push_str("<");
-            pretty_type_hint_and_heap(db, th, &mut s);
-            s.push_str(">");
-            s
-        } else {
-            String::new()
-        };
+        // Build list body.
+        let list_body = format!("{}[{}]", outer_heap_str, elem_strs.join(", "));
 
-        let source = format!("{}[{}]{}", outer_heap_str, elem_strs.join(", "), type_hint_str);
+        // Build source with type hint if present (use prefix syntax for datafun compatibility).
+        let source = if let Some(th) = expr.type_hint(db) {
+            let mut type_str = String::new();
+            pretty_type_hint_and_heap(db, th, &mut type_str);
+            format!(": {} / {}", type_str, list_body)
+        } else {
+            list_body
+        };
 
         Some(MutationResult {
             source,

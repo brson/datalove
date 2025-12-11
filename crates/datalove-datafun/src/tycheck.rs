@@ -2074,6 +2074,35 @@ fn heap_to_string(heap: datalit::ast::Heap) -> String {
     }
 }
 
+/// Extract the outer heap from an expression.
+///
+/// Returns the heap sigil used on the expression itself (e.g. `@` in `@{...}`).
+/// Returns `Heap::Omitted` for expressions that don't have an explicit heap.
+fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit::ast::Heap {
+    use crate::ast::ExprFunKind;
+    match expr.expr(db) {
+        ExprFunKind::True(lit) | ExprFunKind::False(lit) | ExprFunKind::None(lit) => lit.heap(db),
+        ExprFunKind::Int(e) => e.heap(db),
+        ExprFunKind::Float(e) => e.heap(db),
+        ExprFunKind::Hex(e) => e.heap(db),
+        ExprFunKind::String(e) => e.heap(db),
+        ExprFunKind::List(e) => e.heap(db),
+        ExprFunKind::Set(e) => e.heap(db),
+        ExprFunKind::Map(e) => e.heap(db),
+        ExprFunKind::Tensor(e) => e.heap(db),
+        ExprFunKind::AnonTuple(e) => e.heap(db),
+        ExprFunKind::NamedTuple(e) => e.heap(db),
+        ExprFunKind::AnonStruct(e) => e.heap(db),
+        ExprFunKind::NamedStruct(e) => e.heap(db),
+        ExprFunKind::AnonEnum(e) => e.heap(db),
+        ExprFunKind::NamedEnum(e) => e.heap(db),
+        ExprFunKind::Data(e) => e.heap(db),
+        ExprFunKind::Err(e) => e.heap(db),
+        // Non-literal expressions don't have an outer heap.
+        _ => datalit::ast::Heap::Omitted,
+    }
+}
+
 /// Check if two types are equivalent.
 fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
     match (t1, t2) {
@@ -2742,6 +2771,16 @@ fn check_list_elements<'db>(
                 actual_heap: heap_to_string(elem_ty.heap(db)),
             });
         }
+
+        // Also check expression's outer heap (for cases where type hint provides heap
+        // but the expression literal has a different heap, e.g. `@{...}` vs `#{...}`).
+        let expr_heap = get_expr_heap(db, *elem);
+        if !heaps_compatible(expected_heap, expr_heap) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(expected_heap),
+                actual_heap: heap_to_string(expr_heap),
+            });
+        }
     }
 
     Ok(())
@@ -2790,6 +2829,15 @@ fn check_set_elements<'db>(
             return Err(TypeError::HeapMismatch {
                 expected_heap: heap_to_string(expected_heap),
                 actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
+
+        // Also check expression's outer heap.
+        let expr_heap = get_expr_heap(db, *elem);
+        if !heaps_compatible(expected_heap, expr_heap) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(expected_heap),
+                actual_heap: heap_to_string(expr_heap),
             });
         }
     }
@@ -2848,6 +2896,15 @@ fn check_map_entries<'db>(
             });
         }
 
+        // Also check key expression's outer heap.
+        let key_expr_heap = get_expr_heap(db, entry.key(db));
+        if !heaps_compatible(expected_key_heap, key_expr_heap) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(expected_key_heap),
+                actual_heap: heap_to_string(key_expr_heap),
+            });
+        }
+
         // Check value type compatibility with coercion.
         if let Err((expected_str, actual_str)) = check_type_coercion(db, actual_value_ty, &value_type) {
             return Err(TypeError::TypeMismatch {
@@ -2862,6 +2919,15 @@ fn check_map_entries<'db>(
             return Err(TypeError::HeapMismatch {
                 expected_heap: heap_to_string(expected_value_heap),
                 actual_heap: heap_to_string(value_ty.heap(db)),
+            });
+        }
+
+        // Also check value expression's outer heap.
+        let value_expr_heap = get_expr_heap(db, entry.value(db));
+        if !heaps_compatible(expected_value_heap, value_expr_heap) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(expected_value_heap),
+                actual_heap: heap_to_string(value_expr_heap),
             });
         }
     }
@@ -2912,6 +2978,15 @@ fn check_tensor_elements<'db>(
             return Err(TypeError::HeapMismatch {
                 expected_heap: heap_to_string(expected_heap),
                 actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
+
+        // Also check expression's outer heap.
+        let expr_heap = get_expr_heap(db, *elem);
+        if !heaps_compatible(expected_heap, expr_heap) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(expected_heap),
+                actual_heap: heap_to_string(expr_heap),
             });
         }
     }
@@ -2970,6 +3045,15 @@ fn check_tuple_elements<'db>(
             return Err(TypeError::HeapMismatch {
                 expected_heap: heap_to_string(expected_heap),
                 actual_heap: heap_to_string(elem_ty.heap(db)),
+            });
+        }
+
+        // Also check expression's outer heap.
+        let expr_heap = get_expr_heap(db, *elem);
+        if !heaps_compatible(expected_heap, expr_heap) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(expected_heap),
+                actual_heap: heap_to_string(expr_heap),
             });
         }
     }
@@ -3036,6 +3120,15 @@ fn check_struct_fields<'db>(
             return Err(TypeError::HeapMismatch {
                 expected_heap: heap_to_string(expected_heap),
                 actual_heap: heap_to_string(field_value_ty.heap(db)),
+            });
+        }
+
+        // Also check expression's outer heap.
+        let expr_heap = get_expr_heap(db, field.value(db));
+        if !heaps_compatible(expected_heap, expr_heap) {
+            return Err(TypeError::HeapMismatch {
+                expected_heap: heap_to_string(expected_heap),
+                actual_heap: heap_to_string(expr_heap),
             });
         }
     }
