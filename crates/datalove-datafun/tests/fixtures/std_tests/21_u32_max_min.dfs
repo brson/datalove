@@ -1,0 +1,6 @@
+require module sys/std/u32
+
+import u32.max
+import u32.min
+
+let output = (max(3, 7), max(7, 3), max(5, 5), min(3, 7), min(7, 3), min(5, 5))

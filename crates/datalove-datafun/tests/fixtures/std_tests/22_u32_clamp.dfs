@@ -1,0 +1,5 @@
+require module sys/std/u32
+
+import u32.clamp
+
+let output = (clamp(5, 0, 10), clamp(0, 5, 10), clamp(15, 0, 10), clamp(0, 0, 10), clamp(10, 0, 10))

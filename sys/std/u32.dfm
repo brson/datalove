@@ -235,3 +235,48 @@ fun bitxor(self: u32, n: u32): u32
   // todo
   ret 0
 end fun
+
+// True if zero.
+fun is_zero(self: u32): bool
+  ret self == 0
+end fun
+
+// Maximum of two values.
+fun max(self: u32, other: u32): u32
+  if self >= other
+    ret self
+  else
+    ret other
+  end if
+end fun
+
+// Minimum of two values.
+fun min(self: u32, other: u32): u32
+  if self <= other
+    ret self
+  else
+    ret other
+  end if
+end fun
+
+// Clamp value to range [min_val, max_val].
+fun clamp(self: u32, min_val: u32, max_val: u32): u32
+  if self .< min_val
+    ret min_val
+  else
+    if self .> max_val
+      ret max_val
+    else
+      ret self
+    end if
+  end if
+end fun
+
+// Absolute difference between two values.
+fun abs_diff(self: u32, other: u32): !u32
+  if self >= other
+    ret self -! other
+  else
+    ret other -! self
+  end if
+end fun
