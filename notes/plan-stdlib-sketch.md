@@ -98,20 +98,28 @@ to support the current datalove featureset
 
 ### int.dfm (bigint)
 
-**Implementable:**
-- `abs(self: int): int` - using `if` and unary neg
-- `signum(self: int): int` - returns -1, 0, or 1
-- `is_positive(self: int): bool`
-- `is_negative(self: int): bool`
-- `is_zero(self: int): bool`
-- `max(self: int, other: int): int`
-- `min(self: int, other: int): int`
-- `clamp(self: int, min: int, max: int): int`
-- `div_euclid(self: int, other: int): !int` - Euclidean division
-- `rem_euclid(self: int, other: int): !int` - Euclidean remainder
+**BLOCKED: Linear type semantics prevent implementation.**
+
+The `int` type is a linear type (move semantics per botspec section 3.4).
+This means comparisons like `self .< 0` consume/move the value, preventing
+its reuse in return statements. Functions like `abs`, `max`, `min` all need
+to both compare and return `self`, which is impossible without:
+- Borrow/reference semantics for comparisons
+- A clone/copy intrinsic for int
+- Runtime intrinsics that handle this internally
+
+**Previously thought implementable (actually blocked):**
+- `abs(self: int): int` - BLOCKED: comparison moves self
+- `signum(self: int): int` - BLOCKED: comparison moves self
+- `is_positive(self: int): bool` - BLOCKED: comparison moves self
+- `is_negative(self: int): bool` - BLOCKED: comparison moves self
+- `is_zero(self: int): bool` - BLOCKED: comparison moves self
+- `max(self: int, other: int): int` - BLOCKED: comparison moves operands
+- `min(self: int, other: int): int` - BLOCKED: comparison moves operands
+- `clamp(self: int, min: int, max: int): int` - BLOCKED: comparisons move values
 
 **Requires intrinsics:**
-- String conversion, bit operations, pow, etc.
+- All of the above, plus string conversion, bit operations, pow, etc.
 
 ### u32.dfm (and other fixed integers)
 
@@ -215,13 +223,13 @@ Most float operations need runtime support.
 
 ### Phase 1: Pure Functions (No Runtime Needed)
 
-1. **bool.dfm**: Implement `not`, `and`, `or`, `xor`, `implies`
-2. **int.dfm**: Implement `abs`, `signum`, `is_positive`, `is_negative`, `is_zero`, `max`, `min`, `clamp`
+1. **bool.dfm**: Implement `not`, `and`, `or`, `xor`, `implies`, `then_some` - DONE
+2. ~~**int.dfm**: Implement `abs`, `signum`, etc.~~ - BLOCKED (linear type)
 3. **u32.dfm**: Keep existing stubs, add `is_zero`, `max`, `min`, `clamp`, `abs_diff`
 4. **option.dfm**: Add `zip` (returns tuple)
 5. **New result.dfm**: Implement `is_ok`, `is_err`, `unwrap_or`, `ok`, `or_result`, `and_result`
-6. **New i32.dfm**: Mirror u32 structure for signed integer
-7. **New cmp.dfm**: Simple max/min/clamp helpers
+6. **New i32.dfm**: Mirror u32 structure for signed integer (copy type, so should work)
+7. ~~**New cmp.dfm**: Simple max/min/clamp helpers~~ - int versions blocked
 
 ### Phase 2: After Adding Runtime Intrinsics
 
@@ -229,6 +237,25 @@ Most float operations need runtime support.
 2. String operations
 3. List operations
 4. Float math functions
+5. **int.dfm**: All functions (requires clone/borrow or intrinsics)
+
+---
+
+## Progress
+
+### Completed
+
+- **bool.dfm**: 6 functions implemented (`not`, `and`, `or`, `xor`, `implies`, `then_some`)
+- **Test fixtures**: 6 new tests (10-15) for bool module
+- **Tooling**: Added `typecheck-std` CLI command for debugging stdlib
+- **Tooling**: Improved error reporting in std_tests and CLI script command
+
+### Next Steps
+
+Recommended next module: **result.dfm** or **u32.dfm additions**
+
+- result.dfm: Can implement `is_ok`, `is_err`, `unwrap_or`, `or_result`, `and_result` using `if |value|` destructuring
+- u32.dfm: Can add `is_zero`, `max`, `min`, `clamp` since u32 is a copy type
 
 ---
 
