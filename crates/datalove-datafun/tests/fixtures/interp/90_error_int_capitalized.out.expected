@@ -44,7 +44,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors([DatalitError(\"CannotSynthesize\"), DatalitError(\"CannotSynthesize\"), UnresolvedName(\"test\")])",
+                "TypecheckErrors([CannotSynthesize, CannotSynthesize, UnresolvedName(\"test\")])",
             ],
         ),
         output: "",
