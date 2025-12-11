@@ -99,6 +99,8 @@ enum Command {
     Docs(docs::DocsCommand),
     /// Execute a datafun script.
     Script(ScriptCommand),
+    /// Typecheck the sys/std library and report errors.
+    TypecheckStd(TypecheckStdCommand),
 }
 
 #[derive(clap::Args)]
@@ -149,6 +151,10 @@ struct ScriptCommand {
     no_sys: bool,
 }
 
+#[derive(clap::Args)]
+struct TypecheckStdCommand {
+}
+
 impl Cli {
     fn run(&self) -> AnyResult<()> {
         match &self.cmd {
@@ -159,6 +165,7 @@ impl Cli {
             Command::Repl(cmd) => cmd.run(&self.args),
             Command::Docs(cmd) => cmd.run(),
             Command::Script(cmd) => cmd.run(&self.args),
+            Command::TypecheckStd(cmd) => cmd.run(&self.args),
         }
     }
 }
@@ -585,7 +592,13 @@ impl ScriptCommand {
         let module_errors = typecheck_result.module_errors(&db);
         if !module_errors.is_empty() {
             let error_count: usize = module_errors.values().map(|v| v.len()).sum();
-            bail!("Package world has {} typecheck error(s)", error_count);
+            eprintln!("Package world has {} typecheck error(s):", error_count);
+            for (module, errors) in module_errors.iter() {
+                for err in errors {
+                    eprintln!("  {}: {:?}", module.name(&db), err);
+                }
+            }
+            bail!("Package world typecheck failed");
         }
 
         // Execute the script with the new interpreter.
@@ -613,5 +626,64 @@ impl ScriptCommand {
 
         // Guard cleans up automatically on drop.
         Ok(())
+    }
+}
+
+impl TypecheckStdCommand {
+    fn run(&self, _args: &Args) -> AnyResult<()> {
+        use datalove_datafun as datafun;
+
+        let db = datafun::Database::default();
+
+        // Load package world from sys/ directory.
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_path = rmx::std::path::PathBuf::from(manifest_dir);
+        let parent = match manifest_path.parent() {
+            Some(p) => p,
+            None => bail!("Failed to get parent directory"),
+        };
+        let grandparent = match parent.parent() {
+            Some(p) => p,
+            None => bail!("Failed to get grandparent directory"),
+        };
+        let sys_dir = grandparent.join("sys");
+
+        println!("Loading sys/ from: {}", sys_dir.display());
+
+        let config = datafun::package_load::PackageWorldConfig {
+            dir_pkglib_system: sys_dir,
+            dir_pkglib_local: None,
+        };
+
+        let package_world_raw = rmx::futures::executor::block_on(
+            datafun::package_load::load_world(config)
+        )?;
+
+        let package_world = datafun::package::import_from_loader(&db, package_world_raw);
+
+        // Resolve and typecheck the package world.
+        let resolution = datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
+        let graph = match resolution.result(&db) {
+            Ok(g) => g,
+            Err(e) => bail!("Package resolution failed: {:?}", e),
+        };
+
+        let typecheck_result = datafun::tycheck::typecheck_package_world(&db, graph);
+
+        // Report typecheck errors.
+        let module_errors = typecheck_result.module_errors(&db);
+        if module_errors.is_empty() {
+            println!("No typecheck errors found in sys/std.");
+            Ok(())
+        } else {
+            let error_count: usize = module_errors.values().map(|v| v.len()).sum();
+            println!("Found {} typecheck error(s):", error_count);
+            for (module, errors) in module_errors.iter() {
+                for err in errors {
+                    println!("  {}: {:?}", module.name(&db), err);
+                }
+            }
+            bail!("Typecheck failed with {} error(s)", error_count);
+        }
     }
 }

@@ -44,7 +44,17 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let module_errors = typecheck_result.module_errors(&db);
     if !module_errors.is_empty() {
         let error_count: usize = module_errors.values().map(|v| v.len()).sum();
-        return Err(format!("Package world has {} typecheck error(s)", error_count));
+        let mut error_details = Vec::new();
+        for (module, errors) in module_errors.iter() {
+            for err in errors {
+                error_details.push(format!("  {}: {:?}", module.name(&db), err));
+            }
+        }
+        return Err(format!(
+            "Package world has {} typecheck error(s):\n{}",
+            error_count,
+            error_details.join("\n")
+        ));
     }
 
     // Execute the script with the new interpreter.
