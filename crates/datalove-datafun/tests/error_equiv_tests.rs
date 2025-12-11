@@ -386,7 +386,6 @@ fn test_error_equiv_discovery() {
 /// Note: This test may fail if datafun and datalit have different
 /// integer range checking behavior. Run to investigate discrepancies.
 #[test]
-#[ignore] // Run with --ignored to investigate
 fn test_error_equiv_out_of_range_int_detailed() {
     let db = datalove_datafun::Database::default();
     let config = make_mutation_config();
@@ -417,7 +416,6 @@ fn test_error_equiv_out_of_range_int_detailed() {
 
 /// Detailed test for WrongElementType mutations.
 #[test]
-#[ignore] // Run with --ignored to investigate
 fn test_error_equiv_wrong_element_type_detailed() {
     let db = datalove_datafun::Database::default();
     let config = make_mutation_config();
@@ -479,7 +477,6 @@ fn test_error_equiv_heap_mismatch_detailed() {
 
 /// Detailed test for ArityMismatch mutations.
 #[test]
-#[ignore] // Run with --ignored to investigate
 fn test_error_equiv_arity_mismatch_detailed() {
     let db = datalove_datafun::Database::default();
     let config = make_mutation_config();
