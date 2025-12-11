@@ -31,6 +31,8 @@ mod value;
 mod error;
 mod frame;
 mod memory;
+mod types;
+mod alloc;
 
 pub use value::{Value, Destination, ValueLocation, EvalContext};
 pub use error::InterpError;
@@ -38,6 +40,12 @@ pub use frame::{SlotState, StackFrame};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
 use frame::CfgControl;
 use memory::{clone_value, clone_value_to_dest};
+use types::{is_u32_value, is_int_value, is_f32_value, is_bool_value, is_copy_type};
+use alloc::{
+    allocate_bool, allocate_f32, allocate_u32_raw, allocate_bigint,
+    allocate_option_none, allocate_option_some_from_value,
+    allocate_result_ok_from_value, allocate_result_err, widen_u32_to_int,
+};
 
 use rmx::prelude::*;
 use rmx::std::collections::HashMap;
@@ -2476,56 +2484,6 @@ fn eval_return_expression_frame<'db>(
 // Value Allocation
 // ============================================================================
 
-/// Allocate a boolean value.
-fn allocate_bool<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: bool,
-) -> Result<Value, InterpError> {
-    use crate::datalit::tycheck::Type;
-
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::Bool);
-
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-
-    unsafe {
-        *ptr = if value { 1 } else { 0 };
-    }
-
-    Ok(Value {
-        ptr,
-        tydesc: tydesc_ptr,
-        location: ValueLocation::TempOwned,
-    })
-}
-
-/// Allocate an f32 value.
-fn allocate_f32<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: f32,
-) -> Result<Value, InterpError> {
-    use crate::datalit::tycheck::Type;
-
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::F32);
-
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-
-    unsafe {
-        *(ptr as *mut f32) = value;
-    }
-
-    Ok(Value {
-        ptr,
-        tydesc: tydesc_ptr,
-        location: ValueLocation::TempOwned,
-    })
-}
-
 /// Allocate an f32 value from a float literal.
 fn allocate_float_literal<'db>(
     ctx: &mut InterpContext<'db>,
@@ -2537,61 +2495,15 @@ fn allocate_float_literal<'db>(
     allocate_f32(ctx, value)
 }
 
-/// Allocate an integer value.
-///
-/// For now, we only support u32 literals.
+/// Allocate an integer value from a literal.
 fn allocate_int_literal<'db>(
     ctx: &mut InterpContext<'db>,
     int_expr: &crate::datalit::ast::ExprInt<'db>,
 ) -> Result<Value, InterpError> {
-    use crate::datalit::tycheck::Type;
-
-    // Parse the integer value.
     let value_str = int_expr.value(ctx.db).as_str(ctx.db);
     let value: u32 = value_str.parse()
         .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
-
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
-
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-
-    unsafe {
-        *(ptr as *mut u32) = value;
-    }
-
-    Ok(Value {
-        ptr,
-        tydesc: tydesc_ptr,
-        location: ValueLocation::TempOwned,
-    })
-}
-
-/// Allocate a u32 value from a raw u32.
-fn allocate_u32_raw<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: u32,
-) -> Result<Value, InterpError> {
-    use crate::datalit::tycheck::Type;
-
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
-
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-
-    unsafe {
-        *(ptr as *mut u32) = value;
-    }
-
-    Ok(Value {
-        ptr,
-        tydesc: tydesc_ptr,
-        location: ValueLocation::TempOwned,
-    })
+    allocate_u32_raw(ctx, value)
 }
 
 /// Allocate a string value.
@@ -2990,38 +2902,6 @@ fn eval_inline_anon_struct<'db>(
     allocate_struct_from_values(ctx, field_values)
 }
 
-// ============================================================================
-// Type Checking Utilities
-// ============================================================================
-
-/// Check if a value is a u32 type.
-fn is_u32_value(value: Value) -> bool {
-    unsafe {
-        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::U32
-    }
-}
-
-/// Check if a value is an int (bigint) type.
-fn is_int_value(value: Value) -> bool {
-    unsafe {
-        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::Int
-    }
-}
-
-/// Check if a value is an f32 type.
-fn is_f32_value(value: Value) -> bool {
-    unsafe {
-        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::F32
-    }
-}
-
-/// Check if a value is a Bool type.
-fn is_bool_value(value: Value) -> bool {
-    unsafe {
-        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::Bool
-    }
-}
-
 /// Extract a boolean value from a Bool-typed Value.
 ///
 /// Returns an error if the value is not a Bool type.
@@ -3209,235 +3089,6 @@ fn evaluate_branch_condition<'db>(
             ))
         }
     }
-}
-
-/// Check if a value is a copy type.
-///
-/// For now, we consider u32 and Bool as copy types.
-/// Int, String and other types are non-copy (linear).
-fn is_copy_type(value: Value) -> bool {
-    unsafe {
-        use datalove_rt::rtdt::TyTag;
-        match (*value.tydesc).type_tag {
-            TyTag::U32 | TyTag::Bool => true,
-            _ => false,
-        }
-    }
-}
-
-/// Allocate a bigint value and initialize it to zero.
-fn allocate_bigint<'db>(
-    ctx: &mut InterpContext<'db>,
-) -> Result<Value, InterpError> {
-    use crate::datalit::tycheck::Type;
-
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::Int);
-
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-
-    // Initialize to zero.
-    unsafe {
-        let int_ptr = ptr as *mut datalove_rt::rtdt::Int;
-        (*int_ptr).data = std::ptr::null();
-        (*int_ptr).size_and_sign = 0;
-        (*int_ptr).capacity = 0;
-    }
-
-    Ok(Value {
-        ptr,
-        tydesc: tydesc_ptr,
-        location: ValueLocation::TempOwned,
-    })
-}
-
-/// Allocate an Option<T> with None value.
-fn allocate_option_none<'db>(
-    ctx: &mut InterpContext<'db>,
-    inner_tydesc: *const datalove_rt::rtdt::TyDesc,
-) -> Result<Value, InterpError> {
-    use datalove_rt::rtdt;
-
-    // Create Option tydesc from inner tydesc.
-    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_tydesc);
-
-    // Allocate memory.
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
-    };
-
-    if ptr.is_null() {
-        return Err(InterpError::RuntimeError("Failed to allocate Option".to_string()));
-    }
-
-    // Write None tag.
-    unsafe {
-        *ptr = rtdt::OptionTag::None as u8;
-    }
-
-    Ok(Value {
-        ptr,
-        tydesc: option_tydesc,
-        location: ValueLocation::TempOwned,
-    })
-}
-
-/// Wrap an existing value in Some, consuming the inner value.
-fn allocate_option_some_from_value<'db>(
-    ctx: &mut InterpContext<'db>,
-    inner_value: Value,
-) -> Result<Value, InterpError> {
-    use datalove_rt::rtdt;
-
-    // Create Option tydesc from inner value's tydesc.
-    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_value.tydesc);
-    let option_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) };
-
-    // Compute layout.
-    let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc_ref) };
-
-    // Allocate memory.
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
-    };
-
-    if ptr.is_null() {
-        destroy_value(ctx, inner_value);
-        return Err(InterpError::RuntimeError("Failed to allocate Option".to_string()));
-    }
-
-    unsafe {
-        // Write Some tag.
-        *ptr = rtdt::OptionTag::Some as u8;
-
-        // Copy inner value to payload offset.
-        let payload_ptr = ptr.add(layout.payload_offset as usize);
-        let inner_size = (*inner_value.tydesc).size as usize;
-        std::ptr::copy_nonoverlapping(inner_value.ptr, payload_ptr, inner_size);
-    }
-
-    // Free the inner value's container (but data has been copied to Option).
-    if inner_value.location == ValueLocation::TempOwned {
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                ctx.runtime.handle(),
-                inner_value.tydesc,
-                1,
-                inner_value.ptr,
-            );
-        }
-    }
-
-    Ok(Value {
-        ptr,
-        tydesc: option_tydesc,
-        location: ValueLocation::TempOwned,
-    })
-}
-
-/// Wrap an existing value in Ok, consuming the inner value.
-fn allocate_result_ok_from_value<'db>(
-    ctx: &mut InterpContext<'db>,
-    inner_value: Value,
-) -> Result<Value, InterpError> {
-    use datalove_rt::rtdt;
-
-    // Create Result tydesc from inner value's tydesc.
-    let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(inner_value.tydesc);
-    let result_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(result_tydesc) };
-
-    // Compute layout.
-    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc_ref) };
-
-    // Allocate memory.
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, result_tydesc, 1)
-    };
-
-    if ptr.is_null() {
-        destroy_value(ctx, inner_value);
-        return Err(InterpError::RuntimeError("Failed to allocate Result".to_string()));
-    }
-
-    unsafe {
-        // Write Ok tag.
-        *ptr = rtdt::ResultTag::Ok as u8;
-
-        // Copy inner value to payload offset.
-        let payload_ptr = ptr.add(layout.payload_offset as usize);
-        let inner_size = (*inner_value.tydesc).size as usize;
-        std::ptr::copy_nonoverlapping(inner_value.ptr, payload_ptr, inner_size);
-    }
-
-    // Free the inner value's container (but data has been copied to Result).
-    if inner_value.location == ValueLocation::TempOwned {
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                ctx.runtime.handle(),
-                inner_value.tydesc,
-                1,
-                inner_value.ptr,
-            );
-        }
-    }
-
-    Ok(Value {
-        ptr,
-        tydesc: result_tydesc,
-        location: ValueLocation::TempOwned,
-    })
-}
-
-/// Allocate a Result::Err with an error value.
-fn allocate_result_err<'db>(
-    ctx: &mut InterpContext<'db>,
-    ok_tydesc: *const datalove_rt::rtdt::TyDesc,
-    err_tydesc: *const datalove_rt::rtdt::TyDesc,
-    err_ptr: *mut u8,
-) -> Result<Value, InterpError> {
-    use datalove_rt::rtdt;
-
-    // Create Result tydesc from ok type.
-    let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(ok_tydesc);
-    let result_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(result_tydesc) };
-
-    // Compute layout.
-    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc_ref) };
-
-    // Allocate memory.
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, result_tydesc, 1)
-    };
-
-    if ptr.is_null() {
-        return Err(InterpError::RuntimeError("Failed to allocate Result".to_string()));
-    }
-
-    unsafe {
-        // Write Err tag.
-        *ptr = rtdt::ResultTag::Err as u8;
-
-        // Write Error at payload offset.
-        // Error has same layout as Data: (tydesc ptr, value ptr).
-        let payload_ptr = ptr.add(layout.payload_offset as usize);
-        let error_ptr = payload_ptr as *mut rtdt::Data;
-        std::ptr::write(
-            error_ptr,
-            rtdt::Data::from_pointers(err_tydesc, err_ptr)
-        );
-    }
-
-    Ok(Value {
-        ptr,
-        tydesc: result_tydesc,
-        location: ValueLocation::TempOwned,
-    })
 }
 
 /// Evaluate try-option operator (`val?`).
@@ -4079,45 +3730,6 @@ fn allocate_set_from_values<'db>(
         tydesc: set_tydesc,
         location: ValueLocation::TempOwned,
     })
-}
-
-/// Widen a u32 value to an int (bigint) value.
-fn widen_u32_to_int<'db>(
-    ctx: &mut InterpContext<'db>,
-    u32_value: Value,
-) -> Result<Value, InterpError> {
-    // Read the u32 value.
-    let value_u32 = unsafe { *(u32_value.ptr as *const u32) };
-
-    // Allocate the Int structure.
-    let int_val = allocate_bigint(ctx)?;
-    let int_ptr = int_val.ptr as *mut datalove_rt::rtdt::Int;
-
-    unsafe {
-        if value_u32 == 0 {
-            // Zero: no limbs needed.
-            (*int_ptr).data = std::ptr::null();
-            (*int_ptr).size_and_sign = 0;
-            (*int_ptr).capacity = 0;
-        } else {
-            // Non-zero: allocate one limb.
-            let rt_handle = ctx.runtime.handle();
-            let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-                rt_handle,
-                4,  // size of u32
-                4,  // alignment of u32
-                1   // count
-            ) as *mut u32;
-
-            *limb_ptr = value_u32;
-
-            (*int_ptr).data = limb_ptr;
-            (*int_ptr).size_and_sign = 1;  // 1 limb, positive
-            (*int_ptr).capacity = 1;
-        }
-    }
-
-    Ok(int_val)
 }
 
 /// Narrow an Int value to u32.
