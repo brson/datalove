@@ -1,9 +1,7 @@
-//! Tests that exercise known parser panics.
+//! Tests that verify the parser returns ParseError nodes instead of panicking.
 //!
-//! Each test documents a specific panic case in the datalit parser.
-//! Tests use `#[should_panic]` to verify the panic occurs.
-//! When the panics are fixed to return ParseError nodes instead,
-//! those tests are updated to verify the error node is returned.
+//! These tests exercise error cases in the datalit parser.
+//! The parser should return ParseError nodes for all malformed input.
 
 use rmx::prelude::*;
 
@@ -15,157 +13,146 @@ fn parse(source: &str) -> String {
     rmx::serde_json::to_string_pretty(&serde_ast).X()
 }
 
+fn assert_parse_error(json: &str, context: &str) {
+    // Check for ParseError nodes or <error> placeholder names.
+    assert!(
+        json.contains("ParseError") || json.contains(r#""<error>""#),
+        "expected parse error node in {}, got: {}",
+        context,
+        json
+    );
+}
+
 // =============================================================================
-// Type hint parsing: fixed cases (now return error nodes)
+// Type hint parsing: error cases
 // =============================================================================
 
 /// `tuple` keyword without name or parens.
-/// Now returns a parse error node instead of panicking.
 #[test]
 fn type_hint_tuple_missing_name() {
     let json = parse(": tuple / @42");
-    assert!(json.contains("ParseError") || json.contains("Error"), "expected parse error node");
+    assert_parse_error(&json, "tuple without name");
 }
 
 /// `struct` keyword without name or braces.
-/// Now returns a parse error node instead of panicking.
 #[test]
 fn type_hint_struct_missing_name() {
     let json = parse(": struct / @42");
-    assert!(json.contains("ParseError") || json.contains("Error"), "expected parse error node");
+    assert_parse_error(&json, "struct without name");
 }
 
 /// `enum` keyword without name or braces.
-/// Now returns a parse error node instead of panicking.
 #[test]
 fn type_hint_named_enum_missing_name() {
     let json = parse(": enum / @42");
-    assert!(json.contains("ParseError") || json.contains("Error"), "expected parse error node");
+    assert_parse_error(&json, "enum without name");
 }
 
-/// Line 557: struct field without name in non-empty braces
-/// Struct field expects `name: type`
-/// Note: Empty braces `{}` don't trigger the field parser
+/// Struct field without name in non-empty braces.
+/// Struct field expects `name: type`.
 #[test]
-#[should_panic(expected = "expected name")]
 fn type_hint_struct_field_missing_name() {
-    // Need actual content in braces to trigger field parsing
-    parse(": struct Foo { : i32 } / @42");
+    let json = parse(": struct Foo { : i32 } / @42");
+    assert_parse_error(&json, "struct field without name");
 }
 
-/// Line 564: enum variant without name in non-empty braces
-/// Enum variant expects a name
-/// Note: Empty braces `{}` don't trigger the variant parser
+/// Enum variant without name in non-empty braces.
+/// Enum variant expects a name.
 #[test]
-#[should_panic(expected = "expected name")]
 fn type_hint_enum_variant_missing_name() {
-    // Need actual content in braces to trigger variant parsing
-    parse(": enum { (i32) } / @42");
+    let json = parse(": enum { (i32) } / @42");
+    // This should produce an error for the missing variant name.
+    assert_parse_error(&json, "enum variant without name");
 }
 
-// =============================================================================
-// Type hint parsing: need_sigil panics
-// =============================================================================
-
-/// Line 360: map type hint missing comma between key and value type
-/// `map<K, V>` expects a comma
+/// Map type hint missing comma between key and value type.
+/// `map<K, V>` expects a comma.
 #[test]
-#[should_panic(expected = "expected sigil ,")]
 fn type_hint_map_missing_comma() {
-    parse(": map<i32 i32> / @42");
+    let json = parse(": map<i32 i32> / @42");
+    assert_parse_error(&json, "map missing comma");
 }
 
-/// Line 449: tensor type hint missing comma between element type and rank
-/// `tensor<T, N>` expects a comma
+/// Tensor type hint missing comma between element type and rank.
+/// `tensor<T, N>` expects a comma.
 #[test]
-#[should_panic(expected = "expected sigil ,")]
 fn type_hint_tensor_missing_comma() {
-    parse(": tensor<i32 2> / @42");
+    let json = parse(": tensor<i32 2> / @42");
+    assert_parse_error(&json, "tensor missing comma");
 }
 
-/// Line 558: struct field missing colon between name and type
-/// Struct field expects `name: type`
+/// Struct field missing colon between name and type.
+/// Struct field expects `name: type`.
 #[test]
-#[should_panic(expected = "expected sigil :")]
 fn type_hint_struct_field_missing_colon() {
-    parse(": struct Foo { x i32 } / @42");
+    let json = parse(": struct Foo { x i32 } / @42");
+    assert_parse_error(&json, "struct field missing colon");
 }
 
 // =============================================================================
-// Expression parsing: need_sigil panics
+// Expression parsing: error cases
 // =============================================================================
 
-/// Line 609: type-hinted expression missing forward slash
-/// `: type / expr` expects a `/` after the type
+/// Type-hinted expression missing forward slash.
+/// `: type / expr` expects a `/` after the type.
 #[test]
-#[should_panic(expected = "expected sigil /")]
 fn expr_type_hint_missing_slash() {
-    parse(": i32 @42");
+    let json = parse(": i32 @42");
+    assert_parse_error(&json, "type hint missing slash");
 }
 
-/// Line 1065: map entry missing equals between key and value
-/// `map { k = v }` expects `=`
+/// Map entry missing equals between key and value.
+/// `map { k = v }` expects `=`.
 #[test]
-#[should_panic(expected = "expected sigil =")]
 fn expr_map_entry_missing_equals() {
-    parse("@map { @1 @2 }");
+    let json = parse("@map { @1 @2 }");
+    assert_parse_error(&json, "map entry missing equals");
 }
 
-/// Line 1239: struct field missing equals between name and value
-/// `struct Foo { x = v }` expects `=`
+/// Struct field missing equals between name and value.
+/// `struct Foo { x = v }` expects `=`.
 #[test]
-#[should_panic(expected = "expected sigil =")]
 fn expr_struct_field_missing_equals() {
-    parse("@struct Foo { x @42 }");
+    let json = parse("@struct Foo { x @42 }");
+    assert_parse_error(&json, "struct field missing equals");
 }
 
-// =============================================================================
-// Expression parsing: need_name panics
-// =============================================================================
-
-/// Line 928: tuple expression without name
-/// `tuple` expects a name like `tuple Foo(...)`
+/// Tuple expression without name.
+/// `tuple` expects a name like `tuple Foo(...)`.
 #[test]
-#[should_panic(expected = "expected name")]
 fn expr_tuple_missing_name() {
-    parse("@tuple");
+    let json = parse("@tuple");
+    assert_parse_error(&json, "tuple without name");
 }
 
-/// Line 961: struct expression without name
-/// `struct` expects a name like `struct Foo{...}`
+/// Struct expression without name.
+/// `struct` expects a name like `struct Foo{...}`.
 #[test]
-#[should_panic(expected = "expected name")]
 fn expr_struct_missing_name() {
-    parse("@struct");
+    let json = parse("@struct");
+    assert_parse_error(&json, "struct without name");
 }
 
-/// Line 998: enum expression without variant name
-/// `enum` expects a variant name
+/// Enum expression without variant name.
+/// `enum` expects a variant name.
 #[test]
-#[should_panic(expected = "expected name")]
 fn expr_enum_missing_variant_name() {
-    parse("@enum");
+    let json = parse("@enum");
+    assert_parse_error(&json, "enum without variant name");
 }
 
-/// Line 1002: named enum expression missing variant name after dot
-/// `enum Foo.` expects a variant name after the dot
+/// Named enum expression missing variant name after dot.
+/// `enum Foo.` expects a variant name after the dot.
 #[test]
-#[should_panic(expected = "expected name")]
 fn expr_named_enum_missing_variant_after_dot() {
-    parse("@enum Foo.");
+    let json = parse("@enum Foo.");
+    assert_parse_error(&json, "named enum missing variant after dot");
 }
 
-/// Line 1238: struct field missing name
-/// `struct Foo { = v }` expects a name before `=`
+/// Struct field missing name.
+/// `struct Foo { = v }` expects a name before `=`.
 #[test]
-#[should_panic(expected = "expected name")]
 fn expr_struct_field_missing_name() {
-    parse("@struct Foo { = @42 }");
+    let json = parse("@struct Foo { = @42 }");
+    assert_parse_error(&json, "struct field missing name");
 }
-
-// =============================================================================
-// Float parsing edge cases
-// Note: The float panics at lines 745 and 1129 are guarded by peek-ahead checks
-// so they may not be easily triggerable with simple malformed input.
-// These are left as documentation of potential panic points.
-// =============================================================================

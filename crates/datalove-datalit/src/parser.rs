@@ -441,7 +441,16 @@ impl<'db> DynParser<'db> {
                             expr_spans: Vec::new(),
                         };
                         let key_type = sub_parser.parse_type_hint_and_heap();
-                        sub_parser.need_sigil(Sigil::Comma);
+                        if !sub_parser.eat_sigil(Sigil::Comma) {
+                            let (text, span) = sub_parser.current_text_span();
+                            return self.emit_type_hint_error(
+                                text,
+                                span,
+                                "expected comma between map key and value types",
+                                "D005",
+                                "expected ',' between key and value types"
+                            );
+                        }
                         let value_type = sub_parser.parse_type_hint_and_heap();
                         ast::TypeHint::Map(ast::TypeHintMap::new(self.db, key_type, value_type))
                     }
@@ -501,7 +510,16 @@ impl<'db> DynParser<'db> {
                             expr_spans: Vec::new(),
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
-                        sub_parser.need_sigil(Sigil::Comma);
+                        if !sub_parser.eat_sigil(Sigil::Comma) {
+                            let (text, span) = sub_parser.current_text_span();
+                            return self.emit_type_hint_error(
+                                text,
+                                span,
+                                "expected comma between tensor element type and rank",
+                                "D009",
+                                "expected ',' after element type"
+                            );
+                        }
 
                         let rank = match sub_parser.parse_u32_literal() {
                             Some(r) => r,
@@ -609,14 +627,58 @@ impl<'db> DynParser<'db> {
     }
 
     fn parse_type_hint_named_field(&mut self) -> ast::TypeHintNamedField<'db> {
-        let name = self.need_name();
-        self.need_sigil(Sigil::Colon);
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                // No name found - emit error and create placeholder.
+                let (text, span) = self.current_text_span();
+                let error_hint = self.emit_type_hint_error(
+                    text.clone(),
+                    span.clone(),
+                    "expected field name in struct definition",
+                    "D010",
+                    "expected field name"
+                );
+                // Create a placeholder name for the error field.
+                let placeholder_name = InternedText::new(self.db, "<error>".S());
+                let type_hint = ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_hint);
+                return ast::TypeHintNamedField::new(self.db, placeholder_name, type_hint);
+            }
+        };
+        if !self.eat_sigil(Sigil::Colon) {
+            let (text, span) = self.current_text_span();
+            let error_hint = self.emit_type_hint_error(
+                text,
+                span,
+                "expected ':' after field name in struct definition",
+                "D010",
+                "expected ':' after field name"
+            );
+            let type_hint = ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_hint);
+            return ast::TypeHintNamedField::new(self.db, name, type_hint);
+        }
         let type_hint = self.parse_type_hint_and_heap();
         ast::TypeHintNamedField::new(self.db, name, type_hint)
     }
 
     fn parse_type_hint_enum_variant(&mut self) -> ast::TypeHintEnumVariant<'db> {
-        let name = self.need_name();
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                // No name found - emit error and create placeholder.
+                let (text, span) = self.current_text_span();
+                DiagnosticBuilder::error(self.db, "expected variant name in enum definition")
+                    .code("D011")
+                    .primary_label(text, span, "expected variant name")
+                    .emit_parse();
+                // Create a placeholder name for the error variant.
+                return ast::TypeHintEnumVariant::new(
+                    self.db,
+                    InternedText::new(self.db, "<error>".S()),
+                    None
+                );
+            }
+        };
         let payload = if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.peek() {
             // Parse a single type as payload.
             self.next(); // Consume the branch.
@@ -661,9 +723,21 @@ impl<'db> DynParser<'db> {
         let expr_full = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
             let type_hint = self.parse_type_hint_and_heap();
-            self.need_sigil(Sigil::SlashForward);
-            let expr = self.parse_expr_and_heap();
-            ast::ExprFull::new(self.db, Some(type_hint), expr)
+            if !self.eat_sigil(Sigil::SlashForward) {
+                let (err_text, err_span) = self.current_text_span();
+                let error_expr = self.emit_expr_error(
+                    err_text,
+                    err_span,
+                    "expected '/' after type hint",
+                    "D012",
+                    "expected '/' separator between type hint and expression"
+                );
+                let expr = ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_expr);
+                ast::ExprFull::new(self.db, Some(type_hint), expr)
+            } else {
+                let expr = self.parse_expr_and_heap();
+                ast::ExprFull::new(self.db, Some(type_hint), expr)
+            }
         } else {
             // No type hint, just parse expression.
             let expr = self.parse_expr_and_heap();
@@ -980,7 +1054,18 @@ impl<'db> DynParser<'db> {
             Some("tuple") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("tuple");
-                let name = self.need_name();
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        return self.emit_expr_error(
+                            keyword_text,
+                            keyword_span,
+                            "expected name after tuple keyword",
+                            "D014",
+                            "expected tuple name"
+                        );
+                    }
+                };
                 match self.peek() {
                     Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
                         self.next(); // Consume the branch.
@@ -1013,7 +1098,18 @@ impl<'db> DynParser<'db> {
             Some("struct") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("struct");
-                let name = self.need_name();
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        return self.emit_expr_error(
+                            keyword_text,
+                            keyword_span,
+                            "expected name after struct keyword",
+                            "D015",
+                            "expected struct name"
+                        );
+                    }
+                };
                 match self.peek() {
                     Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
                         self.next(); // Consume the branch.
@@ -1044,17 +1140,41 @@ impl<'db> DynParser<'db> {
                 }
             }
             Some("enum") => {
+                let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("enum");
                 // Enum expression syntax:
                 // - enum Variant (anonymous, no payload)
                 // - enum Variant(...) (anonymous, with single value payload)
                 // - enum EnumName.Variant (named, with dot separator)
                 // - enum EnumName.Variant(...) (named, with single value payload)
-                let first_name = self.need_name();
+                let first_name = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        return self.emit_expr_error(
+                            keyword_text,
+                            keyword_span,
+                            "expected variant name after enum keyword",
+                            "D016",
+                            "expected enum variant name"
+                        );
+                    }
+                };
                 if self.peek_sigil(Sigil::Dot) {
                     // Named enum: enum EnumName.Variant [(...)]
                     self.eat_sigil(Sigil::Dot);
-                    let variant_name = self.need_name();
+                    let variant_name = match self.eat_name() {
+                        Some(n) => n,
+                        None => {
+                            let (text, span) = self.current_text_span();
+                            return self.emit_expr_error(
+                                text,
+                                span,
+                                "expected variant name after '.' in named enum",
+                                "D016",
+                                "expected variant name after '.'"
+                            );
+                        }
+                    };
                     let payload = if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.peek() {
                         // Parse a single expression as payload.
                         self.next(); // Consume the branch.
@@ -1117,7 +1237,22 @@ impl<'db> DynParser<'db> {
                         };
                         let entries = sub_parser.parse_comma_separated(|p| {
                             let key = p.parse_expr_full();
-                            p.need_sigil(Sigil::Equals);
+                            if !p.eat_sigil(Sigil::Equals) {
+                                let (text, span) = p.current_text_span();
+                                let error_expr = p.emit_expr_error(
+                                    text,
+                                    span,
+                                    "expected '=' between map key and value",
+                                    "D017",
+                                    "expected '=' after key"
+                                );
+                                let error_value = ast::ExprFull::new(
+                                    p.db,
+                                    None,
+                                    ast::ExprAndHeap::new(p.db, ast::Heap::Omitted, error_expr)
+                                );
+                                return ast::ExprMapEntry::new(p.db, key, error_value);
+                            }
                             let value = p.parse_expr_full();
                             ast::ExprMapEntry::new(p.db, key, value)
                         });
@@ -1290,8 +1425,43 @@ impl<'db> DynParser<'db> {
     }
 
     fn parse_expr_struct_field(&mut self) -> ast::ExprStructField<'db> {
-        let name = self.need_name();
-        self.need_sigil(Sigil::Equals);
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                // No name found - emit error and create placeholder.
+                let (text, span) = self.current_text_span();
+                let error_expr = self.emit_expr_error(
+                    text.clone(),
+                    span.clone(),
+                    "expected field name in struct expression",
+                    "D018",
+                    "expected field name"
+                );
+                let placeholder_name = InternedText::new(self.db, "<error>".S());
+                let error_value = ast::ExprFull::new(
+                    self.db,
+                    None,
+                    ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_expr)
+                );
+                return ast::ExprStructField::new(self.db, placeholder_name, error_value);
+            }
+        };
+        if !self.eat_sigil(Sigil::Equals) {
+            let (text, span) = self.current_text_span();
+            let error_expr = self.emit_expr_error(
+                text,
+                span,
+                "expected '=' after field name in struct expression",
+                "D018",
+                "expected '=' after field name"
+            );
+            let error_value = ast::ExprFull::new(
+                self.db,
+                None,
+                ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_expr)
+            );
+            return ast::ExprStructField::new(self.db, name, error_value);
+        }
         let value = self.parse_expr_full();
         ast::ExprStructField::new(self.db, name, value)
     }
@@ -1373,34 +1543,34 @@ impl<'db> DynParser<'db> {
         token
     }
 
-    fn eat_sigil(&mut self, sigil: Sigil) {
-        match self.next() {
-            Some(TreeToken::Token(token)) => {
-                match token.kind(self.db) {
-                    TokenKind::Sigil(s) if s == sigil => return,
-                    _ => {}
-                }
-            }
-            _ => {}
+    /// Try to consume a sigil. Returns true if successful, false otherwise.
+    /// Does not advance position on failure.
+    fn eat_sigil(&mut self, sigil: Sigil) -> bool {
+        if self.peek_sigil(sigil) {
+            self.next();
+            true
+        } else {
+            false
         }
-        panic!("expected sigil {}", sigil.as_str());
     }
 
+    /// Consume a required sigil. Panics if not found.
+    /// Use this only in contexts where the sigil is guaranteed to exist.
     fn need_sigil(&mut self, sigil: Sigil) {
-        self.eat_sigil(sigil)
+        if !self.eat_sigil(sigil) {
+            panic!("expected sigil {}", sigil.as_str());
+        }
     }
 
-    fn eat_word(&mut self, word: &str) {
-        match self.next() {
-            Some(TreeToken::Token(token)) => {
-                match token.word_str(self.db) {
-                    Some(w) if w == word => return,
-                    _ => {}
-                }
-            }
-            _ => {}
+    /// Try to consume a specific word. Returns true if successful, false otherwise.
+    /// Does not advance position on failure.
+    fn eat_word(&mut self, word: &str) -> bool {
+        if self.peek_word() == Some(word) {
+            self.next();
+            true
+        } else {
+            false
         }
-        panic!("expected word '{}'", word);
     }
 
     fn eat_name(&mut self) -> Option<InternedText<'db>> {
