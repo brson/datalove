@@ -210,8 +210,17 @@ impl<'db> Parser<'db> {
             None
         };
 
-        // Need `=` sigil
-        self.need_sigil(tokens, Sigil::Equals);
+        // Need `=` sigil. If missing, emit error and return parse error.
+        if !self.eat_sigil(tokens, Sigil::Equals) {
+            let (text, span) = self.peek_text_span(tokens);
+            return self.emit_stmt_error(
+                text,
+                span,
+                "expected '=' after let binding",
+                "D023",
+                "expected '='"
+            );
+        }
 
         // Parse the value expression.
         let value = self.parse_expr_full(tokens);
@@ -1588,8 +1597,41 @@ impl<'db> Parser<'db> {
         for group in groups {
             if !group.is_empty() {
                 let mut group_iter = group.into_iter().peekable();
-                let name = self.need_name(&mut group_iter);
-                self.need_sigil(&mut group_iter, Sigil::Equals);
+
+                // Try to get name.
+                let name = match self.eat_name(&mut group_iter) {
+                    Some(n) => n,
+                    None => {
+                        // Missing name - emit error and use placeholder.
+                        let (text, span) = self.peek_text_span(&mut group_iter);
+                        let error_expr = self.emit_expr_error(
+                            text,
+                            span,
+                            "expected field name in struct",
+                            "D021",
+                            "expected field name"
+                        );
+                        let error_name = InternedText::new(self.db, "<error>".S());
+                        fields.push(ast::ExprStructField::new(self.db, error_name, error_expr));
+                        continue;
+                    }
+                };
+
+                // Try to get `=`.
+                if !self.eat_sigil(&mut group_iter, Sigil::Equals) {
+                    // Missing equals - emit error and use placeholder value.
+                    let (text, span) = self.peek_text_span(&mut group_iter);
+                    let error_expr = self.emit_expr_error(
+                        text,
+                        span,
+                        "expected '=' after field name in struct",
+                        "D022",
+                        "expected '='"
+                    );
+                    fields.push(ast::ExprStructField::new(self.db, name, error_expr));
+                    continue;
+                }
+
                 let value = self.parse_expr_full(&mut group_iter);
                 fields.push(ast::ExprStructField::new(self.db, name, value));
             }
@@ -1753,22 +1795,43 @@ impl<'db> Parser<'db> {
         }
     }
 
+    /// Try to consume a name (identifier). Returns Some(name) if successful.
+    fn eat_name(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> Option<InternedText<'db>> {
+        if self.peek_word(tokens).is_some() {
+            match tokens.next() {
+                Some(TreeToken::Token(token)) => {
+                    match token.word_str(self.db) {
+                        Some(word) => Some(InternedText::new(self.db, word.S())),
+                        None => None,
+                    }
+                }
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Consume a required name. Panics if not found.
     fn need_name(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> InternedText<'db> {
-        match tokens.next() {
-            Some(TreeToken::Token(token)) => {
-                match token.word_str(self.db) {
-                    Some(word) => InternedText::new(self.db, word.S()),
-                    None => {
+        match self.eat_name(tokens) {
+            Some(name) => name,
+            None => {
+                match tokens.peek() {
+                    Some(TreeToken::Token(token)) => {
                         let text = token.text(self.db).as_str(self.db);
                         panic!("expected name, got token: {}", text)
                     }
+                    Some(TreeToken::Branch(..)) => panic!("expected name, got branch"),
+                    None => panic!("expected name, got end of input"),
                 }
             }
-            Some(TreeToken::Branch(..)) => panic!("expected name, got branch"),
-            None => panic!("expected name, got end of input"),
         }
     }
 
@@ -1785,29 +1848,30 @@ impl<'db> Parser<'db> {
         }
     }
 
+    /// Try to consume a sigil. Returns true if successful, false otherwise.
     fn eat_sigil(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
         sigil: Sigil,
-    ) {
-        match tokens.next() {
-            Some(TreeToken::Token(token)) => {
-                match token.kind(self.db) {
-                    TokenKind::Sigil(s) if s == sigil => return,
-                    _ => {}
-                }
-            }
-            _ => {}
+    ) -> bool {
+        if self.peek_sigil(tokens, sigil) {
+            tokens.next();
+            true
+        } else {
+            false
         }
-        panic!("expected sigil {}", sigil.as_str());
     }
 
+    /// Consume a required sigil. Panics if not found.
+    /// Use this only in contexts where the sigil is guaranteed to exist.
     fn need_sigil(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
         sigil: Sigil,
     ) {
-        self.eat_sigil(tokens, sigil)
+        if !self.eat_sigil(tokens, sigil) {
+            panic!("expected sigil {}", sigil.as_str());
+        }
     }
 
     /// Check if the current position starts a type-hinted expression (`: type / expr`).
