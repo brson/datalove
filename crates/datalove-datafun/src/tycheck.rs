@@ -3225,33 +3225,20 @@ fn check_enum_variant<'db>(
             TypeError::VariantNotFound(variant_name.as_str(db).to_string())
         })?;
 
-    // Check payload.
-    match (payload, expected_variant.payload(db)) {
-        (Some(payload_expr), Some(expected_payload_ty)) => {
-            // Synthesize payload type and check against expected.
-            let payload_ty = ctx.synthesize_expr(payload_expr)?;
-            let actual_datalit_ty = match payload_ty.ty(db) {
-                Type::Datalit(dt) => dt,
-                _ => return Ok(()), // Non-datalit types handled elsewhere.
-            };
-            if let Err(err) = check_type_coercion(db, actual_datalit_ty, &expected_payload_ty) {
-                return Err(TypeError::from(err));
-            }
-        }
-        (None, None) => {
-            // No payload expected, none provided - OK.
-        }
-        (Some(_), None) => {
-            return Err(TypeError::TypeMismatch {
-                expected: "no payload".to_string(),
-                actual: "payload".to_string(),
-            });
-        }
-        (None, Some(_)) => {
-            return Err(TypeError::TypeMismatch {
-                expected: "payload".to_string(),
-                actual: "no payload".to_string(),
-            });
+    // Check payload type if both have payloads.
+    // If payload presence differs (expression has payload but type hint doesn't, or vice versa),
+    // don't fail here - let the type comparison at a higher level catch the mismatch.
+    // This matches datalit's Check-TypedAnonEnum behavior which compares enum types rather
+    // than individual variant payloads.
+    if let (Some(payload_expr), Some(expected_payload_ty)) = (payload, expected_variant.payload(db)) {
+        // Synthesize payload type and check against expected.
+        let payload_ty = ctx.synthesize_expr(payload_expr)?;
+        let actual_datalit_ty = match payload_ty.ty(db) {
+            Type::Datalit(dt) => dt,
+            _ => return Ok(()), // Non-datalit types handled elsewhere.
+        };
+        if let Err(err) = check_type_coercion(db, actual_datalit_ty, &expected_payload_ty) {
+            return Err(TypeError::from(err));
         }
     }
 

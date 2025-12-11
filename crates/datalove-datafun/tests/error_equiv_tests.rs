@@ -683,9 +683,6 @@ fn test_error_equiv_wrong_variant_detailed() {
 }
 
 /// Detailed test for source-level mutations.
-/// Note: DeleteComma is skipped due to minor differences in type hint parsing (~50% pass).
-/// Note: DeleteOpeningBracket and ExtraClosingBracket have ~90-98% pass rates due to
-/// minor expression parsing differences (not type hints).
 #[test]
 fn test_error_equiv_source_mutations_detailed() {
     let db = datalove_datafun::Database::default();
@@ -709,11 +706,6 @@ fn test_error_equiv_source_mutations_detailed() {
             let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
             if let Some(result) = mutation.apply(&db, expr, &mut rng) {
-                // Skip DeleteComma due to type hint parsing differences.
-                // Skip DeleteOpeningBracket and ExtraClosingBracket due to expression parsing differences.
-                if matches!(mutation, Mutation::DeleteComma | Mutation::DeleteOpeningBracket | Mutation::ExtraClosingBracket) {
-                    continue;
-                }
                 if let Err(e) = test_error_equiv(&db, &result) {
                     failures.push((seed, mutation, e));
                 }
