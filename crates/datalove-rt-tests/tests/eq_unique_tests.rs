@@ -22,8 +22,10 @@ fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_
 
 /// Clean up an instantiated value.
 unsafe fn cleanup_value(rt: &Runtime, ptr: *const u8, tydesc: *const datalove_rt::rtdt::TyDesc) {
-    datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr as *mut u8, tydesc);
-    datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc, 1, ptr as *mut u8);
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr as *mut u8, tydesc);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc, 1, ptr as *mut u8);
+    }
 }
 
 
@@ -34,7 +36,7 @@ fn test_eq_unique_f32_equals() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, "@3.14")?;
     let typechecked_b = compile_str(&db, "@3.14")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -69,7 +71,7 @@ fn test_eq_unique_u32_equals() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, "@42")?;
     let typechecked_b = compile_str(&db, "@42")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -104,7 +106,7 @@ fn test_eq_unique_tuple_equals() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, "@(@true, @3.14)")?;
     let typechecked_b = compile_str(&db, "@(@true, @3.14)")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -139,7 +141,7 @@ fn test_eq_unique_tuple_not_equals() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, "@(@true, @3.14)")?;
     let typechecked_b = compile_str(&db, "@(@true, @2.71)")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -176,7 +178,7 @@ fn test_eq_unique_map_empty_equals() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, ": @map<@u32, @u32> / @map{}")?;
     let typechecked_b = compile_str(&db, ": @map<@u32, @u32> / @map{}")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -211,7 +213,7 @@ fn test_eq_unique_map_equals_same_contents() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, "@map{@10 = @100, @20 = @200, @30 = @300}")?;
     let typechecked_b = compile_str(&db, "@map{@10 = @100, @20 = @200, @30 = @300}")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -246,7 +248,7 @@ fn test_eq_unique_map_not_equals_different_keys() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, ": @map<@u32, @u32> / @map{@10 = @100, @20 = @200}")?;
     let typechecked_b = compile_str(&db, ": @map<@u32, @u32> / @map{@10 = @100, @30 = @300}")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -281,7 +283,7 @@ fn test_eq_unique_map_not_equals_different_values() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, ": @map<@u32, @u32> / @map{@10 = @100, @20 = @200}")?;
     let typechecked_b = compile_str(&db, ": @map<@u32, @u32> / @map{@10 = @100, @20 = @999}")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -316,7 +318,7 @@ fn test_eq_unique_map_not_equals_different_sizes() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, ": @map<@u32, @u32> / @map{@10 = @100, @20 = @200, @30 = @300}")?;
     let typechecked_b = compile_str(&db, ": @map<@u32, @u32> / @map{@10 = @100, @20 = @200}")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -353,7 +355,7 @@ fn test_eq_unique_set_empty_equals() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, ": @set<@u32> / @set{}")?;
     let typechecked_b = compile_str(&db, ": @set<@u32> / @set{}")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -388,7 +390,7 @@ fn test_eq_unique_set_equals_same_contents() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, "@set{@10, @20, @30}")?;
     let typechecked_b = compile_str(&db, "@set{@10, @20, @30}")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -423,7 +425,7 @@ fn test_eq_unique_set_not_equals_different_elements() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, ": @set<@u32> / @set{@10, @20, @30}")?;
     let typechecked_b = compile_str(&db, ": @set<@u32> / @set{@10, @20, @40}")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
@@ -458,7 +460,7 @@ fn test_eq_unique_set_not_equals_different_sizes() -> AnyResult<()> {
     let typechecked_a = compile_str(&db, ": @set<@u32> / @set{@10, @20, @30}")?;
     let typechecked_b = compile_str(&db, ": @set<@u32> / @set{@10, @20}")?;
 
-    let mut rt = Runtime::new();
+    let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
     let (ptr_a, tydesc_a) = {
         let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
