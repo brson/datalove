@@ -1178,8 +1178,8 @@ fn synthesize_expr<'db>(
         ExprFunKind::Tensor(tensor_expr) => {
             if let Some(type_hint) = tensor_expr.type_hint(db) {
                 let expected_ty = convert_type_hint(db, type_hint)?;
-                // Check elements against expected type (catches heap mismatches).
-                check_tensor_elements(ctx, tensor_expr.elements(db), expected_ty)?;
+                // Check rank and elements against expected type.
+                check_tensor_shape_and_elements(ctx, tensor_expr, expected_ty)?;
                 return Ok(expected_ty);
             }
             synthesize_inline_tensor(ctx, expr, tensor_expr)
@@ -2935,24 +2935,44 @@ fn check_map_entries<'db>(
     Ok(())
 }
 
-/// Check tensor elements against expected type.
-fn check_tensor_elements<'db>(
+/// Check tensor shape and elements against expected type.
+fn check_tensor_shape_and_elements<'db>(
     ctx: &mut TypeContext<'db>,
-    elements: &[ExprFun<'db>],
+    tensor_expr: crate::ast::ExprTensor<'db>,
     expected_ty: TypeAndHeap<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
+    let elements = tensor_expr.elements(db);
+    let shape = tensor_expr.shape(db);
 
     // Unwrap Option/Result wrappers to get the actual tensor type.
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
-    // Extract the element type from the tensor type.
-    let elem_type = match inner_ty.ty(db) {
+    // Extract tensor type info.
+    let (elem_type, expected_rank) = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Tensor(tensor_ty)) => {
-            tensor_ty.element_type(db)
+            (tensor_ty.element_type(db), tensor_ty.rank(db))
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
+
+    // Check rank matches type hint.
+    let actual_rank = shape.len() as u32;
+    if actual_rank != expected_rank {
+        return Err(TypeError::ArityMismatch {
+            expected: expected_rank as usize,
+            actual: actual_rank as usize,
+        });
+    }
+
+    // Check element count matches shape product.
+    let expected_count = shape.iter().map(|&d| d as usize).product::<usize>();
+    if elements.len() != expected_count {
+        return Err(TypeError::ArityMismatch {
+            expected: expected_count,
+            actual: elements.len(),
+        });
+    }
 
     // Check each element against expected element type.
     for elem in elements {

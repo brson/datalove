@@ -1510,7 +1510,16 @@ impl<'db> Parser<'db> {
                 if rank <= 1 {
                     self.parse_comma_separated_exprs(iter)
                 } else {
-                    self.parse_tensor_data_2d_plus(iter)
+                    let row_size = *shape.last().unwrap_or(&1) as usize;
+                    let (elems, has_error) = self.parse_tensor_data_2d_plus(iter, row_size);
+                    if has_error {
+                        let (text, span) = self.peek_text_span(tokens);
+                        return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                            self.db, text, span,
+                            InternedText::new(self.db, format!("expected {} elements per row", row_size).S()),
+                        ));
+                    }
+                    elems
                 }
             }
             _ => {
@@ -1526,15 +1535,16 @@ impl<'db> Parser<'db> {
     }
 
     // Parse tensor data for 2D+ tensors: comma-separated rows, space-separated elements.
-    fn parse_tensor_data_2d_plus(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
+    fn parse_tensor_data_2d_plus(&mut self, iter: BracerIter<'db>, row_size: usize) -> (Vec<ast::ExprFun<'db>>, bool) {
         let all_tokens: Vec<_> = iter.collect();
         if all_tokens.is_empty() {
-            return vec![];
+            return (vec![], false);
         }
 
         // Split by comma to get rows.
         let rows = self.split_tokens_by_comma_with_spaces(&all_tokens);
         let mut elements = Vec::new();
+        let mut has_error = false;
 
         for row_tokens in rows {
             // Each row contains space-separated elements.
@@ -1546,12 +1556,20 @@ impl<'db> Parser<'db> {
             // Parse all elements in the row by feeding all tokens to a peekable iterator
             // and calling parse_expr_full repeatedly until exhausted.
             let mut row_iter = elem_tokens.into_iter().peekable();
+            let mut row_elements = Vec::new();
             while row_iter.peek().is_some() {
-                elements.push(self.parse_expr_full(&mut row_iter));
+                row_elements.push(self.parse_expr_full(&mut row_iter));
             }
+
+            // Validate row size matches the last dimension.
+            if row_elements.len() != row_size {
+                has_error = true;
+            }
+
+            elements.extend(row_elements);
         }
 
-        elements
+        (elements, has_error)
     }
 
     // Split tokens by comma, preserving spaces within groups (for tensor row parsing).
@@ -1579,31 +1597,51 @@ impl<'db> Parser<'db> {
     }
 
     // Parse tensor shape dimensions.
+    // Uses incremental parsing like datalit: parse dimension, look for comma, repeat.
     fn parse_tensor_shape(&mut self, tokens: Vec<TreeToken<'db>>) -> Vec<u32> {
-        let mut shape = Vec::new();
-        let mut current_num = String::new();
+        let filtered: Vec<_> = tokens.into_iter()
+            .filter_map(|t| t.without_space(self.db))
+            .collect();
 
-        for token in tokens {
-            match token {
-                TreeToken::Token(t) => {
-                    if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) {
-                        if !current_num.is_empty() {
-                            if let Ok(dim) = current_num.parse::<u32>() {
-                                shape.push(dim);
-                            }
-                            current_num.clear();
-                        }
-                    } else if let Some(word) = t.word_str(self.db) {
-                        current_num.push_str(word);
-                    }
-                }
-                _ => {}
-            }
+        if filtered.is_empty() {
+            return vec![];
         }
 
-        if !current_num.is_empty() {
-            if let Ok(dim) = current_num.parse::<u32>() {
-                shape.push(dim);
+        let mut iter = filtered.into_iter().peekable();
+        let mut shape = Vec::new();
+
+        loop {
+            // Try to parse a dimension number.
+            if let Some(TreeToken::Token(t)) = iter.peek() {
+                if let Some(word) = t.word_str(self.db) {
+                    if let Ok(dim) = word.parse::<u32>() {
+                        iter.next(); // consume the token
+                        shape.push(dim);
+                    } else {
+                        // Not a valid number, stop parsing.
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+
+            // Look for comma to continue, otherwise stop.
+            if let Some(TreeToken::Token(t)) = iter.peek() {
+                if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) {
+                    iter.next(); // consume comma
+                    // Handle trailing comma.
+                    if iter.peek().is_none() {
+                        break;
+                    }
+                } else {
+                    // No comma, stop parsing.
+                    break;
+                }
+            } else {
+                break;
             }
         }
 
@@ -1611,95 +1649,147 @@ impl<'db> Parser<'db> {
     }
 
     // Helper to parse comma-separated expressions from a branch.
+    // Uses incremental parsing like datalit: parse expr, look for comma, repeat.
     fn parse_comma_separated_exprs(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
         let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
         if all_tokens.is_empty() {
             return vec![];
         }
 
-        let groups = self.split_by_comma(all_tokens);
+        let mut tokens = all_tokens.into_iter().peekable();
         let mut elements = Vec::new();
-        for group in groups {
-            if !group.is_empty() {
-                let mut group_iter = group.into_iter().peekable();
-                elements.push(self.parse_expr_full(&mut group_iter));
+
+        loop {
+            if tokens.peek().is_none() {
+                break;
+            }
+            elements.push(self.parse_expr_full(&mut tokens));
+
+            // Look for comma to continue, otherwise stop.
+            if !self.eat_sigil(&mut tokens, Sigil::Comma) {
+                break;
+            }
+
+            // Handle trailing comma: if we're at the end after comma, stop parsing.
+            if tokens.peek().is_none() {
+                break;
             }
         }
         elements
     }
 
     // Helper to parse comma-separated struct fields.
+    // Uses incremental parsing like datalit: parse field, look for comma, repeat.
     fn parse_comma_separated_struct_fields(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprStructField<'db>> {
         let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
         if all_tokens.is_empty() {
             return vec![];
         }
 
-        let groups = self.split_by_comma(all_tokens);
+        let mut tokens = all_tokens.into_iter().peekable();
         let mut fields = Vec::new();
-        for group in groups {
-            if !group.is_empty() {
-                let mut group_iter = group.into_iter().peekable();
 
-                // Try to get name.
-                let name = match self.eat_name(&mut group_iter) {
-                    Some(n) => n,
-                    None => {
-                        // Missing name - emit error and use placeholder.
-                        let (text, span) = self.peek_text_span(&mut group_iter);
-                        let error_expr = self.emit_expr_error(
-                            text,
-                            span,
-                            "expected field name in struct",
-                            "D021",
-                            "expected field name"
-                        );
-                        let error_name = InternedText::new(self.db, "<error>".S());
-                        fields.push(ast::ExprStructField::new(self.db, error_name, error_expr));
-                        continue;
+        loop {
+            // Try to get name.
+            let name = match self.eat_name(&mut tokens) {
+                Some(n) => n,
+                None => {
+                    if tokens.peek().is_none() {
+                        // End of tokens - we're done.
+                        break;
                     }
-                };
-
-                // Try to get `=`.
-                if !self.eat_sigil(&mut group_iter, Sigil::Equals) {
-                    // Missing equals - emit error and use placeholder value.
-                    let (text, span) = self.peek_text_span(&mut group_iter);
+                    // Missing name - emit error and use placeholder.
+                    let (text, span) = self.peek_text_span(&mut tokens);
                     let error_expr = self.emit_expr_error(
                         text,
                         span,
-                        "expected '=' after field name in struct",
-                        "D022",
-                        "expected '='"
+                        "expected field name in struct",
+                        "D021",
+                        "expected field name"
                     );
-                    fields.push(ast::ExprStructField::new(self.db, name, error_expr));
-                    continue;
+                    let error_name = InternedText::new(self.db, "<error>".S());
+                    fields.push(ast::ExprStructField::new(self.db, error_name, error_expr));
+                    break;
                 }
+            };
 
-                let value = self.parse_expr_full(&mut group_iter);
-                fields.push(ast::ExprStructField::new(self.db, name, value));
+            // Try to get `=`.
+            if !self.eat_sigil(&mut tokens, Sigil::Equals) {
+                // Missing equals - emit error and use placeholder value.
+                let (text, span) = self.peek_text_span(&mut tokens);
+                let error_expr = self.emit_expr_error(
+                    text,
+                    span,
+                    "expected '=' after field name in struct",
+                    "D022",
+                    "expected '='"
+                );
+                fields.push(ast::ExprStructField::new(self.db, name, error_expr));
+                break;
+            }
+
+            let value = self.parse_expr_full(&mut tokens);
+            fields.push(ast::ExprStructField::new(self.db, name, value));
+
+            // Look for comma to continue, otherwise stop.
+            if !self.eat_sigil(&mut tokens, Sigil::Comma) {
+                break;
+            }
+
+            // Handle trailing comma: if we're at the end after comma, stop parsing.
+            if tokens.peek().is_none() {
+                break;
             }
         }
         fields
     }
 
     // Helper to parse comma-separated map entries.
+    // Uses incremental parsing like datalit: parse entry (key = value), look for comma, repeat.
     fn parse_comma_separated_map_entries(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprMapEntry<'db>> {
         let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
         if all_tokens.is_empty() {
             return vec![];
         }
 
-        let groups = self.split_by_comma(all_tokens);
+        let mut tokens = all_tokens.into_iter().peekable();
         let mut entries = Vec::new();
-        for group in groups {
-            if !group.is_empty() {
-                // Split by = to get key and value.
-                let (key_tokens, value_tokens) = self.split_by_equals(group);
-                let mut key_iter = key_tokens.into_iter().peekable();
-                let key = self.parse_expr_full(&mut key_iter);
-                let mut value_iter = value_tokens.into_iter().peekable();
-                let value = self.parse_expr_full(&mut value_iter);
-                entries.push(ast::ExprMapEntry::new(self.db, key, value));
+
+        loop {
+            if tokens.peek().is_none() {
+                break;
+            }
+
+            // Parse key.
+            let key = self.parse_expr_full(&mut tokens);
+
+            // Expect `=`.
+            if !self.eat_sigil(&mut tokens, Sigil::Equals) {
+                // Missing equals - emit error.
+                let (text, span) = self.peek_text_span(&mut tokens);
+                let error_value = self.emit_expr_error(
+                    text,
+                    span,
+                    "expected '=' between map key and value",
+                    "D023",
+                    "expected '='"
+                );
+                entries.push(ast::ExprMapEntry::new(self.db, key, error_value));
+                break;
+            }
+
+            // Parse value.
+            let value = self.parse_expr_full(&mut tokens);
+            entries.push(ast::ExprMapEntry::new(self.db, key, value));
+
+            // Look for comma to continue, otherwise stop.
+            if !self.eat_sigil(&mut tokens, Sigil::Comma) {
+                break;
+            }
+
+            // Handle trailing comma.
+            if tokens.peek().is_none() {
+                break;
             }
         }
         entries
@@ -1746,6 +1836,7 @@ impl<'db> Parser<'db> {
     }
 
     // Parse a datafun tuple: (expr1, expr2, ...).
+    // Uses incremental parsing like datalit: parse element, look for comma, repeat.
     fn parse_datafun_tuple(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
@@ -1775,35 +1866,25 @@ impl<'db> Parser<'db> {
             );
         }
 
-        // Split tokens by comma to get individual element token groups.
-        let mut element_token_groups: Vec<Vec<TreeToken<'db>>> = vec![];
-        let mut current_group: Vec<TreeToken<'db>> = vec![];
-
-        for token in all_tokens {
-            match token {
-                TreeToken::Token(t) if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) => {
-                    if !current_group.is_empty() {
-                        element_token_groups.push(current_group);
-                        current_group = vec![];
-                    }
-                }
-                _ => {
-                    current_group.push(token);
-                }
-            }
-        }
-
-        // Don't forget the last group.
-        if !current_group.is_empty() {
-            element_token_groups.push(current_group);
-        }
-
-        // Parse each element group.
+        // Use incremental parsing like datalit.
+        let mut inner_tokens = all_tokens.into_iter().peekable();
         let mut elements = vec![];
-        for group in element_token_groups {
-            let mut group_iter = group.into_iter().peekable();
-            let element = self.parse_expr_full(&mut group_iter);
-            elements.push(element);
+
+        loop {
+            if inner_tokens.peek().is_none() {
+                break;
+            }
+            elements.push(self.parse_expr_full(&mut inner_tokens));
+
+            // Look for comma to continue, otherwise stop.
+            if !self.eat_sigil(&mut inner_tokens, Sigil::Comma) {
+                break;
+            }
+
+            // Handle trailing comma.
+            if inner_tokens.peek().is_none() {
+                break;
+            }
         }
 
         ast::ExprFun::new(
