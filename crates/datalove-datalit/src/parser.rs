@@ -211,67 +211,143 @@ impl<'db> DynParser<'db> {
             Some("tuple") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("tuple");
-                let name = self.need_name();
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                        };
-                        let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
-                        ast::TypeHint::NamedTuple(ast::TypeHintNamedTuple::new(
-                            self.db,
-                            name,
-                            fields,
-                        ))
+                // Check if it's anonymous (starts with () or named (starts with name).
+                if self.peek_sigil(Sigil::ParenOpen) {
+                    // Anonymous tuple with explicit keyword.
+                    match self.peek() {
+                        Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
+                            self.next(); // Consume the branch.
+                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                            let mut sub_parser = DynParser {
+                                db: self.db,
+                                tokens,
+                                pos: 0,
+                                source_text: self.source_text,
+                                expr_spans: Vec::new(),
+                            };
+                            let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
+                            ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
+                        }
+                        _ => {
+                            self.emit_type_hint_error(
+                                keyword_text,
+                                keyword_span,
+                                "expected () after tuple keyword",
+                                "D001",
+                                "expected '(' after 'tuple'"
+                            )
+                        }
                     }
-                    _ => {
-                        self.emit_type_hint_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected () after tuple keyword",
-                            "D001",
-                            "expected '(' after 'tuple'"
-                        )
+                } else if let Some(name) = self.eat_name() {
+                    // Named tuple.
+                    match self.peek() {
+                        Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
+                            self.next(); // Consume the branch.
+                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                            let mut sub_parser = DynParser {
+                                db: self.db,
+                                tokens,
+                                pos: 0,
+                                source_text: self.source_text,
+                                expr_spans: Vec::new(),
+                            };
+                            let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
+                            ast::TypeHint::NamedTuple(ast::TypeHintNamedTuple::new(
+                                self.db,
+                                name,
+                                fields,
+                            ))
+                        }
+                        _ => {
+                            self.emit_type_hint_error(
+                                keyword_text,
+                                keyword_span,
+                                "expected () after tuple name",
+                                "D001",
+                                "expected '(' after tuple name"
+                            )
+                        }
                     }
+                } else {
+                    // Neither anonymous nor named - error.
+                    self.emit_type_hint_error(
+                        keyword_text,
+                        keyword_span,
+                        "expected name or () after tuple keyword",
+                        "D001",
+                        "expected name or '(' after 'tuple'"
+                    )
                 }
             }
             Some("struct") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("struct");
-                let name = self.need_name();
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                        };
-                        let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
-                        ast::TypeHint::NamedStruct(ast::TypeHintNamedStruct::new(
-                            self.db,
-                            name,
-                            fields,
-                        ))
+                // Check if it's anonymous (starts with {) or named (starts with name).
+                if self.peek_sigil(Sigil::BraceOpen) {
+                    // Anonymous struct with explicit keyword.
+                    match self.peek() {
+                        Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
+                            self.next(); // Consume the branch.
+                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                            let mut sub_parser = DynParser {
+                                db: self.db,
+                                tokens,
+                                pos: 0,
+                                source_text: self.source_text,
+                                expr_spans: Vec::new(),
+                            };
+                            let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                            ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
+                        }
+                        _ => {
+                            self.emit_type_hint_error(
+                                keyword_text,
+                                keyword_span,
+                                "expected {} after struct keyword",
+                                "D002",
+                                "expected '{' after 'struct'"
+                            )
+                        }
                     }
-                    _ => {
-                        self.emit_type_hint_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected {} after struct keyword",
-                            "D002",
-                            "expected '{' after 'struct'"
-                        )
+                } else if let Some(name) = self.eat_name() {
+                    // Named struct.
+                    match self.peek() {
+                        Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
+                            self.next(); // Consume the branch.
+                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                            let mut sub_parser = DynParser {
+                                db: self.db,
+                                tokens,
+                                pos: 0,
+                                source_text: self.source_text,
+                                expr_spans: Vec::new(),
+                            };
+                            let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                            ast::TypeHint::NamedStruct(ast::TypeHintNamedStruct::new(
+                                self.db,
+                                name,
+                                fields,
+                            ))
+                        }
+                        _ => {
+                            self.emit_type_hint_error(
+                                keyword_text,
+                                keyword_span,
+                                "expected {} after struct name",
+                                "D002",
+                                "expected '{' after struct name"
+                            )
+                        }
                     }
+                } else {
+                    // Neither anonymous nor named - error.
+                    self.emit_type_hint_error(
+                        keyword_text,
+                        keyword_span,
+                        "expected name or {} after struct keyword",
+                        "D002",
+                        "expected name or '{' after 'struct'"
+                    )
                 }
             }
             Some("enum") => {
@@ -307,9 +383,8 @@ impl<'db> DynParser<'db> {
                             )
                         }
                     }
-                } else {
+                } else if let Some(name) = self.eat_name() {
                     // Named enum.
-                    let name = self.need_name();
                     match self.peek() {
                         Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
                             self.next(); // Consume the branch.
@@ -339,6 +414,15 @@ impl<'db> DynParser<'db> {
                             )
                         }
                     }
+                } else {
+                    // Neither anonymous nor named - error.
+                    self.emit_type_hint_error(
+                        keyword_text,
+                        keyword_span,
+                        "expected name or {} after enum keyword",
+                        "D003",
+                        "expected name or '{' after 'enum'"
+                    )
                 }
             }
             Some("map") => {
@@ -1317,6 +1401,22 @@ impl<'db> DynParser<'db> {
             _ => {}
         }
         panic!("expected word '{}'", word);
+    }
+
+    fn eat_name(&mut self) -> Option<InternedText<'db>> {
+        if self.peek_word().is_some() {
+            match self.next() {
+                Some(TreeToken::Token(token)) => {
+                    match token.word_str(self.db) {
+                        Some(word) => Some(InternedText::new(self.db, word.S())),
+                        None => None,
+                    }
+                }
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 
     fn need_name(&mut self) -> InternedText<'db> {

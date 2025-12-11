@@ -1,9 +1,9 @@
 //! Tests that exercise known parser panics.
 //!
 //! Each test documents a specific panic case in the datalit parser.
-//! These tests use `#[should_panic]` to verify the panic occurs.
+//! Tests use `#[should_panic]` to verify the panic occurs.
 //! When the panics are fixed to return ParseError nodes instead,
-//! these tests should be updated to verify the error node is returned.
+//! those tests are updated to verify the error node is returned.
 
 use rmx::prelude::*;
 
@@ -16,31 +16,31 @@ fn parse(source: &str) -> String {
 }
 
 // =============================================================================
-// Type hint parsing: need_name panics
+// Type hint parsing: fixed cases (now return error nodes)
 // =============================================================================
 
-/// Line 214: `tuple` keyword without name
-/// `tuple` expects a name like `tuple Foo(...)`
+/// `tuple` keyword without name or parens.
+/// Now returns a parse error node instead of panicking.
 #[test]
-#[should_panic(expected = "expected name")]
 fn type_hint_tuple_missing_name() {
-    parse(": tuple / @42");
+    let json = parse(": tuple / @42");
+    assert!(json.contains("ParseError") || json.contains("Error"), "expected parse error node");
 }
 
-/// Line 247: `struct` keyword without name
-/// `struct` expects a name like `struct Foo{...}`
+/// `struct` keyword without name or braces.
+/// Now returns a parse error node instead of panicking.
 #[test]
-#[should_panic(expected = "expected name")]
 fn type_hint_struct_missing_name() {
-    parse(": struct / @42");
+    let json = parse(": struct / @42");
+    assert!(json.contains("ParseError") || json.contains("Error"), "expected parse error node");
 }
 
-/// Line 312: named `enum` without name after keyword
-/// `enum` (non-anonymous) expects a name like `enum Foo{...}`
+/// `enum` keyword without name or braces.
+/// Now returns a parse error node instead of panicking.
 #[test]
-#[should_panic(expected = "expected name")]
 fn type_hint_named_enum_missing_name() {
-    parse(": enum / @42");
+    let json = parse(": enum / @42");
+    assert!(json.contains("ParseError") || json.contains("Error"), "expected parse error node");
 }
 
 /// Line 557: struct field without name in non-empty braces
