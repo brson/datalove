@@ -1,0 +1,13 @@
+require module sys/std/result
+
+import result.is_ok
+import result.is_err
+
+let val1: @u32 = @42
+let val2: @u32 = @42
+let ok1: !u32 = val1
+let ok2: !u32 = val2
+
+// Note: @error literal to !u32 coercion doesn't work in scripts.
+// Testing only Ok path for now.
+let output = (is_ok(ok1), is_err(ok2))

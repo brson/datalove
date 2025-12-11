@@ -133,16 +133,10 @@ pub fn analyze_worldfile(
     // Create persistent interpreter context for incremental scriptunit execution.
     let mut interp_ctx = match InterpContext::new_with_typecheck(db, package_world, typecheck_result) {
         Ok(ctx) => ctx,
-        Err(crate::interp::InterpError::TypecheckErrors(count)) => {
+        Err(crate::interp::InterpError::TypecheckErrors(errors)) => {
             // Provide detailed error info for typecheck failures.
-            let module_errors = typecheck_result.module_errors(db);
-            let mut error_details = Vec::new();
-            for (module, errors) in module_errors.iter() {
-                for err in errors {
-                    error_details.push(format!("{}: {:?}", module.name(db), err));
-                }
-            }
-            bail!("Package world has {} typecheck errors: {}", count, error_details.join("; "));
+            let error_details: Vec<_> = errors.iter().map(|e| format!("{:?}", e)).collect();
+            bail!("Package world has {} typecheck errors: {}", errors.len(), error_details.join("; "));
         }
         Err(e) => bail!("Failed to create interpreter context: {:?}", e),
     };

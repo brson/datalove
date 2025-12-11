@@ -64,7 +64,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors(1)",
+                "TypecheckErrors([TypeMismatch { expected: \"void\", actual: \"@set<@u32>\" }])",
             ],
         ),
         output: "",

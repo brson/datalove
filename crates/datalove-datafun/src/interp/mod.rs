@@ -1,93 +1,577 @@
-//! Analysis-driven interpreter with linear type semantics.
+//! New analysis-driven interpreter.
 //!
-//! # Architecture
-//!
-//! The interpreter executes datafun code in two modes:
-//!
-//! - **Script scope**: Top-level statements (let bindings, function definitions)
-//!   execute directly with script-level variable tracking.
-//!
-//! - **Frame-based execution**: Function bodies execute using a stack frame with
-//!   slots computed by `function_analysis`. This enables destination-passing style
-//!   (DPS) to minimize heap allocations.
-//!
-//! # Value Ownership
-//!
-//! Values track ownership via `ValueLocation`:
-//! - `Borrowed`: Points into frame memory or caller's data. Don't free.
-//! - `TempOwned`: Heap-allocated temporary. Must free structure after use.
-//!
-//! Linear types are enforced by marking slots as `Moved` after use.
-//! Copy types are cloned transparently.
-//!
-//! # Key Types
-//!
-//! - [`InterpContext`]: Main interpreter state (runtime, package world, call stack)
-//! - [`Value`]: Runtime value with pointer, type descriptor, and ownership
-//! - [`StackFrame`]: Function execution frame with slot storage
-//! - [`ScriptScope`]: Top-level variable bindings for REPL/script execution
+//! This interpreter uses the function_analysis framework to achieve safe,
+//! leak-free execution with proper linear type semantics and package world integration.
 
-mod value;
-mod error;
-mod frame;
-mod memory;
-mod types;
-mod alloc;
-mod arith;
-mod arith_widening;
-mod collections;
-mod coerce;
-mod literals;
-mod context;
-mod control;
-mod tydesc;
-
-pub use value::{Value, Destination, ValueLocation, EvalContext};
-pub use error::InterpError;
-pub use frame::{SlotState, StackFrame};
-pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
-pub use context::{
-    InterpContext, ScriptScope, ModuleFunctionTable, ScriptVariable,
-    ScriptVarState, ScriptResult,
-};
-use context::{parse_module_functions, build_module_alias_map, cleanup_script_scope};
-use control::{find_slot_by_name, extract_bool, evaluate_branch_condition, eval_try_option, eval_try_result};
-use tydesc::{type_hint_to_tydesc, value_tydesc_for_option, value_tydesc_for_result};
-use frame::CfgControl;
-use memory::{clone_value, clone_value_to_dest};
-use types::{is_u32_value, is_int_value, is_f32_value, is_bool_value, is_copy_type};
-use alloc::{
-    allocate_bool, allocate_f32, allocate_u32_raw, allocate_bigint,
-    allocate_option_none, allocate_option_some_from_value,
-    allocate_result_ok_from_value, allocate_result_err, widen_u32_to_int,
-};
-use arith::{
-    write_u32_result, write_f32_result, write_bool_result, write_option_u32_result,
-    eval_add_checked, eval_sub_checked, eval_mul_checked, eval_div_checked,
-    eval_add_optional, eval_sub_optional, eval_mul_optional, eval_div_optional,
-    eval_comparison,
-};
-use collections::{
-    allocate_tuple_from_values, allocate_struct_from_values,
-    allocate_list_from_values, allocate_map_from_values, allocate_set_from_values,
-};
-use literals::{
-    allocate_float_literal, allocate_int_literal, allocate_string,
-    allocate_inline_int_literal, write_inline_int_to_dest, write_option_none_to_dest,
-    allocate_inline_string,
-};
-use arith_widening::{execute_binop, execute_unop};
-use coerce::{narrow_int_to_u32, coerce_value_to_dest};
-
+use rmx::prelude::*;
+use rmx::std::collections::HashMap;
 use bct::text::InternedText;
 
 use crate::package::PackageWorld;
 use crate::ast::{self, StmtFun};
-use crate::function_analysis::{Terminator, BlockId};
+use crate::function_analysis::{ControlFlowGraph, Terminator, BlockId};
 
-// ============================================================================
-// Script Execution Entry Points
-// ============================================================================
+/// Interpreter context for script execution.
+pub struct InterpContext<'db> {
+    db: &'db dyn crate::Db,
+    runtime: datalove_rt::rust::Runtime,
+    package_world: PackageWorld,
+    script: Option<crate::script::Script>,
+    pub script_scope: ScriptScope<'db>,
+    module_functions: ModuleFunctionTable<'db>,
+    /// Current module being executed (for module-internal function calls).
+    current_module: Option<crate::package::PackageModule>,
+    /// Typecheck result for the package world (includes module exports).
+    typecheck_result: Option<crate::tycheck::PackageWorldTypecheckResult<'db>>,
+    /// Script-level function analyses (for functions defined in the script).
+    script_function_analyses: HashMap<ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>>,
+    tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
+    /// Call stack for frame-based execution.
+    call_stack: Vec<StackFrame<'db>>,
+}
+
+/// Script-level scope for REPL incremental execution.
+pub struct ScriptScope<'db> {
+    /// Script-level let bindings with move tracking.
+    pub variables: HashMap<InternedText<'db>, ScriptVariable>,
+    /// Script-level functions.
+    pub functions: HashMap<InternedText<'db>, StmtFun<'db>>,
+}
+
+/// Module function table for tracking imported functions.
+///
+/// Maps imported function names to their function definitions and source modules.
+pub struct ModuleFunctionTable<'db> {
+    /// Maps imported function name → (function definition, source module).
+    imported_functions: HashMap<InternedText<'db>, (ast::StmtFun<'db>, crate::package::PackageModule)>,
+    /// Cache of all functions in each module.
+    module_all_functions: HashMap<crate::package::PackageModule, HashMap<InternedText<'db>, ast::StmtFun<'db>>>,
+}
+
+/// Script-level variable with move tracking for linear semantics.
+pub struct ScriptVariable {
+    pub value: Value,
+    pub state: ScriptVarState,
+    pub is_copy: bool,  // Cached from type analysis.
+}
+
+/// Move state for script-level variables.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ScriptVarState {
+    Available,
+    Moved,
+}
+
+/// Slot state for frame-based execution.
+///
+/// Tracks whether a slot is available for use or has been moved.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum SlotState {
+    /// Slot is available for reading (either reference or owned value).
+    Available,
+    /// Slot has been moved from (only applicable to non-copy types).
+    Moved,
+}
+
+/// Control flow result from executing a CFG statement.
+enum CfgControl {
+    /// Continue to the next statement in the block.
+    Continue,
+    /// Return from the function with a value.
+    Return(Value),
+}
+
+/// Stack frame for function execution.
+///
+/// Contains the packed frame data buffer and per-slot state tracking.
+pub struct StackFrame<'db> {
+    /// Packed frame data containing all slot values at computed offsets.
+    pub frame_data: Vec<u8>,
+    /// Per-slot state tracking for move semantics.
+    pub slot_states: Vec<SlotState>,
+    /// Function being executed (for debugging).
+    pub func: crate::ast::StmtFun<'db>,
+    /// Frame layout providing slot offsets and types.
+    pub layout: crate::function_analysis::FrameLayout<'db>,
+    /// Control flow graph for CFG-based execution.
+    pub cfg: ControlFlowGraph<'db>,
+}
+
+/// Tracks whether a Value's memory needs freeing after use.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ValueLocation {
+    /// Points to frame buffer or caller's data via reference. Don't free.
+    Borrowed,
+    /// Temp heap allocation for expression evaluation. Free structure after use.
+    TempOwned,
+}
+
+/// Value representation.
+#[derive(Copy, Clone, Debug)]
+pub struct Value {
+    pub ptr: *mut u8,
+    pub tydesc: *const datalove_rt::rtdt::TyDesc,
+    pub location: ValueLocation,
+}
+
+/// Destination for DPS (Destination-Passing Style) expression evaluation.
+///
+/// When provided, expression evaluation writes directly to this location
+/// instead of allocating a temporary.
+#[derive(Copy, Clone, Debug)]
+pub struct Destination {
+    pub ptr: *mut u8,
+    pub tydesc: *const datalove_rt::rtdt::TyDesc,
+}
+
+impl Destination {
+    /// Create a Value pointing to this destination (Borrowed, since caller owns memory).
+    pub fn to_borrowed_value(self) -> Value {
+        Value {
+            ptr: self.ptr,
+            tydesc: self.tydesc,
+            location: ValueLocation::Borrowed,
+        }
+    }
+}
+
+/// Evaluation context for unified expression evaluation.
+///
+/// This enum allows sharing expression evaluation code between script scope
+/// and frame-based execution while keeping context-specific operations separate.
+#[derive(Copy, Clone, Debug)]
+pub enum EvalContext {
+    /// Script scope evaluation - uses ScriptScope for variables.
+    ScriptScope,
+    /// Frame-based evaluation - uses the current stack frame.
+    Frame,
+}
+
+/// Result of script execution containing the value and runtime.
+///
+/// The runtime and tydesc_table must be kept alive for the value pointer to remain valid.
+pub struct ScriptResult<'db> {
+    pub value: Value,
+    pub runtime: datalove_rt::rust::Runtime,
+    pub tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
+}
+
+impl std::fmt::Debug for ScriptResult<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScriptResult")
+            .field("value", &self.value)
+            .field("runtime", &"<Runtime>")
+            .field("tydesc_table", &"<TyDescTable>")
+            .finish()
+    }
+}
+
+impl Drop for ScriptResult<'_> {
+    fn drop(&mut self) {
+        // NOTE: Value cleanup is now done manually before dropping ScriptResult.
+        // This is because the Drop implementation was running too late,
+        // after the runtime had already started shutting down.
+        // The manual cleanup happens in worldfile_analysis.rs.
+    }
+}
+
+/// Interpreter errors.
+#[derive(Debug)]
+pub enum InterpError {
+    // Analysis-time errors.
+    TypeErrors,
+    TypecheckErrors(Vec<crate::tycheck::TypeError>),
+    AnalysisErrors(Vec<String>),
+
+    // Runtime errors.
+    VariableNotFound(String),
+    UseAfterMove(String),
+    FunctionNotFound(String),
+    ModuleNotFound(String),
+    InvalidExpression(String),
+    RuntimeError(String),
+
+    // Control flow.
+    ReturnOutsideFunction,
+    IfOutsideFunction,
+    FunctionReturn(Value),  // Used internally to propagate return values.
+    EarlyReturn,  // Used for try operator (? or !) early return from CFG.
+
+    // Checked arithmetic overflow - triggers early return with Err.
+    Overflow,
+    DivisionByZero,
+
+    // Optional arithmetic overflow - triggers early return with None.
+    OptionNone,
+    // Result error - triggers early return with Err.
+    // Carries the error value (tydesc + ptr) to be wrapped in Result::Err.
+    ResultErr { tydesc: *const datalove_rt::rtdt::TyDesc, ptr: *mut u8 },
+
+    // Result type.
+    NoOutputVariable,
+}
+
+impl InterpContext<'_> {
+    /// Create a new interpreter context with typecheck result.
+    ///
+    /// The caller must provide a valid typecheck result with no errors.
+    /// The interpreter will use this to set up module function tables.
+    pub fn new_with_typecheck<'db>(
+        db: &'db dyn crate::Db,
+        package_world: PackageWorld,
+        typecheck_result: crate::tycheck::PackageWorldTypecheckResult<'db>,
+    ) -> Result<InterpContext<'db>, InterpError> {
+        // Check for typecheck errors.
+        let module_errors = typecheck_result.module_errors(db);
+        if !module_errors.is_empty() {
+            let all_errors: Vec<_> = module_errors.values().flatten().cloned().collect();
+            return Err(InterpError::TypecheckErrors(all_errors));
+        }
+
+        let graph = typecheck_result.graph(db);
+        let module_functions = ModuleFunctionTable::build_from_graph(db, graph);
+
+        Ok(InterpContext {
+            db,
+            runtime: datalove_rt::rust::Runtime::new(),
+            package_world,
+            script: None,
+            script_scope: ScriptScope {
+                variables: HashMap::new(),
+                functions: HashMap::new(),
+            },
+            module_functions,
+            current_module: None,
+            typecheck_result: Some(typecheck_result),
+            script_function_analyses: HashMap::new(),
+            tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
+            call_stack: Vec::new(),
+        })
+    }
+
+    /// Create a new interpreter context without typecheck (for testing only).
+    ///
+    /// WARNING: This creates a context without typechecking. The interpreter
+    /// may fail at runtime if it encounters untypechecked code.
+    #[doc(hidden)]
+    pub fn new_unchecked<'db>(
+        db: &'db dyn crate::Db,
+        package_world: PackageWorld,
+        script: Option<crate::script::Script>,
+    ) -> InterpContext<'db> {
+        InterpContext {
+            db,
+            runtime: datalove_rt::rust::Runtime::new(),
+            package_world,
+            script,
+            script_scope: ScriptScope {
+                variables: HashMap::new(),
+                functions: HashMap::new(),
+            },
+            module_functions: ModuleFunctionTable::new(),
+            current_module: None,
+            typecheck_result: None,
+            script_function_analyses: HashMap::new(),
+            tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
+            call_stack: Vec::new(),
+        }
+    }
+
+    /// Set the current script for execution.
+    pub fn set_script(&mut self, script: crate::script::Script) {
+        self.script = Some(script);
+    }
+
+    /// Pretty-print a value using this context's runtime and tydesc_table.
+    pub fn pretty_print_value(&mut self, value: &Value) -> Result<String, InterpError> {
+        use datalove_rt as rt;
+        use datalove_rt::rtdt;
+
+        unsafe {
+            // Get runtime handle.
+            let rt_handle = self.runtime.handle();
+
+            // Get string type descriptor from the tydesc_table.
+            let string_tydesc = self.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::String);
+
+            // Create output string.
+            let mut output_string = std::mem::MaybeUninit::<rtdt::String>::uninit();
+            let status = rt::c::dtlv_rti_string_create_local(
+                rt_handle,
+                output_string.as_mut_ptr() as *mut u8,
+                string_tydesc,
+            );
+
+            if status != rt::c::RtStatus::Ok {
+                return Err(InterpError::RuntimeError(
+                    "Failed to create output string".to_string(),
+                ));
+            }
+
+            let mut output_string = output_string.assume_init();
+
+            // Pretty-print value.
+            let status = rt::c::dtlv_rti_pretty_print_local(
+                rt_handle,
+                value.ptr,
+                value.tydesc,
+                &mut output_string as *mut rtdt::String as *mut u8,
+                string_tydesc,
+            );
+
+            if status != rt::c::RtStatus::Ok {
+                rt::c::dtlv_rti_string_destroy_local(
+                    rt_handle,
+                    &mut output_string as *mut rtdt::String as *mut u8,
+                    string_tydesc,
+                );
+                return Err(InterpError::RuntimeError(
+                    "Failed to pretty-print value".to_string(),
+                ));
+            }
+
+            // Extract string contents.
+            let result = if output_string.data.is_null() || output_string.size == 0 {
+                String::new()
+            } else {
+                let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
+                String::from_utf8_lossy(bytes).to_string()
+            };
+
+            // Cleanup.
+            rt::c::dtlv_rti_string_destroy_local(
+                rt_handle,
+                &mut output_string as *mut rtdt::String as *mut u8,
+                string_tydesc,
+            );
+
+            Ok(result)
+        }
+    }
+}
+
+impl ScriptScope<'_> {
+    /// Create a new empty script scope.
+    pub fn new<'db>() -> ScriptScope<'db> {
+        ScriptScope {
+            variables: HashMap::new(),
+            functions: HashMap::new(),
+        }
+    }
+}
+
+impl<'db> ModuleFunctionTable<'db> {
+    /// Create a new empty module function table.
+    pub fn new() -> ModuleFunctionTable<'db> {
+        ModuleFunctionTable {
+            imported_functions: HashMap::new(),
+            module_all_functions: HashMap::new(),
+        }
+    }
+
+    /// Build module function table from script statements and package world.
+    ///
+    /// This processes require module and import statements to resolve imported functions.
+    /// Eagerly parses imported modules to extract function definitions.
+    pub fn build_from_script(
+        db: &'db dyn crate::Db,
+        script: crate::script::Script,
+        package_world: PackageWorld,
+    ) -> ModuleFunctionTable<'db> {
+        let mut table = ModuleFunctionTable::new();
+
+        // Build module alias map (module_alias → PackageModule).
+        let module_alias_map = build_module_alias_map(db, script, package_world);
+
+        // Parse all imported modules and cache their functions.
+        for (_module_alias, module) in &module_alias_map {
+            // Parse the module using tracked function.
+            let functions = parse_module_functions(db, *module);
+
+            // Store all functions from this module.
+            let mut module_funcs = HashMap::new();
+            for (func_name, func) in functions {
+                module_funcs.insert(func_name, func);
+            }
+            table.module_all_functions.insert(*module, module_funcs);
+        }
+
+        // Process all units to find import statements and resolve functions.
+        let units = script.units(db);
+        for unit_index in 0..units.len() {
+            let parsed = crate::parser::parse_script_unit(db, script, unit_index);
+
+            for statement in parsed.statements(db) {
+                if let ast::Statement::Import(import_stmt) = statement {
+                    let module_name = import_stmt.module_name(db);
+                    let item_name = import_stmt.item_name(db);
+
+                    // Resolve the module and look up the function.
+                    if let Some(&module) = module_alias_map.get(&module_name) {
+                        if let Some(module_funcs) = table.module_all_functions.get(&module) {
+                            if let Some(&func) = module_funcs.get(&item_name) {
+                                table.imported_functions.insert(item_name, (func, module));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        table
+    }
+
+    /// Build module function table from a module dependency graph.
+    ///
+    /// Parses ALL modules in the graph, including transitive dependencies.
+    /// This is needed for cross-module function calls.
+    pub fn build_from_graph(
+        db: &'db dyn crate::Db,
+        graph: bct::package_resolve2::PackageWorldModuleGraph<'db>,
+    ) -> ModuleFunctionTable<'db> {
+        let mut table = ModuleFunctionTable::new();
+
+        // Parse all modules in the graph and cache their functions.
+        for module in graph.map(db).keys() {
+            let functions = parse_module_functions(db, *module);
+
+            let mut module_funcs = HashMap::new();
+            for (func_name, func) in functions {
+                module_funcs.insert(func_name, func);
+            }
+            table.module_all_functions.insert(*module, module_funcs);
+        }
+
+        // Note: We don't populate imported_functions here because that's script-specific.
+        // The script's import statements will be handled separately.
+
+        table
+    }
+
+    /// Populate script-level imports (modifies the table in place).
+    pub fn populate_script_imports(
+        &mut self,
+        db: &'db dyn crate::Db,
+        script: crate::script::Script,
+        package_world: PackageWorld,
+    ) {
+        // Build module alias map for the script.
+        let module_alias_map = build_module_alias_map(db, script, package_world);
+
+        // Process all units to find import statements and resolve functions.
+        let units = script.units(db);
+        for unit_index in 0..units.len() {
+            let parsed = crate::parser::parse_script_unit(db, script, unit_index);
+
+            for statement in parsed.statements(db) {
+                if let ast::Statement::Import(import_stmt) = statement {
+                    let module_name = import_stmt.module_name(db);
+                    let item_name = import_stmt.item_name(db);
+
+                    // Resolve the module and look up the function.
+                    if let Some(&module) = module_alias_map.get(&module_name) {
+                        if let Some(module_funcs) = self.module_all_functions.get(&module) {
+                            if let Some(&func) = module_funcs.get(&item_name) {
+                                self.imported_functions.insert(item_name, (func, module));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Look up an imported function by name.
+    ///
+    /// Returns the function and its source module.
+    pub fn get(&self, name: InternedText<'db>) -> Option<(ast::StmtFun<'db>, crate::package::PackageModule)> {
+        self.imported_functions.get(&name).copied()
+    }
+
+    /// Get all functions from a module.
+    pub fn get_module_functions(&self, module: crate::package::PackageModule) -> Option<&HashMap<InternedText<'db>, ast::StmtFun<'db>>> {
+        self.module_all_functions.get(&module)
+    }
+}
+
+/// Parse a module and extract all function definitions.
+///
+/// This is a tracked function to satisfy Salsa's requirements.
+#[salsa::tracked]
+fn parse_module_functions<'db>(
+    db: &'db dyn crate::Db,
+    module: crate::package::PackageModule,
+) -> Vec<(InternedText<'db>, ast::StmtFun<'db>)> {
+    let module_source = module.text(db);
+    let parse_result = crate::parser::parse(db, module_source);
+    let parsed = parse_result.script(db);
+
+    let mut functions = Vec::new();
+    for statement in parsed.statements(db) {
+        if let ast::Statement::Fun(func) = statement {
+            let func_name = func.name(db);
+            functions.push((func_name, *func));
+        }
+    }
+
+    functions
+}
+
+/// Build module alias map for a script.
+///
+/// Maps module aliases (from require statements) to actual package modules.
+fn build_module_alias_map<'db>(
+    db: &'db dyn crate::Db,
+    script: crate::script::Script,
+    package_world: PackageWorld,
+) -> HashMap<InternedText<'db>, crate::package::PackageModule> {
+    use crate::ast::{Statement, StmtRequire};
+
+    let mut alias_map = HashMap::new();
+
+    // Build hierarchy map: (import_space, package_name, module_name) → PackageModule.
+    let mut hierarchy_map = HashMap::new();
+    let world_map = crate::package::package_world_map(db, package_world);
+
+    for (import_space, packages) in world_map.map(db) {
+        for (package_name, package) in packages {
+            for (module_name, module) in package.modules(db) {
+                let key = (
+                    import_space.as_str().to_string(),
+                    package_name.as_str().to_string(),
+                    module_name.as_str().to_string(),
+                );
+                hierarchy_map.insert(key, *module);
+            }
+        }
+    }
+
+    // Process all units to find require module statements.
+    let units = script.units(db);
+    for unit_index in 0..units.len() {
+        let parsed = crate::parser::parse_script_unit(db, script, unit_index);
+
+        for statement in parsed.statements(db) {
+            if let Statement::Require(StmtRequire::Module(req)) = statement {
+                let import_space = req.import_space(db);
+                let package_alias = req.package_alias(db);
+                let module_alias = req.module_alias(db);
+
+                let key = (
+                    import_space.as_str(db).to_string(),
+                    package_alias.as_str(db).to_string(),
+                    module_alias.as_str(db).to_string(),
+                );
+
+                if let Some(&module) = hierarchy_map.get(&key) {
+                    alias_map.insert(module_alias, module);
+                }
+            }
+        }
+    }
+
+    alias_map
+}
 
 /// Execute a complete script in batch mode.
 ///
@@ -126,7 +610,8 @@ pub fn execute_script<'db>(
         // Check for script unit typecheck errors.
         let errors = unit_typecheck.errors(db);
         if !errors.is_empty() {
-            return Err(InterpError::TypecheckErrors(errors.len()));
+            let type_errors: Vec<_> = errors.iter().map(|e| e.error(db)).collect();
+            return Err(InterpError::TypecheckErrors(type_errors));
         }
 
         // Analyze each function in the unit.
@@ -302,10 +787,6 @@ fn execute_unit<'db>(
     Ok(())
 }
 
-// ============================================================================
-// Statement Execution
-// ============================================================================
-
 /// Execute a single statement at script level.
 fn execute_statement<'db>(
     ctx: &mut InterpContext<'db>,
@@ -476,10 +957,6 @@ fn execute_fun_statement<'db>(
 
     Ok(())
 }
-
-// ============================================================================
-// Expression Evaluation - Script Scope
-// ============================================================================
 
 /// Evaluate an expression in script scope.
 fn eval_expression_in_script_scope<'db>(
@@ -652,10 +1129,6 @@ fn read_script_variable<'db>(
         Ok(value)
     }
 }
-
-// ============================================================================
-// Function Calls and Execution
-// ============================================================================
 
 /// Look up a function by name in script scope or imported modules.
 ///
@@ -1247,6 +1720,73 @@ fn execute_function_body<'db>(
     result
 }
 
+/// Get the inner type descriptor for an Option type hint.
+fn value_tydesc_for_option<'db>(
+    ctx: &mut InterpContext<'db>,
+    type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
+) -> *const datalove_rt::rtdt::TyDesc {
+    use crate::datalit::ast::TypeHint;
+
+    if let TypeHint::Option(opt) = type_hint.type_hint(ctx.db) {
+        let inner = opt.inner_type(ctx.db);
+        type_hint_to_tydesc(ctx, inner)
+    } else {
+        // Fallback - shouldn't happen.
+        ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32)
+    }
+}
+
+/// Get the ok type descriptor for a Result type hint.
+fn value_tydesc_for_result<'db>(
+    ctx: &mut InterpContext<'db>,
+    type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
+) -> *const datalove_rt::rtdt::TyDesc {
+    use crate::datalit::ast::TypeHint;
+
+    if let TypeHint::Result(res) = type_hint.type_hint(ctx.db) {
+        let inner = res.inner_type(ctx.db);
+        type_hint_to_tydesc(ctx, inner)
+    } else {
+        // Fallback - shouldn't happen.
+        ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32)
+    }
+}
+
+/// Convert a type hint to a tydesc.
+fn type_hint_to_tydesc<'db>(
+    ctx: &mut InterpContext<'db>,
+    type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
+) -> *const datalove_rt::rtdt::TyDesc {
+    use crate::datalit::ast::TypeHint;
+    use crate::datalit::tycheck::Type;
+
+    match type_hint.type_hint(ctx.db) {
+        TypeHint::Bool => ctx.tydesc_table.get_or_create(&Type::Bool),
+        TypeHint::U8 => ctx.tydesc_table.get_or_create(&Type::U8),
+        TypeHint::I8 => ctx.tydesc_table.get_or_create(&Type::I8),
+        TypeHint::U16 => ctx.tydesc_table.get_or_create(&Type::U16),
+        TypeHint::I16 => ctx.tydesc_table.get_or_create(&Type::I16),
+        TypeHint::U32 => ctx.tydesc_table.get_or_create(&Type::U32),
+        TypeHint::I32 => ctx.tydesc_table.get_or_create(&Type::I32),
+        TypeHint::U64 => ctx.tydesc_table.get_or_create(&Type::U64),
+        TypeHint::I64 => ctx.tydesc_table.get_or_create(&Type::I64),
+        TypeHint::F32 => ctx.tydesc_table.get_or_create(&Type::F32),
+        TypeHint::Int => ctx.tydesc_table.get_or_create(&Type::Int),
+        TypeHint::String => ctx.tydesc_table.get_or_create(&Type::String),
+        TypeHint::Option(opt) => {
+            let inner_tydesc = type_hint_to_tydesc(ctx, opt.inner_type(ctx.db));
+            ctx.tydesc_table.create_option_from_inner_tydesc(inner_tydesc)
+        }
+        TypeHint::Result(res) => {
+            let inner_tydesc = type_hint_to_tydesc(ctx, res.inner_type(ctx.db));
+            ctx.tydesc_table.create_result_from_inner_tydesc(inner_tydesc)
+        }
+        _ => {
+            // Default fallback for complex types.
+            ctx.tydesc_table.get_or_create(&Type::U32)
+        }
+    }
+}
 
 /// Execute function body with CFG-based execution.
 fn execute_function_body_with_frame<'db>(
@@ -1454,6 +1994,17 @@ fn execute_function_statement_frame<'db>(
 // ============================================================================
 // Frame-based execution helpers
 // ============================================================================
+
+/// Find a slot by variable name in the frame layout.
+fn find_slot_by_name<'db>(
+    db: &'db dyn crate::Db,
+    layout: crate::function_analysis::FrameLayout<'db>,
+    name: InternedText<'db>,
+) -> Option<crate::function_analysis::SlotInfo<'db>> {
+    layout.slots(db).iter()
+        .find(|s| s.name(db) == Some(name))
+        .copied()
+}
 
 /// Get a Destination for an expression's temporary slot.
 fn get_destination_for_expr<'db>(
@@ -1938,6 +2489,40 @@ fn eval_expression_frame<'db>(
     }
 }
 
+/// Clone a value (for copy types or explicit cloning).
+fn clone_value<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+) -> Value {
+    // Allocate memory for the clone.
+    let rt_handle = ctx.runtime.handle();
+
+    let cloned_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(
+            rt_handle,
+            value.tydesc,
+            1
+        )
+    };
+
+    // Clone into the allocated memory.
+    unsafe {
+        datalove_rt::c::dtlv_rti_clone_local(
+            rt_handle,
+            value.ptr,
+            value.tydesc,
+            cloned_ptr,
+            value.tydesc,
+        );
+    }
+
+    Value {
+        ptr: cloned_ptr,
+        tydesc: value.tydesc,
+        location: ValueLocation::TempOwned,
+    }
+}
+
 /// Evaluate a return expression with the function's return type as context.
 ///
 /// This is needed for @none/@error literals which require a typed destination.
@@ -1985,9 +2570,398 @@ fn eval_return_expression_frame<'db>(
     eval_expression_frame(ctx, expr, None)
 }
 
-// ============================================================================
-// Unified Expression Evaluation
-// ============================================================================
+/// Clone a value into a pre-allocated destination.
+fn clone_value_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+    dest: Destination,
+) -> Value {
+    use datalove_rt::rtdt::TyDescRef;
+
+    // If tydescs are identical, use the runtime clone directly.
+    if value.tydesc == dest.tydesc {
+        let rt_handle = ctx.runtime.handle();
+        unsafe {
+            datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, dest.ptr, dest.tydesc);
+        }
+    } else {
+        // Tydescs differ but might represent the same type. Check if they're compatible
+        // (same type_tag and size) and use raw memcpy for simple copy types.
+        let src_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+        let dst_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+
+        if src_ref.type_tag() == dst_ref.type_tag() && src_ref.size() == dst_ref.size() {
+            // Types are structurally compatible, use raw memcpy.
+            unsafe {
+                std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, src_ref.size() as usize);
+            }
+        } else {
+            // Types are incompatible, this is an error.
+            panic!(
+                "clone_value_to_dest: incompatible types {:?} (size {}) vs {:?} (size {})",
+                src_ref.type_tag(), src_ref.size(),
+                dst_ref.type_tag(), dst_ref.size()
+            );
+        }
+    }
+    Value {
+        ptr: dest.ptr,
+        tydesc: dest.tydesc,
+        location: ValueLocation::Borrowed,
+    }
+}
+
+/// Allocate a boolean value.
+fn allocate_bool<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: bool,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::Bool);
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    unsafe {
+        *ptr = if value { 1 } else { 0 };
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate an f32 value.
+fn allocate_f32<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: f32,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::F32);
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    unsafe {
+        *(ptr as *mut f32) = value;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate an f32 value from a float literal.
+fn allocate_float_literal<'db>(
+    ctx: &mut InterpContext<'db>,
+    float_expr: &crate::datalit::ast::ExprFloat<'db>,
+) -> Result<Value, InterpError> {
+    let value_str = float_expr.value(ctx.db).as_str(ctx.db);
+    let value: f32 = value_str.parse()
+        .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
+    allocate_f32(ctx, value)
+}
+
+/// Allocate an integer value.
+///
+/// For now, we only support u32 literals.
+fn allocate_int_literal<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_expr: &crate::datalit::ast::ExprInt<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    // Parse the integer value.
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+    let value: u32 = value_str.parse()
+        .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    unsafe {
+        *(ptr as *mut u32) = value;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a u32 value from a raw u32.
+fn allocate_u32_raw<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: u32,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    unsafe {
+        *(ptr as *mut u32) = value;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a string value.
+fn allocate_string<'db>(
+    ctx: &mut InterpContext<'db>,
+    string_expr: &crate::datalit::ast::ExprString<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let string_value_raw = string_expr.value(ctx.db).as_str(ctx.db);
+
+    // Strip quotes if present.
+    let string_value = if string_value_raw.starts_with('"') && string_value_raw.ends_with('"') {
+        &string_value_raw[1..string_value_raw.len()-1]
+    } else {
+        string_value_raw
+    };
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
+
+    let rt_handle = ctx.runtime.handle();
+
+    // Allocate memory for the string structure.
+    let string_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    // Initialize the string structure.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            string_ptr,
+            tydesc_ptr,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create string".to_string()));
+    }
+
+    // Push the string bytes if non-empty.
+    if !string_value.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                string_ptr,
+                tydesc_ptr,
+                string_value.as_ptr(),
+                string_value.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push string bytes".to_string()));
+        }
+    }
+
+    Ok(Value {
+        ptr: string_ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate an inline integer literal (from datafun AST).
+fn allocate_inline_int_literal<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_expr: &ast::ExprInt<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+    let value: u32 = value_str.parse()
+        .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    unsafe {
+        *(ptr as *mut u32) = value;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Write inline integer literal to destination.
+fn write_inline_int_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_expr: &ast::ExprInt<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+
+    // Determine the destination type and parse accordingly.
+    let type_tag = unsafe { (*dest.tydesc).type_tag };
+    match type_tag {
+        datalove_rt::rtdt::TyTag::U8 => {
+            let value: u8 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u8: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u8) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I8 => {
+            let value: i8 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i8: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i8) = value; }
+        }
+        datalove_rt::rtdt::TyTag::U16 => {
+            let value: u16 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u16: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u16) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I16 => {
+            let value: i16 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i16: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i16) = value; }
+        }
+        datalove_rt::rtdt::TyTag::U32 => {
+            let value: u32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u32: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u32) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I32 => {
+            let value: i32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i32: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i32) = value; }
+        }
+        datalove_rt::rtdt::TyTag::U64 => {
+            let value: u64 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u64: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u64) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I64 => {
+            let value: i64 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i64: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i64) = value; }
+        }
+        _ => {
+            return Err(InterpError::RuntimeError(
+                format!("Cannot write integer to destination type {:?}", type_tag)
+            ));
+        }
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write Option::None to a destination.
+fn write_option_none_to_dest(dest: Destination) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag, OptionTag};
+
+    let dest_tydesc = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+
+    // Verify the destination type is Option.
+    if dest_tydesc.type_tag() != TyTag::Option {
+        return Err(InterpError::RuntimeError(
+            format!("Cannot write @none to non-Option type: {:?}", dest_tydesc.type_tag())
+        ));
+    }
+
+    // Write None tag to destination.
+    unsafe {
+        *(dest.ptr as *mut u8) = OptionTag::None as u8;
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Allocate an inline string literal (from datafun AST).
+fn allocate_inline_string<'db>(
+    ctx: &mut InterpContext<'db>,
+    string_expr: &ast::ExprString<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let string_value_raw = string_expr.value(ctx.db).as_str(ctx.db);
+
+    // Strip quotes if present.
+    let string_value = if string_value_raw.starts_with('"') && string_value_raw.ends_with('"') {
+        &string_value_raw[1..string_value_raw.len()-1]
+    } else {
+        string_value_raw
+    };
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
+
+    let rt_handle = ctx.runtime.handle();
+
+    let string_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            string_ptr,
+            tydesc_ptr,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create string".to_string()));
+    }
+
+    if !string_value.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                string_ptr,
+                tydesc_ptr,
+                string_value.as_ptr(),
+                string_value.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push string bytes".to_string()));
+        }
+    }
+
+    Ok(Value {
+        ptr: string_ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+// --- Unified expression evaluation dispatch ---
 
 /// Evaluate an expression in the given context.
 ///
@@ -2151,3 +3125,2589 @@ fn eval_inline_anon_struct<'db>(
     allocate_struct_from_values(ctx, field_values)
 }
 
+/// Check if a value is a u32 type.
+fn is_u32_value(value: Value) -> bool {
+    unsafe {
+        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::U32
+    }
+}
+
+/// Check if a value is an int (bigint) type.
+fn is_int_value(value: Value) -> bool {
+    unsafe {
+        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::Int
+    }
+}
+
+/// Check if a value is an f32 type.
+fn is_f32_value(value: Value) -> bool {
+    unsafe {
+        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::F32
+    }
+}
+
+/// Check if a value is a Bool type.
+fn is_bool_value(value: Value) -> bool {
+    unsafe {
+        (*value.tydesc).type_tag == datalove_rt::rtdt::TyTag::Bool
+    }
+}
+
+/// Extract a boolean value from a Bool-typed Value.
+///
+/// Returns an error if the value is not a Bool type.
+/// Destroys the value after extraction.
+fn extract_bool<'db>(ctx: &mut InterpContext<'db>, value: Value) -> Result<bool, InterpError> {
+    if !is_bool_value(value) {
+        let type_tag = unsafe { (*value.tydesc).type_tag };
+        destroy_value(ctx, value);
+        return Err(InterpError::RuntimeError(
+            format!("Expected Bool in condition, got {:?}", type_tag)
+        ));
+    }
+
+    let result = unsafe { *(value.ptr as *const bool) };
+    destroy_value(ctx, value);
+    Ok(result)
+}
+
+/// Evaluate a branch condition for if-statements.
+///
+/// Handles three condition types:
+/// - Bool: simple true/false
+/// - Option: Some is true, None is false; payload bound to then_binding
+/// - Result: Ok is true, Err is false; payload bound to then_binding, error to else_binding
+///
+/// Returns true if the condition is truthy (bool=true, Option=Some, Result=Ok).
+fn evaluate_branch_condition<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+    then_binding: Option<InternedText<'db>>,
+    else_binding: Option<InternedText<'db>>,
+) -> Result<bool, InterpError> {
+    use datalove_rt::rtdt::{TyTag, OptionTag, ResultTag, TyDescRef};
+    use datalove_rt::rtdt::layout::{compute_option_layout, compute_result_layout};
+
+    let type_tag = unsafe { (*value.tydesc).type_tag };
+
+    match type_tag {
+        TyTag::Bool => {
+            // Simple bool condition.
+            let result = unsafe { *(value.ptr as *const bool) };
+            destroy_value(ctx, value);
+            Ok(result)
+        }
+        TyTag::Option => {
+            // Option condition: Some = true, None = false.
+            let tag = unsafe { *(value.ptr as *const u8) };
+            let is_some = tag == OptionTag::Some as u8;
+
+            if is_some {
+                if let Some(binding_name) = then_binding {
+                    // Extract payload and bind to then_binding slot.
+                    let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+                    let layout = unsafe { compute_option_layout(tydesc_ref) };
+                    let inner_tydesc = tydesc_ref.option_inner_ty();
+
+                    // Get the slot for then_binding.
+                    let frame_index = ctx.call_stack.len() - 1;
+                    let frame_layout = ctx.call_stack[frame_index].layout;
+                    if let Some(slot_info) = find_slot_by_name(ctx.db, frame_layout, binding_name) {
+                        let slot_offset = slot_info.offset(ctx.db) as usize;
+                        let slot_ptr = unsafe {
+                            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
+                        };
+
+
+                        // Copy payload to slot.
+                        let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                        let inner_size = inner_tydesc.size() as usize;
+
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, inner_size);
+                        }
+
+                        // Mark slot as available.
+                        let slot_index = frame_layout.slots(ctx.db)
+                            .iter()
+                            .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
+                            .unwrap_or(0);
+                        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    }
+                }
+            }
+
+            // Destroy the Option container if it was heap-allocated.
+            // Frame slot values are stack memory and shouldn't be freed here.
+            if value.location == ValueLocation::TempOwned {
+                unsafe {
+                    datalove_rt::c::dtlv_rti_mem_free_local(
+                        ctx.runtime.handle(),
+                        value.tydesc,
+                        1,
+                        value.ptr,
+                    );
+                }
+            }
+
+            Ok(is_some)
+        }
+        TyTag::Result => {
+            // Result condition: Ok = true, Err = false.
+            let tag = unsafe { *(value.ptr as *const u8) };
+            let is_ok = tag == ResultTag::Ok as u8;
+
+            if is_ok {
+                if let Some(binding_name) = then_binding {
+                    // Extract Ok payload and bind to then_binding slot.
+                    let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+                    let layout = unsafe { compute_result_layout(tydesc_ref) };
+                    let ok_tydesc = tydesc_ref.result_ok_ty();
+
+                    // Get the slot for then_binding.
+                    let frame_index = ctx.call_stack.len() - 1;
+                    let frame_layout = ctx.call_stack[frame_index].layout;
+                    if let Some(slot_info) = find_slot_by_name(ctx.db, frame_layout, binding_name) {
+                        let slot_offset = slot_info.offset(ctx.db) as usize;
+                        let slot_ptr = unsafe {
+                            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
+                        };
+
+                        // Copy Ok payload to slot.
+                        let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                        let ok_size = ok_tydesc.size() as usize;
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, ok_size);
+                        }
+
+                        // Mark slot as available.
+                        let slot_index = frame_layout.slots(ctx.db)
+                            .iter()
+                            .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
+                            .unwrap_or(0);
+                        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    }
+                }
+            } else {
+                // Err case - bind error to else_binding if present.
+                if let Some(binding_name) = else_binding {
+                    // Extract Error from Result payload and bind to else_binding slot.
+                    let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+                    let layout = unsafe { compute_result_layout(tydesc_ref) };
+
+                    // Get the slot for else_binding.
+                    let frame_index = ctx.call_stack.len() - 1;
+                    let frame_layout = ctx.call_stack[frame_index].layout;
+                    if let Some(slot_info) = find_slot_by_name(ctx.db, frame_layout, binding_name) {
+                        let slot_offset = slot_info.offset(ctx.db) as usize;
+                        let slot_ptr = unsafe {
+                            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
+                        };
+
+                        // Copy Error payload (16 bytes: tydesc ptr + value ptr) to slot.
+                        let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                        let error_size = std::mem::size_of::<datalove_rt::rtdt::Error>();
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, error_size);
+                        }
+
+                        // Mark slot as available.
+                        let slot_index = frame_layout.slots(ctx.db)
+                            .iter()
+                            .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
+                            .unwrap_or(0);
+                        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    }
+                }
+            }
+
+            // Destroy the Result container.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    ctx.runtime.handle(),
+                    value.tydesc,
+                    1,
+                    value.ptr,
+                );
+            }
+
+            Ok(is_ok)
+        }
+        _ => {
+            destroy_value(ctx, value);
+            Err(InterpError::RuntimeError(
+                format!("Expected Bool, Option, or Result in condition, got {:?}", type_tag)
+            ))
+        }
+    }
+}
+
+/// Check if a value is a copy type.
+///
+/// For now, we consider u32 and Bool as copy types.
+/// Int, String and other types are non-copy (linear).
+fn is_copy_type(value: Value) -> bool {
+    unsafe {
+        use datalove_rt::rtdt::TyTag;
+        match (*value.tydesc).type_tag {
+            TyTag::U32 | TyTag::Bool => true,
+            _ => false,
+        }
+    }
+}
+
+/// Allocate a bigint value and initialize it to zero.
+fn allocate_bigint<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::Int);
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    // Initialize to zero.
+    unsafe {
+        let int_ptr = ptr as *mut datalove_rt::rtdt::Int;
+        (*int_ptr).data = std::ptr::null();
+        (*int_ptr).size_and_sign = 0;
+        (*int_ptr).capacity = 0;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate an Option<T> with None value.
+fn allocate_option_none<'db>(
+    ctx: &mut InterpContext<'db>,
+    inner_tydesc: *const datalove_rt::rtdt::TyDesc,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    // Create Option tydesc from inner tydesc.
+    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_tydesc);
+
+    // Allocate memory.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
+    };
+
+    if ptr.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate Option".to_string()));
+    }
+
+    // Write None tag.
+    unsafe {
+        *ptr = rtdt::OptionTag::None as u8;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: option_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Wrap an existing value in Some, consuming the inner value.
+fn allocate_option_some_from_value<'db>(
+    ctx: &mut InterpContext<'db>,
+    inner_value: Value,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    // Create Option tydesc from inner value's tydesc.
+    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_value.tydesc);
+    let option_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) };
+
+    // Compute layout.
+    let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc_ref) };
+
+    // Allocate memory.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
+    };
+
+    if ptr.is_null() {
+        destroy_value(ctx, inner_value);
+        return Err(InterpError::RuntimeError("Failed to allocate Option".to_string()));
+    }
+
+    unsafe {
+        // Write Some tag.
+        *ptr = rtdt::OptionTag::Some as u8;
+
+        // Copy inner value to payload offset.
+        let payload_ptr = ptr.add(layout.payload_offset as usize);
+        let inner_size = (*inner_value.tydesc).size as usize;
+        std::ptr::copy_nonoverlapping(inner_value.ptr, payload_ptr, inner_size);
+    }
+
+    // Free the inner value's container (but data has been copied to Option).
+    if inner_value.location == ValueLocation::TempOwned {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                inner_value.tydesc,
+                1,
+                inner_value.ptr,
+            );
+        }
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: option_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Wrap an existing value in Ok, consuming the inner value.
+fn allocate_result_ok_from_value<'db>(
+    ctx: &mut InterpContext<'db>,
+    inner_value: Value,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    // Create Result tydesc from inner value's tydesc.
+    let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(inner_value.tydesc);
+    let result_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(result_tydesc) };
+
+    // Compute layout.
+    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc_ref) };
+
+    // Allocate memory.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, result_tydesc, 1)
+    };
+
+    if ptr.is_null() {
+        destroy_value(ctx, inner_value);
+        return Err(InterpError::RuntimeError("Failed to allocate Result".to_string()));
+    }
+
+    unsafe {
+        // Write Ok tag.
+        *ptr = rtdt::ResultTag::Ok as u8;
+
+        // Copy inner value to payload offset.
+        let payload_ptr = ptr.add(layout.payload_offset as usize);
+        let inner_size = (*inner_value.tydesc).size as usize;
+        std::ptr::copy_nonoverlapping(inner_value.ptr, payload_ptr, inner_size);
+    }
+
+    // Free the inner value's container (but data has been copied to Result).
+    if inner_value.location == ValueLocation::TempOwned {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                inner_value.tydesc,
+                1,
+                inner_value.ptr,
+            );
+        }
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: result_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a Result::Err with an error value.
+fn allocate_result_err<'db>(
+    ctx: &mut InterpContext<'db>,
+    ok_tydesc: *const datalove_rt::rtdt::TyDesc,
+    err_tydesc: *const datalove_rt::rtdt::TyDesc,
+    err_ptr: *mut u8,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    // Create Result tydesc from ok type.
+    let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(ok_tydesc);
+    let result_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(result_tydesc) };
+
+    // Compute layout.
+    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc_ref) };
+
+    // Allocate memory.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, result_tydesc, 1)
+    };
+
+    if ptr.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate Result".to_string()));
+    }
+
+    unsafe {
+        // Write Err tag.
+        *ptr = rtdt::ResultTag::Err as u8;
+
+        // Write Error at payload offset.
+        // Error has same layout as Data: (tydesc ptr, value ptr).
+        let payload_ptr = ptr.add(layout.payload_offset as usize);
+        let error_ptr = payload_ptr as *mut rtdt::Data;
+        std::ptr::write(
+            error_ptr,
+            rtdt::Data::from_pointers(err_tydesc, err_ptr)
+        );
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: result_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Evaluate try-option operator (`val?`).
+///
+/// If the operand is None, returns `InterpError::OptionNone` for early return.
+/// If the operand is Some(value), extracts and returns the inner value.
+fn eval_try_option<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand_value: Value,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag, OptionTag, layout::compute_option_layout};
+
+    let tydesc_ref = unsafe { TyDescRef::from_ptr(operand_value.tydesc) };
+
+    // Verify operand is Option type.
+    if tydesc_ref.type_tag() != TyTag::Option {
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::RuntimeError(
+            format!("Try-option operator (?) requires Option type, got {:?}", tydesc_ref.type_tag())
+        ));
+    }
+
+    // Read tag.
+    let tag = unsafe { *(operand_value.ptr as *const u8) };
+
+    if tag == OptionTag::None as u8 {
+        // Free the Option container and return early.
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::OptionNone);
+    }
+
+    // Some case: extract the payload.
+    let layout = unsafe { compute_option_layout(tydesc_ref) };
+    let payload_ptr = unsafe { operand_value.ptr.add(layout.payload_offset as usize) };
+
+    // Get inner type descriptor.
+    let inner_tydesc = tydesc_ref.option_inner_ty().as_ptr();
+    let inner_size = unsafe { (*inner_tydesc).size as usize };
+
+    // Clone the payload to a new allocation.
+    let rt_handle = ctx.runtime.handle();
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner_tydesc, 1)
+    };
+
+    if result_ptr.is_null() {
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::RuntimeError("Failed to allocate unwrapped value".to_string()));
+    }
+
+    // Copy payload to result.
+    unsafe {
+        std::ptr::copy_nonoverlapping(payload_ptr, result_ptr, inner_size);
+    }
+
+    // Free the Option container (payload has been copied).
+    if operand_value.location == ValueLocation::TempOwned {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                operand_value.tydesc,
+                1,
+                operand_value.ptr,
+            );
+        }
+    }
+
+    Ok(Value {
+        ptr: result_ptr,
+        tydesc: inner_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Evaluate try-result operator (`val!`).
+///
+/// If the operand is Err, returns `InterpError::ResultErr` for early return.
+/// If the operand is Ok(value), extracts and returns the inner value.
+fn eval_try_result<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand_value: Value,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag, ResultTag, Data, layout::compute_result_layout};
+
+    let tydesc_ref = unsafe { TyDescRef::from_ptr(operand_value.tydesc) };
+
+    // Verify operand is Result type.
+    if tydesc_ref.type_tag() != TyTag::Result {
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::RuntimeError(
+            format!("Try-result operator (!) requires Result type, got {:?}", tydesc_ref.type_tag())
+        ));
+    }
+
+    // Read tag.
+    let tag = unsafe { *(operand_value.ptr as *const u8) };
+
+    let layout = unsafe { compute_result_layout(tydesc_ref) };
+    let payload_ptr = unsafe { operand_value.ptr.add(layout.payload_offset as usize) };
+
+    if tag == ResultTag::Err as u8 {
+        // Err case: extract error and return early.
+        // Error is a Data struct (tydesc ptr + value ptr).
+        let error_data = unsafe { std::ptr::read(payload_ptr as *const Data) };
+        let err_tydesc = error_data.tydesc();
+        let err_value_ptr = error_data.value_ptr();
+
+        // Clone the error value.
+        let err_tydesc_ref = unsafe { TyDescRef::from_ptr(err_tydesc) };
+        let err_size = err_tydesc_ref.size() as usize;
+
+        let rt_handle = ctx.runtime.handle();
+        let cloned_err_ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, err_tydesc, 1)
+        };
+
+        if !cloned_err_ptr.is_null() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(err_value_ptr, cloned_err_ptr, err_size);
+            }
+        }
+
+        // Free the original error value allocation (data has been shallow-copied to clone).
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                err_tydesc,
+                1,
+                err_value_ptr as *mut u8,
+            );
+        }
+
+        // Free the Result container.
+        if operand_value.location == ValueLocation::TempOwned {
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    ctx.runtime.handle(),
+                    operand_value.tydesc,
+                    1,
+                    operand_value.ptr,
+                );
+            }
+        }
+
+        return Err(InterpError::ResultErr {
+            tydesc: err_tydesc,
+            ptr: cloned_err_ptr,
+        });
+    }
+
+    // Ok case: extract the payload.
+    let ok_tydesc = tydesc_ref.result_ok_ty().as_ptr();
+    let ok_size = unsafe { (*ok_tydesc).size as usize };
+
+    // Clone the payload to a new allocation.
+    let rt_handle = ctx.runtime.handle();
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, ok_tydesc, 1)
+    };
+
+    if result_ptr.is_null() {
+        destroy_value(ctx, operand_value);
+        return Err(InterpError::RuntimeError("Failed to allocate unwrapped value".to_string()));
+    }
+
+    // Copy payload to result.
+    unsafe {
+        std::ptr::copy_nonoverlapping(payload_ptr, result_ptr, ok_size);
+    }
+
+    // Free the Result container (payload has been copied).
+    if operand_value.location == ValueLocation::TempOwned {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                ctx.runtime.handle(),
+                operand_value.tydesc,
+                1,
+                operand_value.ptr,
+            );
+        }
+    }
+
+    Ok(Value {
+        ptr: result_ptr,
+        tydesc: ok_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a tuple from a vector of evaluated values.
+///
+/// Takes ownership of all element values, copying their data into the tuple
+/// and freeing their original containers.
+fn allocate_tuple_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    values: Vec<Value>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if values.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty tuple".to_string()));
+    }
+
+    // Collect element tydescs from the values.
+    let element_tydescs: Vec<*const rtdt::TyDesc> = values.iter()
+        .map(|v| v.tydesc)
+        .collect();
+
+    // Create tuple tydesc.
+    let tuple_tydesc = ctx.tydesc_table.get_or_create_tuple(&element_tydescs);
+    let tuple_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(tuple_tydesc) };
+
+    // Compute layout to get field offsets.
+    let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc_ref) };
+
+    // Allocate memory for tuple.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tuple_tydesc, 1)
+    };
+
+    if ptr.is_null() {
+        // Clean up all values on allocation failure.
+        for value in values {
+            destroy_value(ctx, value);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate tuple".to_string()));
+    }
+
+    // Copy each element to its field offset in the tuple.
+    for (i, value) in values.into_iter().enumerate() {
+        let field_offset = layout.field_offsets[i] as usize;
+        let element_size = unsafe { (*value.tydesc).size as usize };
+
+        unsafe {
+            let field_ptr = ptr.add(field_offset);
+            std::ptr::copy_nonoverlapping(value.ptr, field_ptr, element_size);
+        }
+
+        // Free the element's container (data has been copied to tuple).
+        if value.location == ValueLocation::TempOwned {
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    ctx.runtime.handle(),
+                    value.tydesc,
+                    1,
+                    value.ptr,
+                );
+            }
+        }
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tuple_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a struct from field names and evaluated values.
+///
+/// Takes ownership of all field values, copying their data into the struct
+/// and freeing their original containers. Fields must be provided in sorted
+/// order by name for canonical representation.
+fn allocate_struct_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    fields: Vec<(bct::text::InternedText<'db>, Value)>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if fields.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty struct".to_string()));
+    }
+
+    // Collect field names and tydescs from the values.
+    let field_names_and_tydescs: Vec<(bct::text::InternedText<'db>, *const rtdt::TyDesc)> = fields.iter()
+        .map(|(name, value)| (*name, value.tydesc))
+        .collect();
+
+    // Create struct tydesc.
+    let struct_tydesc = ctx.tydesc_table.get_or_create_struct(&field_names_and_tydescs);
+    let struct_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(struct_tydesc) };
+
+    // Compute layout to get field offsets.
+    let layout = unsafe { rtdt::layout::compute_struct_layout(struct_tydesc_ref) };
+
+    // Allocate memory for struct.
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, struct_tydesc, 1)
+    };
+
+    if ptr.is_null() {
+        // Clean up all values on allocation failure.
+        for (_, value) in fields {
+            destroy_value(ctx, value);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate struct".to_string()));
+    }
+
+    // Copy each field value to its offset in the struct.
+    for (i, (_, value)) in fields.into_iter().enumerate() {
+        let field_offset = layout.field_offsets[i] as usize;
+        let field_size = unsafe { (*value.tydesc).size as usize };
+
+        unsafe {
+            let field_ptr = ptr.add(field_offset);
+            std::ptr::copy_nonoverlapping(value.ptr, field_ptr, field_size);
+        }
+
+        // Free the field's container (data has been copied to struct).
+        if value.location == ValueLocation::TempOwned {
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(
+                    ctx.runtime.handle(),
+                    value.tydesc,
+                    1,
+                    value.ptr,
+                );
+            }
+        }
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: struct_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a list from a vector of evaluated values.
+///
+/// Takes ownership of all element values, copying their data into the list
+/// and freeing their original containers. All elements must have the same type.
+fn allocate_list_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    values: Vec<Value>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if values.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty list".to_string()));
+    }
+
+    // All elements must have same type - use first element's tydesc.
+    let element_tydesc = values[0].tydesc;
+    let element_size = unsafe { (*element_tydesc).size as usize };
+
+    // Create list tydesc.
+    let list_tydesc = ctx.tydesc_table.create_list_from_element_tydesc(element_tydesc);
+
+    // Build contiguous buffer of element data.
+    let mut buffer = Vec::with_capacity(values.len() * element_size);
+    for value in &values {
+        unsafe {
+            let slice = std::slice::from_raw_parts(value.ptr, element_size);
+            buffer.extend_from_slice(slice);
+        }
+    }
+
+    // Allocate list value.
+    let rt_handle = ctx.runtime.handle();
+    let list_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, list_tydesc, 1)
+    };
+
+    if list_ptr.is_null() {
+        for value in values {
+            destroy_value(ctx, value);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate list".to_string()));
+    }
+
+    // Create list from slice.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_from_slice_local(
+            rt_handle,
+            buffer.as_ptr(),
+            values.len() as u32,
+            element_tydesc,
+            list_ptr,
+            list_tydesc,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        // Free allocated memory and element values.
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, list_tydesc, 1, list_ptr);
+        }
+        for value in values {
+            destroy_value(ctx, value);
+        }
+        return Err(InterpError::RuntimeError("Failed to create list".to_string()));
+    }
+
+    // Destroy original elements (list cloned them).
+    for value in values {
+        destroy_value(ctx, value);
+    }
+
+    Ok(Value {
+        ptr: list_ptr,
+        tydesc: list_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a map from a vector of key-value pairs.
+///
+/// Takes ownership of all key and value values. Keys and values are moved into the
+/// map's B-tree structure. All keys must have the same type and all values must have
+/// the same type.
+fn allocate_map_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    entries: Vec<(Value, Value)>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if entries.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty map".to_string()));
+    }
+
+    // All keys must have same type, all values must have same type.
+    let key_tydesc = entries[0].0.tydesc;
+    let value_tydesc = entries[0].1.tydesc;
+    let key_size = unsafe { (*key_tydesc).size as usize };
+    let value_size = unsafe { (*value_tydesc).size as usize };
+    let key_align = unsafe { (*key_tydesc).align };
+    let value_align = unsafe { (*value_tydesc).align };
+
+    // Create map tydesc.
+    let map_tydesc = ctx.tydesc_table.create_map_from_key_value_tydescs(key_tydesc, value_tydesc);
+
+    // Allocate map structure.
+    let rt_handle = ctx.runtime.handle();
+    let map_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, map_tydesc, 1)
+    };
+
+    if map_ptr.is_null() {
+        for (k, v) in entries {
+            destroy_value(ctx, k);
+            destroy_value(ctx, v);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate map".to_string()));
+    }
+
+    // Sort entries by key for B-tree construction.
+    // For now, use simple comparison based on raw bytes (works for simple numeric types).
+    let mut sorted_entries = entries;
+    sorted_entries.sort_by(|a, b| {
+        unsafe {
+            let a_slice = std::slice::from_raw_parts(a.0.ptr, key_size);
+            let b_slice = std::slice::from_raw_parts(b.0.ptr, key_size);
+            a_slice.cmp(b_slice)
+        }
+    });
+
+    // Allocate buffers for keys and values.
+    let keys_buffer_size = (sorted_entries.len() * key_size) as u32;
+    let values_buffer_size = (sorted_entries.len() * value_size) as u32;
+
+    let keys_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, keys_buffer_size, key_align, 1)
+    };
+    if keys_buffer.is_null() {
+        for (k, v) in sorted_entries {
+            destroy_value(ctx, k);
+            destroy_value(ctx, v);
+        }
+        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr); }
+        return Err(InterpError::RuntimeError("Failed to allocate keys buffer".to_string()));
+    }
+
+    let values_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, values_buffer_size, value_align, 1)
+    };
+    if values_buffer.is_null() {
+        for (k, v) in sorted_entries {
+            destroy_value(ctx, k);
+            destroy_value(ctx, v);
+        }
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate values buffer".to_string()));
+    }
+
+    // Copy keys and values into buffers.
+    for (i, (key, value)) in sorted_entries.iter().enumerate() {
+        unsafe {
+            let key_dest = keys_buffer.add(i * key_size);
+            let value_dest = values_buffer.add(i * value_size);
+            std::ptr::copy_nonoverlapping(key.ptr, key_dest, key_size);
+            std::ptr::copy_nonoverlapping(value.ptr, value_dest, value_size);
+        }
+    }
+
+    // Build B-tree from sorted slices.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
+            rt_handle,
+            map_ptr,
+            key_tydesc,
+            value_tydesc,
+            keys_buffer,
+            values_buffer,
+            sorted_entries.len() as u32,
+        )
+    };
+
+    // Free buffers (data has been moved to tree).
+    unsafe {
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, values_buffer_size, value_align, 1, values_buffer);
+    }
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        for (k, v) in sorted_entries {
+            destroy_value(ctx, k);
+            destroy_value(ctx, v);
+        }
+        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr); }
+        return Err(InterpError::RuntimeError("Failed to build map B-tree".to_string()));
+    }
+
+    // Free original value containers (data has been moved).
+    for (k, v) in sorted_entries {
+        free_value_structure(ctx, k);
+        free_value_structure(ctx, v);
+    }
+
+    Ok(Value {
+        ptr: map_ptr,
+        tydesc: map_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate a set from a vector of evaluated values.
+///
+/// Takes ownership of all element values. Elements are moved into the
+/// set's B-tree structure. All elements must have the same type.
+fn allocate_set_from_values<'db>(
+    ctx: &mut InterpContext<'db>,
+    values: Vec<Value>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    if values.is_empty() {
+        return Err(InterpError::RuntimeError("Cannot create empty set".to_string()));
+    }
+
+    // All elements must have same type.
+    let element_tydesc = values[0].tydesc;
+    let element_size = unsafe { (*element_tydesc).size as usize };
+    let element_align = unsafe { (*element_tydesc).align };
+
+    // Create set tydesc.
+    let set_tydesc = ctx.tydesc_table.create_set_from_element_tydesc(element_tydesc);
+
+    // Allocate set structure.
+    let rt_handle = ctx.runtime.handle();
+    let set_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, set_tydesc, 1)
+    };
+
+    if set_ptr.is_null() {
+        for v in values {
+            destroy_value(ctx, v);
+        }
+        return Err(InterpError::RuntimeError("Failed to allocate set".to_string()));
+    }
+
+    // Sort elements for B-tree construction.
+    let mut sorted_values = values;
+    sorted_values.sort_by(|a, b| {
+        unsafe {
+            let a_slice = std::slice::from_raw_parts(a.ptr, element_size);
+            let b_slice = std::slice::from_raw_parts(b.ptr, element_size);
+            a_slice.cmp(b_slice)
+        }
+    });
+
+    // Allocate buffer for elements.
+    let buffer_size = (sorted_values.len() * element_size) as u32;
+    let buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, buffer_size, element_align, 1)
+    };
+    if buffer.is_null() {
+        for v in sorted_values {
+            destroy_value(ctx, v);
+        }
+        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, set_tydesc, 1, set_ptr); }
+        return Err(InterpError::RuntimeError("Failed to allocate set buffer".to_string()));
+    }
+
+    // Copy elements into buffer.
+    for (i, value) in sorted_values.iter().enumerate() {
+        unsafe {
+            let elem_dest = buffer.add(i * element_size);
+            std::ptr::copy_nonoverlapping(value.ptr, elem_dest, element_size);
+        }
+    }
+
+    // Build B-tree from sorted slice.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
+            rt_handle,
+            set_ptr,
+            element_tydesc,
+            buffer,
+            sorted_values.len() as u32,
+        )
+    };
+
+    // Free buffer (data has been moved to tree).
+    unsafe {
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, buffer_size, element_align, 1, buffer);
+    }
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        for v in sorted_values {
+            destroy_value(ctx, v);
+        }
+        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, set_tydesc, 1, set_ptr); }
+        return Err(InterpError::RuntimeError("Failed to build set B-tree".to_string()));
+    }
+
+    // Free original value containers (data has been moved).
+    for v in sorted_values {
+        free_value_structure(ctx, v);
+    }
+
+    Ok(Value {
+        ptr: set_ptr,
+        tydesc: set_tydesc,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Widen a u32 value to an int (bigint) value.
+fn widen_u32_to_int<'db>(
+    ctx: &mut InterpContext<'db>,
+    u32_value: Value,
+) -> Result<Value, InterpError> {
+    // Read the u32 value.
+    let value_u32 = unsafe { *(u32_value.ptr as *const u32) };
+
+    // Allocate the Int structure.
+    let int_val = allocate_bigint(ctx)?;
+    let int_ptr = int_val.ptr as *mut datalove_rt::rtdt::Int;
+
+    unsafe {
+        if value_u32 == 0 {
+            // Zero: no limbs needed.
+            (*int_ptr).data = std::ptr::null();
+            (*int_ptr).size_and_sign = 0;
+            (*int_ptr).capacity = 0;
+        } else {
+            // Non-zero: allocate one limb.
+            let rt_handle = ctx.runtime.handle();
+            let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                rt_handle,
+                4,  // size of u32
+                4,  // alignment of u32
+                1   // count
+            ) as *mut u32;
+
+            *limb_ptr = value_u32;
+
+            (*int_ptr).data = limb_ptr;
+            (*int_ptr).size_and_sign = 1;  // 1 limb, positive
+            (*int_ptr).capacity = 1;
+        }
+    }
+
+    Ok(int_val)
+}
+
+/// Narrow an Int value to u32.
+///
+/// This reads the Int value and converts it to a u32. If the Int value is
+/// too large to fit in a u32 or is negative, returns an error.
+fn narrow_int_to_u32<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_value: Value,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    // Read the Int structure.
+    let int_ptr = int_value.ptr as *const datalove_rt::rtdt::Int;
+
+    let u32_value = unsafe {
+        let size_and_sign = (*int_ptr).size_and_sign;
+        let size = size_and_sign.unsigned_abs() as usize;
+        let is_negative = size_and_sign < 0;
+
+        if is_negative {
+            return Err(InterpError::RuntimeError(
+                "Cannot narrow negative Int to u32".to_string()
+            ));
+        }
+
+        if size == 0 {
+            // Zero.
+            0u32
+        } else if size == 1 {
+            // Single limb - just read it.
+            let limb_ptr = (*int_ptr).data as *const u32;
+            *limb_ptr
+        } else {
+            // Multiple limbs - too large for u32.
+            return Err(InterpError::RuntimeError(
+                "Int value too large to fit in u32".to_string()
+            ));
+        }
+    };
+
+    // Allocate u32 result.
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    unsafe {
+        *(ptr as *mut u32) = u32_value;
+    }
+
+    // Destroy the original Int value.
+    destroy_value(ctx, int_value);
+
+    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+}
+
+/// Destroy a value using the runtime's destroy function.
+/// Destroy only the contents of a value without freeing its memory.
+///
+/// Use this for values stored inline in frame buffers, where the memory
+/// is owned by the frame Vec<u8> and should not be freed individually.
+pub fn destroy_value_contents_only<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+) {
+    unsafe {
+        let rt_handle = ctx.runtime.handle();
+
+        // Destroy contents using runtime's type-specific destroy logic.
+        // This handles Int limbs, String buffers, and other complex types.
+        // Does NOT free the value structure itself.
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt_handle,
+            value.ptr,
+            value.tydesc,
+        );
+    }
+}
+
+/// Destroy a value, respecting its location.
+///
+/// For HeapOwned values: destroys contents AND frees the memory structure.
+/// For FrameSlot values: destroys contents only (frame owns the memory).
+pub fn destroy_value<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+) {
+    unsafe {
+        let rt_handle = ctx.runtime.handle();
+
+        // Destroy contents using runtime's type-specific destroy logic.
+        // This handles Int limbs, String buffers, and other complex types.
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt_handle,
+            value.ptr,
+            value.tydesc,
+        );
+
+        // Only free the structure for heap-owned values.
+        // Frame slot values are freed when the frame is dropped.
+        if value.location == ValueLocation::TempOwned {
+            datalove_rt::c::dtlv_rti_mem_free_local(
+                rt_handle,
+                value.tydesc,
+                1,
+                value.ptr,
+            );
+        }
+    }
+}
+
+/// Free only the value structure without destroying contents.
+///
+/// Use this when a value's bytes have been copied to a frame slot,
+/// and the frame now owns the pointers. This frees the temporary
+/// heap-allocated structure but leaves sub-allocations intact.
+pub fn free_value_structure<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+) {
+    // Only free temp allocations. Borrowed values point into frames.
+    if value.location != ValueLocation::TempOwned {
+        return;
+    }
+
+    unsafe {
+        let rt_handle = ctx.runtime.handle();
+
+        // Free only the structure memory, not the contents.
+        // The frame slot now owns any pointers in the structure.
+        datalove_rt::c::dtlv_rti_mem_free_local(
+            rt_handle,
+            value.tydesc,
+            1,
+            value.ptr,
+        );
+    }
+}
+
+/// Evaluate addition with automatic widening to int.
+fn eval_add<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    // Both f32: add and return f32.
+    if is_f32_value(lhs) && is_f32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const f32) };
+        let b = unsafe { *(rhs.ptr as *const f32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return write_f32_result(ctx, a + b, dest);
+    }
+
+    // Both u32: widen to Int and add.
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let rhs_int = match widen_u32_to_int(ctx, rhs) {
+            Ok(v) => v,
+            Err(e) => {
+                // Clean up lhs_int on error.
+                destroy_value(ctx, lhs_int);
+                destroy_value(ctx, lhs);
+                destroy_value(ctx, rhs);
+                return Err(e);
+            }
+        };
+
+        // Destroy the original u32 values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        // Get result buffer - either from dest or allocate.
+        let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
+            (d.ptr, d.tydesc, true)
+        } else {
+            let result_int = match allocate_bigint(ctx) {
+                Ok(v) => v,
+                Err(e) => {
+                    destroy_value(ctx, lhs_int);
+                    destroy_value(ctx, rhs_int);
+                    return Err(e);
+                }
+            };
+            (result_int.ptr, result_int.tydesc, false)
+        };
+
+        // Perform bigint addition.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_add(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_ptr,
+                result_tydesc,
+            )
+        };
+
+        // Clean up temporary widened values.
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value {
+                ptr: result_ptr,
+                tydesc: result_tydesc,
+                location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+            })
+        } else {
+            if !is_borrowed {
+                // Only free if we allocated it.
+                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+                destroy_value(ctx, result_val);
+            }
+            Err(InterpError::RuntimeError("Int addition failed".to_string()))
+        }
+    }
+    // Both Int: add directly.
+    else if is_int_value(lhs) && is_int_value(rhs) {
+        // Get result buffer - either from dest or allocate.
+        let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
+            (d.ptr, d.tydesc, true)
+        } else {
+            let result_int = allocate_bigint(ctx)?;
+            (result_int.ptr, result_int.tydesc, false)
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_add(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_ptr,
+                result_tydesc,
+            )
+        };
+
+        // Destroy input values.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value {
+                ptr: result_ptr,
+                tydesc: result_tydesc,
+                location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+            })
+        } else {
+            if !is_borrowed {
+                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+                destroy_value(ctx, result_val);
+            }
+            Err(InterpError::RuntimeError("Int addition failed".to_string()))
+        }
+    }
+    // Mixed u32 and Int: widen u32 side.
+    else if is_u32_value(lhs) && is_int_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        destroy_value(ctx, lhs);  // Destroy original u32.
+
+        // Get result buffer - either from dest or allocate.
+        let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
+            (d.ptr, d.tydesc, true)
+        } else {
+            let result_int = allocate_bigint(ctx)?;
+            (result_int.ptr, result_int.tydesc, false)
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_add(
+                ctx.runtime.handle(),
+                lhs_int.ptr,
+                lhs_int.tydesc,
+                rhs.ptr,
+                rhs.tydesc,
+                result_ptr,
+                result_tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs);  // Destroy rhs Int.
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value {
+                ptr: result_ptr,
+                tydesc: result_tydesc,
+                location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+            })
+        } else {
+            if !is_borrowed {
+                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+                destroy_value(ctx, result_val);
+            }
+            Err(InterpError::RuntimeError("Int addition failed".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_u32_value(rhs) {
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, rhs);  // Destroy original u32.
+
+        // Get result buffer - either from dest or allocate.
+        let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
+            (d.ptr, d.tydesc, true)
+        } else {
+            let result_int = allocate_bigint(ctx)?;
+            (result_int.ptr, result_int.tydesc, false)
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_add(
+                ctx.runtime.handle(),
+                lhs.ptr,
+                lhs.tydesc,
+                rhs_int.ptr,
+                rhs_int.tydesc,
+                result_ptr,
+                result_tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs);  // Destroy lhs Int.
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value {
+                ptr: result_ptr,
+                tydesc: result_tydesc,
+                location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+            })
+        } else {
+            if !is_borrowed {
+                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+                destroy_value(ctx, result_val);
+            }
+            Err(InterpError::RuntimeError("Int addition failed".to_string()))
+        }
+    }
+    else {
+        // Clean up values before returning error.
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression(
+            "Unsupported types for addition".to_string()
+        ))
+    }
+}
+
+/// Evaluate subtraction with automatic widening to int.
+fn eval_sub<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    // Both f32: subtract and return f32.
+    if is_f32_value(lhs) && is_f32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const f32) };
+        let b = unsafe { *(rhs.ptr as *const f32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return write_f32_result(ctx, a - b, dest);
+    }
+
+    // Helper to get result buffer.
+    let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
+        if let Some(d) = dest {
+            Ok((d.ptr, d.tydesc, true))
+        } else {
+            let v = allocate_bigint(ctx)?;
+            Ok((v.ptr, v.tydesc, false))
+        }
+    };
+
+    // Both u32: widen to Int and subtract.
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_sub(
+                ctx.runtime.handle(),
+                lhs_int.ptr, lhs_int.tydesc,
+                rhs_int.ptr, rhs_int.tydesc,
+                result_ptr, result_tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_int_value(rhs) {
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_sub(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs.ptr, rhs.tydesc,
+                result_ptr, result_tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
+        }
+    }
+    else if is_u32_value(lhs) && is_int_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        destroy_value(ctx, lhs);
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_sub(
+                ctx.runtime.handle(),
+                lhs_int.ptr, lhs_int.tydesc,
+                rhs.ptr, rhs.tydesc,
+                result_ptr, result_tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_u32_value(rhs) {
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, rhs);
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_sub(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs_int.ptr, rhs_int.tydesc,
+                result_ptr, result_tydesc,
+            )
+        };
+
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
+        }
+    }
+    else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Unsupported types for subtraction".to_string()))
+    }
+}
+
+/// Evaluate multiplication with automatic widening to int.
+fn eval_mul<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    // Both f32: multiply and return f32.
+    if is_f32_value(lhs) && is_f32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const f32) };
+        let b = unsafe { *(rhs.ptr as *const f32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return write_f32_result(ctx, a * b, dest);
+    }
+
+    let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
+        if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
+    };
+
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+
+        let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_int_value(rhs) {
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+        let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
+        }
+    }
+    else if is_u32_value(lhs) && is_int_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        destroy_value(ctx, lhs);
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+        let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_u32_value(rhs) {
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, rhs);
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+        let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
+        }
+    }
+    else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Unsupported types for multiplication".to_string()))
+    }
+}
+
+/// Evaluate division with automatic widening to int.
+fn eval_div<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    // Both f32: divide and return f32.
+    if is_f32_value(lhs) && is_f32_value(rhs) {
+        let a = unsafe { *(lhs.ptr as *const f32) };
+        let b = unsafe { *(rhs.ptr as *const f32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return write_f32_result(ctx, a / b, dest);
+    }
+
+    let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
+        if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
+    };
+
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+
+        let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_int_value(rhs) {
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+        let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
+        }
+    }
+    else if is_u32_value(lhs) && is_int_value(rhs) {
+        let lhs_int = widen_u32_to_int(ctx, lhs)?;
+        destroy_value(ctx, lhs);
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+        let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
+        destroy_value(ctx, lhs_int);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
+        }
+    }
+    else if is_int_value(lhs) && is_u32_value(rhs) {
+        let rhs_int = widen_u32_to_int(ctx, rhs)?;
+        destroy_value(ctx, rhs);
+        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
+        let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs_int);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+        } else {
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
+        }
+    }
+    else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Unsupported types for division".to_string()))
+    }
+}
+
+/// Evaluate checked addition (u32 only, no widening).
+///
+/// Returns the u32 result on success, or Overflow error on overflow.
+fn eval_add_checked<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression("Checked addition only supports u32 operands".to_string()));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_add(rhs_val) {
+        Some(result) => write_u32_result(ctx, result, dest),
+        None => Err(InterpError::Overflow),
+    }
+}
+
+/// Evaluate checked subtraction (u32 only, no widening).
+///
+/// Returns the u32 result on success, or Overflow error on underflow.
+fn eval_sub_checked<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression("Checked subtraction only supports u32 operands".to_string()));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_sub(rhs_val) {
+        Some(result) => write_u32_result(ctx, result, dest),
+        None => Err(InterpError::Overflow),
+    }
+}
+
+/// Evaluate checked multiplication (u32 only, no widening).
+///
+/// Returns the u32 result on success, or Overflow error on overflow.
+fn eval_mul_checked<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression("Checked multiplication only supports u32 operands".to_string()));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_mul(rhs_val) {
+        Some(result) => write_u32_result(ctx, result, dest),
+        None => Err(InterpError::Overflow),
+    }
+}
+
+/// Evaluate checked division.
+///
+/// For u32: returns the u32 result on success, or DivisionByZero error.
+/// For int: returns the int result on success, or DivisionByZero error.
+fn eval_div_checked<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    // Both int: use runtime checked division.
+    if is_int_value(lhs) && is_int_value(rhs) {
+        let result_int = allocate_bigint(ctx)?;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs.ptr, rhs.tydesc,
+                result_int.ptr, result_int.tydesc,
+            )
+        };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            return Ok(result_int);
+        } else {
+            destroy_value(ctx, result_int);
+            return Err(InterpError::DivisionByZero);
+        }
+    }
+
+    // Both u32: use Rust checked_div.
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+        let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        match lhs_val.checked_div(rhs_val) {
+            Some(result) => write_u32_result(ctx, result, dest),
+            None => Err(InterpError::DivisionByZero),
+        }
+    } else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Checked division requires matching operand types".to_string()))
+    }
+}
+
+/// Write u32 result to destination or allocate new value.
+fn write_u32_result(ctx: &mut InterpContext<'_>, value: u32, dest: Option<Destination>) -> Result<Value, InterpError> {
+    if let Some(d) = dest {
+        unsafe { *(d.ptr as *mut u32) = value; }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        allocate_u32_raw(ctx, value)
+    }
+}
+
+/// Write Option<u32> result to destination or allocate new value.
+fn write_option_u32_result(ctx: &mut InterpContext<'_>, value: Option<u32>, dest: Option<Destination>) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{OptionTag, TyDescRef};
+    use datalove_rt::rtdt::layout::compute_option_layout;
+
+    
+
+    // Get or create the Option<u32> type descriptor.
+    let u32_tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32);
+    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(u32_tydesc);
+    let option_ref = unsafe { TyDescRef::from_ptr(option_tydesc) };
+    let layout = unsafe { compute_option_layout(option_ref) };
+
+    
+
+    // Check if destination is properly sized for Option.
+    let dest_size = dest.map(|d| unsafe { (*d.tydesc).size });
+    let use_dest = dest.is_some() && dest_size == Some(option_ref.size());
+
+    if let (Some(d), true) = (dest, use_dest) {
+        // Write to provided destination (properly sized).
+        unsafe {
+            match value {
+                Some(v) => {
+                    *(d.ptr as *mut u8) = OptionTag::Some as u8;
+                    let payload_ptr = d.ptr.add(layout.payload_offset as usize);
+                    *(payload_ptr as *mut u32) = v;
+                }
+                None => {
+                    *(d.ptr as *mut u8) = OptionTag::None as u8;
+                }
+            }
+        }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        // Allocate new Option<u32>.
+        let rt_handle = ctx.runtime.handle();
+        let ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
+        };
+
+        if ptr.is_null() {
+            return Err(InterpError::RuntimeError("Failed to allocate Option<u32>".to_string()));
+        }
+
+        unsafe {
+            match value {
+                Some(v) => {
+                    *(ptr as *mut u8) = OptionTag::Some as u8;
+                    let payload_ptr = ptr.add(layout.payload_offset as usize);
+                    *(payload_ptr as *mut u32) = v;
+                }
+                None => {
+                    *(ptr as *mut u8) = OptionTag::None as u8;
+                }
+            }
+        }
+
+        Ok(Value { ptr, tydesc: option_tydesc, location: ValueLocation::TempOwned })
+    }
+}
+
+/// Write f32 result to destination or allocate new value.
+fn write_f32_result(ctx: &mut InterpContext<'_>, value: f32, dest: Option<Destination>) -> Result<Value, InterpError> {
+    if let Some(d) = dest {
+        unsafe { *(d.ptr as *mut f32) = value; }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        allocate_f32(ctx, value)
+    }
+}
+
+/// Write bool result to destination or allocate new value.
+fn write_bool_result(ctx: &mut InterpContext<'_>, value: bool, dest: Option<Destination>) -> Result<Value, InterpError> {
+    if let Some(d) = dest {
+        unsafe { *(d.ptr as *mut u8) = if value { 1 } else { 0 }; }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        allocate_bool(ctx, value)
+    }
+}
+
+/// Evaluate optional addition for u32.
+///
+/// Returns result on success, OptionNone error on overflow.
+fn eval_add_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression("Optional addition only supports u32 operands".to_string()));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_add(rhs_val) {
+        Some(result) => write_u32_result(ctx, result, dest),
+        None => Err(InterpError::OptionNone),
+    }
+}
+
+/// Evaluate optional subtraction for u32.
+///
+/// Returns result on success, OptionNone error on underflow.
+fn eval_sub_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression("Optional subtraction only supports u32 operands".to_string()));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_sub(rhs_val) {
+        Some(result) => write_u32_result(ctx, result, dest),
+        None => Err(InterpError::OptionNone),
+    }
+}
+
+/// Evaluate optional multiplication for u32.
+///
+/// Returns result on success, OptionNone error on overflow.
+fn eval_mul_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    if !is_u32_value(lhs) || !is_u32_value(rhs) {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        return Err(InterpError::InvalidExpression("Optional multiplication only supports u32 operands".to_string()));
+    }
+
+    let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+    let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    match lhs_val.checked_mul(rhs_val) {
+        Some(result) => write_u32_result(ctx, result, dest),
+        None => Err(InterpError::OptionNone),
+    }
+}
+
+/// Evaluate optional division.
+///
+/// For int: returns result on success, OptionNone error on div-by-zero.
+/// For u32: returns result on success, OptionNone error on div-by-zero.
+fn eval_div_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    // Both int: use runtime checked division.
+    if is_int_value(lhs) && is_int_value(rhs) {
+        let result_int = allocate_bigint(ctx)?;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs.ptr, rhs.tydesc,
+                result_int.ptr, result_int.tydesc,
+            )
+        };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        if status == datalove_rt::c::RtStatus::Ok {
+            return Ok(result_int);
+        } else {
+            destroy_value(ctx, result_int);
+            return Err(InterpError::OptionNone);
+        }
+    }
+
+    // Both u32: use Rust checked_div.
+    if is_u32_value(lhs) && is_u32_value(rhs) {
+        let lhs_val = unsafe { *(lhs.ptr as *const u32) };
+        let rhs_val = unsafe { *(rhs.ptr as *const u32) };
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+
+        match lhs_val.checked_div(rhs_val) {
+            Some(result) => write_u32_result(ctx, result, dest),
+            None => Err(InterpError::OptionNone),
+        }
+    } else {
+        destroy_value(ctx, lhs);
+        destroy_value(ctx, rhs);
+        Err(InterpError::InvalidExpression("Optional division requires matching operand types".to_string()))
+    }
+}
+
+/// Evaluate a comparison operation.
+fn eval_comparison<'db>(
+    ctx: &mut InterpContext<'db>,
+    op: crate::ast::BinOp,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    use crate::ast::BinOp;
+    use datalove_rt::c::RtOrdering;
+
+    let ordering = unsafe {
+        datalove_rt::c::dtlv_rti_cmp_total_local(
+            ctx.runtime.handle(),
+            lhs.ptr,
+            lhs.tydesc,
+            rhs.ptr,
+            rhs.tydesc,
+        )
+    };
+
+    destroy_value(ctx, lhs);
+    destroy_value(ctx, rhs);
+
+    let result = match (op, ordering) {
+        (BinOp::Lt, RtOrdering::Less) => true,
+        (BinOp::Gt, RtOrdering::Greater) => true,
+        (BinOp::Le, RtOrdering::Less | RtOrdering::Equal) => true,
+        (BinOp::Ge, RtOrdering::Greater | RtOrdering::Equal) => true,
+        (BinOp::Eq, RtOrdering::Equal) => true,
+        (BinOp::Ne, RtOrdering::Less | RtOrdering::Greater) => true,
+        (_, RtOrdering::Error) => {
+            return Err(InterpError::RuntimeError("Comparison failed: type mismatch".into()));
+        }
+        _ => false,
+    };
+
+    write_bool_result(ctx, result, dest)
+}
+
+/// Execute a binary operation.
+fn execute_binop<'db>(
+    ctx: &mut InterpContext<'db>,
+    op: crate::ast::BinOp,
+    lhs: Value,
+    rhs: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    use crate::ast::BinOp;
+
+    match op {
+        // Bare operators: widen to Int.
+        BinOp::Add => eval_add(ctx, lhs, rhs, dest),
+        BinOp::Sub => eval_sub(ctx, lhs, rhs, dest),
+        BinOp::Mul => eval_mul(ctx, lhs, rhs, dest),
+        BinOp::Div => eval_div(ctx, lhs, rhs, dest),
+
+        // Checked operators: preserve type, early-return on overflow.
+        BinOp::AddChecked => eval_add_checked(ctx, lhs, rhs, dest),
+        BinOp::SubChecked => eval_sub_checked(ctx, lhs, rhs, dest),
+        BinOp::MulChecked => eval_mul_checked(ctx, lhs, rhs, dest),
+        BinOp::DivChecked => eval_div_checked(ctx, lhs, rhs, dest),
+
+        // Comparison operators.
+        BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
+            eval_comparison(ctx, op, lhs, rhs, dest)
+        }
+
+        // Optional operators: preserve type, early-return on overflow/div0.
+        BinOp::AddOptional => eval_add_optional(ctx, lhs, rhs, dest),
+        BinOp::SubOptional => eval_sub_optional(ctx, lhs, rhs, dest),
+        BinOp::MulOptional => eval_mul_optional(ctx, lhs, rhs, dest),
+        BinOp::DivOptional => eval_div_optional(ctx, lhs, rhs, dest),
+    }
+}
+
+/// Execute a unary operation.
+fn execute_unop<'db>(
+    ctx: &mut InterpContext<'db>,
+    op: crate::ast::UnaryOp,
+    operand: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    use crate::ast::UnaryOp;
+
+    match op {
+        UnaryOp::Neg => eval_neg(ctx, operand, dest),
+        UnaryOp::NegOptional => eval_neg_optional(ctx, operand, dest),
+        UnaryOp::NegResult => eval_neg_result(ctx, operand, dest),
+    }
+}
+
+/// Evaluate negation for Int type.
+fn eval_neg<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    // Only Int (bigint) supports bare negation.
+    if !is_int_value(operand) {
+        destroy_value(ctx, operand);
+        return Err(InterpError::InvalidExpression(
+            "Negation only supports Int type".to_string()
+        ));
+    }
+
+    // Get result buffer - either from dest or allocate.
+    let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
+        (d.ptr, d.tydesc, true)
+    } else {
+        let result_int = allocate_bigint(ctx)?;
+        (result_int.ptr, result_int.tydesc, false)
+    };
+
+    // Call runtime negation.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_int_neg(
+            ctx.runtime.handle(),
+            operand.ptr,
+            operand.tydesc,
+            result_ptr,
+            result_tydesc,
+        )
+    };
+
+    // Clean up operand.
+    destroy_value(ctx, operand);
+
+    if status == datalove_rt::c::RtStatus::Ok {
+        Ok(Value {
+            ptr: result_ptr,
+            tydesc: result_tydesc,
+            location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+        })
+    } else {
+        if !is_borrowed {
+            let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+            destroy_value(ctx, result_val);
+        }
+        Err(InterpError::RuntimeError("Int negation failed".to_string()))
+    }
+}
+
+/// Evaluate optional negation (-?x).
+///
+/// Performs checked negation on signed integers.
+/// Returns the raw negated value on success, or OptionNone error on overflow.
+fn eval_neg_optional<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::TyTag;
+
+    let type_tag = unsafe { (*operand.tydesc).type_tag };
+    let operand_tydesc = operand.tydesc;
+
+    // Read value and perform checked negation based on type.
+    let raw_value = unsafe { *(operand.ptr as *const u32) };
+
+    let negated_result: Option<u32> = match type_tag {
+        TyTag::I8 => {
+            let val = raw_value as i8;
+            val.checked_neg().map(|r| (r as i32) as u32)
+        }
+        TyTag::I16 => {
+            let val = raw_value as i16;
+            val.checked_neg().map(|r| (r as i32) as u32)
+        }
+        TyTag::I32 => {
+            let val = raw_value as i32;
+            val.checked_neg().map(|r| r as u32)
+        }
+        _ => {
+            destroy_value(ctx, operand);
+            return Err(InterpError::InvalidExpression(
+                format!("Optional negation not supported for type {:?}", type_tag)
+            ));
+        }
+    };
+
+    // Clean up operand.
+    destroy_value(ctx, operand);
+
+    match negated_result {
+        Some(result) => write_typed_int_result(ctx, result, operand_tydesc, dest),
+        None => Err(InterpError::OptionNone),
+    }
+}
+
+/// Evaluate result negation (-!x).
+///
+/// Performs checked negation on fixed-width integers.
+/// Returns the raw negated value on success, or ResultErr with "overflow" on overflow.
+fn eval_neg_result<'db>(
+    ctx: &mut InterpContext<'db>,
+    operand: Value,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::TyTag;
+
+    let type_tag = unsafe { (*operand.tydesc).type_tag };
+    let operand_tydesc = operand.tydesc;
+
+    // Read value and perform checked negation based on type.
+    let raw_value = unsafe { *(operand.ptr as *const u32) };
+
+    let negated_result: Option<u32> = match type_tag {
+        TyTag::I8 => {
+            let val = raw_value as i8;
+            val.checked_neg().map(|r| (r as i32) as u32)
+        }
+        TyTag::I16 => {
+            let val = raw_value as i16;
+            val.checked_neg().map(|r| (r as i32) as u32)
+        }
+        TyTag::I32 => {
+            let val = raw_value as i32;
+            val.checked_neg().map(|r| r as u32)
+        }
+        TyTag::U8 => {
+            let val = raw_value as u8;
+            val.checked_neg().map(|r| r as u32)
+        }
+        TyTag::U16 => {
+            let val = raw_value as u16;
+            val.checked_neg().map(|r| r as u32)
+        }
+        TyTag::U32 => {
+            raw_value.checked_neg()
+        }
+        _ => {
+            destroy_value(ctx, operand);
+            return Err(InterpError::InvalidExpression(
+                format!("Result negation not supported for type {:?}", type_tag)
+            ));
+        }
+    };
+
+    // Clean up operand.
+    destroy_value(ctx, operand);
+
+    match negated_result {
+        Some(result) => write_typed_int_result(ctx, result, operand_tydesc, dest),
+        None => {
+            // Allocate an "overflow" error string and return ResultErr.
+            let err_string = allocate_error_string(ctx, "overflow")?;
+            Err(InterpError::ResultErr {
+                tydesc: err_string.tydesc,
+                ptr: err_string.ptr,
+            })
+        }
+    }
+}
+
+/// Coerce a value to a destination type.
+///
+/// Handles T → Option<T> (wrap in Some) and T → Result<T> (wrap in Ok).
+/// If the types are compatible, copies the value to the destination.
+fn coerce_value_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    value: Value,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyTag, TyDescRef, OptionTag, ResultTag};
+    use datalove_rt::rtdt::layout::{compute_option_layout, compute_result_layout};
+
+    let value_tag = unsafe { (*value.tydesc).type_tag };
+    let dest_tag = unsafe { (*dest.tydesc).type_tag };
+
+    // If types match, clone the value to dest (not shallow copy - types may have internal pointers).
+    if value.tydesc == dest.tydesc {
+        let clone_status = unsafe {
+            datalove_rt::c::dtlv_rti_clone_local(
+                ctx.runtime.handle(),
+                value.ptr,
+                value.tydesc,
+                dest.ptr,
+                dest.tydesc,
+            )
+        };
+        if clone_status != datalove_rt::c::RtStatus::Ok {
+            destroy_value(ctx, value);
+            return Err(InterpError::RuntimeError("Failed to clone value in coercion".to_string()));
+        }
+        destroy_value(ctx, value);
+        return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
+    }
+
+    // Coerce T → Option<T>
+    if dest_tag == TyTag::Option {
+        let dest_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+        let inner_tydesc = dest_ref.option_inner_ty();
+
+        // Check if value type matches inner type.
+        if value.tydesc == inner_tydesc.as_ptr() {
+            // Wrap value in Some.
+            let layout = unsafe { compute_option_layout(dest_ref) };
+
+            // Write Some tag.
+            unsafe { *(dest.ptr as *mut u8) = OptionTag::Some as u8; }
+
+            // Clone payload (not shallow copy - types may have internal pointers).
+            let payload_ptr = unsafe { dest.ptr.add(layout.payload_offset as usize) };
+            let clone_status = unsafe {
+                datalove_rt::c::dtlv_rti_clone_local(
+                    ctx.runtime.handle(),
+                    value.ptr,
+                    value.tydesc,
+                    payload_ptr,
+                    inner_tydesc.as_ptr(),
+                )
+            };
+            if clone_status != datalove_rt::c::RtStatus::Ok {
+                destroy_value(ctx, value);
+                return Err(InterpError::RuntimeError("Failed to clone value in Option coercion".to_string()));
+            }
+
+            // Clean up the original value (we cloned it).
+            destroy_value(ctx, value);
+
+            return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
+        }
+    }
+
+    // Coerce T → Result<T>
+    if dest_tag == TyTag::Result {
+        let dest_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+        let inner_tydesc = dest_ref.result_ok_ty();
+
+        // Check if value type matches inner type.
+        if value.tydesc == inner_tydesc.as_ptr() {
+            // Wrap value in Ok.
+            let layout = unsafe { compute_result_layout(dest_ref) };
+
+            // Write Ok tag.
+            unsafe { *(dest.ptr as *mut u8) = ResultTag::Ok as u8; }
+
+            // Clone payload (not shallow copy - types may have internal pointers).
+            let payload_ptr = unsafe { dest.ptr.add(layout.payload_offset as usize) };
+            let clone_status = unsafe {
+                datalove_rt::c::dtlv_rti_clone_local(
+                    ctx.runtime.handle(),
+                    value.ptr,
+                    value.tydesc,
+                    payload_ptr,
+                    inner_tydesc.as_ptr(),
+                )
+            };
+            if clone_status != datalove_rt::c::RtStatus::Ok {
+                destroy_value(ctx, value);
+                return Err(InterpError::RuntimeError("Failed to clone value in Result coercion".to_string()));
+            }
+
+            // Clean up the original value (we cloned it).
+            destroy_value(ctx, value);
+
+            return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
+        }
+    }
+
+    // No coercion available - type mismatch.
+    destroy_value(ctx, value);
+    Err(InterpError::RuntimeError(
+        format!("Type mismatch: cannot coerce {:?} to {:?}", value_tag, dest_tag)
+    ))
+}
+
+/// Write a typed integer result to destination or allocate new value.
+///
+/// Preserves the original type (i8, i16, i32, u8, u16, u32) from the tydesc.
+fn write_typed_int_result(
+    ctx: &mut InterpContext<'_>,
+    value: u32,
+    tydesc: *const datalove_rt::rtdt::TyDesc,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    if let Some(d) = dest {
+        // Write to destination.
+        unsafe { *(d.ptr as *mut u32) = value; }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        // Allocate new value with the correct type.
+        let ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_local(ctx.runtime.handle(), tydesc, 1)
+        };
+
+        if ptr.is_null() {
+            return Err(InterpError::RuntimeError("Failed to allocate integer".to_string()));
+        }
+
+        unsafe { *(ptr as *mut u32) = value; }
+        Ok(Value { ptr, tydesc, location: ValueLocation::TempOwned })
+    }
+}
+
+/// Allocate a string value with the given content for use as an error.
+fn allocate_error_string<'db>(
+    ctx: &mut InterpContext<'db>,
+    content: &str,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
+
+    // Allocate memory for string.
+    let rt_handle = ctx.runtime.handle();
+    let string_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    if string_ptr.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate error string".to_string()));
+    }
+
+    // Initialize string structure.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            string_ptr,
+            tydesc_ptr,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create error string".to_string()));
+    }
+
+    // Push the string bytes.
+    if !content.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                string_ptr,
+                tydesc_ptr,
+                content.as_ptr(),
+                content.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push error string bytes".to_string()));
+        }
+    }
+
+    Ok(Value {
+        ptr: string_ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}

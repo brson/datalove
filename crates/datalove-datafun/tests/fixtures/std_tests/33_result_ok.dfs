@@ -1,0 +1,10 @@
+require module sys/std/result
+
+import result.ok
+
+let val: @u32 = @42
+let ok_val: !u32 = val
+
+// Note: @error literal to !u32 coercion doesn't work in scripts.
+// Testing only Ok path for now.
+let output = ok(ok_val)

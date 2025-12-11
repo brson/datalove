@@ -37,7 +37,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors(1)",
+                "TypecheckErrors([CannotSynthesize])",
             ],
         ),
         output: "",

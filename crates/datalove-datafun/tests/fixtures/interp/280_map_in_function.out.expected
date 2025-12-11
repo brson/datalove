@@ -76,7 +76,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors(1)",
+                "TypecheckErrors([TypeMismatch { expected: \"void\", actual: \"@map<@u32, @u32>\" }])",
             ],
         ),
         output: "",

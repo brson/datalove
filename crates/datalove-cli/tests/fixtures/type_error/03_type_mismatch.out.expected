@@ -1,1 +1,1 @@
-Error: Execution error: TypecheckErrors(1)
+Error: Execution error: TypecheckErrors([TypeMismatch { expected: "u32", actual: "string" }])

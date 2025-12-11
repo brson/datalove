@@ -106,7 +106,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors(2)",
+                "TypecheckErrors([TypeMismatch { expected: \"@!u32\", actual: \"u32\" }, UnresolvedName(\"input\")])",
             ],
         ),
         output: "",

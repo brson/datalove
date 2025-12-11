@@ -1,1 +1,1 @@
-Error: Execution error: TypecheckErrors(2)
+Error: Execution error: TypecheckErrors([TypeMismatch { expected: "u32", actual: "int" }, ArityMismatch { expected: 2, actual: 3 }])

@@ -174,7 +174,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors(4)",
+                "TypecheckErrors([TypeMismatch { expected: \"int\", actual: \"u32\" }, TypeMismatch { expected: \"int\", actual: \"u32\" }, TypeMismatch { expected: \"int\", actual: \"u32\" }, UnresolvedName(\"a\")])",
             ],
         ),
         output: "",
