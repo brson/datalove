@@ -585,6 +585,8 @@ fn apply_arity_mismatch<'db>(
 }
 
 /// Remove type hint from None/empty collection.
+///
+/// Uses source-level string manipulation to avoid salsa tracked function issues.
 fn apply_remove_type_hint<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
@@ -594,30 +596,42 @@ fn apply_remove_type_hint<'db>(
     let heap = expr_and_heap.heap(db);
 
     // Check if this is an expression that requires a type hint.
-    let needs_hint = match expr_and_heap.expr(db) {
-        Expr::None => true,
-        Expr::AnonEnum(_) => true,
-        Expr::List(l) if l.elements(db).is_empty() => true,
-        Expr::Set(s) if s.elements(db).is_empty() => true,
-        Expr::Map(m) if m.entries(db).is_empty() => true,
-        _ => false,
+    let (needs_hint, error_code) = match expr_and_heap.expr(db) {
+        Expr::None => (true, "T016"), // Cannot synthesize type for None.
+        Expr::AnonEnum(_) => (true, "T016"), // Cannot synthesize type for anonymous enum.
+        Expr::List(l) if l.elements(db).is_empty() => (true, "T013"), // Cannot synthesize type for empty list.
+        Expr::Set(s) if s.elements(db).is_empty() => (true, "T014"), // Cannot synthesize type for empty set.
+        Expr::Map(m) if m.entries(db).is_empty() => (true, "T015"), // Cannot synthesize type for empty map.
+        _ => (false, ""),
     };
 
     if !needs_hint {
         return None;
     }
 
-    // Create expression without type hint.
-    let new_expr = ExprFull::new(db, None, *expr_and_heap);
-    let source = pretty_print(db, new_expr);
+    // Build source string without type hint.
+    let heap_str = match heap {
+        Heap::Local => "@",
+        Heap::Global => "#",
+        Heap::Omitted => "",
+    };
 
-    let error_code = match expr_and_heap.expr(db) {
-        Expr::None => "T016", // Cannot synthesize type for None.
-        Expr::AnonEnum(_) => "T016", // Cannot synthesize type for anonymous enum.
-        Expr::List(_) => "T013", // Cannot synthesize type for empty list.
-        Expr::Set(_) => "T014", // Cannot synthesize type for empty set.
-        Expr::Map(_) => "T015", // Cannot synthesize type for empty map.
-        _ => "T016",
+    let source = match expr_and_heap.expr(db) {
+        Expr::None => format!("{}none", heap_str),
+        Expr::AnonEnum(e) => {
+            // Format: heap { .VariantName payload }
+            let variant = e.variant_name(db).as_str(db);
+            if let Some(payload) = e.payload(db) {
+                let payload_str = pretty_print(db, payload);
+                format!("{}{{ .{} {} }}", heap_str, variant, payload_str)
+            } else {
+                format!("{}{{ .{} }}", heap_str, variant)
+            }
+        }
+        Expr::List(_) => format!("{}[]", heap_str),
+        Expr::Set(_) => format!("{}set {{}}", heap_str),
+        Expr::Map(_) => format!("{}map {{}}", heap_str),
+        _ => return None,
     };
 
     Some(MutationResult {
@@ -628,6 +642,8 @@ fn apply_remove_type_hint<'db>(
 }
 
 /// Change enum variant to nonexistent name.
+///
+/// Uses source-level string manipulation to avoid salsa tracked function issues.
 fn apply_wrong_variant<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
@@ -637,18 +653,29 @@ fn apply_wrong_variant<'db>(
     let expr_and_heap = expr.expr(db);
     let heap = expr_and_heap.heap(db);
 
+    // Build heap prefix string.
+    let heap_str = match heap {
+        Heap::Local => "@",
+        Heap::Global => "#",
+        Heap::Omitted => "",
+    };
+
+    // Build type hint prefix string.
+    let mut type_hint_str = String::new();
+    type_hint_str.push_str(": ");
+    pretty_type_hint_and_heap(db, type_hint, &mut type_hint_str);
+    type_hint_str.push_str(" / ");
+
     match expr_and_heap.expr(db) {
         Expr::AnonEnum(e) => {
-            // Create enum with nonexistent variant name.
-            let wrong_name = InternedText::new(db, "NonexistentVariant12345");
-            let new_enum = ExprAnonEnum::new(db, wrong_name, e.payload(db));
-            let new_expr = ExprFull::new(
-                db,
-                Some(type_hint),
-                ExprAndHeap::new(db, heap, Expr::AnonEnum(new_enum)),
-            );
-
-            let source = pretty_print(db, new_expr);
+            // Build source: `: type / heap{ .NonexistentVariant12345 payload }`
+            let wrong_variant = "NonexistentVariant12345";
+            let source = if let Some(payload) = e.payload(db) {
+                let payload_str = pretty_print(db, payload);
+                format!("{}{}{{ .{} {} }}", type_hint_str, heap_str, wrong_variant, payload_str)
+            } else {
+                format!("{}{}{{ .{} }}", type_hint_str, heap_str, wrong_variant)
+            };
 
             Some(MutationResult {
                 source,
@@ -657,16 +684,15 @@ fn apply_wrong_variant<'db>(
             })
         }
         Expr::NamedEnum(e) => {
-            // Create enum with nonexistent variant name.
-            let wrong_name = InternedText::new(db, "NonexistentVariant12345");
-            let new_enum = ExprNamedEnum::new(db, e.enum_name(db), wrong_name, e.payload(db));
-            let new_expr = ExprFull::new(
-                db,
-                Some(type_hint),
-                ExprAndHeap::new(db, heap, Expr::NamedEnum(new_enum)),
-            );
-
-            let source = pretty_print(db, new_expr);
+            // Build source: `: type / heap enum EnumName { .NonexistentVariant12345 payload }`
+            let enum_name = e.enum_name(db).as_str(db);
+            let wrong_variant = "NonexistentVariant12345";
+            let source = if let Some(payload) = e.payload(db) {
+                let payload_str = pretty_print(db, payload);
+                format!("{}{}enum {} {{ .{} {} }}", type_hint_str, heap_str, enum_name, wrong_variant, payload_str)
+            } else {
+                format!("{}{}enum {} {{ .{} }}", type_hint_str, heap_str, enum_name, wrong_variant)
+            };
 
             Some(MutationResult {
                 source,

@@ -506,7 +506,6 @@ fn test_error_equiv_arity_mismatch_detailed() {
 
 /// Detailed test for RemoveTypeHint mutations.
 #[test]
-#[ignore] // Run with --ignored to investigate
 fn test_error_equiv_remove_type_hint_detailed() {
     let db = datalove_datafun::Database::default();
     let config = make_mutation_config();
@@ -536,7 +535,6 @@ fn test_error_equiv_remove_type_hint_detailed() {
 
 /// Detailed test for WrongVariant mutations.
 #[test]
-#[ignore] // Run with --ignored to investigate
 fn test_error_equiv_wrong_variant_detailed() {
     let db = datalove_datafun::Database::default();
     let config = make_mutation_config();
