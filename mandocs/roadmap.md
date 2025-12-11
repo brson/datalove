@@ -3,36 +3,12 @@
 
 # in progress
 
-## language
-
-- rewrite interpreter with no leaks
 - move/clone semantics
-- error diagnostics
-
-## testing
-
-- benchmarking
-- runtime value generator for proptesting
-- have exampletest apply test filter
-
-## repl
-
-- ux
-- web
-
-## cli
-
-## modules and standard library
-
-- core modules
-
-## cleanup
-
-- runtime safety
-
-## documentation
-
+- argument modes
 - primer / walkthrough / tutorial
+- destructuring
+- loops
+- std modules
 - improve readme
 
 
@@ -44,19 +20,18 @@
 
 # future
 
-## near future
-
-- don't ever construct tydescs without a tydesc table
+- have exampletest apply test filter
+- repl terminal and web
 - datafun ast roundtrip
 - type declarations
 - name resolution for named types
 - generics
-- argument modes
 - move semantics
 - heap genericity and clone method
 - aot
 
-## far future
+
+# fanciful ideas
 
 - syntax highlighter cli
 - datafun packages as wasm components
