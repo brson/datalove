@@ -39,12 +39,51 @@ fn get_datalit_errors<'db>(
     (errors, false)
 }
 
-/// Check if expression contains parse error.
+/// Check if datalit type hint contains parse error.
+fn has_datalit_type_hint_parse_error<'db>(
+    db: &'db datalove_datafun::Database,
+    th: datalove_datalit::ast::TypeHintAndHeap<'db>,
+) -> bool {
+    use datalove_datalit::ast::TypeHint;
+    match th.type_hint(db) {
+        TypeHint::ParseError(_) => true,
+        TypeHint::List(l) => has_datalit_type_hint_parse_error(db, l.element_type(db)),
+        TypeHint::Set(s) => has_datalit_type_hint_parse_error(db, s.element_type(db)),
+        TypeHint::Map(m) => {
+            has_datalit_type_hint_parse_error(db, m.key_type(db)) ||
+            has_datalit_type_hint_parse_error(db, m.value_type(db))
+        }
+        TypeHint::Option(o) => has_datalit_type_hint_parse_error(db, o.inner_type(db)),
+        TypeHint::Result(r) => has_datalit_type_hint_parse_error(db, r.inner_type(db)),
+        TypeHint::AnonTuple(t) => t.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, *f)),
+        TypeHint::NamedTuple(t) => t.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, *f)),
+        TypeHint::AnonStruct(s) => s.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, f.type_hint(db))),
+        TypeHint::NamedStruct(s) => s.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, f.type_hint(db))),
+        TypeHint::AnonEnum(e) => e.variants(db).iter().any(|v| {
+            v.payload(db).map(|p| has_datalit_type_hint_parse_error(db, p)).unwrap_or(false)
+        }),
+        TypeHint::NamedEnum(e) => e.variants(db).iter().any(|v| {
+            v.payload(db).map(|p| has_datalit_type_hint_parse_error(db, p)).unwrap_or(false)
+        }),
+        TypeHint::Tensor(t) => has_datalit_type_hint_parse_error(db, t.element_type(db)),
+        _ => false,
+    }
+}
+
+/// Check if expression contains parse error (including in type hints).
 fn has_parse_error<'db>(
     db: &'db datalove_datafun::Database,
     expr: datalove_datalit::ast::ExprFull<'db>,
 ) -> bool {
     use datalove_datalit::ast::Expr;
+
+    // Check type hint first.
+    if let Some(th) = expr.type_hint(db) {
+        if has_datalit_type_hint_parse_error(db, th) {
+            return true;
+        }
+    }
+
     match expr.expr(db).expr(db) {
         Expr::ParseError(_) => true,
         Expr::List(l) => l.elements(db).iter().any(|e| has_parse_error(db, *e)),
@@ -730,6 +769,130 @@ fn test_debug_heap_mismatch() {
             }
         }
     }
+}
+
+/// Debug test for DeleteOpeningBracket and ExtraClosingBracket - shows raw errors from both systems.
+#[test]
+#[ignore] // Run with --ignored to investigate
+fn test_debug_bracket_mutations() {
+    let config = make_mutation_config();
+
+    for mutation in [Mutation::DeleteOpeningBracket, Mutation::ExtraClosingBracket] {
+        eprintln!("\n=== {:?} ===\n", mutation);
+
+        for seed in 0..50 {
+            let config_clone = config.clone();
+            let result = std::thread::spawn(move || {
+                let db = datalove_datafun::Database::default();
+                let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
+                let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+
+                let original = datalove_datalit::pretty::pretty_print(&db, expr);
+
+                if let Some(result) = mutation.apply(&db, expr, &mut rng) {
+                    let (datalit_errs, datalit_parse) = get_datalit_errors(&db, &result.source);
+                    let (datafun_errs, datafun_parse) = get_datafun_errors(&db, &result.source);
+                    let is_eq = errors_equivalent(&datalit_errs, &datafun_errs, datalit_parse, datafun_parse);
+                    Some((original, result.source, datalit_errs, datalit_parse, datafun_errs, datafun_parse, is_eq))
+                } else {
+                    None
+                }
+            }).join();
+
+            match result {
+                Ok(Some((original, source, datalit_errs, datalit_parse, datafun_errs, datafun_parse, is_eq))) => {
+                    if !is_eq {
+                        eprintln!("FAIL Seed {}: original = {}", seed, original);
+                        eprintln!("             mutated  = {}", source);
+                        eprintln!("  Datalit: {:?} (parse_err={})", datalit_errs, datalit_parse);
+                        eprintln!("  Datafun: {:?} (parse_err={})", datafun_errs, datafun_parse);
+                        eprintln!();
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    eprintln!("PANIC Seed {}: {:?}", seed, e);
+                }
+            }
+        }
+    }
+}
+
+/// Detailed debug for specific failing bracket cases.
+#[test]
+#[ignore]
+fn test_debug_specific_bracket_cases() {
+    let db = datalove_datafun::Database::default();
+
+    // Case 1: DeleteOpeningBracket seed 14
+    // Original type hint: enum {TestStruct93(i16), GenEnum17}
+    // Mutated type hint: enum {TestStruct93i16), GenEnum17}
+    // After bracer removes unmatched ): enum {TestStruct93i16, GenEnum17}
+    let source1 = ": {item9: enum {TestStruct93i16), GenEnum17}} / {item9 = : enum {TestStruct93(i16), GenEnum17} / enum GenEnum17}";
+    eprintln!("=== Case 1: DeleteOpeningBracket ===");
+    eprintln!("Source: {}", source1);
+    eprintln!("");
+    eprintln!("Analysis:");
+    eprintln!("  Outer type hint: {{item9: enum {{TestStruct93i16, GenEnum17}}}}");
+    eprintln!("  Value struct type hint: {{item9 = : enum {{TestStruct93(i16), GenEnum17}} / enum GenEnum17}}");
+    eprintln!("  The field item9 has:");
+    eprintln!("    - Outer type hint expects enum with variants: TestStruct93i16, GenEnum17");
+    eprintln!("    - Inner type hint on value expects enum with variants: TestStruct93(i16), GenEnum17");
+    eprintln!("    - Actual enum value: GenEnum17 (no payload)");
+    eprintln!("");
+
+    // Parse with datalit
+    let src1 = bct::input::Source::new(&db, source1.to_string());
+    let datalit_parsed = datalove_datalit::parser::parse_integration_test(&db, src1);
+    eprintln!("Datalit pretty: {}", datalove_datalit::pretty::pretty_print(&db, datalit_parsed));
+    eprintln!("Datalit has_parse_error: {}", has_parse_error(&db, datalit_parsed));
+
+    // Check the type hint
+    if let Some(th) = datalit_parsed.type_hint(&db) {
+        eprintln!("Datalit type hint heap: {:?}", th.heap(&db));
+    }
+
+    // Parse with datafun
+    let datafun_text1 = format!("let _x = {}", source1);
+    let src1_fun = bct::input::Source::new(&db, datafun_text1);
+    let datafun_parsed = datalove_datafun::parser::parse_integration_test(&db, src1_fun);
+    eprintln!("Datafun has_parse_error: {}", {
+        let stmts = datafun_parsed.statements(&db);
+        if stmts.is_empty() {
+            true
+        } else if let datalove_datafun::ast::Statement::Let(stmt) = &stmts[0] {
+            has_datafun_parse_error(&db, stmt.value(&db))
+        } else {
+            true
+        }
+    });
+
+    // Type check both
+    let (datalit_errs, _) = get_datalit_errors(&db, source1);
+    let (datafun_errs, _) = get_datafun_errors(&db, source1);
+    eprintln!("Datalit errors: {:?}", datalit_errs);
+    eprintln!("Datafun errors: {:?}", datafun_errs);
+
+    eprintln!();
+
+    // Case 2: ExtraClosingBracket seed 39
+    // Type hint in second map entry: {y)7: u8, y0: u8}
+    // After bracer removes unmatched ): {y7: u8, y0: u8}
+    let source2 = ": map<i32, {y7: u8, y0: u8}> / map {: i32 / 108 = : {y7: u8, y0: u8} / {y7 = : u8 / 88, y0 = : u8 / 237}, : i32 / 73 = : {y)7: u8, y0: u8} / {y7 = : u8 / 44, y0 = : u8 / 168}}";
+    eprintln!("=== Case 2: ExtraClosingBracket ===");
+    eprintln!("Source: {}", source2);
+
+    // Parse with datalit
+    let src2 = bct::input::Source::new(&db, source2.to_string());
+    let datalit_parsed2 = datalove_datalit::parser::parse_integration_test(&db, src2);
+    eprintln!("Datalit pretty: {}", datalove_datalit::pretty::pretty_print(&db, datalit_parsed2));
+    eprintln!("Datalit has_parse_error: {}", has_parse_error(&db, datalit_parsed2));
+
+    // Type check both
+    let (datalit_errs2, _) = get_datalit_errors(&db, source2);
+    let (datafun_errs2, _) = get_datafun_errors(&db, source2);
+    eprintln!("Datalit errors: {:?}", datalit_errs2);
+    eprintln!("Datafun errors: {:?}", datafun_errs2);
 }
 
 /// Debug test for ArityMismatch - shows raw errors from both systems.

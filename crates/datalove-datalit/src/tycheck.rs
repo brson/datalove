@@ -1223,6 +1223,36 @@ fn check<'db>(
             Ok(())
         }
 
+        // Rule: Check-TypedAnonEnum - validate type hint against expected type.
+        // When an anonymous enum expression has a direct enum type hint (not wrapped
+        // in Option/Result), the hinted type must be equivalent to the expected type.
+        (Expr::AnonEnum(_), Type::AnonEnum(_)) if expr.type_hint(db).is_some() && matches!(expr.type_hint(db).unwrap().type_hint(db), TypeHint::AnonEnum(_) | TypeHint::NamedEnum(_)) => {
+            let type_hint_and_heap = expr.type_hint(db).unwrap();
+            let hinted_type = convert_type_hint(db, type_hint_and_heap)?;
+            let hinted_type_inner = hinted_type.ty(db);
+
+            // Check if the hinted type matches the expected type.
+            if !types_equivalent(db, hinted_type_inner, expected_type) {
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "mismatched types")
+                        .code("T047")
+                        .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                            type_to_string(db, expected_type),
+                            type_to_string(db, hinted_type_inner)))
+                        .note("the type hint on this enum does not match the expected type from context")
+                        .emit_type();
+                }
+                return Err(TypeError::TypeMismatch {
+                    expected: type_to_string(db, expected_type),
+                    actual: type_to_string(db, hinted_type_inner),
+                });
+            }
+
+            // Now check the expression without hint against the expected type.
+            let expr_without_hint = ExprFull::new(db, None, *expr_and_heap);
+            check(ctx, expr_without_hint, expected)
+        }
+
         // Rule: Check-AnonEnum
         (Expr::AnonEnum(e), Type::AnonEnum(expected_enum)) => {
             let variant_name = e.variant_name(db);
