@@ -155,14 +155,15 @@ The tests reveal real differences between datalit and datafun:
 
 # Remediation Plan
 
-**Status: PHASE 1.7 COMPLETE**
+**Status: PHASE 1 COMPLETE**
 
 ## Root Causes
 
 1. ~~Datafun doesn't call datalit's `check()` function for typed literals~~ FIXED
 2. ~~Datafun doesn't check heap compatibility for typed literals~~ FIXED
 3. ~~Datafun doesn't check arity for tuples/structs against type hints~~ FIXED
-4. Parser panics on malformed input instead of returning ParseError nodes (TBD)
+4. ~~Mutations using AST manipulation cause salsa panics~~ FIXED
+5. Parser panics on malformed input instead of returning ParseError nodes (TBD)
 
 ## Phase 1: Type Error Fixes - COMPLETED
 
@@ -226,6 +227,28 @@ Added `check_tuple_elements` helper function to validate that tuple element coun
 
 Added `check_struct_fields` helper function to validate that struct field count and names match the type hint. Updated `ExprFunKind::AnonStruct` and `ExprFunKind::NamedStruct` handling to call this function when type hints are present.
 
+## Phase 1.8: RemoveTypeHint Fix - COMPLETED
+
+### Task 1.8.1: Fix mutation_gen to avoid salsa panics - DONE
+
+Converted `apply_remove_type_hint` from AST manipulation to source-level string building. Now generates source strings directly for `none`, enums, and empty collections without creating `ExprFull` tracked structs.
+
+## Phase 1.9: WrongVariant Fix - COMPLETED
+
+### Task 1.9.1: Fix mutation_gen to avoid salsa panics - DONE
+
+Converted `apply_wrong_variant` from AST manipulation to source-level string building. Now generates source strings directly with the wrong variant name (`NonexistentVariant12345`) without creating `ExprAnonEnum`, `ExprNamedEnum`, or `ExprFull` tracked structs.
+
+## Phase 1.10: HeapMismatch Collection Element Fix - COMPLETED
+
+### Task 1.10.1: Add expression-level heap checking - DONE
+
+Added `get_expr_heap()` helper to extract outer heap from expressions. Updated all collection element validators to check expression's actual heap in addition to synthesized type's heap. This catches cases like `@{...}` with type hint `#{...}`.
+
+### Task 1.10.2: Fix mutation_gen type hint format - DONE
+
+Changed `apply_heap_mismatch` to use prefix type hint syntax (`: type / expr`) instead of trailing `<type>` format, since datafun doesn't parse trailing type hints on collections.
+
 ## Phase 2: Parser Panic Fixes (TBD)
 
 Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return errors instead of panicking. ~40 call sites affected. Exact approach TBD.
@@ -245,18 +268,31 @@ Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return err
 11. ~~Task 1.7.1 - Fix mutation_gen salsa panics for ArityMismatch~~ DONE
 12. ~~Task 1.7.2 - Add tuple arity checking~~ DONE
 13. ~~Task 1.7.3 - Add struct arity checking~~ DONE
-14. Task 2.x - Parser panic fixes (TBD)
+14. ~~Task 1.8.1 - Fix mutation_gen salsa panics for RemoveTypeHint~~ DONE
+15. ~~Task 1.9.1 - Fix mutation_gen salsa panics for WrongVariant~~ DONE
+16. ~~Task 1.10.1 - Add expression-level heap checking~~ DONE
+17. ~~Task 1.10.2 - Fix HeapMismatch type hint format~~ DONE
+18. Task 2.x - Parser panic fixes (TBD)
 
 ## Current Results
 
-| Mutation | Previous | Current |
-|----------|----------|---------|
-| OutOfRangeInt | 0% | 100% |
-| HeapMismatch | 0% | 100% |
-| DeleteHeapSigil | 100% | 100% |
-| WrongElementType | 0% | 100% |
-| ArityMismatch | 0% | 100% |
-| Overall | 62.7% | 63.4% |
+| Mutation | Previous | Current | Test Status |
+|----------|----------|---------|-------------|
+| OutOfRangeInt | 0% | 100% | ✅ Enabled |
+| HeapMismatch | 0% | 100% | ✅ Enabled |
+| DeleteHeapSigil | 100% | 100% | ✅ (in discovery) |
+| WrongElementType | 0% | 100% | ✅ Enabled |
+| ArityMismatch | 0% | 100% | ✅ Enabled |
+| RemoveTypeHint | 0% | 100% | ✅ Enabled |
+| WrongVariant | 0% | 100% | ✅ Enabled |
+| DeleteOpeningBracket | 36.4% | 36.4% | ❌ Parser panics |
+| TruncateSource | 26.0% | 26.0% | ❌ Parser panics |
+| DeleteComma | 50.0% | 50.0% | ❌ Parser panics |
+| ExtraClosingBracket | 66.0% | 66.0% | ❌ Parser panics |
+
+**Test Summary:**
+- 7 of 8 detailed tests enabled and passing
+- 1 test ignored (`test_error_equiv_source_mutations_detailed`) - requires Phase 2 parser fixes
 
 ## Success Criteria
 
@@ -264,4 +300,6 @@ Convert `eat_sigil()`, `need_sigil()`, `eat_word()`, `need_name()` to return err
 - ~~HeapMismatch: 0% → 100%~~ ACHIEVED
 - ~~WrongElementType: 0% → 100%~~ ACHIEVED
 - ~~ArityMismatch: 0% → 100%~~ ACHIEVED
+- ~~RemoveTypeHint: 0% → 100%~~ ACHIEVED
+- ~~WrongVariant: 0% → 100%~~ ACHIEVED
 - Source mutations: significant improvement pending Phase 2
