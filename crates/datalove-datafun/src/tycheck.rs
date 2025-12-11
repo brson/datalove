@@ -1886,7 +1886,7 @@ pub fn convert_type_hint<'db>(
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     // Delegate to datalit's convert_type_hint.
     let datalit_ty = datalit::tycheck::convert_type_hint(db, type_hint_and_heap)
-        .map_err(|e| TypeError::DatalitError(format!("{:?}", e)))?;
+        .map_err(TypeError::from)?;
 
     let heap = datalit_ty.heap(db);
     let ty = Type::Datalit(datalit_ty.ty(db).clone());

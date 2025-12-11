@@ -983,7 +983,17 @@ impl<'db> Parser<'db> {
         if self.peek_sigil(tokens, Sigil::Colon) {
             self.eat_sigil(tokens, Sigil::Colon);
             let type_hint = self.parse_type_hint_and_heap(tokens);
-            self.need_sigil(tokens, Sigil::SlashForward);
+            // Expect `/` after type hint.
+            if !self.eat_sigil(tokens, Sigil::SlashForward) {
+                let (text, span) = self.peek_text_span(tokens);
+                return self.emit_expr_error(
+                    text,
+                    span,
+                    "expected '/' after type hint in `: type / expr` pattern",
+                    "D021",
+                    "expected '/'"
+                );
+            }
             let (heap, expr_kind) = self.parse_lit_expr_and_heap(tokens, Some(type_hint));
             // The type_hint is already captured in the expr_kind, just return.
             return ast::ExprFun::new(self.db, expr_kind);
@@ -1216,12 +1226,14 @@ impl<'db> Parser<'db> {
         if s.is_empty() {
             return false;
         }
-        let s = if s.starts_with("0x") || s.starts_with("0X") {
-            &s[2..]
+        if s.starts_with("0x") || s.starts_with("0X") {
+            // Hex literal - allow hex digits after prefix.
+            let s = &s[2..];
+            !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit() || c == '_')
         } else {
-            s
-        };
-        s.chars().all(|c| c.is_ascii_hexdigit() || c == '_')
+            // Decimal literal - only allow decimal digits.
+            s.chars().all(|c| c.is_ascii_digit() || c == '_')
+        }
     }
 
     // Parse anonymous tuple: (expr, expr, ...)
