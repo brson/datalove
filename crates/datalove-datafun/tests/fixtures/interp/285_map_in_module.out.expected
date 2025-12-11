@@ -1,0 +1,117 @@
+[
+    ModuleAnalysis(
+        type: "Module",
+        path: "sys/test/mapmod",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "make_map",
+                    params: [],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Map(TypeHintMap(
+                            key_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                            value_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprMap(
+                                    kind: "Map",
+                                    heap: Local,
+                                    type_hint: None,
+                                    entries: [
+                                        ExprMapEntry(
+                                            key: ExprFun(
+                                                expr: ExprInt(
+                                                    kind: "Int",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                    value: "1",
+                                                ),
+                                            ),
+                                            value: ExprFun(
+                                                expr: ExprInt(
+                                                    kind: "Int",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                    value: "100",
+                                                ),
+                                            ),
+                                        ),
+                                        ExprMapEntry(
+                                            key: ExprFun(
+                                                expr: ExprInt(
+                                                    kind: "Int",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                    value: "2",
+                                                ),
+                                            ),
+                                            value: ExprFun(
+                                                expr: ExprInt(
+                                                    kind: "Int",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                    value: "200",
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        exports: [],
+    ),
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtRequireModule(
+                    kind: "Require",
+                    variant: "Module",
+                    import_space: "sys",
+                    package_alias: "test",
+                    module_alias: "mapmod",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "mapmod",
+                    item_name: "make_map",
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "make_map",
+                            args: [],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@map {@1 = @100, @2 = @200}",
+    ),
+]
