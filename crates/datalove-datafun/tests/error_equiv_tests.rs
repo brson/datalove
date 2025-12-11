@@ -682,6 +682,126 @@ fn test_error_equiv_wrong_variant_detailed() {
     }
 }
 
+/// Detailed test for DuplicateField mutations.
+#[test]
+fn test_error_equiv_duplicate_field_detailed() {
+    let db = datalove_datafun::Database::default();
+    let config = make_mutation_config();
+
+    let mut failures = vec![];
+
+    for seed in 0..200 {
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+
+        if let Some(result) = Mutation::DuplicateField.apply(&db, expr, &mut rng) {
+            if let Err(e) = test_error_equiv(&db, &result) {
+                failures.push((seed, e));
+            }
+        }
+    }
+
+    if !failures.is_empty() {
+        for (seed, err) in &failures[..failures.len().min(10)] {
+            eprintln!("Seed {}: {}\n", seed, err);
+        }
+        if failures.len() > 10 {
+            eprintln!("... and {} more failures", failures.len() - 10);
+        }
+        panic!("{} DuplicateField tests failed", failures.len());
+    }
+}
+
+/// Detailed test for WrongFieldName mutations.
+#[test]
+fn test_error_equiv_wrong_field_name_detailed() {
+    let db = datalove_datafun::Database::default();
+    let config = make_mutation_config();
+
+    let mut failures = vec![];
+
+    for seed in 0..200 {
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+
+        if let Some(result) = Mutation::WrongFieldName.apply(&db, expr, &mut rng) {
+            if let Err(e) = test_error_equiv(&db, &result) {
+                failures.push((seed, e));
+            }
+        }
+    }
+
+    if !failures.is_empty() {
+        for (seed, err) in &failures[..failures.len().min(10)] {
+            eprintln!("Seed {}: {}\n", seed, err);
+        }
+        if failures.len() > 10 {
+            eprintln!("... and {} more failures", failures.len() - 10);
+        }
+        panic!("{} WrongFieldName tests failed", failures.len());
+    }
+}
+
+/// Detailed test for WrongPayloadPresence mutations.
+#[test]
+fn test_error_equiv_wrong_payload_presence_detailed() {
+    let db = datalove_datafun::Database::default();
+    let config = make_mutation_config();
+
+    let mut failures = vec![];
+
+    for seed in 0..200 {
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+
+        if let Some(result) = Mutation::WrongPayloadPresence.apply(&db, expr, &mut rng) {
+            if let Err(e) = test_error_equiv(&db, &result) {
+                failures.push((seed, e));
+            }
+        }
+    }
+
+    if !failures.is_empty() {
+        for (seed, err) in &failures[..failures.len().min(10)] {
+            eprintln!("Seed {}: {}\n", seed, err);
+        }
+        if failures.len() > 10 {
+            eprintln!("... and {} more failures", failures.len() - 10);
+        }
+        panic!("{} WrongPayloadPresence tests failed", failures.len());
+    }
+}
+
+/// Detailed test for SwapMapKeyValue mutations.
+#[test]
+fn test_error_equiv_swap_map_key_value_detailed() {
+    let db = datalove_datafun::Database::default();
+    let config = make_mutation_config();
+
+    let mut failures = vec![];
+
+    for seed in 0..200 {
+        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
+        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+
+        if let Some(result) = Mutation::SwapMapKeyValue.apply(&db, expr, &mut rng) {
+            if let Err(e) = test_error_equiv(&db, &result) {
+                failures.push((seed, e));
+            }
+        }
+    }
+
+    if !failures.is_empty() {
+        for (seed, err) in &failures[..failures.len().min(10)] {
+            eprintln!("Seed {}: {}\n", seed, err);
+        }
+        if failures.len() > 10 {
+            eprintln!("... and {} more failures", failures.len() - 10);
+        }
+        panic!("{} SwapMapKeyValue tests failed", failures.len());
+    }
+}
+
 /// Detailed test for source-level mutations.
 #[test]
 fn test_error_equiv_source_mutations_detailed() {
@@ -694,6 +814,7 @@ fn test_error_equiv_source_mutations_detailed() {
         Mutation::TruncateSource,
         Mutation::DeleteComma,
         Mutation::ExtraClosingBracket,
+        Mutation::DeleteClosingBracket,
     ];
 
     let mut total_failures = vec![];

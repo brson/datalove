@@ -61,6 +61,16 @@ pub enum Mutation {
     RemoveTypeHint,
     /// Change enum variant to nonexistent name.
     WrongVariant,
+    /// Duplicate a field name in struct.
+    DuplicateField,
+    /// Use wrong field name in struct (field not in type hint).
+    WrongFieldName,
+    /// Remove a closing bracket.
+    DeleteClosingBracket,
+    /// Add payload to variant that doesn't expect one, or remove from one that does.
+    WrongPayloadPresence,
+    /// Swap key and value types in map entry.
+    SwapMapKeyValue,
 }
 
 impl Mutation {
@@ -72,12 +82,17 @@ impl Mutation {
             Mutation::TruncateSource,
             Mutation::DeleteComma,
             Mutation::ExtraClosingBracket,
+            Mutation::DeleteClosingBracket,
             Mutation::OutOfRangeInt,
             Mutation::WrongElementType,
             Mutation::HeapMismatch,
             Mutation::ArityMismatch,
             Mutation::RemoveTypeHint,
             Mutation::WrongVariant,
+            Mutation::DuplicateField,
+            Mutation::WrongFieldName,
+            Mutation::WrongPayloadPresence,
+            Mutation::SwapMapKeyValue,
         ]
     }
 
@@ -89,6 +104,7 @@ impl Mutation {
             Mutation::TruncateSource,
             Mutation::DeleteComma,
             Mutation::ExtraClosingBracket,
+            Mutation::DeleteClosingBracket,
         ]
     }
 
@@ -101,6 +117,10 @@ impl Mutation {
             Mutation::ArityMismatch,
             Mutation::RemoveTypeHint,
             Mutation::WrongVariant,
+            Mutation::DuplicateField,
+            Mutation::WrongFieldName,
+            Mutation::WrongPayloadPresence,
+            Mutation::SwapMapKeyValue,
         ]
     }
 
@@ -111,14 +131,19 @@ impl Mutation {
             | Mutation::DeleteOpeningBracket
             | Mutation::TruncateSource
             | Mutation::DeleteComma
-            | Mutation::ExtraClosingBracket => MutationKind::Source,
+            | Mutation::ExtraClosingBracket
+            | Mutation::DeleteClosingBracket => MutationKind::Source,
 
             Mutation::OutOfRangeInt
             | Mutation::WrongElementType
             | Mutation::HeapMismatch
             | Mutation::ArityMismatch
             | Mutation::RemoveTypeHint
-            | Mutation::WrongVariant => MutationKind::Ast,
+            | Mutation::WrongVariant
+            | Mutation::DuplicateField
+            | Mutation::WrongFieldName
+            | Mutation::WrongPayloadPresence
+            | Mutation::SwapMapKeyValue => MutationKind::Ast,
         }
     }
 
@@ -145,6 +170,11 @@ impl Mutation {
             Mutation::ArityMismatch => apply_arity_mismatch(db, expr, rng),
             Mutation::RemoveTypeHint => apply_remove_type_hint(db, expr),
             Mutation::WrongVariant => apply_wrong_variant(db, expr, rng),
+            Mutation::DuplicateField => apply_duplicate_field(db, expr),
+            Mutation::WrongFieldName => apply_wrong_field_name(db, expr),
+            Mutation::DeleteClosingBracket => apply_delete_closing_bracket(&source, rng),
+            Mutation::WrongPayloadPresence => apply_wrong_payload_presence(db, expr),
+            Mutation::SwapMapKeyValue => apply_swap_map_key_value(db, expr),
         }
     }
 }
@@ -701,6 +731,317 @@ fn apply_wrong_variant<'db>(
             })
         }
         _ => None,
+    }
+}
+
+/// Delete a closing bracket from the source.
+fn apply_delete_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
+    let bracket_positions: Vec<(usize, char)> = source
+        .char_indices()
+        .filter(|(_, c)| *c == ')' || *c == ']' || *c == '}' || *c == '>')
+        .collect();
+
+    if bracket_positions.is_empty() {
+        return None;
+    }
+
+    let (pos, bracket) = bracket_positions[rng.gen_range(0..bracket_positions.len())];
+    let mut result = source.to_string();
+    result.remove(pos);
+
+    Some(MutationResult {
+        source: result,
+        expected_errors: vec![], // Parse errors vary by context.
+        description: format!("Deleted closing bracket '{}' at position {}", bracket, pos),
+    })
+}
+
+/// Duplicate a field name in struct.
+fn apply_duplicate_field<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFull<'db>,
+) -> Option<MutationResult> {
+    let type_hint = expr.type_hint(db)?;
+    let expr_and_heap = expr.expr(db);
+    let heap = expr_and_heap.heap(db);
+
+    let heap_str = match heap {
+        Heap::Local => "@",
+        Heap::Global => "#",
+        Heap::Omitted => "",
+    };
+
+    // Check if this is an anon struct with at least 2 fields.
+    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
+        let fields = s.fields(db);
+        if fields.len() < 2 {
+            return None;
+        }
+
+        // Duplicate first field's name in second field.
+        let first_name = fields[0].name(db).as_str(db);
+        let mut field_strs: Vec<String> = fields.iter().map(|f| {
+            let name = f.name(db).as_str(db);
+            let value = pretty_print(db, f.value(db));
+            format!("{}: {}", name, value)
+        }).collect();
+
+        // Replace second field name with first field name.
+        let second_value = pretty_print(db, fields[1].value(db));
+        field_strs[1] = format!("{}: {}", first_name, second_value);
+
+        // Build type hint string.
+        let mut type_str = String::new();
+        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+
+        let source = format!(": {} / {}{{{}}}", type_str, heap_str, field_strs.join(", "));
+
+        Some(MutationResult {
+            source,
+            expected_errors: vec!["T040"], // Duplicate field.
+            description: "Duplicated field name in struct".to_string(),
+        })
+    } else if let (TypeHint::NamedStruct(_), Expr::NamedStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
+        let fields = s.fields(db);
+        if fields.len() < 2 {
+            return None;
+        }
+
+        let struct_name = s.name(db).as_str(db);
+        let first_name = fields[0].name(db).as_str(db);
+
+        let mut field_strs: Vec<String> = fields.iter().map(|f| {
+            let name = f.name(db).as_str(db);
+            let value = pretty_print(db, f.value(db));
+            format!("{}: {}", name, value)
+        }).collect();
+
+        // Replace second field name with first field name.
+        let second_value = pretty_print(db, fields[1].value(db));
+        field_strs[1] = format!("{}: {}", first_name, second_value);
+
+        // Build type hint string.
+        let mut type_str = String::new();
+        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+
+        let source = format!(": {} / {}struct {} {{{}}}", type_str, heap_str, struct_name, field_strs.join(", "));
+
+        Some(MutationResult {
+            source,
+            expected_errors: vec!["T041"], // Duplicate field (named struct).
+            description: "Duplicated field name in named struct".to_string(),
+        })
+    } else {
+        None
+    }
+}
+
+/// Use wrong field name in struct (field not in type hint).
+fn apply_wrong_field_name<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFull<'db>,
+) -> Option<MutationResult> {
+    let type_hint = expr.type_hint(db)?;
+    let expr_and_heap = expr.expr(db);
+    let heap = expr_and_heap.heap(db);
+
+    let heap_str = match heap {
+        Heap::Local => "@",
+        Heap::Global => "#",
+        Heap::Omitted => "",
+    };
+
+    // Check if this is an anon struct.
+    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
+        let fields = s.fields(db);
+        if fields.is_empty() {
+            return None;
+        }
+
+        // Change first field name to nonexistent.
+        let mut field_strs: Vec<String> = fields.iter().map(|f| {
+            let name = f.name(db).as_str(db);
+            let value = pretty_print(db, f.value(db));
+            format!("{}: {}", name, value)
+        }).collect();
+
+        let first_value = pretty_print(db, fields[0].value(db));
+        field_strs[0] = format!("nonexistent_field_xyz: {}", first_value);
+
+        // Build type hint string.
+        let mut type_str = String::new();
+        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+
+        let source = format!(": {} / {}{{{}}}", type_str, heap_str, field_strs.join(", "));
+
+        Some(MutationResult {
+            source,
+            expected_errors: vec!["T042"], // Unknown field.
+            description: "Changed field name to nonexistent".to_string(),
+        })
+    } else if let (TypeHint::NamedStruct(_), Expr::NamedStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
+        let fields = s.fields(db);
+        if fields.is_empty() {
+            return None;
+        }
+
+        let struct_name = s.name(db).as_str(db);
+
+        let mut field_strs: Vec<String> = fields.iter().map(|f| {
+            let name = f.name(db).as_str(db);
+            let value = pretty_print(db, f.value(db));
+            format!("{}: {}", name, value)
+        }).collect();
+
+        let first_value = pretty_print(db, fields[0].value(db));
+        field_strs[0] = format!("nonexistent_field_xyz: {}", first_value);
+
+        // Build type hint string.
+        let mut type_str = String::new();
+        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+
+        let source = format!(": {} / {}struct {} {{{}}}", type_str, heap_str, struct_name, field_strs.join(", "));
+
+        Some(MutationResult {
+            source,
+            expected_errors: vec!["T043"], // Unknown field (named struct).
+            description: "Changed field name to nonexistent in named struct".to_string(),
+        })
+    } else {
+        None
+    }
+}
+
+/// Add payload to variant that doesn't expect one, or remove from one that does.
+fn apply_wrong_payload_presence<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFull<'db>,
+) -> Option<MutationResult> {
+    let type_hint = expr.type_hint(db)?;
+    let expr_and_heap = expr.expr(db);
+    let heap = expr_and_heap.heap(db);
+
+    let heap_str = match heap {
+        Heap::Local => "@",
+        Heap::Global => "#",
+        Heap::Omitted => "",
+    };
+
+    // Build type hint prefix string.
+    let mut type_hint_str = String::new();
+    type_hint_str.push_str(": ");
+    pretty_type_hint_and_heap(db, type_hint, &mut type_hint_str);
+    type_hint_str.push_str(" / ");
+
+    match (type_hint.type_hint(db), expr_and_heap.expr(db)) {
+        (TypeHint::AnonEnum(th_enum), Expr::AnonEnum(e)) => {
+            let variant_name = e.variant_name(db).as_str(db);
+
+            // Find this variant in the type hint to check expected payload.
+            let variants = th_enum.variants(db);
+            let variant_hint = variants.iter().find(|v| v.name(db).as_str(db) == variant_name)?;
+
+            // Flip payload presence: add if missing, remove if present.
+            let source = if variant_hint.payload(db).is_some() {
+                // Variant expects payload, but we'll omit it.
+                format!("{}{}{{ .{} }}", type_hint_str, heap_str, variant_name)
+            } else {
+                // Variant doesn't expect payload, but we'll add one.
+                format!("{}{}{{ .{} @42 }}", type_hint_str, heap_str, variant_name)
+            };
+
+            Some(MutationResult {
+                source,
+                expected_errors: vec!["T045"], // Wrong payload presence.
+                description: "Toggled enum variant payload presence".to_string(),
+            })
+        }
+        (TypeHint::NamedEnum(th_enum), Expr::NamedEnum(e)) => {
+            let enum_name = e.enum_name(db).as_str(db);
+            let variant_name = e.variant_name(db).as_str(db);
+
+            // Find this variant in the type hint to check expected payload.
+            let variants = th_enum.variants(db);
+            let variant_hint = variants.iter().find(|v| v.name(db).as_str(db) == variant_name)?;
+
+            // Flip payload presence.
+            let source = if variant_hint.payload(db).is_some() {
+                format!("{}{}enum {} {{ .{} }}", type_hint_str, heap_str, enum_name, variant_name)
+            } else {
+                format!("{}{}enum {} {{ .{} @42 }}", type_hint_str, heap_str, enum_name, variant_name)
+            };
+
+            Some(MutationResult {
+                source,
+                expected_errors: vec!["T047"], // Wrong payload presence (named enum).
+                description: "Toggled named enum variant payload presence".to_string(),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Swap key and value types in a map entry.
+fn apply_swap_map_key_value<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFull<'db>,
+) -> Option<MutationResult> {
+    let type_hint = expr.type_hint(db)?;
+    let expr_and_heap = expr.expr(db);
+    let outer_heap = expr_and_heap.heap(db);
+
+    // Check if this is a map with at least one entry where key/value types differ.
+    if let (TypeHint::Map(map_th), Expr::Map(m)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
+        let entries = m.entries(db);
+        if entries.is_empty() {
+            return None;
+        }
+
+        // Check if key and value types are different (otherwise swap is not an error).
+        let key_type = map_th.key_type(db);
+        let val_type = map_th.value_type(db);
+        let mut key_str = String::new();
+        let mut val_str = String::new();
+        pretty_type_hint_and_heap(db, key_type, &mut key_str);
+        pretty_type_hint_and_heap(db, val_type, &mut val_str);
+        if key_str == val_str {
+            return None; // Same types, swap won't cause error.
+        }
+
+        // Build map entries with first entry's key/value swapped.
+        let mut entry_strs: Vec<String> = entries.iter().enumerate().map(|(i, e)| {
+            let key_pp = pretty_print(db, e.key(db));
+            let val_pp = pretty_print(db, e.value(db));
+            if i == 0 {
+                // Swap key and value for first entry.
+                format!("{}: {}", val_pp, key_pp)
+            } else {
+                format!("{}: {}", key_pp, val_pp)
+            }
+        }).collect();
+
+        // Build outer heap prefix.
+        let outer_heap_str = match outer_heap {
+            Heap::Local => "@",
+            Heap::Global => "#",
+            Heap::Omitted => "",
+        };
+
+        let map_body = format!("{}map {{ {} }}", outer_heap_str, entry_strs.join(", "));
+
+        // Build type hint string.
+        let mut type_str = String::new();
+        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+
+        let source = format!(": {} / {}", type_str, map_body);
+
+        Some(MutationResult {
+            source,
+            expected_errors: vec!["T019"], // Map key type mismatch.
+            description: "Swapped map key and value".to_string(),
+        })
+    } else {
+        None
     }
 }
 
