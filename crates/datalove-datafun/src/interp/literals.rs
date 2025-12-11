@@ -1,0 +1,265 @@
+//! Literal value allocation and writing.
+//!
+//! Functions for allocating and writing literal values (integers, floats,
+//! strings) from parsed AST nodes to runtime values.
+
+use crate::ast;
+
+use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
+use super::alloc::allocate_f32;
+
+/// Allocate an f32 value from a float literal (datalit AST).
+pub(super) fn allocate_float_literal<'db>(
+    ctx: &mut InterpContext<'db>,
+    float_expr: &crate::datalit::ast::ExprFloat<'db>,
+) -> Result<Value, InterpError> {
+    let value_str = float_expr.value(ctx.db).as_str(ctx.db);
+    let value: f32 = value_str.parse()
+        .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
+    allocate_f32(ctx, value)
+}
+
+/// Allocate an integer value from a literal (datalit AST).
+pub(super) fn allocate_int_literal<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_expr: &crate::datalit::ast::ExprInt<'db>,
+) -> Result<Value, InterpError> {
+    use super::alloc::allocate_u32_raw;
+
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+    let value: u32 = value_str.parse()
+        .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
+    allocate_u32_raw(ctx, value)
+}
+
+/// Allocate a string value (datalit AST).
+pub(super) fn allocate_string<'db>(
+    ctx: &mut InterpContext<'db>,
+    string_expr: &crate::datalit::ast::ExprString<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let string_value_raw = string_expr.value(ctx.db).as_str(ctx.db);
+
+    // Strip quotes if present.
+    let string_value = if string_value_raw.starts_with('"') && string_value_raw.ends_with('"') {
+        &string_value_raw[1..string_value_raw.len()-1]
+    } else {
+        string_value_raw
+    };
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
+
+    let rt_handle = ctx.runtime.handle();
+
+    // Allocate memory for the string structure.
+    let string_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    // Initialize the string structure.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            string_ptr,
+            tydesc_ptr,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create string".to_string()));
+    }
+
+    // Push the string bytes if non-empty.
+    if !string_value.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                string_ptr,
+                tydesc_ptr,
+                string_value.as_ptr(),
+                string_value.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push string bytes".to_string()));
+        }
+    }
+
+    Ok(Value {
+        ptr: string_ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Allocate an inline integer literal (from datafun AST).
+pub(super) fn allocate_inline_int_literal<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_expr: &ast::ExprInt<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+    let value: u32 = value_str.parse()
+        .map_err(|e| InterpError::RuntimeError(format!("Failed to parse integer: {}", e)))?;
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
+
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    unsafe {
+        *(ptr as *mut u32) = value;
+    }
+
+    Ok(Value {
+        ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
+
+/// Write inline integer literal to destination.
+pub(super) fn write_inline_int_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    int_expr: &ast::ExprInt<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    let value_str = int_expr.value(ctx.db).as_str(ctx.db);
+
+    // Determine the destination type and parse accordingly.
+    let type_tag = unsafe { (*dest.tydesc).type_tag };
+    match type_tag {
+        datalove_rt::rtdt::TyTag::U8 => {
+            let value: u8 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u8: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u8) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I8 => {
+            let value: i8 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i8: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i8) = value; }
+        }
+        datalove_rt::rtdt::TyTag::U16 => {
+            let value: u16 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u16: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u16) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I16 => {
+            let value: i16 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i16: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i16) = value; }
+        }
+        datalove_rt::rtdt::TyTag::U32 => {
+            let value: u32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u32: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u32) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I32 => {
+            let value: i32 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i32: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i32) = value; }
+        }
+        datalove_rt::rtdt::TyTag::U64 => {
+            let value: u64 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse u64: {}", e)))?;
+            unsafe { *(dest.ptr as *mut u64) = value; }
+        }
+        datalove_rt::rtdt::TyTag::I64 => {
+            let value: i64 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i64: {}", e)))?;
+            unsafe { *(dest.ptr as *mut i64) = value; }
+        }
+        _ => {
+            return Err(InterpError::RuntimeError(
+                format!("Cannot write integer to destination type {:?}", type_tag)
+            ));
+        }
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write Option::None to a destination.
+pub(super) fn write_option_none_to_dest(dest: Destination) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag, OptionTag};
+
+    let dest_tydesc = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+
+    // Verify the destination type is Option.
+    if dest_tydesc.type_tag() != TyTag::Option {
+        return Err(InterpError::RuntimeError(
+            format!("Cannot write @none to non-Option type: {:?}", dest_tydesc.type_tag())
+        ));
+    }
+
+    // Write None tag to destination.
+    unsafe {
+        *(dest.ptr as *mut u8) = OptionTag::None as u8;
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Allocate an inline string literal (from datafun AST).
+pub(super) fn allocate_inline_string<'db>(
+    ctx: &mut InterpContext<'db>,
+    string_expr: &ast::ExprString<'db>,
+) -> Result<Value, InterpError> {
+    use crate::datalit::tycheck::Type;
+
+    let string_value_raw = string_expr.value(ctx.db).as_str(ctx.db);
+
+    // Strip quotes if present.
+    let string_value = if string_value_raw.starts_with('"') && string_value_raw.ends_with('"') {
+        &string_value_raw[1..string_value_raw.len()-1]
+    } else {
+        string_value_raw
+    };
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
+
+    let rt_handle = ctx.runtime.handle();
+
+    let string_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
+    };
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            string_ptr,
+            tydesc_ptr,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create string".to_string()));
+    }
+
+    if !string_value.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                string_ptr,
+                tydesc_ptr,
+                string_value.as_ptr(),
+                string_value.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push string bytes".to_string()));
+        }
+    }
+
+    Ok(Value {
+        ptr: string_ptr,
+        tydesc: tydesc_ptr,
+        location: ValueLocation::TempOwned,
+    })
+}
