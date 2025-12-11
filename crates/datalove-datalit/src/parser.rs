@@ -401,35 +401,6 @@ impl<'db> DynParser<'db> {
                     }
                 }
             }
-            Some("list") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
-                self.eat_word("list");
-                // Expect angle bracket with element type.
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::AngleOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                        };
-                        let element_type = sub_parser.parse_type_hint_and_heap();
-                        ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
-                    }
-                    _ => {
-                        self.emit_type_hint_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected <> after list keyword",
-                            "D007",
-                            "expected '<' after 'list'"
-                        )
-                    }
-                }
-            }
             Some("tensor") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("tensor");
