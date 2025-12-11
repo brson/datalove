@@ -327,12 +327,11 @@ When an anonymous enum expression has a direct enum type hint (not wrapped in Op
 | TruncateSource | 26% | 100% | ✅ Enabled |
 | DeleteOpeningBracket | 36.4% | 100% | ✅ Enabled |
 | ExtraClosingBracket | 66.0% | 100% | ✅ Enabled |
-| DeleteComma | 50.0% | 90% | ⚠️ Skipped (minor type hint diffs) |
+| DeleteComma | 50.0% | 100% | ✅ Enabled |
 
 **Test Summary:**
-- 10 of 11 mutation tests enabled and passing at 100%
-- DeleteComma skipped due to minor type hint parsing differences (~90% pass)
-- Overall discovery test: 99.5% pass rate (182/183)
+- 11 of 11 mutation tests enabled and passing at 100%
+- Overall discovery test: 100% pass rate (183/183)
 
 ## Success Criteria
 
@@ -542,28 +541,25 @@ The enum variant parsing difference stems from type hint parsing. Same fix as Ta
 
 ## Results
 
-- DeleteComma: 83% → 94.3% (50/53)
-- Discovery test: 99.5% → 100% (183/183)
+- DeleteComma: 83% → 100% (53/53)
+- Discovery test: 100% (183/183)
 - All detailed tests pass
 
-## Remaining Issues
+## Phase 3 Additional Fixes
 
-3 failures in DeleteComma debug test (seeds 102, 143, 155):
+### Task 3.7: Add enum variant checking - DONE
 
-1. **Seeds 102, 155** - Type hint comma deletion in struct/tuple type hints
-   - Datalit reports: `ArityMismatch { expected: N, actual: M }`
-   - Datafun reports: `TypeMismatch { expected: "...", actual: "..." }`
-   - Both are semantically equivalent (type hint parsed with fewer fields)
-   - Not worth fixing - requires deep changes to error comparison logic
+When synthesizing `AnonEnum`/`NamedEnum` expressions with type hints, datafun now verifies the variant exists in the type hint. Previously, it just converted the type hint without checking.
 
-2. **Seed 143** - Enum variant comma deletion
-   - Datalit reports: `VariantNotFound("ElementValue92")`
-   - Datafun reports: no error
-   - Type hint `{Data40(@i8), MyStruct77 ElementValue92}` parsed differently
-   - Not worth fixing - minor edge case
+**Files modified:**
+- `crates/datalove-datafun/src/tycheck.rs` - Added `check_enum_variant()` helper function
 
-These are acceptable because:
-- The errors are semantically equivalent in cases 102/155
-- The discovery test (with 50 seeds) shows 100% pass rate
-- The detailed debug test (with 200 seeds) shows 94.3% pass rate
-- All other mutation types show 100% pass rate
+### Task 3.8: Report ArityMismatch for struct/tuple type mismatches - DONE
+
+Modified `check_type_coercion()` to detect when structs/tuples have different field counts and return `ArityMismatch` instead of `TypeMismatch`. This matches datalit's behavior.
+
+**Files modified:**
+- `crates/datalove-datafun/src/tycheck.rs`:
+  - Added `CoercionError` enum with `TypeMismatch` and `ArityMismatch` variants
+  - Added `check_type_arity_or_mismatch()` helper function
+  - Updated all `check_type_coercion()` callers to use the new error type
