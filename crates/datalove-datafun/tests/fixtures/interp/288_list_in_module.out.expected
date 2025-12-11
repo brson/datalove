@@ -1,0 +1,101 @@
+[
+    ModuleAnalysis(
+        type: "Module",
+        path: "sys/test/listmod",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "make_list",
+                    params: [],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: List(TypeHintList(
+                            element_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprList(
+                                    kind: "List",
+                                    heap: Local,
+                                    type_hint: None,
+                                    elements: [
+                                        ExprFun(
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: None,
+                                                value: "5",
+                                            ),
+                                        ),
+                                        ExprFun(
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: None,
+                                                value: "10",
+                                            ),
+                                        ),
+                                        ExprFun(
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: None,
+                                                value: "15",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        exports: [],
+    ),
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtRequireModule(
+                    kind: "Require",
+                    variant: "Module",
+                    import_space: "sys",
+                    package_alias: "test",
+                    module_alias: "listmod",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "listmod",
+                    item_name: "make_list",
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "make_list",
+                            args: [],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@[@5, @10, @15]",
+    ),
+]

@@ -1,0 +1,16 @@
+----------
+module sys/test/listmod
+----------
+
+fun make_list(): [u32]
+    ret @[ @5, @10, @15 ]
+end fun
+
+----------
+script
+----------
+
+require module sys/test/listmod
+import listmod.make_list
+
+let output = make_list()

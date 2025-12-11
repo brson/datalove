@@ -253,14 +253,19 @@ Requires extending function_analysis to cover script-level statements.
 This is a significant architectural change.
 
 ### Phase 5: Test Coverage - COMPLETE
-Added 6 new tests for collections in functions:
+Added 10 new tests for collections in functions and modules:
 - 280_map_in_function.world
 - 281_set_in_function.world
 - 282_struct_in_function.world
 - 283_list_in_function.world
 - 284_tuple_in_function.world
-- 287_struct_in_module.world
+- 285_map_in_module.world (return type: `map<u32, u32>`)
+- 286_set_in_module.world (return type: `set<u32>`)
+- 287_struct_in_module.world (return type: `{x: u32, y: u32}`)
+- 288_list_in_module.world (return type: `[u32]`)
 
-Note: Module tests for Map/Set/List not possible yet due to missing type syntax.
+Type syntax notes:
+- `map<K, V>` and `set<T>` use angle brackets
+- Lists use bracket syntax `[T]` not `list<T>`
 
-### Tests: 145 passing with DATALOVE_LEAK_CHECK=panic
+### Tests: 148 passing with DATALOVE_LEAK_CHECK=panic
