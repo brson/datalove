@@ -249,7 +249,7 @@ Added `get_expr_heap()` helper to extract outer heap from expressions. Updated a
 
 Changed `apply_heap_mismatch` to use prefix type hint syntax (`: type / expr`) instead of trailing `<type>` format, since datafun doesn't parse trailing type hints on collections.
 
-## Phase 2: Parser Panic Fixes - PARTIALLY COMPLETE
+## Phase 2: Parser Panic Fixes - COMPLETE
 
 ### Task 2.1: Fix `need_sigil` panic for missing `/` - DONE
 
@@ -263,10 +263,12 @@ The function was treating any hex digit (a-f) as numeric, causing `@e` to be par
 
 Changed from `DatalitError(format!("{:?}", e))` to `TypeError::from(e)` to properly convert datalit errors.
 
-### Remaining Issues (bct crate)
+### Task 2.4: Fix bct bracer panics with unmatched brackets - DONE
 
-- DeleteOpeningBracket: bct bracer panics with unmatched close brackets
-- ExtraClosingBracket: bct bracer panics with unmatched close brackets
+Fixed `BracerIter::next2()` in `bct/crates/bct/src/bracer.rs` to skip `removed_closes` that fall behind the iterator position after exiting a branch. The bug occurred because `removed_closes` positions are absolute token indices, but after jumping past a branch the iterator position could skip past recorded removed close positions.
+
+### Remaining Issues
+
 - DeleteComma: Legitimate parsing differences (not a bug)
 
 ## Implementation Order
@@ -291,6 +293,7 @@ Changed from `DatalitError(format!("{:?}", e))` to `TypeError::from(e)` to prope
 18. ~~Task 2.1 - Fix need_sigil panic for missing /~~ DONE
 19. ~~Task 2.2 - Fix is_numeric_literal hex vs decimal~~ DONE
 20. ~~Task 2.3 - Fix convert_type_hint error wrapping~~ DONE
+21. ~~Task 2.4 - Fix bct bracer panics~~ DONE
 
 ## Current Results
 
@@ -304,13 +307,14 @@ Changed from `DatalitError(format!("{:?}", e))` to `TypeError::from(e)` to prope
 | RemoveTypeHint | 0% | 100% | ✅ Enabled |
 | WrongVariant | 0% | 100% | ✅ Enabled |
 | TruncateSource | 26% | 100% | ✅ Enabled |
-| DeleteOpeningBracket | 36.4% | N/A | ⚠️ Skipped (bct bug) |
-| ExtraClosingBracket | 66.0% | N/A | ⚠️ Skipped (bct bug) |
+| DeleteOpeningBracket | 36.4% | N/A | ⚠️ Skipped (grammar diff, bct fixed) |
+| ExtraClosingBracket | 66.0% | N/A | ⚠️ Skipped (grammar diff, bct fixed) |
 | DeleteComma | 50.0% | N/A | ⚠️ Skipped (grammar diff) |
 
 **Test Summary:**
 - 8 of 8 detailed tests enabled and passing
-- Source mutations test enabled (skips 3 mutations with external issues)
+- Source mutations test enabled (skips 3 mutations with grammar differences)
+- bct bracer panics fixed, but error equivalence still differs due to different parser recovery
 
 ## Success Criteria
 

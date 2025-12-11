@@ -564,9 +564,10 @@ fn test_error_equiv_wrong_variant_detailed() {
 }
 
 /// Detailed test for source-level mutations.
-/// Note: Some mutations are skipped due to external issues:
-/// - DeleteOpeningBracket, ExtraClosingBracket: bct bracer bug with unmatched brackets
-/// - DeleteComma: Legitimate parsing differences between datalit/datafun grammar recovery
+/// Note: Some mutations are skipped due to legitimate parsing differences:
+/// - DeleteOpeningBracket, ExtraClosingBracket: Different grammar recovery between
+///   datalit and datafun (datalit reports PARSE_ERROR, datafun recovers and typechecks)
+/// - DeleteComma: Different comma handling in datalit vs datafun grammars
 #[test]
 fn test_error_equiv_source_mutations_detailed() {
     let db = datalove_datafun::Database::default();
@@ -590,9 +591,8 @@ fn test_error_equiv_source_mutations_detailed() {
             let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
             if let Some(result) = mutation.apply(&db, expr, &mut rng) {
-                // Skip mutations that trigger bct bracer bug with unmatched brackets.
-                // Skip DeleteComma because it creates legitimately different parses
-                // between datalit and datafun (different grammar recovery).
+                // Skip mutations that create legitimately different parses between
+                // datalit and datafun due to different grammar recovery strategies.
                 if matches!(mutation, Mutation::DeleteOpeningBracket | Mutation::ExtraClosingBracket | Mutation::DeleteComma) {
                     continue;
                 }
