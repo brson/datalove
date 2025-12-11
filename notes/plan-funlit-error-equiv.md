@@ -344,3 +344,205 @@ When an anonymous enum expression has a direct enum type hint (not wrapped in Op
 - ~~WrongVariant: 0% → 100%~~ ACHIEVED
 - ~~TruncateSource: 26% → 100%~~ ACHIEVED
 - ~~Source mutations test: enabled~~ ACHIEVED
+
+---
+
+# Phase 3: DeleteComma Parsing Alignment
+
+**Status: NOT STARTED**
+
+## Problem Summary
+
+DeleteComma test currently passes at ~83% (44/53). The failures fall into distinct categories where datalit and datafun parse malformed input differently.
+
+## Root Cause Analysis
+
+The parsers use fundamentally different strategies:
+
+### Datalit Approach
+- Uses `parse_comma_separated` which **parses incrementally** - calls `parse_fn`, then looks for comma, repeats
+- When parsing `{a = val1 b = val2, c = val3}` (missing comma):
+  - Parses field `a`, gets value
+  - Looks for comma, doesn't find it, **stops**
+  - Result: 1 field
+
+### Datafun Approach
+- Uses `split_by_comma` first, then parses each group
+- When parsing `{a = val1 b = val2, c = val3}` (missing comma):
+  - Splits by comma: `["a = val1 b = val2", "c = val3"]`
+  - Parses group 1: finds `a`, finds `=`, parses rest as value (including junk)
+  - Parses group 2: finds `c`
+  - Result: 2 fields
+
+## Failure Categories
+
+### Category 1: Struct/Tuple Field Comma Deletion (Seeds 17, 136, 151)
+**Pattern:** Delete comma between struct field values
+```
+Original: #{y4 = #"value", z1 = #"data", value7 = ...}
+Mutated:  #{y4 = #"value" z1 = #"data", value7 = ...}
+Datalit:  ArityMismatch { expected: 3, actual: 1 }
+Datafun:  ArityMismatch { expected: 3, actual: 2 }
+```
+
+### Category 2: Type Hint Comma Deletion (Seeds 102, 155)
+**Pattern:** Delete comma in type hint (struct/tuple)
+```
+Original: @{data3: @i32, value4: @i64, y0: @bool}
+Mutated:  @{data3: @i32, value4: @i64 y0: @bool}
+Datalit:  ArityMismatch { expected: 2, actual: 3 }
+Datafun:  TypeMismatch (different type hint parsing)
+```
+
+### Category 3: Tensor Shape Comma Deletion (Seed 126)
+**Pattern:** Delete comma in tensor shape
+```
+Original: @tensor [2, 1] [...]
+Mutated:  @tensor [2 1] [...]
+Datalit:  ArityMismatch { expected: 2, actual: 1 }
+Datafun:  No error (parses "21" as single dimension)
+```
+
+### Category 4: Enum Variant Comma Deletion (Seed 143)
+**Pattern:** Delete comma between enum variants in type hint
+```
+Original: @enum {Data40(@i8), MyStruct77, ElementValue92}
+Mutated:  @enum {Data40(@i8), MyStruct77 ElementValue92}
+Datalit:  VariantNotFound("ElementValue92") - sees 2 variants
+Datafun:  No error - sees 3 variants (parses "MyStruct77 ElementValue92" differently)
+```
+
+### Category 5: Tensor Element Comma Deletion (Seeds 150, 159)
+**Pattern:** Delete comma between tensor elements
+```
+Original: #tensor [...] [: #u8 / #85, : #u8 / #146]
+Mutated:  #tensor [...] [: #u8 / #85 : #u8 / #146]
+Datalit:  PARSE_ERROR
+Datafun:  No error
+```
+
+## Remediation Strategy
+
+**Goal:** Make datafun use the same incremental parsing strategy as datalit for literals.
+
+### Task 3.1: Refactor datafun struct field parsing
+
+Change `parse_comma_separated_struct_fields` from split-first to incremental:
+
+```rust
+// Current (datafun):
+fn parse_comma_separated_struct_fields(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprStructField<'db>> {
+    let groups = self.split_by_comma(all_tokens);
+    for group in groups {
+        // parse each group
+    }
+}
+
+// Target (match datalit):
+fn parse_comma_separated_struct_fields(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprStructField<'db>> {
+    let tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
+    let mut tokens_iter = tokens.into_iter().peekable();
+    let mut fields = Vec::new();
+    loop {
+        fields.push(self.parse_struct_field(&mut tokens_iter));
+        if !self.eat_comma(&mut tokens_iter) {
+            break;
+        }
+    }
+    fields
+}
+```
+
+### Task 3.2: Refactor datafun tuple element parsing
+
+Apply same change to tuple parsing.
+
+### Task 3.3: Refactor datafun tensor shape parsing
+
+Current datafun:
+```rust
+fn parse_tensor_shape(&mut self, tokens: Vec<TreeToken<'db>>) -> Vec<u32> {
+    for token in tokens {
+        if comma { flush_current } else { append_to_current }
+    }
+}
+```
+
+This treats "2 1" as "21" because it just concatenates word tokens. Should match datalit's `parse_comma_separated(|p| p.parse_u32_literal())`.
+
+### Task 3.4: Refactor datafun tensor element parsing
+
+Current datafun 2D+ tensor parsing:
+```rust
+fn parse_tensor_data_2d_plus(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
+    let rows = self.split_tokens_by_comma_with_spaces(&all_tokens);
+    for row_tokens in rows {
+        while row_iter.peek().is_some() {
+            elements.push(self.parse_expr_full(&mut row_iter));
+        }
+    }
+}
+```
+
+This is close to datalit, but the difference in 1D parsing is the issue.
+
+### Task 3.5: Fix type hint parsing in datafun
+
+Datafun delegates to datalit for type hints via `parse_type_hint_and_heap_from_tokens`. The issue is that datafun collects tokens stopping at `,`, `=`, `/`, then passes them to datalit.
+
+For malformed type hints like `{data3: @i32, value4: @i64 y0: @bool}`:
+- Datafun collects until `/`, gets the whole malformed type hint
+- Datalit parses it, but may interpret it differently than if parsed in context
+
+**Fix:** Datafun should use datalit's type hint parser directly rather than pre-collecting tokens.
+
+### Task 3.6: Fix enum type hint parsing
+
+The enum variant parsing difference stems from type hint parsing. Same fix as Task 3.5.
+
+## Implementation Order
+
+1. Task 3.1 - Struct field parsing (fixes Seeds 17, 136, 151)
+2. Task 3.2 - Tuple element parsing
+3. Task 3.3 - Tensor shape parsing (fixes Seed 126)
+4. Task 3.4 - Tensor element parsing (fixes Seeds 150, 159)
+5. Task 3.5 - Type hint parsing (fixes Seeds 102, 155)
+6. Task 3.6 - Enum type hint parsing (fixes Seed 143)
+
+## Why Full Delegation Won't Work
+
+Investigated sharing infrastructure by having datafun delegate to datalit's parser.
+
+**Already shared:**
+- Type hints (`datalit::ast::TypeHintAndHeap`, `datalit::ast::Heap`)
+- Type hint parsing (`datalit::parser::parse_type_hint_and_heap_from_tokens`)
+
+**Why we can't share literal parsing:**
+1. AST types differ: `datafun::ExprFun` vs `datalit::ExprFull`
+2. Struct fields in datafun can contain full expressions (function calls, binary ops), not just literals
+3. Example: `{ field = some_function() }` must work in datafun
+
+**What we CAN share:**
+- The **comma-handling logic** pattern (incremental vs split-first)
+- Token iteration helpers
+
+## Recommended Approach: Structural Alignment
+
+Make datafun's parsing logic structurally identical to datalit's for comma-separated parsing:
+
+1. Change `parse_comma_separated_struct_fields` from split-first to incremental
+2. Change `parse_comma_separated_exprs` from split-first to incremental
+3. Fix `parse_tensor_shape` to parse incrementally
+
+This is lower risk than extraction because:
+- We have DeleteComma tests to verify correctness
+- We're only changing the parsing strategy, not the AST types
+- The changes are localized to a few functions
+
+After alignment is verified, we could extract a shared `parse_comma_separated` helper that takes a closure, similar to what datalit already has.
+
+## Expected Results
+
+After remediation:
+- DeleteComma: 83% → 100%
+- Overall: 99.5% → 100%

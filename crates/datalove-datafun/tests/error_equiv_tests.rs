@@ -941,3 +941,64 @@ fn test_debug_arity_mismatch() {
     eprintln!("Total mutations applied: {}", applied_count);
 }
 
+/// Debug test for DeleteComma - shows raw errors from both systems.
+#[test]
+#[ignore] // Run with --ignored to investigate
+fn test_debug_delete_comma() {
+    let config = make_mutation_config();
+
+    eprintln!("\n=== DeleteComma Failures ===\n");
+
+    let mut failures = Vec::new();
+    let mut successes = 0;
+    for seed in 0..200 {
+        let config_clone = config.clone();
+        let result = std::thread::spawn(move || {
+            let db = datalove_datafun::Database::default();
+            let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
+            let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
+
+            let original = datalove_datalit::pretty::pretty_print(&db, expr);
+
+            if let Some(result) = Mutation::DeleteComma.apply(&db, expr, &mut rng) {
+                let (datalit_errs, datalit_parse) = get_datalit_errors(&db, &result.source);
+                let (datafun_errs, datafun_parse) = get_datafun_errors(&db, &result.source);
+                let is_eq = errors_equivalent(&datalit_errs, &datafun_errs, datalit_parse, datafun_parse);
+                Some((original, result.source, result.description, datalit_errs, datalit_parse, datafun_errs, datafun_parse, is_eq))
+            } else {
+                None
+            }
+        }).join();
+
+        match result {
+            Ok(Some((original, source, desc, datalit_errs, datalit_parse, datafun_errs, datafun_parse, is_eq))) => {
+                if !is_eq {
+                    failures.push((seed, desc, original, source, datalit_errs, datalit_parse, datafun_errs, datafun_parse));
+                } else {
+                    successes += 1;
+                }
+            }
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("PANIC Seed {}: {:?}", seed, e);
+            }
+        }
+    }
+
+    // Print summary first.
+    eprintln!("\n=== Summary ===");
+    let total = failures.len() + successes;
+    eprintln!("Pass rate: {}/{} ({:.1}%)", successes, total, successes as f64 / total as f64 * 100.0);
+    eprintln!("Failures: {}\n", failures.len());
+
+    // Print failures.
+    for (seed, desc, original, source, datalit_errs, datalit_parse, datafun_errs, datafun_parse) in failures {
+        eprintln!("FAIL Seed {}: {}", seed, desc);
+        eprintln!("  Original: {}", original);
+        eprintln!("  Mutated:  {}", source);
+        eprintln!("  Datalit: {:?} (parse_err={})", datalit_errs, datalit_parse);
+        eprintln!("  Datafun: {:?} (parse_err={})", datafun_errs, datafun_parse);
+        eprintln!();
+    }
+}
+
