@@ -17,25 +17,37 @@ It is neither stable nor supported.
 
 ## Installation
 
-Install prebuilt binaries:
+Install from source with [Rust](https://rustup.rs)
 
 ```
-curl -L https://up.datalove.todo | sh
+cargo install datalove-cli
 ```
 
-Or install from source with [Rust](https://rustup.rs):
+Run the REPL with
 
-`cargo install datalove-cli`
+````
+datalove repl
+```
 
 
 ## Datalove novelties for language enthusiasts
 
+Matched-brace / token-tree lexing.
+Statement oriented, statements that span multiple lines without statement terminators.
+Pascal, Python, and Rust-influenced syntax.
+
 Linear types and argument modes.
 No reference types, no GC.
+Ergonomic coercions.
 
-Matched-brace tree lexing plus newline-sensitive parsing
-enables an unambiguous mixture of Python, Pascal, and Rust syntactic features
-(with some unfortunate tradeoffs around `<` and `>`).
+Fully-incremental compilation.
+Whole-world compilation, all modules and other inputs must be known upfront.
+Incremental script execution.
+Interpreter, JIT and AOT.
+
+
+
+
 
 
 ## What is Datalove?
@@ -57,16 +69,4 @@ on the datalit type system. File extensions: `.dfs` (script), `.dfm` (modules)
 
 The complete language with procedures, owned native pointers, and objects. File
 extensions: `.dls` (script), `.dlm` (module)
-
-
-## Key Features
-
-- **Statically typed** with ergonomic coercions and runtime reflection
-- **REPL-first design** with undo/redo and rewind/replay
-- **Fully WASM-compatible** toolchain
-- **Massive standard library** (aspirational)
-- **Fast incremental compilation** with hot-reloading
-
-
-## Quick Look
 
