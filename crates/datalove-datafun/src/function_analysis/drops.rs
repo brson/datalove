@@ -126,6 +126,10 @@ pub fn compute_drop_points<'db>(
                 // No drops at branches or gotos.
                 // Drops happen at the exit points (returns).
             }
+            Terminator::LoopContinue(_) | Terminator::LoopBreak(_) => {
+                // No drops at loop control flow.
+                // Drops happen at the exit points (returns).
+            }
         }
     }
 

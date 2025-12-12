@@ -20,6 +20,9 @@ pub enum Statement {
     Require(StmtRequire),
     Import(StmtImport),
     If(StmtIf),
+    Loop(StmtLoop),
+    Break(StmtBreak),
+    Continue(StmtContinue),
     ParseError(StmtParseError),
 }
 
@@ -90,6 +93,17 @@ pub struct StmtIf {
     pub then_body: Vec<Statement>,
     pub else_body: Option<Vec<Statement>>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtLoop {
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtBreak {}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtContinue {}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtParseError {
@@ -367,6 +381,9 @@ impl Statement {
             crate::ast::Statement::Require(s) => Statement::Require(StmtRequire::from_ast(db, s)),
             crate::ast::Statement::Import(s) => Statement::Import(StmtImport::from_ast(db, *s)),
             crate::ast::Statement::If(s) => Statement::If(StmtIf::from_ast(db, *s)),
+            crate::ast::Statement::Loop(s) => Statement::Loop(StmtLoop::from_ast(db, *s)),
+            crate::ast::Statement::Break(_) => Statement::Break(StmtBreak {}),
+            crate::ast::Statement::Continue(_) => Statement::Continue(StmtContinue {}),
             crate::ast::Statement::ParseError(s) => Statement::ParseError(StmtParseError::from_ast(db, *s)),
         }
     }
@@ -459,6 +476,14 @@ impl StmtIf {
             else_body: ast.else_body(db).as_ref().map(|stmts| {
                 stmts.iter().map(|s| Statement::from_ast(db, s)).collect()
             }),
+        }
+    }
+}
+
+impl StmtLoop {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::StmtLoop<'db>) -> Self {
+        StmtLoop {
+            body: ast.body(db).iter().map(|s| Statement::from_ast(db, s)).collect(),
         }
     }
 }

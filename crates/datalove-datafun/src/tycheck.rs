@@ -54,6 +54,9 @@ pub enum TypeError {
     ExtraField(String),
     FieldOrderMismatch,
     VariantNotFound(String),
+    // Loop control flow errors.
+    BreakOutsideLoop,
+    ContinueOutsideLoop,
 }
 
 impl From<datalit::tycheck::TypeError> for TypeError {
@@ -161,6 +164,8 @@ pub struct TypeContext<'db> {
     errors: Vec<TypeError>,
     /// Expression types, indexed by ExprFun ID.
     expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    /// Current loop nesting depth (for validating break/continue).
+    loop_depth: u32,
 }
 
 impl<'db> TypeContext<'db> {
@@ -176,6 +181,7 @@ impl<'db> TypeContext<'db> {
             expected_return_type: None,
             errors: Vec::new(),
             expr_types: Vec::new(),
+            loop_depth: 0,
         }
     }
 
@@ -956,6 +962,33 @@ fn check_statement<'db>(
                     }
                 }
             }
+        }
+
+        Statement::Loop(stmt) => {
+            // Increment loop depth for body.
+            ctx.loop_depth += 1;
+
+            // Type check loop body.
+            for body_stmt in stmt.body(db) {
+                check_statement(ctx, body_stmt);
+            }
+
+            // Restore loop depth.
+            ctx.loop_depth -= 1;
+        }
+
+        Statement::Break(_) => {
+            if ctx.loop_depth == 0 {
+                ctx.add_error(TypeError::BreakOutsideLoop);
+            }
+            // Break is valid - no further type checking needed.
+        }
+
+        Statement::Continue(_) => {
+            if ctx.loop_depth == 0 {
+                ctx.add_error(TypeError::ContinueOutsideLoop);
+            }
+            // Continue is valid - no further type checking needed.
         }
 
         Statement::ParseError(_) => {

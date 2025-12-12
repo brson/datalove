@@ -1,0 +1,22 @@
+{
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "int",
+      "kind": "TypeMismatch"
+    },
+    {
+      "actual": "int",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test_loop",
+      "params": [],
+      "return_type": "@u32"
+    }
+  ]
+}

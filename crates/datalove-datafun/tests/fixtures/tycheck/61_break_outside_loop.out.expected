@@ -1,0 +1,15 @@
+{
+  "errors": [
+    {
+      "kind": "BreakOutsideLoop"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "bad_break",
+      "params": [],
+      "return_type": "@u32"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+fun nested_break(): @u32
+  let n = @0
+  loop
+    loop
+      break
+    end loop
+    let n = n + @1
+    if n >= @2
+      break
+    end if
+  end loop
+  ret n
+end fun

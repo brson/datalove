@@ -150,6 +150,13 @@ fn walk_statements_for_reads<'db>(
                     walk_statements_for_reads(db, else_body, slots, reads, stmt_counter);
                 }
             }
+            Statement::Loop(loop_stmt) => {
+                // Process loop body.
+                walk_statements_for_reads(db, loop_stmt.body(db), slots, reads, stmt_counter);
+            }
+            Statement::Break(_) | Statement::Continue(_) => {
+                // No reads from control flow statements.
+            }
             Statement::Fun(_) | Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No reads.
             }
@@ -572,6 +579,12 @@ fn walk_for_expr_mapping<'db>(
                     walk_for_expr_mapping(db, else_body, map, expr_counter, stmt_counter);
                 }
             }
+            Statement::Loop(loop_stmt) => {
+                walk_for_expr_mapping(db, loop_stmt.body(db), map, expr_counter, stmt_counter);
+            }
+            Statement::Break(_) | Statement::Continue(_) => {
+                // No expressions in control flow statements.
+            }
             Statement::Fun(_) | Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No expressions.
             }
@@ -804,6 +817,18 @@ fn walk_and_track_init<'db>(
                         }
                     }
                 }
+            }
+            Statement::Loop(loop_stmt) => {
+                // For loops, track the body. Note: loop body may execute 0 or more times.
+                let state_before_loop = current_state.clone();
+                walk_and_track_init(db, loop_stmt.body(db), slots, current_state, map, stmt_counter);
+                // After loop: merge with before-loop state (loop may not execute).
+                for i in 0..current_state.len() {
+                    current_state[i] = state_before_loop[i].merge(current_state[i]);
+                }
+            }
+            Statement::Break(_) | Statement::Continue(_) => {
+                // No state changes for control flow statements.
             }
             Statement::Ret(_) | Statement::Fun(_) | Statement::Require(_) |
             Statement::Import(_) | Statement::ParseError(_) => {

@@ -1,0 +1,19 @@
+----------
+script
+----------
+
+// Simplified loop test - sum 1 to 3 = 6.
+fun sum_to_three(): !u32
+    let sum: u32 = @0
+    let i: u32 = @0
+    loop
+        let i = i +! @1
+        let sum = sum +! i
+        if i >= @3
+            break
+        end if
+    end loop
+    ret sum
+end fun
+
+let output = sum_to_three()

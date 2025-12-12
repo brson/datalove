@@ -1,0 +1,15 @@
+{
+  "errors": [
+    {
+      "kind": "ContinueOutsideLoop"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "bad_continue",
+      "params": [],
+      "return_type": "@u32"
+    }
+  ]
+}

@@ -181,6 +181,9 @@ impl<'db> Parser<'db> {
             Some("require") => self.parse_require(&mut tokens),
             Some("import") => self.parse_import(&mut tokens),
             Some("if") => self.parse_if(&mut tokens, remaining_lines),
+            Some("loop") => self.parse_loop(&mut tokens, remaining_lines),
+            Some("break") => self.parse_break(&mut tokens),
+            Some("continue") => self.parse_continue(&mut tokens),
             _ => {
                 let (text, span) = self.peek_text_span(&mut tokens);
                 self.emit_stmt_error(
@@ -188,7 +191,7 @@ impl<'db> Parser<'db> {
                     span,
                     "unexpected statement",
                     "P001",
-                    "expected 'let', 'fun', 'ret', 'require', 'import', or 'if'"
+                    "expected 'let', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'"
                 )
             }
         }
@@ -625,6 +628,51 @@ impl<'db> Parser<'db> {
             else_binding,
             else_body,
         ))
+    }
+
+    fn parse_loop(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+    ) -> ast::Statement<'db> {
+        self.eat_word(tokens, "loop");
+
+        // Parse body until we hit "end loop".
+        let mut body = vec![];
+        while let Some((_, line)) = remaining_lines.peek() {
+            if line.len() >= 2 {
+                if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
+                    if let (Some("end"), Some("loop")) = (t1.word_str(self.db), t2.word_str(self.db)) {
+                        remaining_lines.next(); // Consume "end loop" line.
+                        break;
+                    }
+                }
+            }
+
+            let (_, line) = remaining_lines.next().X();
+            if !line.is_empty() {
+                let stmt = self.parse_statement(line, remaining_lines);
+                body.push(stmt);
+            }
+        }
+
+        ast::Statement::Loop(ast::StmtLoop::new(self.db, body))
+    }
+
+    fn parse_break(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> ast::Statement<'db> {
+        self.eat_word(tokens, "break");
+        ast::Statement::Break(ast::StmtBreak::new(self.db, ()))
+    }
+
+    fn parse_continue(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> ast::Statement<'db> {
+        self.eat_word(tokens, "continue");
+        ast::Statement::Continue(ast::StmtContinue::new(self.db, ()))
     }
 
     // Delegate to datalit parser for type hints.

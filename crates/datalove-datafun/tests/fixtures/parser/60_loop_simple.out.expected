@@ -1,0 +1,96 @@
+{
+  "statements": [
+    {
+      "kind": "Fun",
+      "name": "count_to_three",
+      "params": [],
+      "return_type": {
+        "heap": "Local",
+        "type_hint": "U32"
+      },
+      "body": [
+        {
+          "kind": "Let",
+          "name": "n",
+          "type_hint": null,
+          "value": {
+            "expr": {
+              "kind": "Int",
+              "heap": "Local",
+              "type_hint": null,
+              "value": "0"
+            }
+          }
+        },
+        {
+          "kind": "Loop",
+          "body": [
+            {
+              "kind": "Let",
+              "name": "n",
+              "type_hint": null,
+              "value": {
+                "expr": {
+                  "kind": "BinOp",
+                  "op": "Add",
+                  "lhs": {
+                    "expr": {
+                      "kind": "Name",
+                      "name": "n"
+                    }
+                  },
+                  "rhs": {
+                    "expr": {
+                      "kind": "Int",
+                      "heap": "Local",
+                      "type_hint": null,
+                      "value": "1"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "kind": "If",
+              "condition": {
+                "expr": {
+                  "kind": "BinOp",
+                  "op": "Ge",
+                  "lhs": {
+                    "expr": {
+                      "kind": "Name",
+                      "name": "n"
+                    }
+                  },
+                  "rhs": {
+                    "expr": {
+                      "kind": "Int",
+                      "heap": "Local",
+                      "type_hint": null,
+                      "value": "3"
+                    }
+                  }
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "Break"
+                }
+              ],
+              "else_body": null
+            }
+          ]
+        },
+        {
+          "kind": "Ret",
+          "value": {
+            "expr": {
+              "kind": "Name",
+              "name": "n"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

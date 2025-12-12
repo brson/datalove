@@ -213,6 +213,13 @@ fn walk_statements<'db>(
                     walk_statements(db, else_body, registry, slots, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
                 }
             }
+            Statement::Loop(loop_stmt) => {
+                // Process loop body.
+                walk_statements(db, loop_stmt.body(db), registry, slots, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
+            }
+            Statement::Break(_) | Statement::Continue(_) => {
+                // No moves or reads in control flow statements.
+            }
             Statement::Fun(_) | Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No moves or reads in these statements.
             }

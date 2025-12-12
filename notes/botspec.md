@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2025-12-09
+Last verified: 2025-12-11
 
 ## Overview
 
@@ -125,6 +125,9 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | `import` | `import module_name.item_name` | Implemented |
 | `if` | `if cond ... end if` | Implemented (in function bodies) |
 | `if` with binding | `if opt \|value\| ... end if` | Implemented (option/result unwrap) |
+| `loop` | `loop ... end loop` | Implemented (in function bodies) |
+| `break` | `break` | Implemented (exits innermost loop) |
+| `continue` | `continue` | Implemented (jumps to loop start) |
 
 ### 2.2 Expressions
 
@@ -216,7 +219,36 @@ end fun
 | `ref` | `param: ref type` | By reference | [NOT IMPLEMENTED] |
 | `mut` | `param: mut type` | By mut reference | [NOT IMPLEMENTED] |
 
-### 2.6 Module System
+### 2.6 Loop Statements
+
+Unconditional loop with break/continue control flow:
+
+```
+fun count_to_three(): !u32
+    let n: u32 = @0
+    loop
+        let n = n +! @1
+        if n >= @3
+            break
+        end if
+    end loop
+    ret n
+end fun
+```
+
+**Behavior:**
+- `loop ... end loop` repeats indefinitely until `break` or `ret`
+- `break` exits the innermost loop
+- `continue` jumps to the start of the innermost loop
+- `break`/`continue` outside a loop is a typecheck error
+- Nested loops supported; break/continue affect only the innermost loop
+
+**Implementation notes:**
+- CFG builder creates loop header and exit blocks
+- Loop stack tracks nesting for break/continue targets
+- Typechecker tracks loop depth to validate break/continue placement
+
+### 2.7 Module System
 
 **Three-level hierarchy:** library -> package -> module
 
@@ -299,7 +331,6 @@ Features from documentation that have no or minimal implementation:
 | Zipper heaps | notes/zipper-heaps.md | Design only |
 | `panic` statement | notes/panicking.md | Not implemented |
 | Pattern matching / match | demo-datafun-script.dfs | Not implemented |
-| `loop`/`break`/`continue` | demo-datafun-script.dfs | Not implemented |
 | `arena` blocks | demo-datafun-script.dfs | Not implemented |
 | `memoize` | demo-datafun-script.dfs | Not implemented |
 | `var`/`set` mutation | demo-datafun-script.dfs | Not implemented |

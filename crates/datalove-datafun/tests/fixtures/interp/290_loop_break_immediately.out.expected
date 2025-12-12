@@ -1,0 +1,55 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "break_immediately",
+                    params: [],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Local,
+                        type_hint: U32,
+                    )),
+                    body: [
+                        StmtLoop(
+                            kind: "Loop",
+                            body: [
+                                StmtBreak(
+                                    kind: "Break",
+                                ),
+                            ],
+                        ),
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "42",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "break_immediately",
+                            args: [],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@42",
+    ),
+]

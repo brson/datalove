@@ -1,0 +1,12 @@
+----------
+script
+----------
+
+fun break_immediately(): @u32
+    loop
+        break
+    end loop
+    ret @42
+end fun
+
+let output = break_immediately()

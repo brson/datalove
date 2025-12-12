@@ -174,6 +174,16 @@ fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_jso
                 "name": name
             })
         }
+        TypeError::BreakOutsideLoop => {
+            json!({
+                "kind": "BreakOutsideLoop"
+            })
+        }
+        TypeError::ContinueOutsideLoop => {
+            json!({
+                "kind": "ContinueOutsideLoop"
+            })
+        }
     }
 }
 

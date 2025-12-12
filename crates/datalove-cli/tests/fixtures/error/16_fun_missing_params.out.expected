@@ -9,6 +9,6 @@ error[P001]: unexpected statement
  --> 16_fun_missing_params.dfs:2:1
   |
 2 | end fun
-  | ^^^ expected 'let', 'fun', 'ret', 'require', 'import', or 'if'
+  | ^^^ expected 'let', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'
 
 Error: 2 parse error(s)

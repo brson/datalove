@@ -1,0 +1,4 @@
+fun bad_break(): @u32
+  break
+  ret @0
+end fun

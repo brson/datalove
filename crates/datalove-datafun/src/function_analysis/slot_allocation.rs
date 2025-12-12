@@ -89,6 +89,13 @@ impl<'db> SlotAllocationBuilder<'db> {
                     self.analyze_statements(db, else_body);
                 }
             }
+            Statement::Loop(loop_stmt) => {
+                // Recursively analyze loop body.
+                self.analyze_statements(db, loop_stmt.body(db));
+            }
+            Statement::Break(_) | Statement::Continue(_) => {
+                // No slots needed for control flow statements.
+            }
             Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No slots needed.
             }

@@ -28,6 +28,9 @@ pub enum Statement<'db> {
     Require(StmtRequire<'db>),
     Import(StmtImport<'db>),
     If(StmtIf<'db>),
+    Loop(StmtLoop<'db>),
+    Break(StmtBreak<'db>),
+    Continue(StmtContinue<'db>),
     ParseError(StmtParseError<'db>),
 }
 
@@ -104,6 +107,27 @@ pub struct StmtIf<'db> {
     pub else_binding: Option<InternedText<'db>>,
     #[returns(ref)]
     pub else_body: Option<Vec<Statement<'db>>>,
+}
+
+/// Unconditional loop statement.
+#[salsa::tracked]
+pub struct StmtLoop<'db> {
+    #[returns(ref)]
+    pub body: Vec<Statement<'db>>,
+}
+
+/// Break statement for exiting the innermost loop.
+#[salsa::tracked]
+pub struct StmtBreak<'db> {
+    // Placeholder field for salsa tracking.
+    pub _phantom: (),
+}
+
+/// Continue statement for skipping to the next iteration.
+#[salsa::tracked]
+pub struct StmtContinue<'db> {
+    // Placeholder field for salsa tracking.
+    pub _phantom: (),
 }
 
 #[salsa::tracked]

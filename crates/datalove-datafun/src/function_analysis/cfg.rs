@@ -1,7 +1,7 @@
 //! Control flow graph construction.
 
 use rmx::prelude::*;
-use crate::ast::{Statement, StmtFun, StmtRet, StmtIf, ExprFun, ExprFunKind};
+use crate::ast::{Statement, StmtFun, StmtRet, StmtIf, StmtLoop, ExprFun, ExprFunKind};
 use super::{StmtId, BlockId};
 
 /// Control flow graph for a function.
@@ -40,6 +40,10 @@ pub enum Terminator {
     Goto(BlockId),
     /// Early return from ? or ! operator.
     TryReturn,
+    /// Jump to loop header (continue).
+    LoopContinue(BlockId),
+    /// Jump to after loop (break).
+    LoopBreak(BlockId),
 }
 
 /// Edge in the control flow graph.
@@ -56,6 +60,8 @@ pub struct CfgBuilder<'db> {
     stmts: Vec<Statement<'db>>,
     next_block_id: u32,
     next_stmt_id: u32,
+    /// Stack of (header_block, exit_block) for nested loops.
+    loop_stack: Vec<(BlockId, BlockId)>,
 }
 
 /// Build the CFG for a function.
@@ -84,6 +90,7 @@ impl<'db> CfgBuilder<'db> {
             stmts: Vec::new(),
             next_block_id: 0,
             next_stmt_id: 0,
+            loop_stack: Vec::new(),
         }
     }
 
@@ -268,6 +275,84 @@ impl<'db> CfgBuilder<'db> {
                     // Create the join block immediately (even if empty) since edges point to it.
                     current_block = join_block;
                     current_stmts = Vec::new();
+                }
+
+                Statement::Loop(loop_stmt) => {
+                    // Loop creates a back-edge for continue and exit-edge for break.
+                    let loop_header = self.alloc_block_id();
+                    let loop_exit = self.alloc_block_id();
+
+                    // Current block jumps to loop header.
+                    self.add_block(BasicBlock {
+                        block_id: current_block,
+                        statements: current_stmts.clone(),
+                        terminator: Terminator::Goto(loop_header),
+                    });
+                    self.add_edge(current_block, loop_header);
+
+                    // Push loop context for break/continue.
+                    self.loop_stack.push((loop_header, loop_exit));
+
+                    // Build loop body.
+                    let (body_exit, body_created) = self.build_statements(db, loop_stmt.body(db), loop_header);
+
+                    // Pop loop context.
+                    self.loop_stack.pop();
+
+                    // Connect loop body end back to header (unless body ended with break/return).
+                    if let Some(exit_block) = body_exit {
+                        self.add_edge(exit_block, loop_header);
+                        if !body_created {
+                            // Block wasn't created yet.
+                            self.add_block(BasicBlock {
+                                block_id: exit_block,
+                                statements: Vec::new(),
+                                terminator: Terminator::Goto(loop_header),
+                            });
+                        } else {
+                            // Update terminator to loop back.
+                            if let Some(block) = self.blocks.iter_mut().find(|b| b.block_id == exit_block) {
+                                // Only update if it's the default Return terminator.
+                                if matches!(block.terminator, Terminator::Return) {
+                                    block.terminator = Terminator::Goto(loop_header);
+                                }
+                            }
+                        }
+                    }
+
+                    // Continue from loop exit block.
+                    current_block = loop_exit;
+                    current_stmts = Vec::new();
+                }
+
+                Statement::Break(_) => {
+                    // Break jumps to innermost loop's exit block.
+                    if let Some(&(_, loop_exit)) = self.loop_stack.last() {
+                        self.add_block(BasicBlock {
+                            block_id: current_block,
+                            statements: current_stmts.clone(),
+                            terminator: Terminator::LoopBreak(loop_exit),
+                        });
+                        self.add_edge(current_block, loop_exit);
+                        // Break terminates this path.
+                        return (None, true);
+                    }
+                    // Break outside loop - should be caught by typechecker.
+                }
+
+                Statement::Continue(_) => {
+                    // Continue jumps to innermost loop's header block.
+                    if let Some(&(loop_header, _)) = self.loop_stack.last() {
+                        self.add_block(BasicBlock {
+                            block_id: current_block,
+                            statements: current_stmts.clone(),
+                            terminator: Terminator::LoopContinue(loop_header),
+                        });
+                        self.add_edge(current_block, loop_header);
+                        // Continue terminates this path.
+                        return (None, true);
+                    }
+                    // Continue outside loop - should be caught by typechecker.
                 }
 
                 Statement::Fun(_) => {

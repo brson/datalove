@@ -805,6 +805,15 @@ fn execute_statement<'db>(
         ast::Statement::If(_) => {
             return Err(InterpError::IfOutsideFunction);
         }
+        ast::Statement::Loop(_) => {
+            return Err(InterpError::RuntimeError("Loop outside function".to_string()));
+        }
+        ast::Statement::Break(_) => {
+            return Err(InterpError::RuntimeError("Break outside loop".to_string()));
+        }
+        ast::Statement::Continue(_) => {
+            return Err(InterpError::RuntimeError("Continue outside loop".to_string()));
+        }
         ast::Statement::Require(_) | ast::Statement::Import(_) => {
             // Already handled by package world loading.
             // Nothing to execute at runtime.
@@ -1873,6 +1882,14 @@ fn execute_function_body_with_frame<'db>(
                 // Early return from ? operator - propagate.
                 return Err(InterpError::EarlyReturn);
             }
+            Terminator::LoopContinue(header_block) => {
+                // Jump to loop header for next iteration.
+                current_block_id = *header_block;
+            }
+            Terminator::LoopBreak(exit_block) => {
+                // Jump to after the loop.
+                current_block_id = *exit_block;
+            }
         }
     }
 }
@@ -1902,6 +1919,15 @@ fn execute_cfg_statement<'db>(
             // In CFG mode, if-statements are handled by the Branch terminator.
             // We don't execute the body here - just continue.
             // The condition will be evaluated when we reach the Block's terminator.
+            Ok(CfgControl::Continue)
+        }
+        ast::Statement::Loop(_) => {
+            // In CFG mode, loops are handled by CFG structure.
+            // The body is in a separate block; we just continue to the terminator.
+            Ok(CfgControl::Continue)
+        }
+        ast::Statement::Break(_) | ast::Statement::Continue(_) => {
+            // Break/continue are handled by CFG terminators.
             Ok(CfgControl::Continue)
         }
         ast::Statement::Fun(_) => {
@@ -1977,6 +2003,15 @@ fn execute_function_statement_frame<'db>(
         }
         ast::Statement::If(_) => {
             Err(InterpError::InvalidExpression("If statements in functions not yet implemented".to_string()))
+        }
+        ast::Statement::Loop(_) => {
+            Err(InterpError::InvalidExpression("Loop statements in functions not yet implemented".to_string()))
+        }
+        ast::Statement::Break(_) => {
+            Err(InterpError::InvalidExpression("Break statements in functions not yet implemented".to_string()))
+        }
+        ast::Statement::Continue(_) => {
+            Err(InterpError::InvalidExpression("Continue statements in functions not yet implemented".to_string()))
         }
         ast::Statement::Fun(_) => {
             Err(InterpError::InvalidExpression("Nested functions not yet implemented".to_string()))
