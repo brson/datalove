@@ -24,6 +24,9 @@ With core->runtime calls.
 
 # on deck
 
+- data type
+- anonymous enums with payloads
+- named types
 - clean up demo files
 - alternate backend
 - generics
