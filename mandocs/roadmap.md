@@ -12,6 +12,9 @@
 - improve readme
 
 
+# on deck
+
+- filterable example tests
 
 
 ----------
