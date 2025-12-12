@@ -7,7 +7,6 @@
 - argument modes
 - primer / walkthrough / tutorial
 - destructuring
-- loops
 - std modules
 - improve readme
 
