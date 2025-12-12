@@ -10,6 +10,7 @@ With core->runtime calls.
 
 # in progress
 
+- fix binop/unop semantics
 - move/clone semantics
 - argument modes
 - primer / walkthrough / tutorial
