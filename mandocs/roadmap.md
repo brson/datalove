@@ -21,6 +21,7 @@ With core->runtime calls.
 
 # on deck
 
+- clean up demo files
 - alternate backend
 - generics
 - filterable example tests
