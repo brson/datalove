@@ -516,7 +516,7 @@ proptest! {
         };
         let expr = gen_expr_full_seeded(&db, seed, config);
 
-        let mut rt = Runtime::new();
+        let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
 
         let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr);
@@ -563,7 +563,7 @@ proptest! {
         let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
         let expr2 = gen_expr_full_seeded(&db, seed2, config);
 
-        let mut rt = Runtime::new();
+        let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
 
         let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1);
@@ -628,7 +628,7 @@ proptest! {
         };
         let expr = gen_expr_full_seeded(&db, seed, config);
 
-        let mut rt = Runtime::new();
+        let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
 
         let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr);
@@ -688,7 +688,7 @@ proptest! {
         let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
         let expr2 = gen_expr_full_seeded(&db, seed2, config);
 
-        let mut rt = Runtime::new();
+        let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
 
         let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1);
@@ -757,7 +757,7 @@ proptest! {
         let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
         let expr2 = gen_expr_full_seeded(&db, seed2, config);
 
-        let mut rt = Runtime::new();
+        let rt = Runtime::new();
         let mut tydesc_table = TyDescTable::new(&db);
 
         let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1);
