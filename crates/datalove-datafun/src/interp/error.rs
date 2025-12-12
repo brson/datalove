@@ -7,8 +7,8 @@ use super::Value;
 pub enum InterpError {
     // Analysis-time errors.
     TypeErrors,
-    /// Typecheck found errors. Payload is the count.
-    TypecheckErrors(usize),
+    /// Typecheck found errors.
+    TypecheckErrors(Vec<crate::tycheck::TypeError>),
     AnalysisErrors(Vec<String>),
 
     // Runtime errors.

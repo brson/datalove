@@ -110,8 +110,8 @@ impl InterpContext<'_> {
         // Check for typecheck errors.
         let module_errors = typecheck_result.module_errors(db);
         if !module_errors.is_empty() {
-            let error_count = module_errors.values().map(|v| v.len()).sum::<usize>();
-            return Err(InterpError::TypecheckErrors(error_count));
+            let all_errors: Vec<_> = module_errors.values().flatten().cloned().collect();
+            return Err(InterpError::TypecheckErrors(all_errors));
         }
 
         let graph = typecheck_result.graph(db);
