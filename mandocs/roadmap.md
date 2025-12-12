@@ -12,8 +12,8 @@ With core->runtime calls.
 # in progress
 
 - fix binop/unop semantics
-- move/clone semantics
-- argument modes
+- move/clone semantics - moves-etc.md
+- argument modes - moves-etc.md
 - script/function unification semantics
 - primer / walkthrough / tutorial
 - destructuring
