@@ -1477,7 +1477,6 @@ dependencies = [
  "salsa",
  "serde",
  "serde_json",
- "termcolor",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -1556,7 +1555,6 @@ dependencies = [
  "proptest",
  "rustmax",
  "salsa",
- "termcolor",
 ]
 
 [[package]]

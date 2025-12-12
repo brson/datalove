@@ -9,7 +9,6 @@ edition.workspace = true
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
-termcolor = "1.4.1"
 proptest = "1.5"
 datalove-rt.path = "../datalove-rt"
 datalove-rtdt.path = "../datalove-rtdt"
