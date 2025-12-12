@@ -28,6 +28,7 @@ pub struct MoveInfo<'db> {
 #[salsa::tracked]
 pub struct MoveOp<'db> {
     pub expr_id: ExprId,
+    pub stmt_id: StmtId,
     pub slot_id: SlotId,
     pub move_kind: MoveKind,
 }
@@ -150,6 +151,7 @@ fn walk_statements<'db>(
                         value_expr,
                         slot_id,
                         MoveKind::Assignment,
+                        stmt_id,
                         registry,
                         slots,
                         moves,
@@ -179,6 +181,7 @@ fn walk_statements<'db>(
                     db,
                     value_expr,
                     expr_id,
+                    stmt_id,
                     registry,
                     slots,
                     moves,
@@ -233,6 +236,7 @@ fn collect_moves_from_expr<'db>(
     expr: ExprFun<'db>,
     target_slot: SlotId,
     move_kind: MoveKind,
+    stmt_id: StmtId,
     registry: &FunctionRegistry<'db>,
     slots: &[AllocatedSlot<'db>],
     moves: &mut Vec<MoveOp<'db>>,
@@ -260,12 +264,12 @@ fn collect_moves_from_expr<'db>(
                     move_kind  // Use the passed-in kind.
                 };
 
-                moves.push(MoveOp::new(db, expr_id, source_slot, actual_move_kind));
+                moves.push(MoveOp::new(db, expr_id, stmt_id, source_slot, actual_move_kind));
             }
         }
         ExprFunKind::FunctionCall(call) => {
             // Function call: arguments might be moved depending on parameter modes.
-            process_function_call(db, call, registry, slots, moves, expr_counter, tycheck_result, func);
+            process_function_call(db, call, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Tuple(tuple) => {
             // Tuple: each element might be moved.
@@ -275,6 +279,7 @@ fn collect_moves_from_expr<'db>(
                     *element,
                     target_slot,
                     move_kind,
+                    stmt_id,
                     registry,
                     slots,
                     moves,
@@ -286,20 +291,20 @@ fn collect_moves_from_expr<'db>(
         }
         ExprFunKind::BinOp(binop) => {
             // Binary operation: both operands might be moved.
-            collect_moves_from_expr(db, binop.lhs(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
-            collect_moves_from_expr(db, binop.rhs(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, binop.lhs(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, binop.rhs(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::UnaryOp(unary) => {
             // Unary operation: operand might be moved.
-            collect_moves_from_expr(db, unary.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, unary.operand(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryOption(try_op) => {
             // Try option: operand might be moved.
-            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryResult(try_op) => {
             // Try result: operand might be moved.
-            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::ParseError(_) => {
             // No moves in parse errors.
@@ -317,60 +322,60 @@ fn collect_moves_from_expr<'db>(
         }
         ExprFunKind::List(list) => {
             for elem in list.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Set(set) => {
             for elem in set.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Map(map) => {
             for entry in map.entries(db) {
-                collect_moves_from_expr(db, entry.key(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
-                collect_moves_from_expr(db, entry.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, entry.key(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, entry.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Tensor(tensor) => {
             for elem in tensor.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonTuple(tuple) => {
             for elem in tuple.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::NamedTuple(tuple) => {
             for elem in tuple.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
-                collect_moves_from_expr(db, field.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, field.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::NamedStruct(s) => {
             for field in s.fields(db) {
-                collect_moves_from_expr(db, field.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, field.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonEnum(e) => {
             if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr(db, payload, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, payload, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::NamedEnum(e) => {
             if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr(db, payload, target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, payload, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Data(d) => {
-            collect_moves_from_expr(db, d.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, d.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Err(e) => {
-            collect_moves_from_expr(db, e.value(db), target_slot, move_kind, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, e.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
     }
 }
@@ -380,6 +385,7 @@ fn collect_moves_from_expr_for_return<'db>(
     db: &'db dyn crate::Db,
     expr: ExprFun<'db>,
     return_expr_id: ExprId,
+    stmt_id: StmtId,
     registry: &FunctionRegistry<'db>,
     slots: &[AllocatedSlot<'db>],
     moves: &mut Vec<MoveOp<'db>>,
@@ -404,12 +410,12 @@ fn collect_moves_from_expr_for_return<'db>(
                     MoveKind::FunctionReturn
                 };
 
-                moves.push(MoveOp::new(db, return_expr_id, slot, actual_move_kind));
+                moves.push(MoveOp::new(db, return_expr_id, stmt_id, slot, actual_move_kind));
             }
         }
         ExprFunKind::FunctionCall(call) => {
             // Function call: the result is moved to return, but also process arguments.
-            process_function_call(db, call, registry, slots, moves, expr_counter, tycheck_result, func);
+            process_function_call(db, call, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Tuple(tuple) => {
             // Tuple: each element might be moved.
@@ -418,6 +424,7 @@ fn collect_moves_from_expr_for_return<'db>(
                     db,
                     *element,
                     return_expr_id,
+                    stmt_id,
                     registry,
                     slots,
                     moves,
@@ -429,18 +436,18 @@ fn collect_moves_from_expr_for_return<'db>(
         }
         ExprFunKind::BinOp(binop) => {
             // Binary operation: both operands might be moved.
-            collect_moves_from_expr_for_return(db, binop.lhs(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            collect_moves_from_expr_for_return(db, binop.rhs(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, binop.lhs(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, binop.rhs(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::UnaryOp(unary) => {
             // Unary operation: operand might be moved.
-            collect_moves_from_expr_for_return(db, unary.operand(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, unary.operand(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryOption(try_op) => {
-            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryResult(try_op) => {
-            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::ParseError(_) => {
             // No moves in parse errors.
@@ -458,60 +465,60 @@ fn collect_moves_from_expr_for_return<'db>(
         }
         ExprFunKind::List(list) => {
             for elem in list.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Set(set) => {
             for elem in set.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Map(map) => {
             for entry in map.entries(db) {
-                collect_moves_from_expr_for_return(db, entry.key(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
-                collect_moves_from_expr_for_return(db, entry.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, entry.key(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, entry.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Tensor(tensor) => {
             for elem in tensor.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonTuple(tuple) => {
             for elem in tuple.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::NamedTuple(tuple) => {
             for elem in tuple.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
-                collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::NamedStruct(s) => {
             for field in s.fields(db) {
-                collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonEnum(e) => {
             if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr_for_return(db, payload, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, payload, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::NamedEnum(e) => {
             if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr_for_return(db, payload, return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, payload, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Data(d) => {
-            collect_moves_from_expr_for_return(db, d.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, d.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Err(e) => {
-            collect_moves_from_expr_for_return(db, e.value(db), return_expr_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, e.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
     }
 }
@@ -520,6 +527,7 @@ fn collect_moves_from_expr_for_return<'db>(
 fn process_function_call<'db>(
     db: &'db dyn crate::Db,
     call: crate::ast::ExprFunctionCall<'db>,
+    stmt_id: StmtId,
     registry: &FunctionRegistry<'db>,
     slots: &[AllocatedSlot<'db>],
     moves: &mut Vec<MoveOp<'db>>,
@@ -558,7 +566,7 @@ fn process_function_call<'db>(
                                 MoveKind::FunctionCall
                             };
 
-                            moves.push(MoveOp::new(db, expr_id, slot_id, actual_move_kind));
+                            moves.push(MoveOp::new(db, expr_id, stmt_id, slot_id, actual_move_kind));
                         }
                     } else {
                         // For complex expressions, recursively collect moves.
@@ -568,6 +576,7 @@ fn process_function_call<'db>(
                             *arg,
                             SlotId(0), // Dummy
                             MoveKind::FunctionCall,
+                            stmt_id,
                             registry,
                             slots,
                             moves,

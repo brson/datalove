@@ -16,28 +16,28 @@ The highest-impact fixes are the linear type analysis bugs, which block result c
 
 ## Category 1: Linear Type Analysis Bugs (High Priority)
 
-### 1.1 UseAfterMove False Positive in Branching
+### 1.1 UseAfterMove False Positive in Branching - FIXED
 
-**Problem:** The move analysis incorrectly flags valid patterns where a linear parameter is used in different branches of an `if` statement.
+**Status:** Fixed. The bug was caused by ExprId counter desync between move analysis and validation.
+
+**Problem:** The move analysis incorrectly flagged valid patterns where a linear parameter is used in different branches of an `if` statement.
 
 **Example (result.dfm):**
 ```datafun
 fun or_result(self: !u32, other: !u32): !u32
   if self |value|
-    ret self      // <-- Analysis says UseAfterMove here
+    ret self      // <-- Was incorrectly flagged as UseAfterMove
   else |error|
     ret other
   end if
 end fun
 ```
 
-This is semantically valid: `self` is consumed exactly once regardless of which branch executes. The analysis appears to be treating the `if self |value|` destructuring as a move, then flagging the `ret self` in the then-branch as a second use.
+**Root cause:** The `MoveOp` struct stored an `ExprId` which was then reverse-mapped to a `StmtId` using a separately-built map. The ExprId counters in `moves.rs` and `validation.rs` were out of sync (moves.rs incremented twice per statement for moves and reads), causing lookups to fail and default to `StmtId(0)`.
 
-**Impact:** Blocks `or_result`, `and_result` for result.dfm. Similar patterns would be needed for option combinators.
+**Fix:** Added `stmt_id` directly to `MoveOp` struct, eliminating the need for reverse-mapping. The move now correctly records which statement it occurred in.
 
-**Fix approach:** The move analysis needs to understand that:
-- In `if x |binding|`, the value flows into `binding`, but `x` itself isn't "moved" in a way that prevents returning it
-- Or alternatively, the pattern should allow returning the original value from the same branch that destructured it
+**Test:** `295_or_result_branching` interp test confirms the fix.
 
 ### 1.2 Linear Types Block All int.dfm Functions
 
@@ -176,7 +176,7 @@ The language has `+!` and `+?` operators that return Result/Option, but the stdl
 
 ### Phase 1: Quick Wins (Unblock existing patterns)
 
-1. **Fix UseAfterMove false positive in branching** - Unblocks result/option combinators
+1. ~~**Fix UseAfterMove false positive in branching**~~ - DONE
 2. **Fix error literal coercion in scripts** - Enables testing error paths
 
 ### Phase 2: Linear Type Improvements (Unblock int.dfm)
@@ -203,19 +203,19 @@ The language has `+!` and `+?` operators that return Result/Option, but the stdl
 | bool.dfm | 6 | Complete (not, and, or, xor, implies, then_some) |
 | u32.dfm | 43 | 8 working, 35 stubbed (need intrinsics) |
 | option.dfm | 7 | Complete for ?u32 |
-| result.dfm | 5 | Partial (or_result/and_result blocked by analysis bug) |
+| result.dfm | 5 | or_result/and_result now unblocked (analysis bug fixed) |
 | int.dfm | 0 | Blocked entirely by linear type semantics |
 | list.dfm | 0 | Blocked by missing intrinsics |
 
 ---
 
-## Appendix: Specific Code Patterns That Fail
+## Appendix: Specific Code Patterns
 
-### A. or_result pattern (UseAfterMove)
+### A. or_result pattern - FIXED
 ```datafun
 fun or_result(self: !u32, other: !u32): !u32
   if self |value|
-    ret self      // Error: UseAfterMove
+    ret self      // Now works correctly
   else |error|
     ret other
   end if

@@ -290,16 +290,13 @@ fn collect_reads_from_expr<'db>(
 /// Note: Copy moves are not considered real moves for this check.
 pub fn check_double_move<'db>(
     db: &'db dyn crate::Db,
-    func: StmtFun<'db>,
+    _func: StmtFun<'db>,
     move_info: super::MoveInfo<'db>,
 ) -> Vec<AnalysisError> {
     use std::collections::HashMap;
-    use super::{MoveKind};
+    use super::MoveKind;
 
     let mut errors = Vec::new();
-
-    // Build a map from ExprId to StmtId.
-    let expr_to_stmt = build_expr_to_stmt_map(db, func);
 
     // Group moves by slot_id, filtering out Copy moves.
     let mut moves_by_slot: HashMap<SlotId, Vec<super::MoveOp<'db>>> = HashMap::new();
@@ -319,24 +316,18 @@ pub fn check_double_move<'db>(
     for (slot_id, moves) in moves_by_slot {
         if moves.len() >= 2 {
             // Create error with first two moves.
+            // Use stmt_id directly from MoveOp.
             let first = &moves[0];
             let second = &moves[1];
-
-            let first_stmt = expr_to_stmt.get(&first.expr_id(db))
-                .copied()
-                .unwrap_or(StmtId(0));
-            let second_stmt = expr_to_stmt.get(&second.expr_id(db))
-                .copied()
-                .unwrap_or(StmtId(0));
 
             errors.push(AnalysisError::DoubleMove {
                 slot: slot_id,
                 first_move: ProgramPoint {
-                    stmt_id: first_stmt,
+                    stmt_id: first.stmt_id(db),
                     position: Position::Before,
                 },
                 second_move: ProgramPoint {
-                    stmt_id: second_stmt,
+                    stmt_id: second.stmt_id(db),
                     position: Position::Before,
                 },
             });
@@ -368,10 +359,8 @@ pub fn check_use_after_move<'db>(
         .map(|s| s.slot_id(db))
         .collect();
 
-    // Build a map from ExprId to StmtId.
-    let expr_to_stmt = build_expr_to_stmt_map(db, func);
-
     // Build a map of SlotId -> Vec<ProgramPoint> for all moves.
+    // Use stmt_id directly from MoveOp instead of reverse-mapping from ExprId.
     let mut moves_by_slot: HashMap<SlotId, Vec<ProgramPoint>> = HashMap::new();
     for move_op in move_info.moves(db) {
         // Skip Copy moves - they don't consume the value.
@@ -384,12 +373,8 @@ pub fn check_use_after_move<'db>(
             continue;
         }
 
-        let stmt_id = expr_to_stmt.get(&move_op.expr_id(db))
-            .copied()
-            .unwrap_or(StmtId(0));
-
         let move_point = ProgramPoint {
-            stmt_id,
+            stmt_id: move_op.stmt_id(db),
             position: Position::Before,
         };
 
@@ -540,6 +525,10 @@ pub fn check_value_not_used<'db>(
 }
 
 /// Build a map from ExprId to StmtId.
+///
+/// Note: This function is kept for debugging purposes but is no longer used
+/// in the main validation logic. MoveOp now stores stmt_id directly.
+#[allow(dead_code)]
 fn build_expr_to_stmt_map<'db>(
     db: &'db dyn crate::Db,
     func: StmtFun<'db>,
@@ -1351,5 +1340,41 @@ end fun
 
         // Should have no errors - parameters (Reference slots) are skipped.
         assert_eq!(errors.len(), 0);
+    }
+
+    /// Regression test: UseAfterMove false positive in branching patterns.
+    ///
+    /// The pattern `if self |value| ret self else |error| ret other` should NOT
+    /// trigger UseAfterMove because each variable is only used once in its
+    /// respective branch.
+    ///
+    /// This was a bug where the ExprId-to-StmtId mapping was incomplete, causing
+    /// moves in else branches to be incorrectly mapped to StmtId(0). Fixed by
+    /// storing stmt_id directly in MoveOp.
+    #[test]
+    fn test_use_after_move_branching_no_false_positive() {
+        let ref db = crate::Database::default();
+        let source = r#"
+fun or_result(self: !u32, other: !u32): !u32
+  if self |value|
+    ret self
+  else |error|
+    ret other
+  end if
+end fun
+        "#;
+
+        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let slot_alloc = allocate_slots(db, func);
+        let cfg = build_cfg(db, func);
+        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+
+        let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
+
+        // Each variable is only used once in its respective branch, so no errors.
+        assert_eq!(errors.len(), 0,
+            "or_result should have no UseAfterMove errors - each variable is used once");
     }
 }
