@@ -14,6 +14,7 @@ With core->runtime calls.
 - fix binop/unop semantics
 - move/clone semantics
 - argument modes
+- script/function unification semantics
 - primer / walkthrough / tutorial
 - destructuring
 - runtime calls
