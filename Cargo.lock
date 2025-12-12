@@ -1471,6 +1471,7 @@ dependencies = [
  "console_error_panic_hook",
  "datalove-datafun",
  "datalove-datalit",
+ "datalove-exampletest",
  "js-sys",
  "rustmax",
  "salsa",
@@ -1549,6 +1550,7 @@ version = "0.1.0"
 dependencies = [
  "bct",
  "datalove-datalit",
+ "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
  "proptest",

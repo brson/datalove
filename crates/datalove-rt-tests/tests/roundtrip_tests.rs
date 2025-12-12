@@ -4,6 +4,7 @@ use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use datalove_datalit as datalit;
 use datalove_rt as rt;
+use datalove_exampletest::{parse_test_filters, matches_filters};
 
 fn find_test_fixtures() -> Vec<PathBuf> {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -302,15 +303,39 @@ fn run_test_case(dlt_path: &Path) -> TestResult {
 }
 
 fn main() {
-    let fixtures = find_test_fixtures();
+    let filters = parse_test_filters();
+    let all_fixtures = find_test_fixtures();
 
-    if fixtures.is_empty() {
+    if all_fixtures.is_empty() {
         eprintln!("No test fixtures found in tests/fixtures/roundtrip/");
         std::process::exit(1);
     }
 
+    // Filter fixtures based on command-line arguments.
+    let fixtures: Vec<_> = all_fixtures
+        .into_iter()
+        .filter(|f| {
+            let name = f.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            matches_filters(name, &filters)
+        })
+        .collect();
+
+    if fixtures.is_empty() {
+        eprintln!("No tests matched the filter(s): {:?}", filters);
+        std::process::exit(0);
+    }
+
     let mut stdout = StandardStream::stdout(ColorChoice::Auto);
     let mut stderr = StandardStream::stderr(ColorChoice::Auto);
+
+    // Print filter info if filtering is active.
+    if !filters.is_empty() {
+        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan))).X();
+        write!(&mut stdout, "Filter: ").X();
+        stdout.reset().X();
+        writeln!(&mut stdout, "{:?}", filters).X();
+        writeln!(&mut stdout).X();
+    }
 
     let mut passed = 0;
     let mut failed = 0;

@@ -14,6 +14,7 @@ proptest = "1.5"
 datalove-rt.path = "../datalove-rt"
 datalove-rtdt.path = "../datalove-rtdt"
 datalove-datalit.path = "../datalove-datalit"
+datalove-exampletest.path = "../datalove-exampletest"
 
 [[test]]
 name = "roundtrip_tests"

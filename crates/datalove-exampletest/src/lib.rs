@@ -3,11 +3,41 @@
 //! This crate provides infrastructure for running example-based tests that compare
 //! actual output against expected output, with support for the "blessed" pattern
 //! (updating expected output via BLESS=1 environment variable).
+//!
+//! ## Test Filtering
+//!
+//! Tests can be filtered by passing arguments after `--` to cargo test:
+//!
+//! ```bash
+//! cargo test -p datalove-datafun --test parser_tests -- foo
+//! ```
+//!
+//! This runs only tests whose names contain "foo". Multiple filters can be
+//! provided and a test runs if it matches any filter.
 
 use rmx::prelude::*;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+
+/// Parse command-line arguments for test filtering.
+///
+/// Returns a list of filter patterns. A test matches if its name contains
+/// any of the patterns (case-sensitive substring match).
+pub fn parse_test_filters() -> Vec<String> {
+    std::env::args().skip(1).collect()
+}
+
+/// Check if a test name matches the given filters.
+///
+/// Returns true if filters is empty (run all tests) or if the test name
+/// contains any of the filter strings as a substring.
+pub fn matches_filters(test_name: &str, filters: &[String]) -> bool {
+    if filters.is_empty() {
+        return true;
+    }
+    filters.iter().any(|filter| test_name.contains(filter.as_str()))
+}
 
 /// Result of running a single test case.
 #[derive(Debug)]
@@ -147,10 +177,18 @@ where
     ///
     /// This is the main entry point. It will find all test fixtures, run them,
     /// print colored output, and exit with an appropriate status code.
+    ///
+    /// Test filtering is supported via command-line arguments. Pass filter
+    /// strings after `--` to cargo test, e.g.:
+    ///
+    /// ```bash
+    /// cargo test -p crate --test test_name -- filter
+    /// ```
     pub fn run(self) -> ! {
-        let fixtures = self.find_test_fixtures();
+        let filters = parse_test_filters();
+        let all_fixtures = self.find_test_fixtures();
 
-        if fixtures.is_empty() {
+        if all_fixtures.is_empty() {
             eprintln!(
                 "No test fixtures found in tests/fixtures/{}/",
                 self.fixture_subdir
@@ -158,8 +196,36 @@ where
             std::process::exit(1);
         }
 
+        // Filter fixtures based on command-line arguments.
+        let fixtures: Vec<_> = all_fixtures
+            .into_iter()
+            .filter(|f| {
+                let name = f.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                matches_filters(name, &filters)
+            })
+            .collect();
+
+        if fixtures.is_empty() {
+            eprintln!(
+                "No tests matched the filter(s): {:?}",
+                filters
+            );
+            std::process::exit(0);
+        }
+
         let mut stdout = StandardStream::stdout(ColorChoice::Auto);
         let mut stderr = StandardStream::stderr(ColorChoice::Auto);
+
+        // Print filter info if filtering is active.
+        if !filters.is_empty() {
+            stdout
+                .set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))
+                .X();
+            write!(&mut stdout, "Filter: ").X();
+            stdout.reset().X();
+            writeln!(&mut stdout, "{:?}", filters).X();
+            writeln!(&mut stdout).X();
+        }
 
         let mut passed = 0;
         let mut failed = 0;

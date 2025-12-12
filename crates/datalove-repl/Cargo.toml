@@ -22,6 +22,7 @@ js-sys = "0.3"
 
 [dev-dependencies]
 termcolor = "1.4"
+datalove-exampletest.path = "../datalove-exampletest"
 
 [[test]]
 name = "engine_tests"
