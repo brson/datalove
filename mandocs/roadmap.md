@@ -1,5 +1,12 @@
 # Datalove Roadmap
 
+The MVP is a working bare datafun language.
+With tools: repl, script runner, and compiler.
+With backends: interpreter, jit, aot.
+With embedding engine.
+With compute-only core library.
+With core->runtime calls.
+
 
 # in progress
 
@@ -7,12 +14,15 @@
 - argument modes
 - primer / walkthrough / tutorial
 - destructuring
+- runtime calls
 - std modules
 - improve readme
 
 
 # on deck
 
+- alternate backend
+- generics
 - filterable example tests
 
 
