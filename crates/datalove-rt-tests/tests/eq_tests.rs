@@ -2757,4 +2757,146 @@ proptest! {
             datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
         }
     }
+
+    /// Property: Cross-function consistency - eq(x,y)=Equals implies cmp(x,y)=Equal.
+    #[test]
+    fn proptest_eq_cmp_consistency(seed1 in any::<u64>(), seed2 in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
+        let expr2 = gen_expr_full_seeded(&db, seed2, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+
+        let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1);
+        let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
+        prop_assert!(typechecked1.errors(&db).is_empty());
+
+        let resolved2 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr2);
+        let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
+        prop_assert!(typechecked2.errors(&db).is_empty());
+
+        let inst1 = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked1)
+            .expect("Should instantiate");
+        let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
+        drop(inst1);
+
+        let inst2 = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked2)
+            .expect("Should instantiate");
+        let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
+        drop(inst2);
+
+        let eq_result = unsafe {
+            datalove_rt::c::dtlv_rti_eq_local(
+                std::ptr::null_mut(),
+                ptr1,
+                tydesc1,
+                ptr2,
+                tydesc2,
+            )
+        };
+
+        if matches!(eq_result, datalove_rt::c::RtEq::Equals) {
+            let cmp_result = unsafe {
+                datalove_rt::c::dtlv_rti_cmp_local(
+                    std::ptr::null_mut(),
+                    ptr1,
+                    tydesc1,
+                    ptr2,
+                    tydesc2,
+                )
+            };
+
+            prop_assert!(matches!(cmp_result, datalove_rt::c::RtOrdering::Equal),
+                "Cross-function: eq(x,y)=Equals implies cmp(x,y)=Equal");
+        }
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, tydesc1);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc1, 1, ptr1 as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr2 as *mut u8, tydesc2);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc2, 1, ptr2 as *mut u8);
+        }
+    }
+
+    /// Property: Consistency with eq_unique for non-float types.
+    /// For types without NaN, eq and eq_unique should give the same result.
+    #[test]
+    fn proptest_eq_eq_unique_consistency(seed1 in any::<u64>(), seed2 in any::<u64>()) {
+        let db = Database::default();
+        let config = AstGenConfig {
+            type_weights: TypeWeights {
+                // Disable float types to avoid NaN special cases.
+                f32_type: 0,
+                named_tuple_type: 0,
+                named_struct_type: 0,
+                named_enum_type: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expr1 = gen_expr_full_seeded(&db, seed1, config.clone());
+        let expr2 = gen_expr_full_seeded(&db, seed2, config);
+
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+
+        let resolved1 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr1);
+        let typechecked1 = datalove_datalit::tycheck::type_check(&db, expr1, resolved1);
+        prop_assert!(typechecked1.errors(&db).is_empty());
+
+        let resolved2 = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr2);
+        let typechecked2 = datalove_datalit::tycheck::type_check(&db, expr2, resolved2);
+        prop_assert!(typechecked2.errors(&db).is_empty());
+
+        let inst1 = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked1)
+            .expect("Should instantiate");
+        let (ptr1, tydesc1) = (inst1.ptr, inst1.tydesc.as_ptr());
+        drop(inst1);
+
+        let inst2 = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked2)
+            .expect("Should instantiate");
+        let (ptr2, tydesc2) = (inst2.ptr, inst2.tydesc.as_ptr());
+        drop(inst2);
+
+        let eq_result = unsafe {
+            datalove_rt::c::dtlv_rti_eq_local(
+                std::ptr::null_mut(),
+                ptr1,
+                tydesc1,
+                ptr2,
+                tydesc2,
+            )
+        };
+
+        let eq_unique_result = unsafe {
+            datalove_rt::c::dtlv_rti_eq_unique_local(
+                std::ptr::null_mut(),
+                ptr1,
+                tydesc1,
+                ptr2,
+                tydesc2,
+            )
+        };
+
+        // For non-float types, eq and eq_unique should match.
+        prop_assert_eq!(eq_result, eq_unique_result,
+            "For non-float types, eq and eq_unique should return the same result");
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr1 as *mut u8, tydesc1);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc1, 1, ptr1 as *mut u8);
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr2 as *mut u8, tydesc2);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc2, 1, ptr2 as *mut u8);
+        }
+    }
 }
