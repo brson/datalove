@@ -272,9 +272,9 @@ let a: ?u8 = 1
 
 var c: u8 = 0
 if a |value|
-  c = value
+  set c = value
 else
-  c = 255
+  set c = 255
 end if
 ```
 
@@ -283,7 +283,7 @@ let a: !u8 = 1
 
 var c: u8 = 0
 if a |value|
-  c = value
+  set c = value
 else |error|
   ret error
 end if
