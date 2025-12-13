@@ -11,5 +11,4 @@ bct.workspace = true
 salsa.workspace = true
 
 [dev-dependencies]
-datalove-datafun.path = "../datalove-datafun"
 datalove-exampletest.path = "../datalove-exampletest"
