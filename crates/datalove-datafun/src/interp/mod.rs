@@ -1172,9 +1172,10 @@ fn execute_function_body<'db>(
         ));
     }
 
-    // Get frame layout and CFG.
+    // Get frame layout, CFG, and drop points.
     let layout = analysis.frame_layout(ctx.db);
     let cfg = analysis.control_flow(ctx.db);
+    let drop_points = analysis.drop_points(ctx.db);
     let total_size = layout.total_size(ctx.db) as usize;
     let slots = layout.slots(ctx.db);
 
@@ -1228,6 +1229,7 @@ fn execute_function_body<'db>(
         func,
         layout,
         cfg,
+        drop_points,
     };
     ctx.call_stack.push(frame);
 
@@ -1518,22 +1520,67 @@ fn execute_cfg_statement<'db>(
 }
 
 /// Clean up a stack frame by destroying all Available (non-moved) values.
+///
+/// Phase 3: Dual-mode cleanup - compare old slot_states-based cleanup with
+/// analysis-computed drop points. Log discrepancies for debugging.
 fn cleanup_frame<'db>(
     ctx: &mut InterpContext<'db>,
     frame: StackFrame<'db>,
 ) {
+    use std::collections::HashSet;
+    use crate::function_analysis::{DropReason, SlotId, SlotOwnership};
+
     let layout = frame.layout;
     let slots = layout.slots(ctx.db);
+    let drop_points = frame.drop_points;
 
+    // Collect slots that old cleanup would destroy.
+    let mut old_cleanup_slots: HashSet<SlotId> = HashSet::new();
+    for (slot_index, slot_info) in slots.iter().enumerate() {
+        if frame.slot_states[slot_index] == SlotState::Available {
+            if slot_info.kind(ctx.db).ownership() == SlotOwnership::Owned {
+                old_cleanup_slots.insert(slot_info.slot_id(ctx.db));
+            }
+        }
+    }
+
+    // Collect slots that drop points say should be destroyed at function exit.
+    // Note: Drop points with reason Moved or Uninitialized indicate NO drop needed.
+    let mut drop_points_slots: HashSet<SlotId> = HashSet::new();
+    for drop_point in drop_points.drops(ctx.db) {
+        match drop_point.reason(ctx.db) {
+            DropReason::EndOfScope | DropReason::EarlyReturn => {
+                drop_points_slots.insert(drop_point.slot_id(ctx.db));
+            }
+            DropReason::Moved | DropReason::Uninitialized => {
+                // These indicate no drop is needed.
+            }
+        }
+    }
+
+    // Compare and log discrepancies.
+    let only_in_old: Vec<_> = old_cleanup_slots.difference(&drop_points_slots).collect();
+    let only_in_new: Vec<_> = drop_points_slots.difference(&old_cleanup_slots).collect();
+
+    if !only_in_old.is_empty() || !only_in_new.is_empty() {
+        eprintln!(
+            "[cleanup_frame] Discrepancy in function '{}': old_only={:?}, new_only={:?}",
+            frame.func.name(ctx.db).text(ctx.db),
+            only_in_old,
+            only_in_new
+        );
+    }
+
+    // Perform old cleanup (still authoritative for now).
     for (slot_index, slot_info) in slots.iter().enumerate() {
         // Only destroy if the slot is still Available (not moved).
         if frame.slot_states[slot_index] == SlotState::Available {
-            // Skip Reference slots (parameters) - caller owns the data.
-            if slot_info.kind(ctx.db) == crate::function_analysis::SlotKind::Reference {
+            // Skip Borrowed slots - caller owns the data.
+            if slot_info.kind(ctx.db).ownership() == SlotOwnership::Borrowed {
                 continue;
             }
 
-            // Destroy Local and Temporary slots.
+            // Destroy Owned slots (Local and Temporary).
             let offset = slot_info.offset(ctx.db) as usize;
             let slot_ptr = unsafe { frame.frame_data.as_ptr().add(offset) as *mut u8 };
 

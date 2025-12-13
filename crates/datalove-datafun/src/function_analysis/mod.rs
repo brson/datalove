@@ -75,6 +75,30 @@ pub enum SlotKind {
     Temporary,
 }
 
+impl SlotKind {
+    /// Derive ownership from slot kind.
+    ///
+    /// Reference slots are borrowed (caller owns the data).
+    /// Local and Temporary slots are owned (frame must destroy at drop point).
+    pub fn ownership(self) -> SlotOwnership {
+        match self {
+            SlotKind::Reference => SlotOwnership::Borrowed,
+            SlotKind::Local | SlotKind::Temporary => SlotOwnership::Owned,
+        }
+    }
+}
+
+/// Ownership status of a slot.
+///
+/// Determines who is responsible for destroying the slot's contents.
+#[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
+pub enum SlotOwnership {
+    /// Frame owns this slot, must destroy at drop point.
+    Owned,
+    /// Caller owns, frame must not destroy.
+    Borrowed,
+}
+
 /// Position within a statement (before or after).
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
 pub enum Position {

@@ -8,66 +8,59 @@ Clean up the interpreter's ownership model so that:
 3. Value is purely a transient handle for operations
 4. No ad-hoc slot_states scanning - analysis is source of truth
 
-## Current State
+## Progress
 
-- `SlotKind`: Reference | Local | Temporary (ownership implicit)
-- `slot_states: Vec<SlotState>` tracks Available/Moved at runtime
-- `cleanup_frame` scans all slots checking states
-- `cleanup_args_after_frame` separately handles argument cleanup
-- `DropPoints` computed but never used by interpreter
-- `Value.location` (TempOwned/Borrowed) conflates multiple concerns
+- **Phase 1**: COMPLETE
+- **Phase 2**: COMPLETE
+- **Phase 3**: IN PROGRESS (dual-mode comparison working, discrepancies logged)
+- **Phases 4-7**: Not started
 
 ## Incremental Phases
 
-### Phase 1: Add Explicit Ownership to Slots
+### Phase 1: Add Explicit Ownership to Slots ✓ COMPLETE
 
-**Files**: `function_analysis/slot_allocation.rs`, `function_analysis/mod.rs`
+**Files**: `function_analysis/mod.rs`
 
-1. Add `SlotOwnership` enum:
-   ```rust
-   pub enum SlotOwnership {
-       Owned,    // Frame owns this slot, must destroy at drop point
-       Borrowed, // Caller owns, frame must not destroy
-   }
-   ```
-
-2. Add `ownership` field to `SlotInfo` (or `AllocatedSlot`)
-
-3. Derive ownership from SlotKind:
+**What was done:**
+1. Added `SlotOwnership` enum (Owned/Borrowed) to `function_analysis/mod.rs`
+2. Added `ownership()` method on `SlotKind` that derives ownership:
    - Reference → Borrowed
    - Local → Owned
    - Temporary → Owned
+3. All tests pass with no behavior change
 
-4. Run tests - should pass with no behavior change
-
-### Phase 2: Interpreter Reads Ownership from Slots
+### Phase 2: Interpreter Reads Ownership from Slots ✓ COMPLETE
 
 **Files**: `interp/mod.rs`
 
-1. In `cleanup_frame`, check `slot_info.ownership()` instead of `slot_info.kind() == Reference`
+**What was done:**
+1. Updated `cleanup_frame` to use `slot_info.kind(ctx.db).ownership() == SlotOwnership::Borrowed`
+   instead of `slot_info.kind(ctx.db) == SlotKind::Reference`
+2. Semantically equivalent, uses new ownership abstraction
+3. All tests pass with no behavior change
 
-2. Keep slot_states for now - just change what we check
-
-3. Run tests - should pass with no behavior change
-
-### Phase 3: Dual-Mode Cleanup (Old + New)
+### Phase 3: Dual-Mode Cleanup (Old + New) — IN PROGRESS
 
 **Files**: `interp/mod.rs`, `interp/frame.rs`
 
-1. Add current program point tracking to interpreter context:
-   - Track which statement we're executing
-   - Track position (before/after)
+**What was done:**
+1. Added `drop_points: DropPoints<'db>` field to `StackFrame` in `frame.rs`
+2. Updated `execute_function_body` to extract drop_points from analysis and include in frame
+3. Modified `cleanup_frame` to compare old and new cleanup approaches:
+   - Collects slots old cleanup would destroy (Available + Owned)
+   - Collects slots drop_points says to destroy (EndOfScope/EarlyReturn reasons)
+   - Logs discrepancies to stderr
 
-2. Create `execute_drop_points_for_stmt()`:
-   - Given current stmt_id and position, find matching drop points
-   - Destroy the indicated slots
+**Findings:**
+- Old cleanup is too aggressive: destroys ALL Available Owned slots, including copy types
+- Drop points analysis is precise: only marks non-copy, initialized, non-moved slots
+- Most discrepancies: `old_only` has slots (old would drop copy types unnecessarily)
+- Some discrepancies: `new_only` has slots (possible move tracking differences)
 
-3. Run BOTH old cleanup AND new drop-point cleanup:
-   - At function exit, run both
-   - Assert they destroy the same set of slots
-   - Log discrepancies for debugging
-
-4. Fix discrepancies one by one until both agree
+**Not yet done:**
+- Program point tracking (not needed for function-exit comparison)
+- `execute_drop_points_for_stmt()` (deferred - not needed until Phase 4)
+- Fix discrepancies to make both agree
 
 ### Phase 4: Switch to Drop Points Only
 
