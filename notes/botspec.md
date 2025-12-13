@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2025-12-11
+Last verified: 2025-12-12
 
 ## Overview
 
@@ -78,7 +78,7 @@ Uses Salsa for incremental compilation. REPL-first design.
 |------|--------|--------|-------------------|
 | Option | `?@T` | value or `@none` | Implemented |
 | Result | `!@T` | value or `@error "msg"` | Implemented |
-| Data | `@data` | `@data 1`, `@data : int / 1` | [NOT IMPLEMENTED] |
+| Data | `@data` | `@data 1`, `@data : int / 1` | Implemented |
 | Error | `@error` | `@error "oops"`, `@error : int / 1` | Implemented (as result payload) |
 
 ### 1.5 Heap Annotations
@@ -285,6 +285,8 @@ i8 -> i16 -> i32 -> i64 -> int
 ### 3.3 Coercions
 
 - Values implicitly wrap to `Some`/`Ok` when checking against Option/Result
+- Any type coerces to `data` (T → data)
+- Data values coerce to `?data` and `!data` (data → Option<data>, data → Result<data>)
 - Anonymous aggregates coerce to named aggregates with matching structure
 - Empty collections check against any element type
 
@@ -335,6 +337,6 @@ Features from documentation that have no or minimal implementation:
 | `memoize` | demo-datafun-script.dfs | Not implemented |
 | `var`/`set` mutation | demo-datafun-script.dfs | Not implemented |
 | `@type` introspection | demo-datafun-script.dfs | Not implemented |
-| `@data` dynamic type | README.md | Not implemented |
+| `@data` dynamic type | README.md | Implemented |
 | Named aggregates | README.md | Not implemented (named tuples, structs, enums) |
 | Full Datalove layer | README.md | Not implemented |
