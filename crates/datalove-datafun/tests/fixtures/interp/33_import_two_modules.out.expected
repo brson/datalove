@@ -510,7 +510,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"Function \'double\' has analysis errors: [UseAfterMove { slot: SlotId(0), use_location: ProgramPoint { stmt_id: StmtId(1), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }, UseAfterMove { slot: SlotId(1), use_location: ProgramPoint { stmt_id: StmtId(1), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
+                "RuntimeError(\"Function \'square\' has analysis errors: [DoubleMove { slot: SlotId(0), first_move: ProgramPoint { stmt_id: StmtId(0), position: Before }, second_move: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
             ],
         ),
         output: "",

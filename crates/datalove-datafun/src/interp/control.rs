@@ -171,13 +171,17 @@ pub(super) fn evaluate_branch_condition<'db>(
                 }
             }
 
-            unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(
-                    ctx.runtime.handle(),
-                    value.tydesc,
-                    1,
-                    value.ptr,
-                );
+            // Only free structure if TempOwned (like Option handling).
+            // Borrowed values are owned by caller and cleaned up via cleanup_args_after_frame.
+            if value.location == ValueLocation::TempOwned {
+                unsafe {
+                    datalove_rt::c::dtlv_rti_mem_free_local(
+                        ctx.runtime.handle(),
+                        value.tydesc,
+                        1,
+                        value.ptr,
+                    );
+                }
             }
 
             Ok(is_ok)

@@ -141,17 +141,13 @@ pub fn execute_script<'db>(
 
     // Helper to cleanup script scope variables.
     fn cleanup_script_scope(ctx: &mut InterpContext<'_>) {
-        let remaining_vars: Vec<_> = ctx.script_scope.variables.drain()
-            .filter_map(|(_, var)| {
-                if var.state == ScriptVarState::Available {
-                    Some(var.value)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        for value in remaining_vars {
-            destroy_value(ctx, value);
+        let vars: Vec<_> = ctx.script_scope.variables.drain().collect();
+        for (_, var) in vars {
+            if var.state == ScriptVarState::Available {
+                // Available: destroy contents and free structure.
+                destroy_value(ctx, var.value);
+            }
+            // Moved: ownership was transferred to consumer, nothing to do.
         }
     }
 
@@ -657,9 +653,15 @@ fn read_script_variable<'db>(
         // Copy types: clone the value, keep state Available.
         Ok(clone_value(ctx, value))
     } else {
-        // Linear types: move the value, mark as Moved.
+        // Linear types: transfer ownership to caller.
         ctx.script_scope.variables.get_mut(&name).unwrap().state = ScriptVarState::Moved;
-        Ok(value)
+        // Return as TempOwned - caller takes full ownership.
+        // The cleanup will skip Moved variables since ownership was transferred.
+        Ok(Value {
+            ptr: value.ptr,
+            tydesc: value.tydesc,
+            location: ValueLocation::TempOwned,
+        })
     }
 }
 
@@ -1033,8 +1035,12 @@ fn execute_function_body<'db>(
                     if slot_states[slot_id.0 as usize] != SlotState::Moved {
                         // Slot was never read/moved, so destroy the argument.
                         destroy_value(ctx, arg_value);
+                    } else if arg_value.location == ValueLocation::TempOwned {
+                        // Slot was moved: contents were consumed by function.
+                        // Free the structure since it's TempOwned (caller allocated it).
+                        free_value_structure(ctx, arg_value);
                     }
-                    // If Moved, ownership was transferred, don't free.
+                    // Borrowed values have their structures owned elsewhere.
                 }
             }
         }
@@ -1186,6 +1192,31 @@ fn execute_function_body<'db>(
                         "Failed to clone return value to heap".to_string()
                     ));
                 }
+
+                // Destroy the original value's internal allocations if it's in a Moved slot.
+                // Available slots will be cleaned up by cleanup_frame, so we skip those.
+                // Check if the original pointer is in an Available slot.
+                let original_ptr = value.ptr;
+                let layout = frame.layout;
+                let slots = layout.slots(ctx.db);
+                let is_in_available_slot = slots.iter().enumerate().any(|(slot_index, slot_info)| {
+                    if frame.slot_states[slot_index] != SlotState::Available {
+                        return false;
+                    }
+                    let offset = slot_info.offset(ctx.db) as usize;
+                    let slot_ptr = unsafe { frame.frame_data.as_ptr().add(offset) as *const u8 };
+                    slot_ptr == original_ptr
+                });
+
+                if !is_in_available_slot {
+                    // Original is in a Moved slot (or not in any slot), destroy its contents.
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        ctx.runtime.handle(),
+                        original_ptr,
+                        value.tydesc,
+                    );
+                }
+
                 value.ptr = heap_ptr;
                 value.location = ValueLocation::TempOwned;
             }
@@ -1744,9 +1775,11 @@ fn eval_expression_frame<'db>(
                     }
                     Ok(result)
                 } else {
-                    // Move: take ownership. Value becomes TempOwned.
+                    // Move: take ownership of the reference.
+                    // Return as Borrowed because caller owns the structure memory.
+                    // Contents will be destroyed by consumer, structure freed by caller cleanup.
                     ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
-                    Ok(Value { ptr, tydesc, location: ValueLocation::TempOwned })
+                    Ok(Value { ptr, tydesc, location: ValueLocation::Borrowed })
                 }
             } else {
                 // Local/Temporary slot.

@@ -73,7 +73,13 @@
         "value": "@(@1, @2, @3)"
       }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "triple",
+        "ty": "(@u32, @u32, @u32)",
+        "value": "@(@1, @2, @3)"
+      }
+    ]
   },
   {
     "input": "let mixed = @(@100, @\"test\", @true)",
@@ -94,6 +100,11 @@
         "name": "mixed",
         "ty": "(@u32, @string, @bool)",
         "value": "@(@100, @\"test\", @true)"
+      },
+      {
+        "name": "triple",
+        "ty": "(@u32, @u32, @u32)",
+        "value": "@(@1, @2, @3)"
       }
     ]
   },
@@ -111,6 +122,12 @@
         "value": "@(@100, @\"test\", @true)"
       }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "triple",
+        "ty": "(@u32, @u32, @u32)",
+        "value": "@(@1, @2, @3)"
+      }
+    ]
   }
 ]

@@ -219,11 +219,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "RuntimeError(\"Function \'compute_large\' has analysis errors: [UseAfterMove { slot: SlotId(2), use_location: ProgramPoint { stmt_id: StmtId(2), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }, UseAfterMove { slot: SlotId(6), use_location: ProgramPoint { stmt_id: StmtId(2), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }, UseAfterMove { slot: SlotId(10), use_location: ProgramPoint { stmt_id: StmtId(3), position: Before }, move_location: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@100000000",
     ),
 ]

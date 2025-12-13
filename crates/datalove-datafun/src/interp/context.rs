@@ -443,16 +443,12 @@ pub(super) fn build_module_alias_map<'db>(
 
 /// Helper to clean up script scope variables.
 pub(super) fn cleanup_script_scope(ctx: &mut InterpContext<'_>) {
-    let remaining_vars: Vec<_> = ctx.script_scope.variables.drain()
-        .filter_map(|(_, var)| {
-            if var.state == ScriptVarState::Available {
-                Some(var.value)
-            } else {
-                None
-            }
-        })
-        .collect();
-    for value in remaining_vars {
-        destroy_value(ctx, value);
+    let vars: Vec<_> = ctx.script_scope.variables.drain().collect();
+    for (_, var) in vars {
+        if var.state == ScriptVarState::Available {
+            // Available: destroy contents and free structure.
+            destroy_value(ctx, var.value);
+        }
+        // Moved: ownership was transferred to consumer, nothing to do.
     }
 }
