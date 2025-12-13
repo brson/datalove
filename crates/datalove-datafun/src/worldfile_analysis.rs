@@ -2,10 +2,11 @@
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
-use crate::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
-use crate::package_load::{Package, PackageModule};
-use crate::interp::InterpContext;
 use rmx::std::collections::BTreeMap;
+
+use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
+use datalove_datafun_pkg::package_load::{Package, PackageModule};
+use datalove_datafun_compiler::interp::InterpContext;
 
 /// Analysis result for a single worldfile section.
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,7 +24,7 @@ pub struct ModuleAnalysis {
     /// Module path (e.g., "sys/std/u32").
     pub path: String,
     /// AST.
-    pub ast: crate::ast_serde::Script,
+    pub ast: datalove_datafun_compiler::ast_serde::Script,
     /// Typecheck result.
     pub typecheck: TypecheckResult,
     /// Exported function names.
@@ -34,7 +35,7 @@ pub struct ModuleAnalysis {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptUnitAnalysis {
     /// AST.
-    pub ast: crate::ast_serde::Script,
+    pub ast: datalove_datafun_compiler::ast_serde::Script,
     /// Typecheck result.
     pub typecheck: TypecheckResult,
     /// Variables and functions added to interpreter state.
@@ -55,7 +56,7 @@ pub struct ExprAnalysis {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptAnalysis {
     /// AST.
-    pub ast: crate::ast_serde::Script,
+    pub ast: datalove_datafun_compiler::ast_serde::Script,
     /// Typecheck result.
     pub typecheck: TypecheckResult,
     /// Final output value.
@@ -80,7 +81,7 @@ pub enum TypecheckResult {
 /// - Expr sections evaluate expressions and emit type + value
 /// - Script sections execute complete scripts with output variable
 pub fn analyze_worldfile(
-    db: &dyn crate::Db,
+    db: &dyn salsa::Database,
     parsed: ParsedWorldfile,
 ) -> AnyResult<Vec<SectionAnalysis>> {
     let mut analyses = Vec::new();
@@ -116,11 +117,11 @@ pub fn analyze_worldfile(
     }
 
     // Convert raw package world to Salsa type.
-    let raw_package_world = crate::package_load::PackageWorld {
+    let raw_package_world = datalove_datafun_pkg::package_load::PackageWorld {
         pkglib_system,
         pkglib_local,
     };
-    let package_world = crate::package::import_from_loader(db, raw_package_world);
+    let package_world = datalove_datafun_pkg::import_from_loader(db, raw_package_world);
 
     // Resolve and typecheck the package world.
     let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
@@ -128,12 +129,12 @@ pub fn analyze_worldfile(
         Ok(graph) => graph,
         Err(e) => bail!("Package world resolution failed: {:?}", e),
     };
-    let typecheck_result = crate::tycheck::typecheck_package_world(db, graph);
+    let typecheck_result = datalove_datafun_compiler::tycheck::typecheck_package_world(db, graph);
 
     // Create persistent interpreter context for incremental scriptunit execution.
     let mut interp_ctx = match InterpContext::new_with_typecheck(db, package_world, typecheck_result) {
         Ok(ctx) => ctx,
-        Err(crate::interp::InterpError::TypecheckErrors(errors)) => {
+        Err(datalove_datafun_compiler::interp::InterpError::TypecheckErrors(errors)) => {
             // Provide detailed error info for typecheck failures.
             let error_details: Vec<_> = errors.iter().map(|e| format!("{:?}", e)).collect();
             bail!("Package world has {} typecheck errors: {}", errors.len(), error_details.join("; "));
@@ -164,7 +165,7 @@ pub fn analyze_worldfile(
     // Clean up any remaining variables in the interp_ctx before dropping.
     let remaining_vars: Vec<_> = interp_ctx.script_scope.variables.drain().map(|(_, var)| var.value).collect();
     for value in remaining_vars {
-        crate::interp::destroy_value(&mut interp_ctx, value);
+        datalove_datafun_compiler::interp::destroy_value(&mut interp_ctx, value);
     }
 
     Ok(analyses)
@@ -172,7 +173,7 @@ pub fn analyze_worldfile(
 
 /// Analyze a module section.
 fn analyze_module_section(
-    db: &dyn crate::Db,
+    db: &dyn salsa::Database,
     library: &str,
     package: &str,
     module: &str,
@@ -182,10 +183,10 @@ fn analyze_module_section(
 
     // Parse the module source.
     let source_obj = bct::input::Source::new(db, source.S());
-    let parsed_ast = crate::parser::parse_for_diagnostics(db, source_obj);
+    let parsed_ast = datalove_datafun_compiler::parser::parse_for_diagnostics(db, source_obj);
 
     // Convert to serializable AST.
-    let serde_ast = crate::ast_serde::Script::from_ast(db, parsed_ast);
+    let serde_ast = datalove_datafun_compiler::ast_serde::Script::from_ast(db, parsed_ast);
 
     Ok(SectionAnalysis::Module(ModuleAnalysis {
         path: module_path,
@@ -197,18 +198,18 @@ fn analyze_module_section(
 
 /// Analyze a scriptunit section by executing against incremental context.
 fn analyze_scriptunit_section<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     ctx: &mut InterpContext<'db>,
     source: &str,
 ) -> AnyResult<SectionAnalysis> {
     // Parse the scriptunit source.
     let source_obj = bct::input::Source::new(db, source.S());
-    let unit = crate::script::ScriptUnit::new(db, source_obj);
-    let script = crate::script::Script::new(db, vec![unit]);
+    let unit = datalove_datafun_compiler::script::ScriptUnit::new(db, source_obj);
+    let script = datalove_datafun_compiler::script::Script::new(db, vec![unit]);
 
     // Convert AST to serializable format.
-    let parsed_ast = crate::parser::parse_script_unit(db, script, 0);
-    let serde_ast = crate::ast_serde::Script::from_ast(db, parsed_ast);
+    let parsed_ast = datalove_datafun_compiler::parser::parse_script_unit(db, script, 0);
+    let serde_ast = datalove_datafun_compiler::ast_serde::Script::from_ast(db, parsed_ast);
 
     // Execute the scriptunit against the context.
     // This will update ctx.script_scope with new variables and functions.
@@ -219,7 +220,7 @@ fn analyze_scriptunit_section<'db>(
         .map(|k| k.text(db).to_string())
         .collect();
 
-    match crate::interp::execute_script_unit(ctx, script, 0) {
+    match datalove_datafun_compiler::interp::execute_script_unit(ctx, script, 0) {
         Ok(_) => {
             // Track what changed.
             let after_vars: Vec<String> = ctx.script_scope.variables.keys()
@@ -261,18 +262,18 @@ fn analyze_scriptunit_section<'db>(
 
 /// Analyze an expr section by evaluating the expression.
 fn analyze_expr_section<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     ctx: &mut InterpContext<'db>,
     source: &str,
 ) -> AnyResult<SectionAnalysis> {
     // For now, wrap the expression in a temporary let statement to evaluate it.
     let wrapped_source = format!("let __temp = {}", source.trim());
     let source_obj = bct::input::Source::new(db, wrapped_source.S());
-    let unit = crate::script::ScriptUnit::new(db, source_obj);
-    let script = crate::script::Script::new(db, vec![unit]);
+    let unit = datalove_datafun_compiler::script::ScriptUnit::new(db, source_obj);
+    let script = datalove_datafun_compiler::script::Script::new(db, vec![unit]);
 
     // Execute to get the value.
-    match crate::interp::execute_script_unit(ctx, script, 0) {
+    match datalove_datafun_compiler::interp::execute_script_unit(ctx, script, 0) {
         Ok(_) => {
             // Extract and remove the __temp variable.
             let temp_name = bct::text::InternedText::new(db, S("__temp"));
@@ -282,7 +283,7 @@ fn analyze_expr_section<'db>(
                     .unwrap_or_else(|e| format!("Error: {:?}", e));
 
                 // Destroy the value to avoid leaks.
-                crate::interp::destroy_value(ctx, var.value);
+                datalove_datafun_compiler::interp::destroy_value(ctx, var.value);
 
                 Ok(SectionAnalysis::Expr(ExprAnalysis {
                     type_: "Unknown".to_string(),  // TODO: Infer type.
@@ -300,18 +301,18 @@ fn analyze_expr_section<'db>(
 
 /// Analyze a script section by executing the complete script.
 fn analyze_script_section(
-    db: &dyn crate::Db,
-    package_world: crate::package::PackageWorld,
+    db: &dyn salsa::Database,
+    package_world: datalove_datafun_pkg::PackageWorld,
     source: &str,
 ) -> AnyResult<SectionAnalysis> {
     // Parse the script source.
     let source_obj = bct::input::Source::new(db, source.S());
-    let unit = crate::script::ScriptUnit::new(db, source_obj);
-    let script = crate::script::Script::new(db, vec![unit]);
+    let unit = datalove_datafun_compiler::script::ScriptUnit::new(db, source_obj);
+    let script = datalove_datafun_compiler::script::Script::new(db, vec![unit]);
 
     // Convert AST to serializable format.
-    let parsed_ast = crate::parser::parse_script_unit(db, script, 0);
-    let serde_ast = crate::ast_serde::Script::from_ast(db, parsed_ast);
+    let parsed_ast = datalove_datafun_compiler::parser::parse_script_unit(db, script, 0);
+    let serde_ast = datalove_datafun_compiler::ast_serde::Script::from_ast(db, parsed_ast);
 
     // Resolve and typecheck the package world.
     let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
@@ -328,13 +329,13 @@ fn analyze_script_section(
         }
     };
 
-    let typecheck_result = crate::tycheck::typecheck_package_world(db, graph);
+    let typecheck_result = datalove_datafun_compiler::tycheck::typecheck_package_world(db, graph);
 
     // Execute the script.
-    match crate::interp::execute_script(db, script, package_world, typecheck_result) {
+    match datalove_datafun_compiler::interp::execute_script(db, script, package_world, typecheck_result) {
         Ok(mut result) => {
             // Pretty-print the output.
-            let output = crate::interp::pretty_print_value(&mut result)
+            let output = datalove_datafun_compiler::interp::pretty_print_value(&mut result)
                 .unwrap_or_else(|e| format!("Error: {:?}", e));
 
             // Destroy the value using the runtime's destroy function.

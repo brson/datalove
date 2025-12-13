@@ -439,7 +439,7 @@ pub fn type_check_for_diagnostics<'db>(
 pub fn type_check_with_package_world_for_diagnostics<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
-    package_world: crate::package::PackageWorld,
+    package_world: bct::package2::PackageWorld,
     package_world_typecheck: PackageWorldTypecheckResult<'db>,
 ) -> TypecheckResult<'db> {
     let script = crate::parser::parse_for_diagnostics(db, source);
@@ -461,7 +461,7 @@ pub fn type_check_with_package_world<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
     script: Script<'db>,
-    package_world: crate::package::PackageWorld,
+    package_world: bct::package2::PackageWorld,
     package_world_typecheck: PackageWorldTypecheckResult<'db>,
 ) -> TypecheckResult<'db> {
     let mut ctx = TypeContext::new(db, source);
@@ -2439,7 +2439,7 @@ fn build_module_alias_map<'db>(
 pub fn build_script_module_alias_map<'db>(
     db: &'db dyn crate::Db,
     script: Script<'db>,
-    package_world: crate::package::PackageWorld,
+    package_world: bct::package2::PackageWorld,
     _graph: bct::package_resolve2::PackageWorldModuleGraph<'db>,
 ) -> HashMap<InternedText<'db>, bct::package2::PackageModule> {
     let mut alias_map = HashMap::new();
@@ -2449,7 +2449,7 @@ pub fn build_script_module_alias_map<'db>(
     let mut hierarchy_map = HashMap::new();
 
     // Create the package world map.
-    let world_map = crate::package::package_world_map(db, package_world);
+    let world_map = bct::package2::package_world_map(db, package_world);
 
     for (import_space, packages) in world_map.map(db) {
         for (package_name, package) in packages {

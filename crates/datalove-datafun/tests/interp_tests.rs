@@ -2,7 +2,8 @@
 
 use rmx::prelude::*;
 use std::path::Path;
-use datalove_datafun_compiler as datafun;
+use datalove_datafun as datafun;
+use datalove_datafun_pkg::package_load_worldfile;
 
 /// Analyze a worldfile and produce RON output.
 fn analyze_file(path: &Path) -> Result<String, String> {
@@ -12,7 +13,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let db = datafun::Database::default();
 
     // Parse the worldfile into sections.
-    let parsed = datafun::package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
+    let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
         .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
 
     // Analyze all sections.

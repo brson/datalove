@@ -6,14 +6,18 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-datalove-datafun-compiler.path = "../datalove-datafun-compiler"
-
-[dev-dependencies]
 rmx.workspace = true
 bct.workspace = true
+salsa.workspace = true
+serde = { version = "1", features = ["derive"] }
+datalove-datafun-compiler.path = "../datalove-datafun-compiler"
+datalove-datafun-pkg.path = "../datalove-datafun-pkg"
+datalove-rt.path = "../datalove-rt"
+
+[dev-dependencies]
 datalove-exampletest.path = "../datalove-exampletest"
 datalove-datalit.path = "../datalove-datalit"
-datalove-rt.path = "../datalove-rt"
+ron = "0.8"
 
 [[test]]
 name = "tycheck_world_tests"
@@ -23,4 +27,9 @@ harness = false
 [[test]]
 name = "std_tests"
 path = "tests/std_tests.rs"
+harness = false
+
+[[test]]
+name = "interp_tests"
+path = "tests/interp_tests.rs"
 harness = false

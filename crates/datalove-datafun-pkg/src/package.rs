@@ -1,24 +1,17 @@
 //! Package types with Salsa integration.
 //!
-//! Wraps the plain loading types with Salsa inputs for incremental computation.
+//! Re-exports bct types and provides conversion from loader types.
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
 use bct::input::Source;
-pub use bct::package2::{Package, PackageModule, PackageName, ModuleName};
-use bct::package_resolve2::PackageWorldMap;
+pub use bct::package2::{
+    Package, PackageModule, PackageName, ModuleName,
+    PackageWorld, package_world_map,
+};
 
 use crate::package_load as pl;
-
-/// A package world containing system and local package libraries.
-#[salsa::input]
-pub struct PackageWorld {
-    #[returns(ref)]
-    pub pkglib_system: BTreeMap<PackageName, Package>,
-    #[returns(ref)]
-    pub pkglib_local: BTreeMap<PackageName, Package>,
-}
 
 /// Convert loaded packages to Salsa types.
 pub fn import_from_loader(
@@ -69,22 +62,5 @@ fn make_module(
         db,
         module.name,
         Source::new(db, module.text),
-    )
-}
-
-/// Create a PackageWorldMap from a PackageWorld.
-#[salsa::tracked]
-pub fn package_world_map(
-    db: &dyn salsa::Database,
-    package_world: PackageWorld,
-) -> PackageWorldMap<'_> {
-    let pkglib_system = package_world.pkglib_system(db).C();
-    let pkglib_local = package_world.pkglib_local(db).C();
-    PackageWorldMap::new(
-        db,
-        BTreeMap::from([
-            (S("sys"), pkglib_system),
-            (S("local"), pkglib_local),
-        ]),
     )
 }

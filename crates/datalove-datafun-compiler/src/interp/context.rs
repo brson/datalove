@@ -10,7 +10,7 @@
 use rmx::std::collections::HashMap;
 use bct::text::InternedText;
 
-use crate::package::PackageWorld;
+use bct::package2::PackageWorld;
 use crate::module_graph::{ModuleId, ModuleGraph, ModuleGraphTypecheckResult};
 use crate::ast::{self, StmtFun};
 
@@ -29,7 +29,7 @@ pub struct InterpContext<'db> {
     pub script_scope: ScriptScope<'db>,
     pub(super) module_functions: ModuleFunctionTable<'db>,
     /// Current module being executed (for module-internal function calls).
-    pub(super) current_module: Option<crate::package::PackageModule>,
+    pub(super) current_module: Option<bct::package2::PackageModule>,
     /// Typecheck result for the package world (includes module exports).
     pub(super) typecheck_result: Option<crate::tycheck::PackageWorldTypecheckResult<'db>>,
     /// Script-level function analyses (for functions defined in the script).
@@ -61,9 +61,9 @@ pub struct ScriptScope<'db> {
 /// Maps imported function names to their function definitions and source modules.
 pub struct ModuleFunctionTable<'db> {
     /// Maps imported function name → (function definition, source module).
-    imported_functions: HashMap<InternedText<'db>, (ast::StmtFun<'db>, crate::package::PackageModule)>,
+    imported_functions: HashMap<InternedText<'db>, (ast::StmtFun<'db>, bct::package2::PackageModule)>,
     /// Cache of all functions in each module.
-    module_all_functions: HashMap<crate::package::PackageModule, HashMap<InternedText<'db>, ast::StmtFun<'db>>>,
+    module_all_functions: HashMap<bct::package2::PackageModule, HashMap<InternedText<'db>, ast::StmtFun<'db>>>,
 }
 
 /// Module function table using ModuleId (package-agnostic version).
@@ -431,12 +431,12 @@ impl<'db> ModuleFunctionTable<'db> {
     /// Look up an imported function by name.
     ///
     /// Returns the function and its source module.
-    pub fn get(&self, name: InternedText<'db>) -> Option<(ast::StmtFun<'db>, crate::package::PackageModule)> {
+    pub fn get(&self, name: InternedText<'db>) -> Option<(ast::StmtFun<'db>, bct::package2::PackageModule)> {
         self.imported_functions.get(&name).copied()
     }
 
     /// Get all functions from a module.
-    pub fn get_module_functions(&self, module: crate::package::PackageModule) -> Option<&HashMap<InternedText<'db>, ast::StmtFun<'db>>> {
+    pub fn get_module_functions(&self, module: bct::package2::PackageModule) -> Option<&HashMap<InternedText<'db>, ast::StmtFun<'db>>> {
         self.module_all_functions.get(&module)
     }
 }
@@ -505,7 +505,7 @@ impl<'db> ModuleFunctionTableGraph<'db> {
 #[salsa::tracked]
 pub(super) fn parse_module_functions<'db>(
     db: &'db dyn crate::Db,
-    module: crate::package::PackageModule,
+    module: bct::package2::PackageModule,
 ) -> Vec<(InternedText<'db>, ast::StmtFun<'db>)> {
     let module_source = module.text(db);
     let parse_result = crate::parser::parse(db, module_source);
@@ -529,14 +529,14 @@ pub(super) fn build_module_alias_map<'db>(
     db: &'db dyn crate::Db,
     script: crate::script::Script,
     package_world: PackageWorld,
-) -> HashMap<InternedText<'db>, crate::package::PackageModule> {
+) -> HashMap<InternedText<'db>, bct::package2::PackageModule> {
     use crate::ast::{Statement, StmtRequire};
 
     let mut alias_map = HashMap::new();
 
     // Build hierarchy map: (import_space, package_name, module_name) → PackageModule.
     let mut hierarchy_map = HashMap::new();
-    let world_map = crate::package::package_world_map(db, package_world);
+    let world_map = bct::package2::package_world_map(db, package_world);
 
     for (import_space, packages) in world_map.map(db) {
         for (package_name, package) in packages {

@@ -18,5 +18,8 @@ pub mod package_resolve;
 
 // Re-export key types.
 pub use package_load::{PackageWorldConfig, load_world};
-pub use package::{PackageWorld, import_from_loader, package_world_map};
+pub use package::{
+    Package, PackageModule, PackageName, ModuleName,
+    PackageWorld, import_from_loader, package_world_map,
+};
 pub use package_resolve::{resolve_package_world_with_imports, to_module_graph};

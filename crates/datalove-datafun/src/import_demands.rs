@@ -1,3 +1,7 @@
+//! Extract import demands from parsed modules.
+//!
+//! This module bridges datafun-pkg with the compiler's parser.
+
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
@@ -5,12 +9,12 @@ use bct::input::Source;
 use bct::package2::PackageModule;
 use bct::package_resolve2::{ImportDemand, ImportDemandMap, PackageWorldMap};
 
-use crate::parser;
-use crate::ast;
+use datalove_datafun_compiler::parser;
+use datalove_datafun_compiler::ast;
 
 #[salsa::tracked]
 pub fn import_demands<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     package_world_map: PackageWorldMap<'db>,
 ) -> ImportDemandMap<'db> {
     let mut map = BTreeMap::new();
@@ -31,7 +35,7 @@ struct ModuleImportDemands<'db> {
 
 #[salsa::tracked]
 fn module_import_demands<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     source: Source,
 ) -> ModuleImportDemands<'db> {
     let ast = parser::parse(db, source).script(db);

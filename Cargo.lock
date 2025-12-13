@@ -1419,10 +1419,14 @@ version = "0.1.0"
 dependencies = [
  "bct",
  "datalove-datafun-compiler",
+ "datalove-datafun-pkg",
  "datalove-datalit",
  "datalove-exampletest",
  "datalove-rt",
+ "ron",
  "rustmax",
+ "salsa",
+ "serde",
 ]
 
 [[package]]

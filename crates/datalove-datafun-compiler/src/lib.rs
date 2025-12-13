@@ -18,16 +18,6 @@ pub mod interp;
 // Module graph abstraction (core compiler uses this).
 pub mod module_graph;
 
-// Package system (to be extracted to separate crate).
-pub mod package;
-pub mod package_load;
-pub mod package_load_worldfile;
-pub mod import_demands;
-pub mod package_resolve;
-
-// Worldfile testing infrastructure.
-pub mod worldfile_analysis;
-
 pub use datalove_datalit as datalit;
 
 // Re-export Db trait for external use.

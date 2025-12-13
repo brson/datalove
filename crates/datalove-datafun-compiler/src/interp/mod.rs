@@ -81,7 +81,7 @@ use coerce::{narrow_int_to_u32, coerce_value_to_dest};
 
 use bct::text::InternedText;
 
-use crate::package::PackageWorld;
+use bct::package2::PackageWorld;
 use crate::module_graph::ModuleId;
 use crate::ast::{self, StmtFun};
 use crate::function_analysis::{Terminator, BlockId};
@@ -91,7 +91,7 @@ use crate::function_analysis::{Terminator, BlockId};
 /// Used by the interpreter to track which module a function belongs to.
 #[derive(Copy, Clone)]
 enum ModuleRef {
-    Package(crate::package::PackageModule),
+    Package(bct::package2::PackageModule),
     Graph(ModuleId),
 }
 
@@ -1173,7 +1173,7 @@ fn execute_function_body<'db>(
     }
 
     // Helper to restore previous module context.
-    fn restore_module_context(ctx: &mut InterpContext<'_>, prev: (Option<crate::package::PackageModule>, Option<ModuleId>)) {
+    fn restore_module_context(ctx: &mut InterpContext<'_>, prev: (Option<bct::package2::PackageModule>, Option<ModuleId>)) {
         ctx.current_module = prev.0;
         ctx.current_module_id = prev.1;
     }

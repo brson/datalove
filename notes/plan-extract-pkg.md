@@ -1,15 +1,19 @@
-# Plan: Extract Package Code from datafun Core
+# Plan: Extract Package Code from datafun-compiler
 
-Goal: Diamond dependency where datafun and datafun-pkg don't know about each other.
+Goal: Diamond dependency where datafun-compiler and datafun-pkg don't know about each other.
+The glue crate datafun bridges both.
 
 ```
               bct (shared types)
              /    \
             v      v
-       datafun    datafun-pkg
+  datafun-compiler  datafun-pkg
             \      /
              v    v
-           caller
+            datafun (glue)
+               |
+               v
+            caller
 ```
 
 ## Progress Summary
@@ -18,158 +22,160 @@ Goal: Diamond dependency where datafun and datafun-pkg don't know about each oth
 - [x] Phase 2: Create datalove-datafun-pkg crate (initial version)
 - [x] Phase 3: Move ModuleGraph to bct
 - [x] Phase 4: Make pkg independent of datafun
-- [ ] Phase 5: Remove package types from datafun core (optional cleanup)
+- [x] Phase 5a: Split datafun into datafun + datafun-compiler
+- [x] Phase 5b: Move package_world tests to datafun
+- [x] Phase 6: Remove package modules from datafun-compiler
+- [x] Phase 7: Wire up datafun to use datafun-pkg
 
-## Completed Work
+## Current State (COMPLETE)
 
-### ModuleGraph Abstraction (in datafun, will move to bct)
+```
+bct/src/
+  - package2.rs: Package, PackageModule, PackageWorld, package_world_map
+  - package_resolve2.rs: ImportDemandMap, resolve_package_world
+  - module_graph.rs: ModuleGraph, ModuleGraphBuilder
+
+datalove-datafun-compiler/src/
+  - Core: ast, parser, tycheck, interp, module_graph, resolution
+  - NO package concepts (uses bct::package2 for types)
+
+datalove-datafun-pkg/src/
+  - package.rs: re-exports bct types + import_from_loader
+  - package_load.rs: PackageWorldConfig, load_world
+  - package_load_worldfile.rs: worldfile parsing
+  - package_resolve.rs: resolve_package_world_with_imports, to_module_graph
+
+datalove-datafun/src/
+  - lib.rs: re-exports compiler + pkg
+  - import_demands.rs: extracts imports using compiler's parser
+  - package_resolve.rs: high-level API combining import_demands + pkg resolve
+  - worldfile_analysis.rs: testing infrastructure
+  - tests/: std_tests, tycheck_world_tests, interp_tests
+```
+
+## Target Architecture (ACHIEVED)
+
+```
+datalove-datafun-compiler/src/
+  - Core only: ast, parser, tycheck, interp, module_graph, resolution
+  - NO package concepts (uses bct::package2 for PackageWorld type)
+
+datalove-datafun-pkg/src/
+  - package.rs: re-exports from bct, import_from_loader
+  - package_load.rs, package_load_worldfile.rs
+  - package_resolve.rs (generic, takes ImportDemandMap)
+  - to_module_graph() (converts PackageWorldModuleGraph -> bct::ModuleGraph)
+
+datalove-datafun/src/
+  - lib.rs: re-exports compiler + pkg
+  - import_demands.rs: uses compiler's parser -> ImportDemandMap
+  - package_resolve.rs: high-level API that calls import_demands
+  - worldfile_analysis.rs: testing infrastructure
+```
+
+## Implementation: Phase 6
+
+Remove package modules from datafun-compiler.
+
+### Step 1: Move import_demands.rs to datafun
+
+Create `datalove-datafun/src/import_demands.rs`:
+- Copy from compiler
+- Change `use crate::` to `use datalove_datafun_compiler::`
+
+### Step 2: Create package_resolve wrapper in datafun
+
+Create `datalove-datafun/src/package_resolve.rs`:
+```rust
+// High-level resolve that handles import_demands internally
+pub fn resolve_package_world_with_imports(db, package_world) {
+    let map = datalove_datafun_pkg::package_world_map(db, package_world);
+    let demands = crate::import_demands::import_demands(db, map);
+    datalove_datafun_pkg::resolve_package_world(db, package_world, demands)
+}
+```
+
+### Step 3: Move worldfile_analysis.rs to datafun
+
+- Uses package + compiler, belongs in glue crate
+
+### Step 4: Move interp_tests to datafun
+
+- Uses worldfile_analysis, must move with it
+
+### Step 5: Delete from datafun-compiler
+
+Delete these files:
+- `src/package.rs`
+- `src/package_load.rs`
+- `src/package_load_worldfile.rs`
+- `src/package_resolve.rs`
+- `src/import_demands.rs`
+- `src/worldfile_analysis.rs`
+
+Update `src/lib.rs` to remove module declarations.
+
+### Step 6: Update datafun dependencies
+
+`datalove-datafun/Cargo.toml`:
+```toml
+[dependencies]
+datalove-datafun-compiler.path = "../datalove-datafun-compiler"
+datalove-datafun-pkg.path = "../datalove-datafun-pkg"
+```
+
+### Step 7: Update datafun lib.rs
 
 ```rust
-#[salsa::input]
-pub struct ModuleId { path: String }  // e.g., "sys/std/u32"
+// Re-export compiler
+pub use datalove_datafun_compiler::*;
 
-#[salsa::input]
-pub struct Module { id: ModuleId, source: Source }
+// Re-export pkg
+pub use datalove_datafun_pkg::{
+    PackageWorld, Package, PackageModule,
+    PackageWorldConfig, load_world,
+    package_world_map,
+};
 
-pub struct ResolvedImport {
-    local_name: String,
-    source_module: ModuleId,
-    export_name: String,
-}
-
-#[salsa::input]
-pub struct ModuleGraph {
-    modules: Vec<Module>,
-    module_by_id: BTreeMap<ModuleId, Module>,
-    imports: BTreeMap<ModuleId, Vec<ResolvedImport>>,
-    dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>>,
-}
-
-pub struct ModuleGraphBuilder<'db> { ... }
+// Bridge modules
+pub mod import_demands;
+pub mod package_resolve;
+pub mod worldfile_analysis;
 ```
 
-### Current pkg Crate
+## Verification
 
-Files in pkg (currently depends on datafun - will be changed):
-- `package_load_worldfile.rs` - Worldfile parsing
-- `package_resolve.rs` - Resolution + ModuleGraph conversion
-- `import_demands.rs` - Import demand extraction
+- `just test` passes
+- `datalove-datafun-compiler` has no `package` in module list
+- `datalove-datafun-pkg` has no dep on `datalove-datafun-compiler`
+- Grep for `use crate::package` in compiler returns nothing
 
-## Target Architecture
-
-### What Moves to bct
-
-From `datalove-datafun/src/module_graph.rs`:
-- `ModuleId` - opaque module identifier (path string)
-- `Module` - module with source text
-- `ResolvedImport` - local_name → source_module + export_name
-- `ModuleGraph` - dependency-ordered collection with imports
-- `ModuleGraphBuilder` - builder API
-
-These use only bct primitives (`Source`, `InternedText`).
-
-### What Stays in datafun
-
-- `ModuleExports<'db>` - contains `TypeFunction<'db>` (datafun-specific)
-- `ModuleImports<'db>` - datafun-specific
-- `ModuleGraphTypecheckResult<'db>` - datafun-specific
-- `typecheck_module_graph()` - uses datafun's parser/typer
-- `import_demands()` - uses datafun's parser to extract require statements
-- Interpreter - consumes ModuleGraph via typecheck result
-
-### What pkg Does
-
-- Load packages from filesystem (`package_load.rs`)
-- Parse worldfiles (`package_load_worldfile.rs`)
-- Define PackageWorld, package_world_map()
-- Resolve dependencies (via bct::package_resolve2) - caller provides ImportDemandMap
-- Convert PackageWorldModuleGraph → bct::ModuleGraph
-
-Note: pkg does NOT parse source code. Caller extracts import demands using datafun.
-
-## Implementation Phases
-
-### Phase 3: Move ModuleGraph types to bct
-
-Create `bct/crates/bct/src/module_graph.rs` with core types.
-
-Files:
-- Create `bct/crates/bct/src/module_graph.rs`
-- Update `bct/crates/bct/src/lib.rs` to export it
-
-### Phase 4: Update datafun-pkg to use bct directly
-
-1. Remove dependency on datalove-datafun
-2. Import ModuleGraph from bct
-3. Move package_load.rs, package.rs from datafun to pkg
-4. package_resolve.rs takes ImportDemandMap as parameter (caller provides it)
-5. Delete import_demands.rs from pkg
-
-Files:
-- `crates/datalove-datafun-pkg/Cargo.toml` (remove datafun dep)
-- `crates/datalove-datafun-pkg/src/package_resolve.rs`
-- Delete `crates/datalove-datafun-pkg/src/import_demands.rs`
-
-### Phase 5: Remove package types from datafun core
-
-1. Delete package.rs, package_load.rs from datafun (moved to pkg)
-2. Keep import_demands.rs in datafun (uses parser, takes bct::PackageWorldMap)
-3. Delete package_resolve.rs from datafun
-4. Remove PackageModule from interpreter (only ModuleGraph)
-5. Remove PackageWorld typecheck path
-
-Files:
-- Delete `crates/datalove-datafun/src/package.rs`
-- Delete `crates/datalove-datafun/src/package_load.rs`
-- Delete `crates/datalove-datafun/src/package_load_worldfile.rs`
-- Delete `crates/datalove-datafun/src/package_resolve.rs`
-- Keep `crates/datalove-datafun/src/import_demands.rs`
-- Update interpreter to use only ModuleGraph
-- Update tycheck to remove PackageWorld path
-
-### Phase 6: Example caller usage
+## Caller Usage After Refactor
 
 ```rust
-// 1. Load packages using pkg
-let package_world = datafun_pkg::load_world(&config);
-let package_world_map = datafun_pkg::package_world_map(db, package_world);
+use datalove_datafun as datafun;
 
-// 2. Extract import demands using datafun's parser
-let import_demand_map = datafun::import_demands(db, package_world_map);
+// Load packages
+let package_world = datafun::load_world(&config).await?;
 
-// 3. Resolve and convert to ModuleGraph using pkg
-let module_graph = datafun_pkg::resolve_to_module_graph(db, package_world_map, import_demand_map);
+// Resolve (handles import_demands internally)
+let resolution = datafun::package_resolve::resolve_package_world_with_imports(db, package_world);
+let graph = resolution.result(db)?;
 
-// 4. Compile using datafun
-let typecheck_result = datafun::typecheck_module_graph(db, module_graph);
+// Typecheck
+let result = datafun::tycheck::typecheck_package_world(db, graph);
 
-// 5. Execute using datafun
-let result = datafun::execute_with_module_graph(db, script, module_graph, typecheck_result);
-```
-
-## Dependency After Refactor
-
-```
-bct (has ModuleGraph, package2, package_resolve2)
- ↑        ↑
- |        |
-datafun  datafun-pkg (independent siblings)
- ↑        ↑
- └───┬────┘
-     |
-  caller
+// Execute
+datafun::interp::execute_script(db, script, package_world, result)?;
 ```
 
 ## Key Considerations
 
-1. **Salsa jars**: ModuleGraph uses salsa. bct's Database needs to include these jars.
+1. **import_demands**: Stays in datafun (uses parser).
+   Takes PackageWorldMap, returns ImportDemandMap.
 
-2. **Import demands**: `import_demands()` stays in datafun.
-   - Takes PackageWorldMap (from bct) as input
-   - Uses datafun's parser to extract `require module` statements
-   - Caller calls `datafun::import_demands()`, passes result to `pkg::resolve()`
+2. **worldfile_analysis**: Testing infra, uses both pkg and compiler.
 
-3. **WorldfileAnalysis**: Uses both pkg and datafun concepts.
-   Belongs in a test crate or caller code.
+3. **interp_tests**: Uses worldfile_analysis, must be in datafun or separate test crate.
 
-4. **PackageWorldMap**: Already in bct::package_resolve2, so both can use it.
+4. **Re-exports**: datafun re-exports both compiler and pkg for convenience.
