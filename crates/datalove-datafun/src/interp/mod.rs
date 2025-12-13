@@ -508,7 +508,7 @@ fn eval_expression_in_script_scope<'db>(
             eval_function_call_in_script_scope(ctx, call_expr)
         }
         ast::ExprFunKind::BinOp(binop_expr) => {
-            // Evaluate binary operations in borrow context (operands are not moved).
+            // Evaluate operands (borrow context - we just read, don't consume variables).
             let lhs = eval_expression_in_script_scope_borrow(ctx, binop_expr.lhs(ctx.db))?;
             let rhs = match eval_expression_in_script_scope_borrow(ctx, binop_expr.rhs(ctx.db)) {
                 Ok(v) => v,
@@ -517,7 +517,12 @@ fn eval_expression_in_script_scope<'db>(
                     return Err(e);
                 }
             };
-            execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, dest)
+            // Execute binop with borrowed operands.
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, dest);
+            // Clean up temporary operand values.
+            destroy_value(ctx, lhs);
+            destroy_value(ctx, rhs);
+            result
         }
         ast::ExprFunKind::Tuple(tuple_expr) => {
             // Evaluate each element in script scope.
@@ -540,10 +545,13 @@ fn eval_expression_in_script_scope<'db>(
             allocate_tuple_from_values(ctx, values)
         }
         ast::ExprFunKind::UnaryOp(unary_expr) => {
-            // Evaluate operand in borrow context (operand is not moved).
+            // Evaluate operand (borrow context - we just read, don't consume variables).
             let operand = eval_expression_in_script_scope_borrow(ctx, unary_expr.operand(ctx.db))?;
-            // Execute unary operation.
-            execute_unop(ctx, unary_expr.op(ctx.db), operand, dest)
+            // Execute unary operation with borrowed operand.
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, dest);
+            // Clean up temporary operand value.
+            destroy_value(ctx, operand);
+            result
         }
         ast::ExprFunKind::TryOption(try_op) => {
             // Evaluate operand.
@@ -718,12 +726,17 @@ fn eval_expression_in_script_scope_borrow<'db>(
                     return Err(e);
                 }
             };
-            execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, None)
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, None);
+            destroy_value(ctx, lhs);
+            destroy_value(ctx, rhs);
+            result
         }
         ast::ExprFunKind::UnaryOp(unary_expr) => {
             // Nested unary: stay in borrow context.
             let operand = eval_expression_in_script_scope_borrow(ctx, unary_expr.operand(ctx.db))?;
-            execute_unop(ctx, unary_expr.op(ctx.db), operand, None)
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, None);
+            destroy_value(ctx, operand);
+            result
         }
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Function calls use normal semantics (arguments may be moved).
@@ -1891,9 +1904,6 @@ fn eval_expression_frame<'db>(
 
             // Evaluate lhs in borrow context (binops don't consume operands).
             let lhs = eval_expression_frame_borrow(ctx, lhs_expr, Some(lhs_dest))?;
-            if lhs.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, lhs_expr);
-            }
 
             // Evaluate rhs in borrow context.
             let rhs = match eval_expression_frame_borrow(ctx, rhs_expr, Some(rhs_dest)) {
@@ -1903,16 +1913,25 @@ fn eval_expression_frame<'db>(
                     return Err(e);
                 }
             };
-            if rhs.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, rhs_expr);
-            }
 
             // Use provided dest or own temp slot.
             let result_dest = match dest {
                 Some(d) => d,
                 None => get_destination_for_expr(ctx, expr)?,
             };
-            let result = execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, Some(result_dest))?;
+
+            // Execute binop with borrowed operands.
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(result_dest))?;
+
+            // Clean up temporary operand values.
+            destroy_value(ctx, lhs);
+            if lhs.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, lhs_expr);
+            }
+            destroy_value(ctx, rhs);
+            if rhs.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, rhs_expr);
+            }
 
             // If result went to our temp slot (not caller's dest), mark Available for cleanup.
             if dest.is_none() && result.location == ValueLocation::Borrowed {
@@ -1934,16 +1953,21 @@ fn eval_expression_frame<'db>(
 
             // Evaluate operand in borrow context (unary ops don't consume operands).
             let operand = eval_expression_frame_borrow(ctx, operand_expr, Some(operand_dest))?;
-            if operand.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, operand_expr);
-            }
 
             // Use provided dest or own temp slot.
             let result_dest = match dest {
                 Some(d) => d,
                 None => get_destination_for_expr(ctx, expr)?,
             };
-            let result = execute_unop(ctx, unary_expr.op(ctx.db), operand, Some(result_dest))?;
+
+            // Execute unop with borrowed operand.
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(result_dest))?;
+
+            // Clean up temporary operand value.
+            destroy_value(ctx, operand);
+            if operand.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, operand_expr);
+            }
 
             // If result went to our temp slot, mark Available for cleanup.
             if dest.is_none() && result.location == ValueLocation::Borrowed {
@@ -2209,9 +2233,6 @@ fn eval_expression_frame_borrow<'db>(
             let rhs_dest = get_destination_for_expr(ctx, rhs_expr)?;
 
             let lhs = eval_expression_frame_borrow(ctx, lhs_expr, Some(lhs_dest))?;
-            if lhs.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, lhs_expr);
-            }
 
             let rhs = match eval_expression_frame_borrow(ctx, rhs_expr, Some(rhs_dest)) {
                 Ok(v) => v,
@@ -2220,15 +2241,25 @@ fn eval_expression_frame_borrow<'db>(
                     return Err(e);
                 }
             };
-            if rhs.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, rhs_expr);
-            }
 
             let result_dest = match dest {
                 Some(d) => d,
                 None => get_destination_for_expr(ctx, expr)?,
             };
-            let result = execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, Some(result_dest))?;
+
+            // Execute binop with borrowed operands.
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(result_dest))?;
+
+            // Clean up temporary operand values.
+            destroy_value(ctx, lhs);
+            if lhs.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, lhs_expr);
+            }
+            destroy_value(ctx, rhs);
+            if rhs.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, rhs_expr);
+            }
+
             if dest.is_none() && result.location == ValueLocation::Borrowed {
                 mark_temp_slot_available(ctx, expr);
             }
@@ -2240,15 +2271,21 @@ fn eval_expression_frame_borrow<'db>(
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
 
             let operand = eval_expression_frame_borrow(ctx, operand_expr, Some(operand_dest))?;
-            if operand.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, operand_expr);
-            }
 
             let result_dest = match dest {
                 Some(d) => d,
                 None => get_destination_for_expr(ctx, expr)?,
             };
-            let result = execute_unop(ctx, unary_expr.op(ctx.db), operand, Some(result_dest))?;
+
+            // Execute unop with borrowed operand.
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(result_dest))?;
+
+            // Clean up temporary operand value.
+            destroy_value(ctx, operand);
+            if operand.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, operand_expr);
+            }
+
             if dest.is_none() && result.location == ValueLocation::Borrowed {
                 mark_temp_slot_available(ctx, expr);
             }

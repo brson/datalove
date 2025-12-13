@@ -101,21 +101,19 @@ pub(super) fn write_option_u32_result(ctx: &mut InterpContext<'_>, value: Option
 // ============================================================================
 
 /// Evaluate checked addition (returns error on overflow).
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_add_checked<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if !is_u32_value(lhs) || !is_u32_value(rhs) {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
+    if !is_u32_value(*lhs) || !is_u32_value(*rhs) {
         return Err(InterpError::InvalidExpression("Checked addition requires u32 operands".to_string()));
     }
     let lhs_val = unsafe { *(lhs.ptr as *const u32) };
     let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-    destroy_value(ctx, lhs);
-    destroy_value(ctx, rhs);
     match lhs_val.checked_add(rhs_val) {
         Some(result) => write_u32_result(ctx, result, dest),
         None => Err(InterpError::Overflow),
@@ -123,21 +121,19 @@ pub(super) fn eval_add_checked<'db>(
 }
 
 /// Evaluate checked subtraction (returns error on overflow).
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_sub_checked<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if !is_u32_value(lhs) || !is_u32_value(rhs) {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
+    if !is_u32_value(*lhs) || !is_u32_value(*rhs) {
         return Err(InterpError::InvalidExpression("Checked subtraction requires u32 operands".to_string()));
     }
     let lhs_val = unsafe { *(lhs.ptr as *const u32) };
     let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-    destroy_value(ctx, lhs);
-    destroy_value(ctx, rhs);
     match lhs_val.checked_sub(rhs_val) {
         Some(result) => write_u32_result(ctx, result, dest),
         None => Err(InterpError::Overflow),
@@ -145,21 +141,19 @@ pub(super) fn eval_sub_checked<'db>(
 }
 
 /// Evaluate checked multiplication (returns error on overflow).
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_mul_checked<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if !is_u32_value(lhs) || !is_u32_value(rhs) {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
+    if !is_u32_value(*lhs) || !is_u32_value(*rhs) {
         return Err(InterpError::InvalidExpression("Checked multiplication requires u32 operands".to_string()));
     }
     let lhs_val = unsafe { *(lhs.ptr as *const u32) };
     let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-    destroy_value(ctx, lhs);
-    destroy_value(ctx, rhs);
     match lhs_val.checked_mul(rhs_val) {
         Some(result) => write_u32_result(ctx, result, dest),
         None => Err(InterpError::Overflow),
@@ -167,14 +161,16 @@ pub(super) fn eval_mul_checked<'db>(
 }
 
 /// Evaluate checked division (returns error on division by zero).
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_div_checked<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Both int: use runtime checked division.
-    if is_int_value(lhs) && is_int_value(rhs) {
+    if is_int_value(*lhs) && is_int_value(*rhs) {
         let result_int = allocate_bigint(ctx)?;
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_div_checked(
@@ -184,8 +180,6 @@ pub(super) fn eval_div_checked<'db>(
                 result_int.ptr, result_int.tydesc,
             )
         };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         if status == datalove_rt::c::RtStatus::Ok {
             return Ok(result_int);
         } else {
@@ -195,18 +189,14 @@ pub(super) fn eval_div_checked<'db>(
     }
 
     // Both u32: use Rust checked_div.
-    if is_u32_value(lhs) && is_u32_value(rhs) {
+    if is_u32_value(*lhs) && is_u32_value(*rhs) {
         let lhs_val = unsafe { *(lhs.ptr as *const u32) };
         let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         match lhs_val.checked_div(rhs_val) {
             Some(result) => write_u32_result(ctx, result, dest),
             None => Err(InterpError::DivisionByZero),
         }
     } else {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression("Checked division requires matching operand types".to_string()))
     }
 }
@@ -216,74 +206,67 @@ pub(super) fn eval_div_checked<'db>(
 // ============================================================================
 
 /// Evaluate optional addition (returns None on overflow).
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_add_optional<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if !is_u32_value(lhs) || !is_u32_value(rhs) {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
+    if !is_u32_value(*lhs) || !is_u32_value(*rhs) {
         return Err(InterpError::InvalidExpression("Optional addition requires u32 operands".to_string()));
     }
     let lhs_val = unsafe { *(lhs.ptr as *const u32) };
     let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-    destroy_value(ctx, lhs);
-    destroy_value(ctx, rhs);
     write_option_u32_result(ctx, lhs_val.checked_add(rhs_val), dest)
 }
 
 /// Evaluate optional subtraction (returns None on overflow).
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_sub_optional<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if !is_u32_value(lhs) || !is_u32_value(rhs) {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
+    if !is_u32_value(*lhs) || !is_u32_value(*rhs) {
         return Err(InterpError::InvalidExpression("Optional subtraction requires u32 operands".to_string()));
     }
     let lhs_val = unsafe { *(lhs.ptr as *const u32) };
     let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-    destroy_value(ctx, lhs);
-    destroy_value(ctx, rhs);
     write_option_u32_result(ctx, lhs_val.checked_sub(rhs_val), dest)
 }
 
 /// Evaluate optional multiplication (returns None on overflow).
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_mul_optional<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    if !is_u32_value(lhs) || !is_u32_value(rhs) {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
+    if !is_u32_value(*lhs) || !is_u32_value(*rhs) {
         return Err(InterpError::InvalidExpression("Optional multiplication requires u32 operands".to_string()));
     }
     let lhs_val = unsafe { *(lhs.ptr as *const u32) };
     let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-    destroy_value(ctx, lhs);
-    destroy_value(ctx, rhs);
     write_option_u32_result(ctx, lhs_val.checked_mul(rhs_val), dest)
 }
 
 /// Evaluate optional division (returns None on division by zero).
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_div_optional<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Both int: use runtime optional division.
-    if is_int_value(lhs) && is_int_value(rhs) {
-        let u32_tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32);
-        let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(u32_tydesc);
-
+    if is_int_value(*lhs) && is_int_value(*rhs) {
         let result_int = allocate_bigint(ctx)?;
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_div_checked(
@@ -293,8 +276,6 @@ pub(super) fn eval_div_optional<'db>(
                 result_int.ptr, result_int.tydesc,
             )
         };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
 
         if status == datalove_rt::c::RtStatus::Ok {
             return Ok(result_int);
@@ -305,15 +286,11 @@ pub(super) fn eval_div_optional<'db>(
     }
 
     // Both u32: use Rust checked_div and wrap in Option.
-    if is_u32_value(lhs) && is_u32_value(rhs) {
+    if is_u32_value(*lhs) && is_u32_value(*rhs) {
         let lhs_val = unsafe { *(lhs.ptr as *const u32) };
         let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         write_option_u32_result(ctx, lhs_val.checked_div(rhs_val), dest)
     } else {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression("Optional division requires matching operand types".to_string()))
     }
 }
@@ -323,21 +300,21 @@ pub(super) fn eval_div_optional<'db>(
 // ============================================================================
 
 /// Evaluate comparison operators.
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_comparison<'db>(
     ctx: &mut InterpContext<'db>,
     op: crate::ast::BinOp,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     use crate::ast::BinOp;
 
     // Both u32: direct comparison.
-    if is_u32_value(lhs) && is_u32_value(rhs) {
+    if is_u32_value(*lhs) && is_u32_value(*rhs) {
         let lhs_val = unsafe { *(lhs.ptr as *const u32) };
         let rhs_val = unsafe { *(rhs.ptr as *const u32) };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         let result = match op {
             BinOp::Lt => lhs_val < rhs_val,
             BinOp::Le => lhs_val <= rhs_val,
@@ -362,9 +339,6 @@ pub(super) fn eval_comparison<'db>(
             rhs.tydesc,
         )
     };
-
-    destroy_value(ctx, lhs);
-    destroy_value(ctx, rhs);
 
     let result = match (op, ordering) {
         (BinOp::Lt, RtOrdering::Less) => true,

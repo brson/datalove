@@ -22,36 +22,31 @@ use super::arith::{
 };
 
 /// Evaluate addition with automatic widening to int.
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_add<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Both f32: add and return f32.
-    if is_f32_value(lhs) && is_f32_value(rhs) {
+    if is_f32_value(*lhs) && is_f32_value(*rhs) {
         let a = unsafe { *(lhs.ptr as *const f32) };
         let b = unsafe { *(rhs.ptr as *const f32) };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         return write_f32_result(ctx, a + b, dest);
     }
 
     // Both u32: widen to Int and add.
-    if is_u32_value(lhs) && is_u32_value(rhs) {
-        let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        let rhs_int = match widen_u32_to_int(ctx, rhs) {
+    if is_u32_value(*lhs) && is_u32_value(*rhs) {
+        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
+        let rhs_int = match widen_u32_to_int(ctx, *rhs) {
             Ok(v) => v,
             Err(e) => {
                 destroy_value(ctx, lhs_int);
-                destroy_value(ctx, lhs);
-                destroy_value(ctx, rhs);
                 return Err(e);
             }
         };
-
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
 
         let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
             (d.ptr, d.tydesc, true)
@@ -94,7 +89,7 @@ pub(super) fn eval_add<'db>(
         }
     }
     // Both Int: add directly.
-    else if is_int_value(lhs) && is_int_value(rhs) {
+    else if is_int_value(*lhs) && is_int_value(*rhs) {
         let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
             (d.ptr, d.tydesc, true)
         } else {
@@ -110,9 +105,6 @@ pub(super) fn eval_add<'db>(
                 result_ptr, result_tydesc,
             )
         };
-
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(Value {
@@ -129,9 +121,8 @@ pub(super) fn eval_add<'db>(
         }
     }
     // Mixed u32 and Int: widen u32 side.
-    else if is_u32_value(lhs) && is_int_value(rhs) {
-        let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        destroy_value(ctx, lhs);
+    else if is_u32_value(*lhs) && is_int_value(*rhs) {
+        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
 
         let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
             (d.ptr, d.tydesc, true)
@@ -150,7 +141,6 @@ pub(super) fn eval_add<'db>(
         };
 
         destroy_value(ctx, lhs_int);
-        destroy_value(ctx, rhs);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(Value {
@@ -166,9 +156,8 @@ pub(super) fn eval_add<'db>(
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
-    else if is_int_value(lhs) && is_u32_value(rhs) {
-        let rhs_int = widen_u32_to_int(ctx, rhs)?;
-        destroy_value(ctx, rhs);
+    else if is_int_value(*lhs) && is_u32_value(*rhs) {
+        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
 
         let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
             (d.ptr, d.tydesc, true)
@@ -186,7 +175,6 @@ pub(super) fn eval_add<'db>(
             )
         };
 
-        destroy_value(ctx, lhs);
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
@@ -204,8 +192,6 @@ pub(super) fn eval_add<'db>(
         }
     }
     else {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression(
             "Unsupported types for addition".to_string()
         ))
@@ -213,18 +199,18 @@ pub(super) fn eval_add<'db>(
 }
 
 /// Evaluate subtraction with automatic widening to int.
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_sub<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Both f32: subtract and return f32.
-    if is_f32_value(lhs) && is_f32_value(rhs) {
+    if is_f32_value(*lhs) && is_f32_value(*rhs) {
         let a = unsafe { *(lhs.ptr as *const f32) };
         let b = unsafe { *(rhs.ptr as *const f32) };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         return write_f32_result(ctx, a - b, dest);
     }
 
@@ -238,11 +224,9 @@ pub(super) fn eval_sub<'db>(
     };
 
     // Both u32: widen to Int and subtract.
-    if is_u32_value(lhs) && is_u32_value(rhs) {
-        let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        let rhs_int = widen_u32_to_int(ctx, rhs)?;
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
+    if is_u32_value(*lhs) && is_u32_value(*rhs) {
+        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
 
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
@@ -265,7 +249,7 @@ pub(super) fn eval_sub<'db>(
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
-    else if is_int_value(lhs) && is_int_value(rhs) {
+    else if is_int_value(*lhs) && is_int_value(*rhs) {
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe {
@@ -277,9 +261,6 @@ pub(super) fn eval_sub<'db>(
             )
         };
 
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
-
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
         } else {
@@ -287,9 +268,8 @@ pub(super) fn eval_sub<'db>(
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
-    else if is_u32_value(lhs) && is_int_value(rhs) {
-        let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        destroy_value(ctx, lhs);
+    else if is_u32_value(*lhs) && is_int_value(*rhs) {
+        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe {
@@ -302,7 +282,6 @@ pub(super) fn eval_sub<'db>(
         };
 
         destroy_value(ctx, lhs_int);
-        destroy_value(ctx, rhs);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
@@ -311,9 +290,8 @@ pub(super) fn eval_sub<'db>(
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
-    else if is_int_value(lhs) && is_u32_value(rhs) {
-        let rhs_int = widen_u32_to_int(ctx, rhs)?;
-        destroy_value(ctx, rhs);
+    else if is_int_value(*lhs) && is_u32_value(*rhs) {
+        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe {
@@ -325,7 +303,6 @@ pub(super) fn eval_sub<'db>(
             )
         };
 
-        destroy_value(ctx, lhs);
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
@@ -336,25 +313,23 @@ pub(super) fn eval_sub<'db>(
         }
     }
     else {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression("Unsupported types for subtraction".to_string()))
     }
 }
 
 /// Evaluate multiplication with automatic widening to int.
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_mul<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Both f32: multiply and return f32.
-    if is_f32_value(lhs) && is_f32_value(rhs) {
+    if is_f32_value(*lhs) && is_f32_value(*rhs) {
         let a = unsafe { *(lhs.ptr as *const f32) };
         let b = unsafe { *(rhs.ptr as *const f32) };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         return write_f32_result(ctx, a * b, dest);
     }
 
@@ -362,11 +337,9 @@ pub(super) fn eval_mul<'db>(
         if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
     };
 
-    if is_u32_value(lhs) && is_u32_value(rhs) {
-        let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        let rhs_int = widen_u32_to_int(ctx, rhs)?;
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
+    if is_u32_value(*lhs) && is_u32_value(*rhs) {
+        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
@@ -380,11 +353,9 @@ pub(super) fn eval_mul<'db>(
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
-    else if is_int_value(lhs) && is_int_value(rhs) {
+    else if is_int_value(*lhs) && is_int_value(*rhs) {
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
@@ -393,13 +364,11 @@ pub(super) fn eval_mul<'db>(
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
-    else if is_u32_value(lhs) && is_int_value(rhs) {
-        let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        destroy_value(ctx, lhs);
+    else if is_u32_value(*lhs) && is_int_value(*rhs) {
+        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
         destroy_value(ctx, lhs_int);
-        destroy_value(ctx, rhs);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
@@ -408,12 +377,10 @@ pub(super) fn eval_mul<'db>(
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
-    else if is_int_value(lhs) && is_u32_value(rhs) {
-        let rhs_int = widen_u32_to_int(ctx, rhs)?;
-        destroy_value(ctx, rhs);
+    else if is_int_value(*lhs) && is_u32_value(*rhs) {
+        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
-        destroy_value(ctx, lhs);
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
@@ -424,25 +391,23 @@ pub(super) fn eval_mul<'db>(
         }
     }
     else {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression("Unsupported types for multiplication".to_string()))
     }
 }
 
 /// Evaluate division with automatic widening to int.
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn eval_div<'db>(
     ctx: &mut InterpContext<'db>,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Both f32: divide and return f32.
-    if is_f32_value(lhs) && is_f32_value(rhs) {
+    if is_f32_value(*lhs) && is_f32_value(*rhs) {
         let a = unsafe { *(lhs.ptr as *const f32) };
         let b = unsafe { *(rhs.ptr as *const f32) };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         return write_f32_result(ctx, a / b, dest);
     }
 
@@ -450,11 +415,9 @@ pub(super) fn eval_div<'db>(
         if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
     };
 
-    if is_u32_value(lhs) && is_u32_value(rhs) {
-        let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        let rhs_int = widen_u32_to_int(ctx, rhs)?;
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
+    if is_u32_value(*lhs) && is_u32_value(*rhs) {
+        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
+        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
@@ -468,11 +431,9 @@ pub(super) fn eval_div<'db>(
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
-    else if is_int_value(lhs) && is_int_value(rhs) {
+    else if is_int_value(*lhs) && is_int_value(*rhs) {
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
@@ -481,13 +442,11 @@ pub(super) fn eval_div<'db>(
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
-    else if is_u32_value(lhs) && is_int_value(rhs) {
-        let lhs_int = widen_u32_to_int(ctx, lhs)?;
-        destroy_value(ctx, lhs);
+    else if is_u32_value(*lhs) && is_int_value(*rhs) {
+        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
         destroy_value(ctx, lhs_int);
-        destroy_value(ctx, rhs);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
@@ -496,12 +455,10 @@ pub(super) fn eval_div<'db>(
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
-    else if is_int_value(lhs) && is_u32_value(rhs) {
-        let rhs_int = widen_u32_to_int(ctx, rhs)?;
-        destroy_value(ctx, rhs);
+    else if is_int_value(*lhs) && is_u32_value(*rhs) {
+        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
-        destroy_value(ctx, lhs);
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
@@ -512,18 +469,18 @@ pub(super) fn eval_div<'db>(
         }
     }
     else {
-        destroy_value(ctx, lhs);
-        destroy_value(ctx, rhs);
         Err(InterpError::InvalidExpression("Unsupported types for division".to_string()))
     }
 }
 
 /// Execute a binary operation.
+///
+/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn execute_binop<'db>(
     ctx: &mut InterpContext<'db>,
     op: BinOp,
-    lhs: Value,
-    rhs: Value,
+    lhs: &Value,
+    rhs: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     match op {
@@ -553,10 +510,12 @@ pub(super) fn execute_binop<'db>(
 }
 
 /// Execute a unary operation.
+///
+/// Operand is borrowed (ref semantics) - caller manages its lifetime.
 pub(super) fn execute_unop<'db>(
     ctx: &mut InterpContext<'db>,
     op: UnaryOp,
-    operand: Value,
+    operand: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     match op {
@@ -567,14 +526,15 @@ pub(super) fn execute_unop<'db>(
 }
 
 /// Evaluate negation for Int type.
+///
+/// Operand is borrowed (ref semantics) - caller manages its lifetime.
 pub(super) fn eval_neg<'db>(
     ctx: &mut InterpContext<'db>,
-    operand: Value,
+    operand: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Only Int (bigint) supports bare negation.
-    if !is_int_value(operand) {
-        destroy_value(ctx, operand);
+    if !is_int_value(*operand) {
         return Err(InterpError::InvalidExpression(
             "Negation only supports Int type".to_string()
         ));
@@ -597,8 +557,6 @@ pub(super) fn eval_neg<'db>(
         )
     };
 
-    destroy_value(ctx, operand);
-
     if status == datalove_rt::c::RtStatus::Ok {
         Ok(Value {
             ptr: result_ptr,
@@ -618,9 +576,10 @@ pub(super) fn eval_neg<'db>(
 ///
 /// Performs checked negation on signed integers.
 /// Returns the raw negated value on success, or OptionNone error on overflow.
+/// Operand is borrowed (ref semantics) - caller manages its lifetime.
 pub(super) fn eval_neg_optional<'db>(
     ctx: &mut InterpContext<'db>,
-    operand: Value,
+    operand: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     use datalove_rt::rtdt::TyTag;
@@ -644,14 +603,11 @@ pub(super) fn eval_neg_optional<'db>(
             val.checked_neg().map(|r| r as u32)
         }
         _ => {
-            destroy_value(ctx, operand);
             return Err(InterpError::InvalidExpression(
                 format!("Optional negation not supported for type {:?}", type_tag)
             ));
         }
     };
-
-    destroy_value(ctx, operand);
 
     match negated_result {
         Some(result) => write_typed_int_result(ctx, result, operand_tydesc, dest),
@@ -663,9 +619,10 @@ pub(super) fn eval_neg_optional<'db>(
 ///
 /// Performs checked negation on fixed-width integers.
 /// Returns the raw negated value on success, or ResultErr with "overflow" on overflow.
+/// Operand is borrowed (ref semantics) - caller manages its lifetime.
 pub(super) fn eval_neg_result<'db>(
     ctx: &mut InterpContext<'db>,
-    operand: Value,
+    operand: &Value,
     dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     use datalove_rt::rtdt::TyTag;
@@ -700,14 +657,11 @@ pub(super) fn eval_neg_result<'db>(
             raw_value.checked_neg()
         }
         _ => {
-            destroy_value(ctx, operand);
             return Err(InterpError::InvalidExpression(
                 format!("Result negation not supported for type {:?}", type_tag)
             ));
         }
     };
-
-    destroy_value(ctx, operand);
 
     match negated_result {
         Some(result) => write_typed_int_result(ctx, result, operand_tydesc, dest),
