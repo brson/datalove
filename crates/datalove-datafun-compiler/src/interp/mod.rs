@@ -275,8 +275,8 @@ pub fn execute_script_unit<'db>(
     script: crate::script::Script,
     unit_index: usize,
 ) -> Result<Option<Value>, InterpError> {
-    // Verify context has typecheck result.
-    if ctx.typecheck_result.is_none() {
+    // Verify context has typecheck result (either package-aware or module-graph mode).
+    if ctx.typecheck_result.is_none() && !ctx.is_module_graph_mode() {
         return Err(InterpError::RuntimeError(
             "InterpContext not initialized with typecheck result".to_string()
         ));
@@ -459,37 +459,42 @@ fn execute_fun_statement<'db>(
     let name = fun_stmt.name(ctx.db);
     ctx.script_scope.functions.insert(name, fun_stmt);
 
-    // Typecheck and analyze the function.
-    // We need a typecheck result - use the package world typecheck if available.
-    if let Some(typecheck_result) = ctx.typecheck_result {
-        // Create a minimal script containing just this function for typechecking.
-        let script = ctx.script.ok_or_else(|| {
-            InterpError::RuntimeError("No script set in context".to_string())
-        })?;
+    // Get script.
+    let script = ctx.script.ok_or_else(|| {
+        InterpError::RuntimeError("No script set in context".to_string())
+    })?;
 
-        // Find the unit that contains this function and get its source.
-        let units = script.units(ctx.db);
-        for unit_index in 0..units.len() {
-            let parsed_unit = crate::parser::parse_script_unit(ctx.db, script, unit_index);
-            for stmt in parsed_unit.statements(ctx.db) {
-                if let crate::ast::Statement::Fun(f) = stmt {
-                    if *f == fun_stmt {
-                        let unit_source = units[unit_index].source(ctx.db);
-                        let unit_typecheck = crate::tycheck::type_check_with_package_world(
+    // Find the unit that contains this function and get its source.
+    let units = script.units(ctx.db);
+    for unit_index in 0..units.len() {
+        let parsed_unit = crate::parser::parse_script_unit(ctx.db, script, unit_index);
+        for stmt in parsed_unit.statements(ctx.db) {
+            if let crate::ast::Statement::Fun(f) = stmt {
+                if *f == fun_stmt {
+                    let unit_source = units[unit_index].source(ctx.db);
+
+                    // Typecheck the unit using appropriate mode.
+                    let unit_typecheck = if let Some(typecheck_result) = ctx.typecheck_result {
+                        // Package-world mode.
+                        crate::tycheck::type_check_with_package_world(
                             ctx.db,
                             unit_source,
                             parsed_unit,
                             ctx.package_world,
                             typecheck_result,
-                        );
-                        let analysis = crate::function_analysis::analyze_function(
-                            ctx.db,
-                            fun_stmt,
-                            unit_typecheck,
-                        );
-                        ctx.script_function_analyses.insert(fun_stmt, analysis);
-                        return Ok(());
-                    }
+                        )
+                    } else {
+                        // ModuleGraph or standalone mode - use basic typecheck.
+                        crate::tycheck::type_check(ctx.db, unit_source, parsed_unit)
+                    };
+
+                    let analysis = crate::function_analysis::analyze_function(
+                        ctx.db,
+                        fun_stmt,
+                        unit_typecheck,
+                    );
+                    ctx.script_function_analyses.insert(fun_stmt, analysis);
+                    return Ok(());
                 }
             }
         }

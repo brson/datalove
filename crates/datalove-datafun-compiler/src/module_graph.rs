@@ -10,7 +10,6 @@ use bct::text::InternedText;
 pub use bct::module_graph::{
     ModuleId,
     Module,
-    ResolvedImport,
     ModuleGraph,
     ModuleGraphBuilder,
 };

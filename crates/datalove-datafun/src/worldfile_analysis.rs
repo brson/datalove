@@ -123,16 +123,21 @@ pub fn analyze_worldfile(
     };
     let package_world = datalove_datafun_pkg::import_from_loader(db, raw_package_world);
 
-    // Resolve and typecheck the package world.
+    // Resolve module dependencies and convert to ModuleGraph.
     let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
-    let graph = match resolution.result(db) {
+    let pkg_graph = match resolution.result(db) {
         Ok(graph) => graph,
         Err(e) => bail!("Package world resolution failed: {:?}", e),
     };
-    let typecheck_result = datalove_datafun_compiler::tycheck::typecheck_package_world(db, graph);
+
+    // Convert to package-agnostic ModuleGraph.
+    let module_graph = datalove_datafun_pkg::to_module_graph(db, package_world, pkg_graph);
+
+    // Typecheck using the package-agnostic path.
+    let typecheck_result = datalove_datafun_compiler::tycheck::typecheck_module_graph(db, module_graph);
 
     // Create persistent interpreter context for incremental scriptunit execution.
-    let mut interp_ctx = match InterpContext::new_with_typecheck(db, package_world, typecheck_result) {
+    let mut interp_ctx = match InterpContext::new_with_module_graph(db, typecheck_result) {
         Ok(ctx) => ctx,
         Err(datalove_datafun_compiler::interp::InterpError::TypecheckErrors(errors)) => {
             // Provide detailed error info for typecheck failures.

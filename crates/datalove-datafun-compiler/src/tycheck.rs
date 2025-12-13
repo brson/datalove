@@ -688,6 +688,7 @@ pub fn typecheck_package_world<'db>(
 ///
 /// This is the core typechecking function that works with the package-agnostic
 /// ModuleGraph abstraction. Modules are processed in dependency order.
+/// Function-level imports are resolved on the fly from `require module` and `import` statements.
 #[salsa::tracked]
 pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
@@ -722,31 +723,42 @@ pub fn typecheck_module_graph<'db>(
         // Track imports for this module.
         let mut module_import_functions: Vec<(InternedText<'db>, ModuleId, InternedText<'db>)> = Vec::new();
 
-        // Add imported functions to context from the pre-resolved imports.
-        let resolved_imports = graph.get_imports(db, module_id);
-        for import in resolved_imports {
-            let source_module_id = import.source_module;
+        // Build module alias map from require module statements.
+        let alias_map = build_module_alias_map_for_graph(db, script, &path_to_id);
 
-            // Look up the function in the source module's exports.
-            if let Some(exports) = module_exports_map.get(&source_module_id) {
-                let export_name = InternedText::new(db, import.export_name.clone());
-                let func_opt = exports.functions(db).iter()
-                    .find(|(name, _)| *name == export_name)
-                    .map(|(_, func_type)| *func_type);
+        // Resolve function imports from import statements.
+        for statement in script.statements(db) {
+            if let Statement::Import(import) = statement {
+                let module_name = import.module_name(db);
+                let item_name = import.item_name(db);
 
-                if let Some(func_type) = func_opt {
-                    let local_name = InternedText::new(db, import.local_name.clone());
-                    ctx.add_function(local_name, func_type);
-                    module_import_functions.push((local_name, source_module_id, export_name));
+                // Look up the module in the alias map.
+                if let Some(&source_module_id) = alias_map.get(&module_name) {
+                    // Look up the module exports.
+                    if let Some(exports) = module_exports_map.get(&source_module_id) {
+                        // Look up the function in the exports.
+                        let func_opt = exports.functions(db).iter()
+                            .find(|(name, _)| *name == item_name)
+                            .map(|(_, func_type)| *func_type);
+
+                        if let Some(func_type) = func_opt {
+                            ctx.add_function(item_name, func_type);
+                            module_import_functions.push((item_name, source_module_id, item_name));
+                        } else {
+                            ctx.add_error(TypeError::UnresolvedName(
+                                format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
+                            ));
+                        }
+                    } else {
+                        ctx.add_error(TypeError::UnresolvedName(
+                            format!("module {} (not typechecked yet)", module_name.as_str(db))
+                        ));
+                    }
                 } else {
                     ctx.add_error(TypeError::UnresolvedName(
-                        format!("{} (export not found)", import.export_name)
+                        format!("module {} (not required)", module_name.as_str(db))
                     ));
                 }
-            } else {
-                ctx.add_error(TypeError::UnresolvedName(
-                    format!("module {} (not typechecked yet)", source_module_id.path(db))
-                ));
             }
         }
 
@@ -2426,6 +2438,41 @@ fn build_module_alias_map<'db>(
                 if let Some(&resolved_module) = demand_to_module.get(&demand) {
                     alias_map.insert(module_alias, resolved_module);
                 }
+            }
+        }
+    }
+
+    alias_map
+}
+
+/// Build module alias map from require module statements for ModuleGraph.
+///
+/// Maps module aliases to ModuleIds by parsing require statements and matching
+/// against the path_to_id map.
+fn build_module_alias_map_for_graph<'db>(
+    db: &'db dyn crate::Db,
+    script: Script<'db>,
+    path_to_id: &HashMap<String, crate::module_graph::ModuleId>,
+) -> HashMap<InternedText<'db>, crate::module_graph::ModuleId> {
+    let mut alias_map = HashMap::new();
+
+    for statement in script.statements(db) {
+        if let Statement::Require(StmtRequire::Module(req)) = statement {
+            let import_space = req.import_space(db);
+            let package_alias = req.package_alias(db);
+            let module_alias = req.module_alias(db);
+
+            // Build the module path from the require statement.
+            let path = format!(
+                "{}/{}/{}",
+                import_space.as_str(db),
+                package_alias.as_str(db),
+                module_alias.as_str(db)
+            );
+
+            // Look up the ModuleId by path.
+            if let Some(&module_id) = path_to_id.get(&path) {
+                alias_map.insert(module_alias, module_id);
             }
         }
     }
