@@ -3,8 +3,8 @@ use std::path::Path;
 use rmx::serde_json::json;
 use std::collections::BTreeMap;
 
-fn error_to_json(error: &datalove_datafun_compiler::tycheck::TypeError) -> rmx::serde_json::Value {
-    use datalove_datafun_compiler::tycheck::TypeError;
+fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_json::Value {
+    use datalove_datafun::tycheck::TypeError;
 
     match error {
         TypeError::TypeMismatch { expected, actual } => {
@@ -128,8 +128,8 @@ fn error_to_json(error: &datalove_datafun_compiler::tycheck::TypeError) -> rmx::
     }
 }
 
-fn typeandheap_to_string(db: &dyn datalove_datafun_compiler::Db, tah: datalove_datafun_compiler::tycheck::TypeAndHeap) -> String {
-    use datalove_datafun_compiler::tycheck::Type;
+fn typeandheap_to_string(db: &dyn datalove_datafun::Db, tah: datalove_datafun::tycheck::TypeAndHeap) -> String {
+    use datalove_datafun::tycheck::Type;
     use datalove_datalit::ast::Heap;
 
     let heap_prefix = match tah.heap(db) {
@@ -159,14 +159,14 @@ fn typeandheap_to_string(db: &dyn datalove_datafun_compiler::Db, tah: datalove_d
 
 fn analyze_file(path: &Path) -> Result<String, String> {
     let source_text = std::fs::read_to_string(path).X();
-    let db = datalove_datafun_compiler::Database::default();
+    let db = datalove_datafun::Database::default();
 
     // Load the worldfile.
-    let package_world_raw = datalove_datafun_compiler::package_load_worldfile::load_world_from_worldfile(source_text.as_bytes()).X();
-    let package_world = datalove_datafun_compiler::package::import_from_loader(&db, package_world_raw);
+    let package_world_raw = datalove_datafun::package_load_worldfile::load_world_from_worldfile(source_text.as_bytes()).X();
+    let package_world = datalove_datafun::package::import_from_loader(&db, package_world_raw);
 
     // Resolve imports.
-    let resolution = datalove_datafun_compiler::package_resolve::resolve_package_world_with_imports(&db, package_world);
+    let resolution = datalove_datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
     let result = resolution.result(&db);
 
     // Check if import resolution failed.
@@ -182,7 +182,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let graph = result.ok().X();
 
     // Typecheck the package world.
-    let typecheck_result = datalove_datafun_compiler::tycheck::typecheck_package_world(&db, graph);
+    let typecheck_result = datalove_datafun::tycheck::typecheck_package_world(&db, graph);
 
     // Collect module information.
     let mut modules_output = BTreeMap::new();

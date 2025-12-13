@@ -1417,7 +1417,12 @@ dependencies = [
 name = "datalove-datafun"
 version = "0.1.0"
 dependencies = [
+ "bct",
  "datalove-datafun-compiler",
+ "datalove-datalit",
+ "datalove-exampletest",
+ "datalove-rt",
+ "rustmax",
 ]
 
 [[package]]

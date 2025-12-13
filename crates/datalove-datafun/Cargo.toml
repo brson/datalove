@@ -7,3 +7,20 @@ edition.workspace = true
 
 [dependencies]
 datalove-datafun-compiler.path = "../datalove-datafun-compiler"
+
+[dev-dependencies]
+rmx.workspace = true
+bct.workspace = true
+datalove-exampletest.path = "../datalove-exampletest"
+datalove-datalit.path = "../datalove-datalit"
+datalove-rt.path = "../datalove-rt"
+
+[[test]]
+name = "tycheck_world_tests"
+path = "tests/tycheck_world_tests.rs"
+harness = false
+
+[[test]]
+name = "std_tests"
+path = "tests/std_tests.rs"
+harness = false
