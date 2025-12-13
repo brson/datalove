@@ -508,11 +508,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "RuntimeError(\"Function \'square\' has analysis errors: [DoubleMove { slot: SlotId(0), first_move: ProgramPoint { stmt_id: StmtId(0), position: Before }, second_move: ProgramPoint { stmt_id: StmtId(0), position: Before } }]\")",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@39",
     ),
 ]

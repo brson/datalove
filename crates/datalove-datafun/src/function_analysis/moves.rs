@@ -290,13 +290,16 @@ fn collect_moves_from_expr<'db>(
             }
         }
         ExprFunKind::BinOp(binop) => {
-            // Binary operation: both operands might be moved.
-            collect_moves_from_expr(db, binop.lhs(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            collect_moves_from_expr(db, binop.rhs(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            // Binary operations borrow their operands (ref semantics).
+            // Direct variable references are NOT moved - they are cloned at runtime.
+            // But nested function calls within operands can still cause moves.
+            collect_moves_from_expr_borrow_context(db, binop.lhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, binop.rhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::UnaryOp(unary) => {
-            // Unary operation: operand might be moved.
-            collect_moves_from_expr(db, unary.operand(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            // Unary operations borrow their operands (ref semantics).
+            // Direct variable references are NOT moved - they are cloned at runtime.
+            collect_moves_from_expr_borrow_context(db, unary.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryOption(try_op) => {
             // Try option: operand might be moved.
@@ -380,6 +383,127 @@ fn collect_moves_from_expr<'db>(
     }
 }
 
+/// Collect moves from an expression in borrow context (e.g., binop/unop operands).
+///
+/// In borrow context, direct Name references do NOT cause moves because the
+/// interpreter clones linear values. However, nested function calls can still
+/// cause moves of their arguments.
+fn collect_moves_from_expr_borrow_context<'db>(
+    db: &'db dyn crate::Db,
+    expr: ExprFun<'db>,
+    stmt_id: StmtId,
+    registry: &FunctionRegistry<'db>,
+    slots: &[AllocatedSlot<'db>],
+    moves: &mut Vec<MoveOp<'db>>,
+    expr_counter: &mut u32,
+    tycheck_result: crate::tycheck::TypecheckResult<'db>,
+    func: StmtFun<'db>,
+) {
+    let _expr_id = ExprId(*expr_counter);
+    *expr_counter += 1;
+
+    match expr.expr(db) {
+        ExprFunKind::Name(_) => {
+            // In borrow context, Name expressions do NOT cause moves.
+            // The interpreter will clone linear values as needed.
+        }
+        ExprFunKind::FunctionCall(call) => {
+            // Function calls still cause moves of their arguments.
+            process_function_call(db, call, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Tuple(tuple) => {
+            // Tuple elements in borrow context.
+            for element in tuple.elements(db) {
+                collect_moves_from_expr_borrow_context(db, *element, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::BinOp(binop) => {
+            // Nested binop: still borrow context.
+            collect_moves_from_expr_borrow_context(db, binop.lhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, binop.rhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::UnaryOp(unary) => {
+            // Nested unary: still borrow context.
+            collect_moves_from_expr_borrow_context(db, unary.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::TryOption(try_op) => {
+            collect_moves_from_expr_borrow_context(db, try_op.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::TryResult(try_op) => {
+            collect_moves_from_expr_borrow_context(db, try_op.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::ParseError(_) => {}
+
+        // Literals have no moves.
+        ExprFunKind::True(_) |
+        ExprFunKind::False(_) |
+        ExprFunKind::None(_) |
+        ExprFunKind::Int(_) |
+        ExprFunKind::Float(_) |
+        ExprFunKind::Hex(_) |
+        ExprFunKind::String(_) => {}
+
+        // Collection literals: recurse into elements.
+        ExprFunKind::List(list) => {
+            for elem in list.elements(db) {
+                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Set(set) => {
+            for elem in set.elements(db) {
+                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Map(map) => {
+            for entry in map.entries(db) {
+                collect_moves_from_expr_borrow_context(db, entry.key(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, entry.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Tensor(tensor) => {
+            for elem in tensor.elements(db) {
+                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::AnonTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::NamedTuple(tuple) => {
+            for elem in tuple.elements(db) {
+                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::AnonStruct(s) => {
+            for field in s.fields(db) {
+                collect_moves_from_expr_borrow_context(db, field.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::NamedStruct(s) => {
+            for field in s.fields(db) {
+                collect_moves_from_expr_borrow_context(db, field.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::AnonEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_moves_from_expr_borrow_context(db, payload, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::NamedEnum(e) => {
+            if let Some(payload) = e.payload(db) {
+                collect_moves_from_expr_borrow_context(db, payload, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            }
+        }
+        ExprFunKind::Data(d) => {
+            collect_moves_from_expr_borrow_context(db, d.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Err(e) => {
+            collect_moves_from_expr_borrow_context(db, e.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+    }
+}
+
 /// Collect moves from an expression for return statements.
 fn collect_moves_from_expr_for_return<'db>(
     db: &'db dyn crate::Db,
@@ -435,13 +559,13 @@ fn collect_moves_from_expr_for_return<'db>(
             }
         }
         ExprFunKind::BinOp(binop) => {
-            // Binary operation: both operands might be moved.
-            collect_moves_from_expr_for_return(db, binop.lhs(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            collect_moves_from_expr_for_return(db, binop.rhs(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            // Binary operations borrow their operands (ref semantics).
+            collect_moves_from_expr_borrow_context(db, binop.lhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, binop.rhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::UnaryOp(unary) => {
-            // Unary operation: operand might be moved.
-            collect_moves_from_expr_for_return(db, unary.operand(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            // Unary operations borrow their operands (ref semantics).
+            collect_moves_from_expr_borrow_context(db, unary.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryOption(try_op) => {
             collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);

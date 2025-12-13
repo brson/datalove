@@ -248,7 +248,27 @@ end fun
 - Loop stack tracks nesting for break/continue targets
 - Typechecker tracks loop depth to validate break/continue placement
 
-### 2.7 Module System
+### 2.7 Operator Argument Semantics
+
+All binary operators and unary operators treat their operands as **immutable references** (`ref`), not by-value (`in`).
+
+**Implications:**
+- Operands are read, not consumed
+- For copy types: values are implicitly copied to temporaries
+- For linear types: values are cloned; originals remain valid after the operation
+- A value can be used in multiple operators without explicit cloning
+
+**Example:**
+```
+let x: int = 42
+let a = x + 1    // x is cloned for the operation
+let b = x + 2    // x can be used again
+ret x            // x is still valid
+```
+
+**Implementation Note:** The interpreter evaluates operands into temporary slots. For copy types, this creates a copy. For linear types, the interpreter clones the value so the original remains available.
+
+### 2.8 Module System
 
 **Three-level hierarchy:** library -> package -> module
 

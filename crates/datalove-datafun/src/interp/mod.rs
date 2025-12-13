@@ -508,9 +508,9 @@ fn eval_expression_in_script_scope<'db>(
             eval_function_call_in_script_scope(ctx, call_expr)
         }
         ast::ExprFunKind::BinOp(binop_expr) => {
-            // Evaluate binary operations (operands don't have destinations).
-            let lhs = eval_expression_in_script_scope(ctx, binop_expr.lhs(ctx.db), None)?;
-            let rhs = match eval_expression_in_script_scope(ctx, binop_expr.rhs(ctx.db), None) {
+            // Evaluate binary operations in borrow context (operands are not moved).
+            let lhs = eval_expression_in_script_scope_borrow(ctx, binop_expr.lhs(ctx.db))?;
+            let rhs = match eval_expression_in_script_scope_borrow(ctx, binop_expr.rhs(ctx.db)) {
                 Ok(v) => v,
                 Err(e) => {
                     destroy_value(ctx, lhs);
@@ -540,8 +540,8 @@ fn eval_expression_in_script_scope<'db>(
             allocate_tuple_from_values(ctx, values)
         }
         ast::ExprFunKind::UnaryOp(unary_expr) => {
-            // Evaluate operand.
-            let operand = eval_expression_in_script_scope(ctx, unary_expr.operand(ctx.db), None)?;
+            // Evaluate operand in borrow context (operand is not moved).
+            let operand = eval_expression_in_script_scope_borrow(ctx, unary_expr.operand(ctx.db))?;
             // Execute unary operation.
             execute_unop(ctx, unary_expr.op(ctx.db), operand, dest)
         }
@@ -670,6 +670,67 @@ fn read_script_variable<'db>(
             tydesc: value.tydesc,
             location: ValueLocation::TempOwned,
         })
+    }
+}
+
+/// Read a script-level variable in borrow context (for binop/unop operands).
+///
+/// Always clones the value, never moves. This implements ref semantics for operators.
+fn read_script_variable_borrow<'db>(
+    ctx: &mut InterpContext<'db>,
+    name: InternedText<'db>,
+) -> Result<Value, InterpError> {
+    let value = {
+        let var = ctx.script_scope.variables.get(&name)
+            .ok_or_else(|| InterpError::VariableNotFound(name.text(ctx.db).to_string()))?;
+
+        // Check if already moved.
+        if var.state == ScriptVarState::Moved {
+            return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
+        }
+
+        var.value
+    };
+
+    // Always clone - never move in borrow context.
+    Ok(clone_value(ctx, value))
+}
+
+/// Evaluate an expression in script scope with borrow semantics.
+///
+/// Used for binop/unop operands where variables should be cloned, not moved.
+fn eval_expression_in_script_scope_borrow<'db>(
+    ctx: &mut InterpContext<'db>,
+    expr: ast::ExprFun<'db>,
+) -> Result<Value, InterpError> {
+    match expr.expr(ctx.db) {
+        ast::ExprFunKind::Name(name) => {
+            // Read variable in borrow context (always clones).
+            read_script_variable_borrow(ctx, name)
+        }
+        ast::ExprFunKind::BinOp(binop_expr) => {
+            // Nested binop: stay in borrow context.
+            let lhs = eval_expression_in_script_scope_borrow(ctx, binop_expr.lhs(ctx.db))?;
+            let rhs = match eval_expression_in_script_scope_borrow(ctx, binop_expr.rhs(ctx.db)) {
+                Ok(v) => v,
+                Err(e) => {
+                    destroy_value(ctx, lhs);
+                    return Err(e);
+                }
+            };
+            execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, None)
+        }
+        ast::ExprFunKind::UnaryOp(unary_expr) => {
+            // Nested unary: stay in borrow context.
+            let operand = eval_expression_in_script_scope_borrow(ctx, unary_expr.operand(ctx.db))?;
+            execute_unop(ctx, unary_expr.op(ctx.db), operand, None)
+        }
+        ast::ExprFunKind::FunctionCall(call_expr) => {
+            // Function calls use normal semantics (arguments may be moved).
+            eval_function_call_in_script_scope(ctx, call_expr)
+        }
+        // For other expressions, delegate to normal evaluation.
+        _ => eval_expression_in_script_scope(ctx, expr, None),
     }
 }
 
@@ -1828,14 +1889,14 @@ fn eval_expression_frame<'db>(
             let lhs_dest = get_destination_for_expr(ctx, lhs_expr)?;
             let rhs_dest = get_destination_for_expr(ctx, rhs_expr)?;
 
-            // Evaluate lhs with destination.
-            let lhs = eval_expression_frame(ctx, lhs_expr, Some(lhs_dest))?;
+            // Evaluate lhs in borrow context (binops don't consume operands).
+            let lhs = eval_expression_frame_borrow(ctx, lhs_expr, Some(lhs_dest))?;
             if lhs.location == ValueLocation::Borrowed {
                 mark_temp_slot_available(ctx, lhs_expr);
             }
 
-            // Evaluate rhs with destination.
-            let rhs = match eval_expression_frame(ctx, rhs_expr, Some(rhs_dest)) {
+            // Evaluate rhs in borrow context.
+            let rhs = match eval_expression_frame_borrow(ctx, rhs_expr, Some(rhs_dest)) {
                 Ok(v) => v,
                 Err(e) => {
                     destroy_value(ctx, lhs);
@@ -1871,8 +1932,8 @@ fn eval_expression_frame<'db>(
             let operand_expr = unary_expr.operand(ctx.db);
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
 
-            // Evaluate operand with destination.
-            let operand = eval_expression_frame(ctx, operand_expr, Some(operand_dest))?;
+            // Evaluate operand in borrow context (unary ops don't consume operands).
+            let operand = eval_expression_frame_borrow(ctx, operand_expr, Some(operand_dest))?;
             if operand.location == ValueLocation::Borrowed {
                 mark_temp_slot_available(ctx, operand_expr);
             }
@@ -2063,6 +2124,147 @@ fn eval_return_expression_frame<'db>(
 
     // For other expressions, evaluate without special destination.
     eval_expression_frame(ctx, expr, None)
+}
+
+// ============================================================================
+// Borrow Context Evaluation
+// ============================================================================
+
+/// Evaluate an expression in borrow context (for binop/unop operands).
+///
+/// In borrow context, linear type variables are cloned instead of moved.
+/// This implements the ref semantics for operator arguments.
+fn eval_expression_frame_borrow<'db>(
+    ctx: &mut InterpContext<'db>,
+    expr: ast::ExprFun<'db>,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    let frame_index = ctx.call_stack.len() - 1;
+
+    match expr.expr(ctx.db) {
+        ast::ExprFunKind::Name(name) => {
+            // Find slot by name.
+            let layout = ctx.call_stack[frame_index].layout;
+            let slot_info = find_slot_by_name(ctx.db, layout, name)
+                .ok_or_else(|| InterpError::VariableNotFound(name.text(ctx.db).to_string()))?;
+
+            let slot_id = slot_info.slot_id(ctx.db);
+
+            // Check slot state.
+            if ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] == SlotState::Moved {
+                return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
+            }
+
+            // Get type info for the slot.
+            let ty = slot_info.ty(ctx.db);
+            let datalit_ty = match ty.ty(ctx.db) {
+                crate::tycheck::Type::Datalit(dt) => dt.clone(),
+                _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
+            };
+            let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+
+            // In borrow context, ALWAYS clone to destination (never move).
+            // This is the key difference from regular evaluation.
+            let kind = slot_info.kind(ctx.db);
+
+            if kind == crate::function_analysis::SlotKind::Reference {
+                // Reference slot: read pointer to caller's value.
+                let ptr = read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db);
+                let borrowed = Value { ptr, tydesc, location: ValueLocation::Borrowed };
+
+                let result_dest = match dest {
+                    Some(d) => d,
+                    None => get_destination_for_expr(ctx, expr)?,
+                };
+                let result = clone_value_to_dest(ctx, borrowed, result_dest);
+                if dest.is_none() {
+                    mark_temp_slot_available(ctx, expr);
+                }
+                // Note: We do NOT mark slot as Moved - this is borrow context.
+                Ok(result)
+            } else {
+                // Local/Temporary slot - clone to destination.
+                let offset = slot_info.offset(ctx.db) as usize;
+                let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
+                let source_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::Borrowed };
+
+                let result_dest = match dest {
+                    Some(d) => d,
+                    None => get_destination_for_expr(ctx, expr)?,
+                };
+                let result = clone_value_to_dest(ctx, source_value, result_dest);
+                if dest.is_none() {
+                    mark_temp_slot_available(ctx, expr);
+                }
+                // Note: We do NOT mark slot as Moved - this is borrow context.
+                Ok(result)
+            }
+        }
+
+        // For nested binops/unops, stay in borrow context.
+        ast::ExprFunKind::BinOp(binop_expr) => {
+            let lhs_expr = binop_expr.lhs(ctx.db);
+            let rhs_expr = binop_expr.rhs(ctx.db);
+            let lhs_dest = get_destination_for_expr(ctx, lhs_expr)?;
+            let rhs_dest = get_destination_for_expr(ctx, rhs_expr)?;
+
+            let lhs = eval_expression_frame_borrow(ctx, lhs_expr, Some(lhs_dest))?;
+            if lhs.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, lhs_expr);
+            }
+
+            let rhs = match eval_expression_frame_borrow(ctx, rhs_expr, Some(rhs_dest)) {
+                Ok(v) => v,
+                Err(e) => {
+                    destroy_value(ctx, lhs);
+                    return Err(e);
+                }
+            };
+            if rhs.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, rhs_expr);
+            }
+
+            let result_dest = match dest {
+                Some(d) => d,
+                None => get_destination_for_expr(ctx, expr)?,
+            };
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), lhs, rhs, Some(result_dest))?;
+            if dest.is_none() && result.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, expr);
+            }
+            Ok(result)
+        }
+
+        ast::ExprFunKind::UnaryOp(unary_expr) => {
+            let operand_expr = unary_expr.operand(ctx.db);
+            let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
+
+            let operand = eval_expression_frame_borrow(ctx, operand_expr, Some(operand_dest))?;
+            if operand.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, operand_expr);
+            }
+
+            let result_dest = match dest {
+                Some(d) => d,
+                None => get_destination_for_expr(ctx, expr)?,
+            };
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), operand, Some(result_dest))?;
+            if dest.is_none() && result.location == ValueLocation::Borrowed {
+                mark_temp_slot_available(ctx, expr);
+            }
+            Ok(result)
+        }
+
+        // For function calls in borrow context, the call itself uses normal semantics
+        // (arguments may be moved depending on parameter modes).
+        ast::ExprFunKind::FunctionCall(call_expr) => {
+            eval_function_call_frame(ctx, call_expr)
+        }
+
+        // For other expressions (literals, etc.), delegate to normal evaluation.
+        // These don't involve variable access so borrow vs move doesn't matter.
+        _ => eval_expression_frame(ctx, expr, dest),
+    }
 }
 
 // ============================================================================

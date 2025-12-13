@@ -1,0 +1,5 @@
+let x = 42
+let a = x + 1
+let b = x + 2
+let c = x + 3
+let output = a + b + c

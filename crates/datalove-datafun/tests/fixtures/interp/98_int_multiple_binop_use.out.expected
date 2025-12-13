@@ -1,0 +1,136 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "x",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprInt(
+                            kind: "Int",
+                            heap: Omitted,
+                            type_hint: None,
+                            value: "42",
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "a",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Add,
+                            lhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "x",
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    value: "1",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "b",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Add,
+                            lhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "x",
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    value: "2",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "c",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Add,
+                            lhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "x",
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    value: "3",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Add,
+                            lhs: ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: Add,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "b",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "c",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@132",
+    ),
+]
