@@ -1854,6 +1854,11 @@ fn check_expr<'db>(
                             return Ok(());
                         }
                     }
+                    // If expected is Data, allow coercion (any type coerces to data).
+                    if let datalit::tycheck::Type::Data = expected_datalit_ty {
+                        ctx.store_expr_type(expr, expected);
+                        return Ok(());
+                    }
                     // Otherwise, synthesize and compare.
                     let synthesized = ctx.synthesize_expr(expr)?;
                     if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
@@ -1889,7 +1894,7 @@ fn check_expr<'db>(
                 }
             }
 
-            // If widening fails, check for automatic coercion to Option/Result.
+            // If widening fails, check for automatic coercion to Option/Result/Data.
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
                     // Allow coercion from T to Option<T>.
@@ -1905,7 +1910,28 @@ fn check_expr<'db>(
                         return Ok(());
                     }
                 }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to data.
+                    return Ok(());
+                }
                 _ => {}
+            }
+
+            // Check if synthesized is Data and expected is Option<data> or Result<data>.
+            if let Type::Datalit(datalit::tycheck::Type::Data) = synthesized.ty(db) {
+                match expected.ty(db) {
+                    Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
+                        if let datalit::tycheck::Type::Data = opt.inner_type(db).ty(db) {
+                            return Ok(());
+                        }
+                    }
+                    Type::Datalit(datalit::tycheck::Type::Result(res)) => {
+                        if let datalit::tycheck::Type::Data = res.inner_type(db).ty(db) {
+                            return Ok(());
+                        }
+                    }
+                    _ => {}
+                }
             }
 
             // No match or coercion possible.
@@ -2767,6 +2793,25 @@ fn check_type_coercion<'db>(
         }
         // For error reporting, use the inner type since that's what datalit does.
         return check_type_arity_or_mismatch(db, actual, inner.ty(db));
+    }
+
+    // Check Data coercion: ANY type T can coerce to data.
+    if let datalit::tycheck::Type::Data = expected_ty {
+        return Ok(());
+    }
+
+    // Check Data can coerce to Option<data> or Result<data>.
+    if let datalit::tycheck::Type::Data = actual {
+        if let datalit::tycheck::Type::Option(opt) = expected_ty {
+            if let datalit::tycheck::Type::Data = opt.inner_type(db).ty(db) {
+                return Ok(());
+            }
+        }
+        if let datalit::tycheck::Type::Result(res) = expected_ty {
+            if let datalit::tycheck::Type::Data = res.inner_type(db).ty(db) {
+                return Ok(());
+            }
+        }
     }
 
     // No coercion possible - check for arity mismatch.

@@ -229,3 +229,38 @@ pub(super) fn widen_u32_to_int<'db>(
 
     Ok(int_val)
 }
+
+/// Wrap an existing value in Data, consuming the inner value.
+///
+/// The Data struct takes ownership of the inner value's pointer.
+/// The inner value's memory is NOT freed - Data now owns it.
+pub(super) fn allocate_data_from_value<'db>(
+    ctx: &mut InterpContext<'db>,
+    inner_value: Value,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt;
+
+    let data_tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::Data);
+    let rt_handle = ctx.runtime.handle();
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, data_tydesc, 1)
+    };
+    if ptr.is_null() {
+        destroy_value(ctx, inner_value);
+        return Err(InterpError::RuntimeError("Failed to allocate Data".to_string()));
+    }
+
+    unsafe {
+        std::ptr::write(
+            ptr as *mut rtdt::Data,
+            rtdt::Data::from_pointers(inner_value.tydesc, inner_value.ptr)
+        );
+    }
+
+    // Data now owns the pointer to inner value's allocation.
+    // Don't free inner_value - Data::from_pointers stores inner_value.ptr directly.
+    // If inner was TempOwned, the ownership transfers to Data.
+    // If inner was Borrowed, the caller still owns it (but Data now has a pointer to it).
+
+    Ok(Value { ptr, tydesc: data_tydesc, location: ValueLocation::TempOwned })
+}

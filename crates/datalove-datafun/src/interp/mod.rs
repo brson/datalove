@@ -358,10 +358,15 @@ fn execute_let_statement<'db>(
         )
     };
 
-    // Check if we need to coerce T → Option<T> or T → Result<T>.
+    // Check if we need to coerce T → Option<T>, T → Result<T>, or T → data.
     let final_value = if let Some(type_hint_and_heap) = let_stmt.type_hint(ctx.db) {
         let type_hint = type_hint_and_heap.type_hint(ctx.db);
         match type_hint {
+            TypeHint::Data => {
+                // Coerce any value to Data.
+                let value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?;
+                alloc::allocate_data_from_value(ctx, value)?
+            }
             TypeHint::Option(_) | TypeHint::Result(_) => {
                 // Get expected destination type.
                 let dest_tydesc = type_hint_to_tydesc(ctx, type_hint_and_heap);
@@ -619,8 +624,11 @@ fn eval_expression_in_script_scope<'db>(
         ast::ExprFunKind::AnonEnum(_) | ast::ExprFunKind::NamedEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
-        ast::ExprFunKind::Data(_) => {
-            Err(InterpError::InvalidExpression("Data wrapper not yet implemented".to_string()))
+        ast::ExprFunKind::Data(data_expr) => {
+            // Evaluate inner expression.
+            let inner_value = eval_expression_in_script_scope(ctx, data_expr.value(ctx.db), None)?;
+            // Wrap in Data.
+            alloc::allocate_data_from_value(ctx, inner_value)
         }
         ast::ExprFunKind::Err(_) => {
             // @error without destination - requires type context.
@@ -1661,8 +1669,8 @@ fn execute_let_statement_frame<'db>(
     let dest_tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
     let dest_tag = unsafe { (*dest_tydesc).type_tag };
 
-    // Check if slot is Option/Result and may need coercion.
-    let needs_coercion_check = matches!(dest_tag, TyTag::Option | TyTag::Result);
+    // Check if slot is Option/Result/Data and may need coercion.
+    let needs_coercion_check = matches!(dest_tag, TyTag::Option | TyTag::Result | TyTag::Data);
 
     let value = if needs_coercion_check {
         // Evaluate without destination first to allow coercion.
@@ -1993,8 +2001,11 @@ fn eval_expression_frame<'db>(
         ast::ExprFunKind::AnonEnum(_) | ast::ExprFunKind::NamedEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
-        ast::ExprFunKind::Data(_) => {
-            Err(InterpError::InvalidExpression("Data wrapper not yet implemented".to_string()))
+        ast::ExprFunKind::Data(data_expr) => {
+            // Evaluate inner expression.
+            let inner_value = eval_expression_frame(ctx, data_expr.value(ctx.db), None)?;
+            // Wrap in Data.
+            alloc::allocate_data_from_value(ctx, inner_value)
         }
         ast::ExprFunKind::Err(_) => {
             Err(InterpError::InvalidExpression(
