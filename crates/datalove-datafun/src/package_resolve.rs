@@ -758,4 +758,39 @@ end fun
         assert_eq!(debug_functions.len(), 1, "debug should export 1 function");
         assert!(debug_functions.iter().any(|(name, _)| name.as_str(db) == "debug_value"));
     }
+
+    #[test]
+    fn test_interp_with_module_graph() {
+        use crate::module_graph::{ModuleGraphBuilder, ModuleGraph};
+        use crate::interp::InterpContext;
+        use bct::input::Source;
+
+        let ref db = crate::Database::default();
+
+        // Create a simple ModuleGraph with one module.
+        let mut builder = ModuleGraphBuilder::new(db);
+
+        // Add a module with a simple identity function (avoids type coercion issues).
+        let source = Source::new(db, S(r#"
+fun identity(x: @u32): @u32
+  ret x
+end fun
+"#));
+        let _module_id = builder.add_module("test/math", source);
+        let graph = builder.build();
+
+        // Typecheck using ModuleGraph.
+        let typecheck_result = crate::tycheck::typecheck_module_graph(db, graph);
+
+        // Check for errors.
+        assert!(typecheck_result.is_ok(db), "Typecheck should succeed: {:?}", typecheck_result.all_errors(db));
+
+        // Create interpreter context with ModuleGraph.
+        let ctx_result = InterpContext::new_with_module_graph(db, typecheck_result);
+        assert!(ctx_result.is_ok(), "Should create context: {:?}", ctx_result.err());
+
+        // Verify the context was created with ModuleGraph mode.
+        let ctx = ctx_result.unwrap();
+        assert!(ctx.is_module_graph_mode());
+    }
 }

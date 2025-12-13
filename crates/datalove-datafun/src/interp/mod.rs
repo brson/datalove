@@ -47,8 +47,8 @@ pub use error::InterpError;
 pub use frame::{SlotState, StackFrame};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
 pub use context::{
-    InterpContext, ScriptScope, ModuleFunctionTable, ScriptVariable,
-    ScriptVarState, ScriptResult,
+    InterpContext, ScriptScope, ModuleFunctionTable, ModuleFunctionTableGraph,
+    ScriptVariable, ScriptVarState, ScriptResult,
 };
 use context::{parse_module_functions, build_module_alias_map, cleanup_script_scope};
 use control::{find_slot_by_name, extract_bool, evaluate_branch_condition, eval_try_option, eval_try_result};
@@ -82,8 +82,18 @@ use coerce::{narrow_int_to_u32, coerce_value_to_dest};
 use bct::text::InternedText;
 
 use crate::package::PackageWorld;
+use crate::module_graph::ModuleId;
 use crate::ast::{self, StmtFun};
 use crate::function_analysis::{Terminator, BlockId};
+
+/// Reference to a module (either PackageModule or ModuleId).
+///
+/// Used by the interpreter to track which module a function belongs to.
+#[derive(Copy, Clone)]
+enum ModuleRef {
+    Package(crate::package::PackageModule),
+    Graph(ModuleId),
+}
 
 // ============================================================================
 // Script Execution Entry Points
@@ -757,21 +767,22 @@ fn eval_expression_in_script_scope_borrow<'db>(
 /// Looks in this order:
 /// 1. Script-level functions
 /// 2. Current module functions (if executing inside a module)
-/// 3. Imported module functions
+/// 3. Imported module functions (from current module's imports)
+/// 4. Script-level imported functions
 fn lookup_function<'db>(
     ctx: &InterpContext<'db>,
     name: InternedText<'db>,
-) -> Result<(ast::StmtFun<'db>, Option<crate::package::PackageModule>), InterpError> {
+) -> Result<(ast::StmtFun<'db>, Option<ModuleRef>), InterpError> {
     // First check script scope.
     if let Some(&func) = ctx.script_scope.functions.get(&name) {
         return Ok((func, None));
     }
 
-    // Then check current module functions (for module-internal calls).
+    // Check PackageModule-based lookup (when using PackageWorld).
     if let Some(current_module) = ctx.current_module {
         if let Some(module_funcs) = ctx.module_functions.get_module_functions(current_module) {
             if let Some(&func) = module_funcs.get(&name) {
-                return Ok((func, Some(current_module)));
+                return Ok((func, Some(ModuleRef::Package(current_module))));
             }
         }
 
@@ -786,7 +797,7 @@ fn lookup_function<'db>(
                         // Found the import - look up the function AST from the source module.
                         if let Some(module_funcs) = ctx.module_functions.get_module_functions(*source_module) {
                             if let Some(&func_ast) = module_funcs.get(&name) {
-                                return Ok((func_ast, Some(*source_module)));
+                                return Ok((func_ast, Some(ModuleRef::Package(*source_module))));
                             }
                         }
                     }
@@ -795,9 +806,42 @@ fn lookup_function<'db>(
         }
     }
 
-    // Finally check imported module functions (script-level imports).
+    // Check ModuleGraph-based lookup (when using ModuleGraph).
+    if let Some(current_module_id) = ctx.current_module_id {
+        if let Some(module_funcs) = ctx.module_functions_graph.get_module_functions(current_module_id) {
+            if let Some(&func) = module_funcs.get(&name) {
+                return Ok((func, Some(ModuleRef::Graph(current_module_id))));
+            }
+        }
+
+        // Check what the current module imported from other modules using ModuleGraph typecheck result.
+        if let Some(typecheck_result) = &ctx.module_graph_typecheck {
+            let module_imports_map = typecheck_result.module_imports(ctx.db);
+
+            if let Some(imports) = module_imports_map.get(&current_module_id) {
+                // Look for the function in the imports.
+                for (local_name, source_module_id, _source_name) in imports.functions(ctx.db) {
+                    if *local_name == name {
+                        // Found the import - look up the function AST from the source module.
+                        if let Some(module_funcs) = ctx.module_functions_graph.get_module_functions(*source_module_id) {
+                            if let Some(&func_ast) = module_funcs.get(&name) {
+                                return Ok((func_ast, Some(ModuleRef::Graph(*source_module_id))));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Check script-level imported functions (PackageModule-based).
     if let Some((func, module)) = ctx.module_functions.get(name) {
-        return Ok((func, Some(module)));
+        return Ok((func, Some(ModuleRef::Package(module))));
+    }
+
+    // Check script-level imported functions (ModuleGraph-based).
+    if let Some((func, module_id)) = ctx.module_functions_graph.get(name) {
+        return Ok((func, Some(ModuleRef::Graph(module_id))));
     }
 
     // Function not found.
@@ -1083,7 +1127,7 @@ fn eval_function_call_frame<'db>(
 fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
-    func_module: Option<crate::package::PackageModule>,
+    func_module: Option<ModuleRef>,
     arg_values: Vec<Value>,
 ) -> Result<Value, InterpError> {
     // Helper to clean up arguments on early error (before frame execution).
@@ -1128,12 +1172,24 @@ fn execute_function_body<'db>(
         }
     }
 
-    // Save previous module context and set current module.
-    let prev_module = ctx.current_module;
-    ctx.current_module = func_module;
+    // Helper to restore previous module context.
+    fn restore_module_context(ctx: &mut InterpContext<'_>, prev: (Option<crate::package::PackageModule>, Option<ModuleId>)) {
+        ctx.current_module = prev.0;
+        ctx.current_module_id = prev.1;
+    }
+
+    // Save previous module context.
+    let prev_module = (ctx.current_module, ctx.current_module_id);
+
+    // Set current module based on the variant.
+    match func_module {
+        Some(ModuleRef::Package(pm)) => ctx.current_module = Some(pm),
+        Some(ModuleRef::Graph(mid)) => ctx.current_module_id = Some(mid),
+        None => {}
+    }
 
     // Get function analysis.
-    // First check script-level function analyses, then module analyses.
+    // First check script-level function analyses, then package-based, then ModuleGraph-based.
     let analysis = if let Some(analysis) = ctx.script_function_analyses.get(&func) {
         *analysis
     } else if let Some(typecheck_result) = &ctx.typecheck_result {
@@ -1141,7 +1197,19 @@ fn execute_function_body<'db>(
         match analyses.iter().find(|(f, _)| *f == func).map(|(_, a)| *a) {
             Some(a) => a,
             None => {
-                ctx.current_module = prev_module;
+                restore_module_context(ctx, prev_module);
+                cleanup_args_on_error(ctx, arg_values);
+                return Err(InterpError::RuntimeError(
+                    format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
+                ));
+            }
+        }
+    } else if let Some(typecheck_result) = &ctx.module_graph_typecheck {
+        let analyses = typecheck_result.function_analyses(ctx.db);
+        match analyses.iter().find(|(f, _)| *f == func).map(|(_, a)| *a) {
+            Some(a) => a,
+            None => {
+                restore_module_context(ctx, prev_module);
                 cleanup_args_on_error(ctx, arg_values);
                 return Err(InterpError::RuntimeError(
                     format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
@@ -1149,7 +1217,7 @@ fn execute_function_body<'db>(
             }
         }
     } else {
-        ctx.current_module = prev_module;
+        restore_module_context(ctx, prev_module);
         cleanup_args_on_error(ctx, arg_values);
         return Err(InterpError::RuntimeError(
             "No typecheck result available - cannot execute function".to_string()
@@ -1163,7 +1231,7 @@ fn execute_function_body<'db>(
         .collect();
 
     if !critical_errors.is_empty() {
-        ctx.current_module = prev_module;
+        restore_module_context(ctx, prev_module);
         cleanup_args_on_error(ctx, arg_values);
         return Err(InterpError::RuntimeError(
             format!("Function '{}' has analysis errors: {:?}",
@@ -1190,7 +1258,7 @@ fn execute_function_body<'db>(
     for (i, param) in params.iter().enumerate() {
         // For now, only support In mode parameters.
         if param.mode(ctx.db) != ast::ParamMode::In {
-            ctx.current_module = prev_module;
+            restore_module_context(ctx, prev_module);
             cleanup_args_on_error(ctx, arg_values);
             return Err(InterpError::InvalidExpression(
                 format!("Parameter mode {:?} not yet supported (function '{}')",
@@ -1205,7 +1273,7 @@ fn execute_function_body<'db>(
         let slot_info = match slots.iter().find(|s| s.name(ctx.db) == Some(param_name)) {
             Some(s) => s,
             None => {
-                ctx.current_module = prev_module;
+                restore_module_context(ctx, prev_module);
                 cleanup_args_on_error(ctx, arg_values);
                 return Err(InterpError::RuntimeError(
                     format!("Parameter '{}' not found in frame layout", param_name.text(ctx.db))
@@ -1326,7 +1394,7 @@ fn execute_function_body<'db>(
     cleanup_args_after_frame(ctx, arg_values, &final_slot_states, slots, params, ctx.db);
 
     // Restore previous module.
-    ctx.current_module = prev_module;
+    restore_module_context(ctx, prev_module);
 
     // Handle Option/Result return type wrapping.
     use crate::datalit::ast::TypeHint;

@@ -4,12 +4,14 @@
 //! - [`InterpContext`]: Main interpreter state (runtime, package world, call stack)
 //! - [`ScriptScope`]: Top-level variable bindings for REPL/script execution
 //! - [`ModuleFunctionTable`]: Tracks imported functions from modules
+//! - [`ModuleFunctionTableGraph`]: Package-agnostic version using ModuleId
 //! - [`ScriptResult`]: Result of script execution with value and runtime
 
 use rmx::std::collections::HashMap;
 use bct::text::InternedText;
 
 use crate::package::PackageWorld;
+use crate::module_graph::{ModuleId, ModuleGraph, ModuleGraphTypecheckResult};
 use crate::ast::{self, StmtFun};
 
 use super::{Value, InterpError, StackFrame, destroy_value};
@@ -35,6 +37,15 @@ pub struct InterpContext<'db> {
     pub(super) tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
     /// Call stack for frame-based execution.
     pub(super) call_stack: Vec<StackFrame<'db>>,
+
+    // === ModuleGraph-based execution (package-agnostic) ===
+
+    /// Module function table for ModuleGraph mode.
+    pub(super) module_functions_graph: ModuleFunctionTableGraph<'db>,
+    /// Current module ID for ModuleGraph mode.
+    pub(super) current_module_id: Option<ModuleId>,
+    /// Typecheck result for ModuleGraph mode.
+    pub(super) module_graph_typecheck: Option<ModuleGraphTypecheckResult<'db>>,
 }
 
 /// Script-level scope for REPL incremental execution.
@@ -53,6 +64,16 @@ pub struct ModuleFunctionTable<'db> {
     imported_functions: HashMap<InternedText<'db>, (ast::StmtFun<'db>, crate::package::PackageModule)>,
     /// Cache of all functions in each module.
     module_all_functions: HashMap<crate::package::PackageModule, HashMap<InternedText<'db>, ast::StmtFun<'db>>>,
+}
+
+/// Module function table using ModuleId (package-agnostic version).
+///
+/// Used for ModuleGraph-based execution where package concepts are not available.
+pub struct ModuleFunctionTableGraph<'db> {
+    /// Maps imported function name → (function definition, source module ID).
+    imported_functions: HashMap<InternedText<'db>, (ast::StmtFun<'db>, ModuleId)>,
+    /// Cache of all functions in each module.
+    module_all_functions: HashMap<ModuleId, HashMap<InternedText<'db>, ast::StmtFun<'db>>>,
 }
 
 /// Script-level variable with move tracking for linear semantics.
@@ -132,6 +153,10 @@ impl InterpContext<'_> {
             script_function_analyses: HashMap::new(),
             tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
             call_stack: Vec::new(),
+            // ModuleGraph fields (not used in package mode).
+            module_functions_graph: ModuleFunctionTableGraph::new(),
+            current_module_id: None,
+            module_graph_typecheck: None,
         })
     }
 
@@ -160,12 +185,68 @@ impl InterpContext<'_> {
             script_function_analyses: HashMap::new(),
             tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
             call_stack: Vec::new(),
+            // ModuleGraph fields (not used).
+            module_functions_graph: ModuleFunctionTableGraph::new(),
+            current_module_id: None,
+            module_graph_typecheck: None,
         }
+    }
+
+    /// Create a new interpreter context with ModuleGraph typecheck result.
+    ///
+    /// This is the package-agnostic variant. The caller must provide a valid
+    /// ModuleGraphTypecheckResult with no errors.
+    pub fn new_with_module_graph<'db>(
+        db: &'db dyn crate::Db,
+        typecheck_result: ModuleGraphTypecheckResult<'db>,
+    ) -> Result<InterpContext<'db>, InterpError> {
+        // Check for typecheck errors.
+        if !typecheck_result.is_ok(db) {
+            let all_errors: Vec<_> = typecheck_result.all_errors(db).into_iter().cloned().collect();
+            return Err(InterpError::TypecheckErrors(all_errors));
+        }
+
+        let graph = typecheck_result.graph(db);
+        let module_functions_graph = ModuleFunctionTableGraph::build_from_graph(db, graph);
+
+        // Create a dummy empty PackageWorld for compatibility.
+        // Package-based fields won't be used in ModuleGraph mode.
+        let package_world = PackageWorld::new(
+            db,
+            rmx::std::collections::BTreeMap::new(),
+            rmx::std::collections::BTreeMap::new(),
+        );
+
+        Ok(InterpContext {
+            db,
+            runtime: datalove_rt::rust::Runtime::new(),
+            package_world,
+            script: None,
+            script_scope: ScriptScope {
+                variables: HashMap::new(),
+                functions: HashMap::new(),
+            },
+            module_functions: ModuleFunctionTable::new(),
+            current_module: None,
+            typecheck_result: None,
+            script_function_analyses: HashMap::new(),
+            tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
+            call_stack: Vec::new(),
+            // ModuleGraph fields (active).
+            module_functions_graph,
+            current_module_id: None,
+            module_graph_typecheck: Some(typecheck_result),
+        })
     }
 
     /// Set the current script for execution.
     pub fn set_script(&mut self, script: crate::script::Script) {
         self.script = Some(script);
+    }
+
+    /// Check if this context is using ModuleGraph mode.
+    pub fn is_module_graph_mode(&self) -> bool {
+        self.module_graph_typecheck.is_some()
     }
 
     /// Pretty-print a value using this context's runtime and tydesc_table.
@@ -357,6 +438,62 @@ impl<'db> ModuleFunctionTable<'db> {
     /// Get all functions from a module.
     pub fn get_module_functions(&self, module: crate::package::PackageModule) -> Option<&HashMap<InternedText<'db>, ast::StmtFun<'db>>> {
         self.module_all_functions.get(&module)
+    }
+}
+
+impl<'db> ModuleFunctionTableGraph<'db> {
+    /// Create a new empty module function table.
+    pub fn new() -> ModuleFunctionTableGraph<'db> {
+        ModuleFunctionTableGraph {
+            imported_functions: HashMap::new(),
+            module_all_functions: HashMap::new(),
+        }
+    }
+
+    /// Build module function table from a ModuleGraph.
+    ///
+    /// Parses ALL modules in the graph to extract function definitions.
+    pub fn build_from_graph(
+        db: &'db dyn crate::Db,
+        graph: ModuleGraph,
+    ) -> ModuleFunctionTableGraph<'db> {
+        let mut table = ModuleFunctionTableGraph::new();
+
+        for module in graph.iter_modules(db) {
+            let module_id = module.id(db);
+            let source = module.source(db);
+
+            let parse_result = crate::parser::parse(db, source);
+            let parsed = parse_result.script(db);
+
+            let mut module_funcs = HashMap::new();
+            for statement in parsed.statements(db) {
+                if let ast::Statement::Fun(func) = statement {
+                    let func_name = func.name(db);
+                    module_funcs.insert(func_name, *func);
+                }
+            }
+            table.module_all_functions.insert(module_id, module_funcs);
+        }
+
+        table
+    }
+
+    /// Look up an imported function by name.
+    ///
+    /// Returns the function and its source module ID.
+    pub fn get(&self, name: InternedText<'db>) -> Option<(ast::StmtFun<'db>, ModuleId)> {
+        self.imported_functions.get(&name).copied()
+    }
+
+    /// Get all functions from a module by ID.
+    pub fn get_module_functions(&self, module_id: ModuleId) -> Option<&HashMap<InternedText<'db>, ast::StmtFun<'db>>> {
+        self.module_all_functions.get(&module_id)
+    }
+
+    /// Add an imported function.
+    pub fn add_import(&mut self, name: InternedText<'db>, func: ast::StmtFun<'db>, source_module: ModuleId) {
+        self.imported_functions.insert(name, (func, source_module));
     }
 }
 

@@ -8,7 +8,7 @@ Package loading and resolution moves to a separate crate.
 - [x] Phase 1: Define ModuleGraph abstraction in core
 - [x] Create typecheck_module_graph function
 - [x] Add PackageWorldModuleGraph -> ModuleGraph conversion
-- [ ] Create interp version working on ModuleGraph
+- [x] Create interp version working on ModuleGraph
 - [ ] Phase 2: Create datalove-datafun-pkg crate
 - [ ] Phase 3: Create datalove-datafun-test crate
 
@@ -98,22 +98,27 @@ All 119+ existing tests continue to pass.
 ### Critical Coupling Points
 
 1. `tycheck::typecheck_package_world(PackageWorldModuleGraph) -> PackageWorldTypecheckResult`
-   - **NEW**: `typecheck_module_graph(ModuleGraph) -> ModuleGraphTypecheckResult`
+   - **DONE**: `typecheck_module_graph(ModuleGraph) -> ModuleGraphTypecheckResult`
 2. `interp::execute_script(script, PackageWorld, typecheck_result) -> ScriptResult`
-   - **TODO**: Create ModuleGraph-based version
+   - **DONE**: Interpreter now supports both PackageModule and ModuleId via `ModuleRef` enum
 3. `InterpContext::new_with_typecheck()` stores PackageWorld for module alias resolution
-   - **TODO**: Add ModuleGraph-based constructor
+   - **DONE**: Added `InterpContext::new_with_module_graph()` constructor
 4. `worldfile_analysis::analyze_worldfile()` builds full PackageWorld for tests
    - Will stay in -test crate
 
 ## Remaining Work
 
-### Next: Create interp version for ModuleGraph
+### Phase 1 Complete
 
-Need to:
-1. Add `InterpContext::new_with_module_graph()` constructor
-2. Adapt `ModuleFunctionTable` to work with ModuleId
-3. Create `execute_script_with_module_graph()` or make existing function generic
+Interpreter changes added:
+- `ModuleRef` enum to represent either `PackageModule` or `ModuleId`
+- `ModuleFunctionTableGraph` - parallel function table using `ModuleId`
+- `InterpContext::new_with_module_graph()` constructor
+- `lookup_function` now checks both Package and ModuleGraph variants
+- `execute_function_body` handles both module context types
+
+Tests:
+- `package_resolve::tests::test_interp_with_module_graph` - verifies ModuleGraph-based context creation
 
 ### Phase 2: Create `datalove-datafun-pkg` Crate
 
