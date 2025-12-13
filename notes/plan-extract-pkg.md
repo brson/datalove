@@ -1,25 +1,30 @@
 # Plan: Extract Package Code from datafun Core
 
-Goal: Core compiler knows about modules, not packages/libraries.
-Package loading and resolution moves to a separate crate.
+Goal: Diamond dependency where datafun and datafun-pkg don't know about each other.
+
+```
+              bct (shared types)
+             /    \
+            v      v
+       datafun    datafun-pkg
+            \      /
+             v    v
+           caller
+```
 
 ## Progress Summary
 
 - [x] Phase 1: Define ModuleGraph abstraction in core
-- [x] Create typecheck_module_graph function
-- [x] Add PackageWorldModuleGraph -> ModuleGraph conversion
-- [x] Create interp version working on ModuleGraph
-- [x] Phase 2: Create datalove-datafun-pkg crate
-- [ ] Phase 3: Create datalove-datafun-test crate
+- [x] Phase 2: Create datalove-datafun-pkg crate (initial version)
+- [x] Phase 3: Move ModuleGraph to bct
+- [x] Phase 4: Make pkg independent of datafun
+- [ ] Phase 5: Remove package types from datafun core (optional cleanup)
 
 ## Completed Work
 
-### New Files Created
-
-**`module_graph.rs`** (~260 lines) - Package-agnostic module abstraction:
+### ModuleGraph Abstraction (in datafun, will move to bct)
 
 ```rust
-// Core types
 #[salsa::input]
 pub struct ModuleId { path: String }  // e.g., "sys/std/u32"
 
@@ -34,143 +39,137 @@ pub struct ResolvedImport {
 
 #[salsa::input]
 pub struct ModuleGraph {
-    modules: Vec<Module>,              // Dependency order
+    modules: Vec<Module>,
     module_by_id: BTreeMap<ModuleId, Module>,
     imports: BTreeMap<ModuleId, Vec<ResolvedImport>>,
     dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>>,
 }
 
-// Typecheck result types (keyed by ModuleId, not PackageModule)
-#[salsa::tracked]
-pub struct ModuleExports<'db> { ... }
-
-#[salsa::tracked]
-pub struct ModuleImports<'db> { ... }
-
-#[salsa::tracked]
-pub struct ModuleGraphTypecheckResult<'db> { ... }
-
-// Builder for constructing ModuleGraph
 pub struct ModuleGraphBuilder<'db> { ... }
 ```
 
-### New Functions
+### Current pkg Crate
 
-**`tycheck.rs`**:
-- `typecheck_module_graph(db, ModuleGraph) -> ModuleGraphTypecheckResult`
-  - Package-agnostic typecheck using pre-resolved imports
-  - Processes modules in dependency order
-  - Builds exports/imports maps keyed by ModuleId
-
-**`package_resolve.rs`**:
-- `to_module_graph_with_imports(db, PackageWorld, PackageWorldModuleGraph) -> ModuleGraph`
-  - Converts package-based graph to ModuleGraph
-  - Extracts function-level imports from AST
-  - Resolves module aliases from require statements
-
-### Tests Added
-
-- `module_graph::tests::test_module_graph_builder` - Builder API test
-- `package_resolve::tests::test_to_module_graph_with_imports` - Conversion test
-- `package_resolve::tests::test_typecheck_module_graph` - End-to-end typecheck test
-
-All 119+ existing tests continue to pass.
-
-## Current Architecture
-
-### Package-related files in datafun (~1270 lines)
-
-| File | Lines | Purpose |
-|------|-------|---------|
-| `package.rs` | 84 | Salsa wrapper for bct types |
-| `package_load.rs` | ~166 | Filesystem loading |
-| `package_load_worldfile.rs` | ~519 | Worldfile parsing (tests) |
-| `package_resolve.rs` | ~443 | Resolution orchestration + ModuleGraph conversion |
-| `import_demands.rs` | ~56 | Import demand extraction |
-| `module_graph.rs` | ~260 | **NEW** - Core module abstraction |
-
-### Core type dependencies
-
-- Base types (`Package`, `PackageModule`, `PackageWorldMap`, etc.) from `bct::package2`
-- datafun's `PackageWorld` is a Salsa wrapper around two `BTreeMap<PackageName, Package>`
-- **NEW**: `ModuleGraph` provides package-agnostic alternative
-
-### Critical Coupling Points
-
-1. `tycheck::typecheck_package_world(PackageWorldModuleGraph) -> PackageWorldTypecheckResult`
-   - **DONE**: `typecheck_module_graph(ModuleGraph) -> ModuleGraphTypecheckResult`
-2. `interp::execute_script(script, PackageWorld, typecheck_result) -> ScriptResult`
-   - **DONE**: Interpreter now supports both PackageModule and ModuleId via `ModuleRef` enum
-3. `InterpContext::new_with_typecheck()` stores PackageWorld for module alias resolution
-   - **DONE**: Added `InterpContext::new_with_module_graph()` constructor
-4. `worldfile_analysis::analyze_worldfile()` builds full PackageWorld for tests
-   - Will stay in -test crate
-
-## Remaining Work
-
-### Phase 1 Complete
-
-Interpreter changes added:
-- `ModuleRef` enum to represent either `PackageModule` or `ModuleId`
-- `ModuleFunctionTableGraph` - parallel function table using `ModuleId`
-- `InterpContext::new_with_module_graph()` constructor
-- `lookup_function` now checks both Package and ModuleGraph variants
-- `execute_function_body` handles both module context types
-
-Tests:
-- `package_resolve::tests::test_interp_with_module_graph` - verifies ModuleGraph-based context creation
-
-### Phase 2: Create `datalove-datafun-pkg` Crate (COMPLETED)
-
-**New crate created**: `datalove-datafun-pkg`
-
-Files moved to pkg crate:
+Files in pkg (currently depends on datafun - will be changed):
 - `package_load_worldfile.rs` - Worldfile parsing
-- `package_resolve.rs` - Resolution orchestration + ModuleGraph conversion
+- `package_resolve.rs` - Resolution + ModuleGraph conversion
 - `import_demands.rs` - Import demand extraction
 
-Files kept in datafun (needed by interpreter):
-- `package.rs` - Salsa wrapper types (PackageWorld)
-- `package_load.rs` - Filesystem loading types
+## Target Architecture
 
-The pkg crate re-exports types from datafun for convenience:
-- `PackageWorld`, `import_from_loader`, `package_world_map` from `datalove_datafun::package`
-- `PackageWorldConfig` from `datalove_datafun::package_load`
+### What Moves to bct
 
-Dependencies:
-- `datalove-datafun` (for ModuleGraph, core types, package types)
-- `bct` (for package2 types)
-- `salsa` (for tracked functions)
+From `datalove-datafun/src/module_graph.rs`:
+- `ModuleId` - opaque module identifier (path string)
+- `Module` - module with source text
+- `ResolvedImport` - local_name → source_module + export_name
+- `ModuleGraph` - dependency-ordered collection with imports
+- `ModuleGraphBuilder` - builder API
 
-All 15 tests in pkg crate pass.
+These use only bct primitives (`Source`, `InternedText`).
 
-### Phase 3: Create `datalove-datafun-test` Crate
+### What Stays in datafun
 
-Move test infrastructure:
-- Integration tests using packages
-- `worldfile_analysis.rs` functionality
+- `ModuleExports<'db>` - contains `TypeFunction<'db>` (datafun-specific)
+- `ModuleImports<'db>` - datafun-specific
+- `ModuleGraphTypecheckResult<'db>` - datafun-specific
+- `typecheck_module_graph()` - uses datafun's parser/typer
+- `import_demands()` - uses datafun's parser to extract require statements
+- Interpreter - consumes ModuleGraph via typecheck result
 
-Dependencies:
-- `datalove-datafun`
-- `datalove-datafun-pkg`
-- `datalove-exampletest`
+### What pkg Does
 
-## Key Challenges
+- Load packages from filesystem (`package_load.rs`)
+- Parse worldfiles (`package_load_worldfile.rs`)
+- Define PackageWorld, package_world_map()
+- Resolve dependencies (via bct::package_resolve2) - caller provides ImportDemandMap
+- Convert PackageWorldModuleGraph → bct::ModuleGraph
 
-1. **bct dependency**: Package types come from bct. ModuleGraph abstraction isolates core from this.
+Note: pkg does NOT parse source code. Caller extracts import demands using datafun.
 
-2. **Salsa integration**: Both PackageWorld and ModuleGraph are Salsa inputs. Conversion works but adds some overhead.
+## Implementation Phases
 
-3. **Test migration**: Most tests use worldfile format assuming packages.
-   - Keep package-based testing in -test crate
-   - Core can be tested with ModuleGraph directly
+### Phase 3: Move ModuleGraph types to bct
 
-## Design Decisions Made
+Create `bct/crates/bct/src/module_graph.rs` with core types.
 
-1. **ModuleId uses path strings** (e.g., "sys/std/u32") rather than interned text - simpler, self-describing
+Files:
+- Create `bct/crates/bct/src/module_graph.rs`
+- Update `bct/crates/bct/src/lib.rs` to export it
 
-2. **Pre-resolved imports** in ModuleGraph - typecheck doesn't need to resolve aliases
+### Phase 4: Update datafun-pkg to use bct directly
 
-3. **Separate typecheck result types** - ModuleGraphTypecheckResult uses ModuleId keys, PackageWorldTypecheckResult uses PackageModule keys
+1. Remove dependency on datalove-datafun
+2. Import ModuleGraph from bct
+3. Move package_load.rs, package.rs from datafun to pkg
+4. package_resolve.rs takes ImportDemandMap as parameter (caller provides it)
+5. Delete import_demands.rs from pkg
 
-4. **Conversion at boundary** - Package layer converts to ModuleGraph before calling core typecheck
+Files:
+- `crates/datalove-datafun-pkg/Cargo.toml` (remove datafun dep)
+- `crates/datalove-datafun-pkg/src/package_resolve.rs`
+- Delete `crates/datalove-datafun-pkg/src/import_demands.rs`
+
+### Phase 5: Remove package types from datafun core
+
+1. Delete package.rs, package_load.rs from datafun (moved to pkg)
+2. Keep import_demands.rs in datafun (uses parser, takes bct::PackageWorldMap)
+3. Delete package_resolve.rs from datafun
+4. Remove PackageModule from interpreter (only ModuleGraph)
+5. Remove PackageWorld typecheck path
+
+Files:
+- Delete `crates/datalove-datafun/src/package.rs`
+- Delete `crates/datalove-datafun/src/package_load.rs`
+- Delete `crates/datalove-datafun/src/package_load_worldfile.rs`
+- Delete `crates/datalove-datafun/src/package_resolve.rs`
+- Keep `crates/datalove-datafun/src/import_demands.rs`
+- Update interpreter to use only ModuleGraph
+- Update tycheck to remove PackageWorld path
+
+### Phase 6: Example caller usage
+
+```rust
+// 1. Load packages using pkg
+let package_world = datafun_pkg::load_world(&config);
+let package_world_map = datafun_pkg::package_world_map(db, package_world);
+
+// 2. Extract import demands using datafun's parser
+let import_demand_map = datafun::import_demands(db, package_world_map);
+
+// 3. Resolve and convert to ModuleGraph using pkg
+let module_graph = datafun_pkg::resolve_to_module_graph(db, package_world_map, import_demand_map);
+
+// 4. Compile using datafun
+let typecheck_result = datafun::typecheck_module_graph(db, module_graph);
+
+// 5. Execute using datafun
+let result = datafun::execute_with_module_graph(db, script, module_graph, typecheck_result);
+```
+
+## Dependency After Refactor
+
+```
+bct (has ModuleGraph, package2, package_resolve2)
+ ↑        ↑
+ |        |
+datafun  datafun-pkg (independent siblings)
+ ↑        ↑
+ └───┬────┘
+     |
+  caller
+```
+
+## Key Considerations
+
+1. **Salsa jars**: ModuleGraph uses salsa. bct's Database needs to include these jars.
+
+2. **Import demands**: `import_demands()` stays in datafun.
+   - Takes PackageWorldMap (from bct) as input
+   - Uses datafun's parser to extract `require module` statements
+   - Caller calls `datafun::import_demands()`, passes result to `pkg::resolve()`
+
+3. **WorldfileAnalysis**: Uses both pkg and datafun concepts.
+   Belongs in a test crate or caller code.
+
+4. **PackageWorldMap**: Already in bct::package_resolve2, so both can use it.

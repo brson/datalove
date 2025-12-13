@@ -1,8 +1,9 @@
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 use rmx::std::io::Read;
+use rmx::std::path::PathBuf;
 
-use datalove_datafun::package_load::{PackageWorld, Package, PackageModule, PackageName, ModuleName};
+use crate::package_load::{PackageWorld, Package, PackageModule, PackageName, ModuleName};
 
 /// Result of loading a worldfile that may contain both modules and a script.
 pub struct WorldfileWithScript {

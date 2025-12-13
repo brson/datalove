@@ -9,7 +9,7 @@ edition.workspace = true
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
-datalove-datafun.path = "../datalove-datafun"
 
 [dev-dependencies]
+datalove-datafun.path = "../datalove-datafun"
 datalove-exampletest.path = "../datalove-exampletest"
