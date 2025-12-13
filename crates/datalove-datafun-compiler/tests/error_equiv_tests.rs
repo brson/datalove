@@ -16,7 +16,7 @@ use datalove_datalit::mutation_gen::{Mutation, MutationResult};
 
 /// Extract error codes from datalit typecheck result.
 fn get_datalit_errors<'db>(
-    db: &'db datalove_datafun::Database,
+    db: &'db datalove_datafun_compiler::Database,
     source: &str,
 ) -> (Vec<String>, bool) {
     let src = bct::input::Source::new(db, source.to_string());
@@ -41,7 +41,7 @@ fn get_datalit_errors<'db>(
 
 /// Check if datalit type hint contains parse error.
 fn has_datalit_type_hint_parse_error<'db>(
-    db: &'db datalove_datafun::Database,
+    db: &'db datalove_datafun_compiler::Database,
     th: datalove_datalit::ast::TypeHintAndHeap<'db>,
 ) -> bool {
     use datalove_datalit::ast::TypeHint;
@@ -72,7 +72,7 @@ fn has_datalit_type_hint_parse_error<'db>(
 
 /// Check if expression contains parse error (including in type hints).
 fn has_parse_error<'db>(
-    db: &'db datalove_datafun::Database,
+    db: &'db datalove_datafun_compiler::Database,
     expr: datalove_datalit::ast::ExprFull<'db>,
 ) -> bool {
     use datalove_datalit::ast::Expr;
@@ -106,13 +106,13 @@ fn has_parse_error<'db>(
 
 /// Extract error codes from datafun typecheck result.
 fn get_datafun_errors<'db>(
-    db: &'db datalove_datafun::Database,
+    db: &'db datalove_datafun_compiler::Database,
     source: &str,
 ) -> (Vec<String>, bool) {
     // Wrap in "let _x = " for datafun parsing.
     let datafun_text = format!("let _x = {}", source);
     let src = bct::input::Source::new(db, datafun_text.clone());
-    let script = datalove_datafun::parser::parse_integration_test(db, src);
+    let script = datalove_datafun_compiler::parser::parse_integration_test(db, src);
 
     // Check for parse errors.
     let statements = script.statements(db);
@@ -122,7 +122,7 @@ fn get_datafun_errors<'db>(
 
     // Extract the let statement value.
     let expr = match &statements[0] {
-        datalove_datafun::ast::Statement::Let(stmt) => stmt.value(db),
+        datalove_datafun_compiler::ast::Statement::Let(stmt) => stmt.value(db),
         _ => return (vec!["PARSE_ERROR".to_string()], true),
     };
 
@@ -131,7 +131,7 @@ fn get_datafun_errors<'db>(
         return (vec!["PARSE_ERROR".to_string()], true);
     }
 
-    let result = datalove_datafun::tycheck::type_check(db, src, script);
+    let result = datalove_datafun_compiler::tycheck::type_check(db, src, script);
 
     let errors: Vec<String> = result
         .errors(db)
@@ -144,10 +144,10 @@ fn get_datafun_errors<'db>(
 
 /// Check if datafun expression contains parse error.
 fn has_datafun_parse_error<'db>(
-    db: &'db datalove_datafun::Database,
-    expr: datalove_datafun::ast::ExprFun<'db>,
+    db: &'db datalove_datafun_compiler::Database,
+    expr: datalove_datafun_compiler::ast::ExprFun<'db>,
 ) -> bool {
-    use datalove_datafun::ast::ExprFunKind;
+    use datalove_datafun_compiler::ast::ExprFunKind;
 
     // Helper to check type hint for parse error.
     let check_type_hint = |th: Option<datalove_datalit::ast::TypeHintAndHeap<'db>>| -> bool {
@@ -224,7 +224,7 @@ fn has_datafun_parse_error<'db>(
 
 /// Check if type hint contains parse error.
 fn has_type_hint_parse_error<'db>(
-    db: &'db datalove_datafun::Database,
+    db: &'db datalove_datafun_compiler::Database,
     th: datalove_datalit::ast::TypeHintAndHeap<'db>,
 ) -> bool {
     use datalove_datalit::ast::TypeHint;
@@ -282,7 +282,7 @@ fn errors_equivalent(
 
 /// Test error equivalence for a specific mutated expression.
 fn test_error_equiv(
-    db: &datalove_datafun::Database,
+    db: &datalove_datafun_compiler::Database,
     mutation_result: &MutationResult,
 ) -> Result<(), String> {
     let (datalit_errors, datalit_parse_err) = get_datalit_errors(db, &mutation_result.source);
@@ -380,7 +380,7 @@ fn run_single_mutation_test(
     seed: u64,
 ) -> Option<bool> {
     // Create fresh database for each test to avoid salsa state issues.
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
     let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
@@ -506,7 +506,7 @@ fn test_error_equiv_discovery() {
 /// integer range checking behavior. Run to investigate discrepancies.
 #[test]
 fn test_error_equiv_out_of_range_int_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -536,7 +536,7 @@ fn test_error_equiv_out_of_range_int_detailed() {
 /// Detailed test for WrongElementType mutations.
 #[test]
 fn test_error_equiv_wrong_element_type_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -566,7 +566,7 @@ fn test_error_equiv_wrong_element_type_detailed() {
 /// Detailed test for HeapMismatch mutations.
 #[test]
 fn test_error_equiv_heap_mismatch_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -596,7 +596,7 @@ fn test_error_equiv_heap_mismatch_detailed() {
 /// Detailed test for ArityMismatch mutations.
 #[test]
 fn test_error_equiv_arity_mismatch_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -626,7 +626,7 @@ fn test_error_equiv_arity_mismatch_detailed() {
 /// Detailed test for RemoveTypeHint mutations.
 #[test]
 fn test_error_equiv_remove_type_hint_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -655,7 +655,7 @@ fn test_error_equiv_remove_type_hint_detailed() {
 /// Detailed test for WrongVariant mutations.
 #[test]
 fn test_error_equiv_wrong_variant_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -685,7 +685,7 @@ fn test_error_equiv_wrong_variant_detailed() {
 /// Detailed test for DuplicateField mutations.
 #[test]
 fn test_error_equiv_duplicate_field_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -715,7 +715,7 @@ fn test_error_equiv_duplicate_field_detailed() {
 /// Detailed test for WrongFieldName mutations.
 #[test]
 fn test_error_equiv_wrong_field_name_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -745,7 +745,7 @@ fn test_error_equiv_wrong_field_name_detailed() {
 /// Detailed test for WrongPayloadPresence mutations.
 #[test]
 fn test_error_equiv_wrong_payload_presence_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -775,7 +775,7 @@ fn test_error_equiv_wrong_payload_presence_detailed() {
 /// Detailed test for SwapMapKeyValue mutations.
 #[test]
 fn test_error_equiv_swap_map_key_value_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let mut failures = vec![];
@@ -805,7 +805,7 @@ fn test_error_equiv_swap_map_key_value_detailed() {
 /// Detailed test for source-level mutations.
 #[test]
 fn test_error_equiv_source_mutations_detailed() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_mutation_config();
 
     let source_mutations = [
@@ -856,7 +856,7 @@ fn test_debug_heap_mismatch() {
     for seed in 0..50 {
         let config_clone = config.clone();
         let result = std::thread::spawn(move || {
-            let db = datalove_datafun::Database::default();
+            let db = datalove_datafun_compiler::Database::default();
             let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
             let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
@@ -896,7 +896,7 @@ fn test_debug_bracket_mutations() {
         for seed in 0..50 {
             let config_clone = config.clone();
             let result = std::thread::spawn(move || {
-                let db = datalove_datafun::Database::default();
+                let db = datalove_datafun_compiler::Database::default();
                 let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
                 let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
@@ -935,7 +935,7 @@ fn test_debug_bracket_mutations() {
 #[test]
 #[ignore]
 fn test_debug_specific_bracket_cases() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
 
     // Case 1: DeleteOpeningBracket seed 14
     // Original type hint: enum {TestStruct93(i16), GenEnum17}
@@ -968,12 +968,12 @@ fn test_debug_specific_bracket_cases() {
     // Parse with datafun
     let datafun_text1 = format!("let _x = {}", source1);
     let src1_fun = bct::input::Source::new(&db, datafun_text1);
-    let datafun_parsed = datalove_datafun::parser::parse_integration_test(&db, src1_fun);
+    let datafun_parsed = datalove_datafun_compiler::parser::parse_integration_test(&db, src1_fun);
     eprintln!("Datafun has_parse_error: {}", {
         let stmts = datafun_parsed.statements(&db);
         if stmts.is_empty() {
             true
-        } else if let datalove_datafun::ast::Statement::Let(stmt) = &stmts[0] {
+        } else if let datalove_datafun_compiler::ast::Statement::Let(stmt) = &stmts[0] {
             has_datafun_parse_error(&db, stmt.value(&db))
         } else {
             true
@@ -1018,7 +1018,7 @@ fn test_debug_arity_mismatch() {
     for seed in 0..200 {
         let config_clone = config.clone();
         let result = std::thread::spawn(move || {
-            let db = datalove_datafun::Database::default();
+            let db = datalove_datafun_compiler::Database::default();
             let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
             let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
@@ -1067,7 +1067,7 @@ fn test_debug_delete_comma() {
     for seed in 0..200 {
         let config_clone = config.clone();
         let result = std::thread::spawn(move || {
-            let db = datalove_datafun::Database::default();
+            let db = datalove_datafun_compiler::Database::default();
             let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
             let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 

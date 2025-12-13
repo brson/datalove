@@ -5,7 +5,7 @@
 
 use rmx::prelude::*;
 
-use datalove_datafun::funlit_equiv::{
+use datalove_datafun_compiler::funlit_equiv::{
     datafun_expr_to_datalit_serde,
     datalit_typecheck_to_serde,
     datafun_typecheck_to_serde,
@@ -14,21 +14,21 @@ use datalove_datalit::ast_gen::{AstGenConfig, gen_expr_full_seeded};
 
 /// Extract expression from a let statement in a Script.
 fn extract_let_value<'db>(
-    db: &'db datalove_datafun::Database,
-    script: datalove_datafun::ast::Script<'db>,
-) -> Result<datalove_datafun::ast::ExprFun<'db>, String> {
+    db: &'db datalove_datafun_compiler::Database,
+    script: datalove_datafun_compiler::ast::Script<'db>,
+) -> Result<datalove_datafun_compiler::ast::ExprFun<'db>, String> {
     let statements = script.statements(db);
     if statements.len() != 1 {
         return Err(format!("expected 1 statement, got {}", statements.len()));
     }
     match &statements[0] {
-        datalove_datafun::ast::Statement::Let(stmt) => Ok(stmt.value(db)),
+        datalove_datafun_compiler::ast::Statement::Let(stmt) => Ok(stmt.value(db)),
         other => Err(format!("expected Let statement, got {:?}", std::mem::discriminant(other))),
     }
 }
 
 /// Test that a single expression parses equivalently in both parsers.
-fn test_parse_equiv(db: &datalove_datafun::Database, expr_text: &str) -> Result<(), String> {
+fn test_parse_equiv(db: &datalove_datafun_compiler::Database, expr_text: &str) -> Result<(), String> {
     // Parse with datalit.
     let datalit_source = bct::input::Source::new(db, expr_text.to_string());
     let datalit_parsed = datalove_datalit::parser::parse_integration_test(db, datalit_source);
@@ -37,7 +37,7 @@ fn test_parse_equiv(db: &datalove_datafun::Database, expr_text: &str) -> Result<
     // Parse with datafun (wrap in "let _x = " prefix).
     let datafun_text = format!("let _x = {}", expr_text);
     let datafun_source = bct::input::Source::new(db, datafun_text.clone());
-    let datafun_script = datalove_datafun::parser::parse_integration_test(db, datafun_source);
+    let datafun_script = datalove_datafun_compiler::parser::parse_integration_test(db, datafun_source);
 
     // Extract expression from let statement.
     let datafun_expr = extract_let_value(db, datafun_script)?;
@@ -58,7 +58,7 @@ fn test_parse_equiv(db: &datalove_datafun::Database, expr_text: &str) -> Result<
 }
 
 /// Test that a single expression typechecks equivalently in both typecheckers.
-fn test_typecheck_equiv(db: &datalove_datafun::Database, expr_text: &str) -> Result<(), String> {
+fn test_typecheck_equiv(db: &datalove_datafun_compiler::Database, expr_text: &str) -> Result<(), String> {
     // First verify parsing works.
     test_parse_equiv(db, expr_text)?;
 
@@ -72,8 +72,8 @@ fn test_typecheck_equiv(db: &datalove_datafun::Database, expr_text: &str) -> Res
     // Parse and typecheck with datafun (wrap in "let _x = " prefix).
     let datafun_text = format!("let _x = {}", expr_text);
     let datafun_source = bct::input::Source::new(db, datafun_text.clone());
-    let datafun_script = datalove_datafun::parser::parse_integration_test(db, datafun_source);
-    let datafun_result = datalove_datafun::tycheck::type_check(db, datafun_source, datafun_script);
+    let datafun_script = datalove_datafun_compiler::parser::parse_integration_test(db, datafun_source);
+    let datafun_result = datalove_datafun_compiler::tycheck::type_check(db, datafun_source, datafun_script);
 
     // Extract expression for type lookup.
     let datafun_expr = extract_let_value(db, datafun_script)?;
@@ -97,21 +97,21 @@ fn test_typecheck_equiv(db: &datalove_datafun::Database, expr_text: &str) -> Res
 
 #[test]
 fn test_simple_bool_true() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     test_parse_equiv(&db, "@true").unwrap();
     test_typecheck_equiv(&db, "@true").unwrap();
 }
 
 #[test]
 fn test_simple_bool_false() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     test_parse_equiv(&db, "@false").unwrap();
     test_typecheck_equiv(&db, "@false").unwrap();
 }
 
 #[test]
 fn test_simple_int() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     test_parse_equiv(&db, "@42").unwrap();
     test_typecheck_equiv(&db, "@42").unwrap();
 }
@@ -120,14 +120,14 @@ fn test_simple_int() {
 
 #[test]
 fn test_simple_string() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     test_parse_equiv(&db, r#"@"hello""#).unwrap();
     test_typecheck_equiv(&db, r#"@"hello""#).unwrap();
 }
 
 #[test]
 fn test_simple_list() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     test_parse_equiv(&db, "@[1, 2, 3]").unwrap();
     test_typecheck_equiv(&db, "@[1, 2, 3]").unwrap();
 }
@@ -137,21 +137,21 @@ fn test_simple_list() {
 
 #[test]
 fn test_nested_list() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     test_parse_equiv(&db, "@[[1, 2], [3, 4]]").unwrap();
     test_typecheck_equiv(&db, "@[[1, 2], [3, 4]]").unwrap();
 }
 
 #[test]
 fn test_anon_tuple() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     test_parse_equiv(&db, "@(1, 2, 3)").unwrap();
     test_typecheck_equiv(&db, "@(1, 2, 3)").unwrap();
 }
 
 #[test]
 fn test_anon_struct() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     test_parse_equiv(&db, "@{x = 1, y = 2}").unwrap();
     test_typecheck_equiv(&db, "@{x = 1, y = 2}").unwrap();
 }
@@ -231,7 +231,7 @@ fn make_compatible_config() -> AstGenConfig {
 
 #[test]
 fn test_funlit_equiv_generated_parse() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_compatible_config();
 
     let mut failures = vec![];
@@ -255,7 +255,7 @@ fn test_funlit_equiv_generated_parse() {
 
 #[test]
 fn test_funlit_equiv_generated_typecheck() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_compatible_config();
 
     let mut failures = vec![];
@@ -279,7 +279,7 @@ fn test_funlit_equiv_generated_typecheck() {
 
 #[test]
 fn test_funlit_equiv_roundtrip() {
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let config = make_compatible_config();
 
     let mut failures = vec![];
@@ -297,7 +297,7 @@ fn test_funlit_equiv_roundtrip() {
         // Parse with datafun, pretty-print, then test again.
         let datafun_text = format!("let _x = {}", original_text);
         let datafun_source = bct::input::Source::new(&db, datafun_text);
-        let datafun_script = datalove_datafun::parser::parse_integration_test(&db, datafun_source);
+        let datafun_script = datalove_datafun_compiler::parser::parse_integration_test(&db, datafun_source);
 
         if let Ok(datafun_expr) = extract_let_value(&db, datafun_script) {
             if let Ok(serde) = datafun_expr_to_datalit_serde(&db, datafun_expr) {

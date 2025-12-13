@@ -1,6 +1,6 @@
 use rmx::prelude::*;
 use std::path::Path;
-use datalove_datafun as datafun;
+use datalove_datafun_compiler as datafun;
 
 /// Run a script with the std library loaded from sys/ directory.
 fn analyze_file(path: &Path) -> Result<String, String> {

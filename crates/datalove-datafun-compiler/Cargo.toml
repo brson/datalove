@@ -1,0 +1,46 @@
+[package]
+name = "datalove-datafun-compiler"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+rmx.workspace = true
+bct.workspace = true
+salsa.workspace = true
+serde = { version = "1", features = ["derive"] }
+ron = "0.8"
+datalove-datalit.path = "../datalove-datalit"
+datalove-diagnostic.path = "../datalove-diagnostic"
+datalove-rt.path = "../datalove-rt"
+datalove-rtdt.path = "../datalove-rtdt"
+
+[dev-dependencies]
+datalove-exampletest.path = "../datalove-exampletest"
+rand = "0.8"
+
+[[test]]
+name = "parser_tests"
+path = "tests/parser_tests.rs"
+harness = false
+
+[[test]]
+name = "tycheck_tests"
+path = "tests/tycheck_tests.rs"
+harness = false
+
+[[test]]
+name = "interp_tests"
+path = "tests/interp_tests.rs"
+harness = false
+
+[[test]]
+name = "tycheck_world_tests"
+path = "tests/tycheck_world_tests.rs"
+harness = false
+
+[[test]]
+name = "std_tests"
+path = "tests/std_tests.rs"
+harness = false

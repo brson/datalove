@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 use std::path::Path;
-use datalove_datafun as datafun;
+use datalove_datafun_compiler as datafun;
 
 /// Analyze a worldfile and produce RON output.
 fn analyze_file(path: &Path) -> Result<String, String> {

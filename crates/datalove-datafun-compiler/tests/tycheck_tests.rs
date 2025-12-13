@@ -2,7 +2,7 @@ use rmx::prelude::*;
 use std::path::Path;
 use rmx::serde_json::json;
 
-fn type_hint_to_string(db: &dyn datalove_datafun::Db, type_hint: datalove_datalit::ast::TypeHintAndHeap) -> String {
+fn type_hint_to_string(db: &dyn datalove_datafun_compiler::Db, type_hint: datalove_datalit::ast::TypeHintAndHeap) -> String {
     use datalove_datalit::ast::{TypeHint, Heap};
 
     let heap_prefix = match type_hint.heap(db) {
@@ -62,8 +62,8 @@ fn type_hint_to_string(db: &dyn datalove_datafun::Db, type_hint: datalove_datali
     format!("{}{}", heap_prefix, base_type)
 }
 
-fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_json::Value {
-    use datalove_datafun::tycheck::TypeError;
+fn error_to_json(error: &datalove_datafun_compiler::tycheck::TypeError) -> rmx::serde_json::Value {
+    use datalove_datafun_compiler::tycheck::TypeError;
 
     match error {
         TypeError::TypeMismatch { expected, actual } => {
@@ -189,27 +189,27 @@ fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_jso
 
 fn analyze_file(path: &Path) -> Result<String, String> {
     let source_text = std::fs::read_to_string(path).X();
-    let db = datalove_datafun::Database::default();
+    let db = datalove_datafun_compiler::Database::default();
     let source = bct::input::Source::new(&db, source_text.S());
 
-    let script = datalove_datafun::parser::parse_for_diagnostics(&db, source);
-    let tycheck_result = datalove_datafun::tycheck::type_check(&db, source, script);
+    let script = datalove_datafun_compiler::parser::parse_for_diagnostics(&db, source);
+    let tycheck_result = datalove_datafun_compiler::tycheck::type_check(&db, source, script);
 
     // Collect type judgements for variables and functions.
     let mut judgements = Vec::new();
     for statement in script.statements(&db) {
         match statement {
-            datalove_datafun::ast::Statement::Let(let_stmt) => {
+            datalove_datafun_compiler::ast::Statement::Let(let_stmt) => {
                 let name = let_stmt.name(&db);
-                if let Some(ty) = datalove_datafun::tycheck::lookup_variable_type(&db, script, name) {
+                if let Some(ty) = datalove_datafun_compiler::tycheck::lookup_variable_type(&db, script, name) {
                     judgements.push(json!({
                         "kind": "variable",
                         "name": name.as_str(&db),
-                        "type": datalove_datafun::tycheck::type_to_string(&db, ty.ty(&db))
+                        "type": datalove_datafun_compiler::tycheck::type_to_string(&db, ty.ty(&db))
                     }));
                 }
             }
-            datalove_datafun::ast::Statement::Fun(fun_stmt) => {
+            datalove_datafun_compiler::ast::Statement::Fun(fun_stmt) => {
                 let name = fun_stmt.name(&db);
                 let params = fun_stmt.params(&db);
                 let return_type = fun_stmt.return_type(&db);
