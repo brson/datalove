@@ -12,7 +12,6 @@ With core->runtime calls.
 # in progress
 
 - script/function unification semantics
-- fix binop/unop semantics
 - move/clone semantics - moves-etc.md
 - argument modes - moves-etc.md
 - primer / walkthrough / tutorial
