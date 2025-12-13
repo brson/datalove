@@ -9,7 +9,7 @@ Package loading and resolution moves to a separate crate.
 - [x] Create typecheck_module_graph function
 - [x] Add PackageWorldModuleGraph -> ModuleGraph conversion
 - [x] Create interp version working on ModuleGraph
-- [ ] Phase 2: Create datalove-datafun-pkg crate
+- [x] Phase 2: Create datalove-datafun-pkg crate
 - [ ] Phase 3: Create datalove-datafun-test crate
 
 ## Completed Work
@@ -120,18 +120,29 @@ Interpreter changes added:
 Tests:
 - `package_resolve::tests::test_interp_with_module_graph` - verifies ModuleGraph-based context creation
 
-### Phase 2: Create `datalove-datafun-pkg` Crate
+### Phase 2: Create `datalove-datafun-pkg` Crate (COMPLETED)
 
-Move to new crate:
-- `package_load.rs`
-- `package_load_worldfile.rs`
-- `package_resolve.rs` (keep conversion functions)
-- `import_demands.rs`
-- `package.rs`
+**New crate created**: `datalove-datafun-pkg`
+
+Files moved to pkg crate:
+- `package_load_worldfile.rs` - Worldfile parsing
+- `package_resolve.rs` - Resolution orchestration + ModuleGraph conversion
+- `import_demands.rs` - Import demand extraction
+
+Files kept in datafun (needed by interpreter):
+- `package.rs` - Salsa wrapper types (PackageWorld)
+- `package_load.rs` - Filesystem loading types
+
+The pkg crate re-exports types from datafun for convenience:
+- `PackageWorld`, `import_from_loader`, `package_world_map` from `datalove_datafun::package`
+- `PackageWorldConfig` from `datalove_datafun::package_load`
 
 Dependencies:
-- `datalove-datafun` (for ModuleGraph, core types)
+- `datalove-datafun` (for ModuleGraph, core types, package types)
 - `bct` (for package2 types)
+- `salsa` (for tracked functions)
+
+All 15 tests in pkg crate pass.
 
 ### Phase 3: Create `datalove-datafun-test` Crate
 
