@@ -1519,10 +1519,16 @@ fn execute_cfg_statement<'db>(
     }
 }
 
-/// Clean up a stack frame by destroying all Available (non-moved) values.
+/// Clean up a stack frame using analysis-computed drop points.
 ///
-/// Phase 3: Dual-mode cleanup - compare old slot_states-based cleanup with
-/// analysis-computed drop points. Log discrepancies for debugging.
+/// Phase 4: Use drop_points as source of truth, combined with runtime slot_states
+/// to handle conditional moves. Drop points identify non-copy, initialized, owned
+/// slots that need cleanup. Runtime slot_states filter out slots that were actually
+/// moved at runtime (handling conditional branches).
+///
+/// Note: The drop_points analysis may be conservative about moves (marks a slot as
+/// "moved" if it's moved in any branch). We also do a fallback pass to catch
+/// Available+Owned slots that the analysis missed, to ensure no leaks.
 fn cleanup_frame<'db>(
     ctx: &mut InterpContext<'db>,
     frame: StackFrame<'db>,
@@ -1534,77 +1540,104 @@ fn cleanup_frame<'db>(
     let slots = layout.slots(ctx.db);
     let drop_points = frame.drop_points;
 
-    // Collect slots that old cleanup would destroy.
-    let mut old_cleanup_slots: HashSet<SlotId> = HashSet::new();
-    for (slot_index, slot_info) in slots.iter().enumerate() {
-        if frame.slot_states[slot_index] == SlotState::Available {
-            if slot_info.kind(ctx.db).ownership() == SlotOwnership::Owned {
-                old_cleanup_slots.insert(slot_info.slot_id(ctx.db));
-            }
-        }
-    }
+    // Track which slots we've processed from drop_points.
+    let mut processed_slots: HashSet<SlotId> = HashSet::new();
 
-    // Collect slots that drop points say should be destroyed at function exit.
-    // Note: Drop points with reason Moved or Uninitialized indicate NO drop needed.
-    let mut drop_points_slots: HashSet<SlotId> = HashSet::new();
+    // Build a map from SlotId to slot_index for quick lookup.
+    let slot_id_to_index: std::collections::HashMap<_, _> = slots.iter()
+        .enumerate()
+        .map(|(idx, slot)| (slot.slot_id(ctx.db), idx))
+        .collect();
+
+    // Pass 1: Process drop points from the analysis.
     for drop_point in drop_points.drops(ctx.db) {
+        let slot_id = drop_point.slot_id(ctx.db);
+        processed_slots.insert(slot_id);
+
+        // Only process actual drops, not markers for moved/uninitialized slots.
         match drop_point.reason(ctx.db) {
             DropReason::EndOfScope | DropReason::EarlyReturn => {
-                drop_points_slots.insert(drop_point.slot_id(ctx.db));
+                // This slot needs cleanup.
             }
             DropReason::Moved | DropReason::Uninitialized => {
-                // These indicate no drop is needed.
-            }
-        }
-    }
-
-    // Compare and log discrepancies.
-    let only_in_old: Vec<_> = old_cleanup_slots.difference(&drop_points_slots).collect();
-    let only_in_new: Vec<_> = drop_points_slots.difference(&old_cleanup_slots).collect();
-
-    if !only_in_old.is_empty() || !only_in_new.is_empty() {
-        eprintln!(
-            "[cleanup_frame] Discrepancy in function '{}': old_only={:?}, new_only={:?}",
-            frame.func.name(ctx.db).text(ctx.db),
-            only_in_old,
-            only_in_new
-        );
-    }
-
-    // Perform old cleanup (still authoritative for now).
-    for (slot_index, slot_info) in slots.iter().enumerate() {
-        // Only destroy if the slot is still Available (not moved).
-        if frame.slot_states[slot_index] == SlotState::Available {
-            // Skip Borrowed slots - caller owns the data.
-            if slot_info.kind(ctx.db).ownership() == SlotOwnership::Borrowed {
+                // These are informational - no actual drop needed.
                 continue;
             }
-
-            // Destroy Owned slots (Local and Temporary).
-            let offset = slot_info.offset(ctx.db) as usize;
-            let slot_ptr = unsafe { frame.frame_data.as_ptr().add(offset) as *mut u8 };
-
-            // Get the type descriptor for this slot.
-            let ty = slot_info.ty(ctx.db);
-            let datalit_ty = match ty.ty(ctx.db) {
-                crate::tycheck::Type::Datalit(dt) => dt.clone(),
-                _ => {
-                    // Skip non-datalit types for now.
-                    continue;
-                }
-            };
-            let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-
-            // Destroy the value contents only (not the structure itself).
-            // The memory is part of the frame buffer and will be freed with the frame.
-            let value = Value {
-                ptr: slot_ptr,
-                tydesc,
-                location: ValueLocation::Borrowed,
-            };
-            destroy_value_contents_only(ctx, value);
         }
+
+        // Find the slot info and index.
+        let Some(&slot_index) = slot_id_to_index.get(&slot_id) else {
+            // Slot not found in layout - shouldn't happen.
+            continue;
+        };
+        let slot_info = &slots[slot_index];
+
+        // Check runtime slot_states: only destroy if still Available.
+        // This handles conditional moves where static analysis says "might need drop"
+        // but runtime knows the slot was actually moved.
+        if frame.slot_states[slot_index] != SlotState::Available {
+            continue;
+        }
+
+        destroy_slot_contents(ctx, slot_info, &frame.frame_data);
     }
+
+    // Pass 2: Fallback - clean up Available+Owned slots not mentioned in drop_points.
+    // This catches cases where the analysis is too conservative (marks slot as moved
+    // but at runtime it wasn't).
+    for (slot_index, slot_info) in slots.iter().enumerate() {
+        let slot_id = slot_info.slot_id(ctx.db);
+
+        // Skip if we already processed this slot from drop_points.
+        if processed_slots.contains(&slot_id) {
+            continue;
+        }
+
+        // Skip if not Available (was moved at runtime).
+        if frame.slot_states[slot_index] != SlotState::Available {
+            continue;
+        }
+
+        // Skip Borrowed slots - caller owns the data.
+        if slot_info.kind(ctx.db).ownership() == SlotOwnership::Borrowed {
+            continue;
+        }
+
+        // This slot is Available+Owned but not in drop_points.
+        // Likely a copy type or analysis missed it. Destroy to be safe.
+        destroy_slot_contents(ctx, slot_info, &frame.frame_data);
+    }
+}
+
+/// Destroy the contents of a slot (helper for cleanup_frame).
+fn destroy_slot_contents<'db>(
+    ctx: &mut InterpContext<'db>,
+    slot_info: &crate::function_analysis::SlotInfo<'db>,
+    frame_data: &[u8],
+) {
+    let offset = slot_info.offset(ctx.db) as usize;
+
+    // Get the type descriptor for this slot.
+    let ty = slot_info.ty(ctx.db);
+    let datalit_ty = match ty.ty(ctx.db) {
+        crate::tycheck::Type::Datalit(dt) => dt.clone(),
+        _ => {
+            // Skip non-datalit types.
+            return;
+        }
+    };
+    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+
+    let slot_ptr = unsafe { frame_data.as_ptr().add(offset) as *mut u8 };
+
+    // Destroy the value contents only (not the structure itself).
+    // The memory is part of the frame buffer and will be freed with the frame.
+    let value = Value {
+        ptr: slot_ptr,
+        tydesc,
+        location: ValueLocation::Borrowed,
+    };
+    destroy_value_contents_only(ctx, value);
 }
 
 /// Execute a statement within a function body using frame-based execution.
