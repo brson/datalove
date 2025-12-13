@@ -14,6 +14,7 @@ Clean up the interpreter's ownership model so that:
 - **Phase 2**: COMPLETE
 - **Phase 3**: COMPLETE (dual-mode comparison identified key findings)
 - **Phase 4**: COMPLETE
+- **Phase 4.5**: COMPLETE (per-block move analysis for precise conditional drops)
 - **Phases 5-7**: Not started
 
 ## Incremental Phases
@@ -76,6 +77,31 @@ The drop_points analysis is conservative about moves (marks a slot as "moved" if
 moved in ANY branch). The fallback pass catches cases where static analysis says
 "moved" but runtime knows the slot is still Available. This ensures no leaks while
 allowing the analysis to be refined later.
+
+### Phase 4.5: Per-Block Move Analysis ✓ COMPLETE
+
+**Files**: `function_analysis/moves.rs`, `function_analysis/drops.rs`, `function_analysis/mod.rs`
+
+**What was done:**
+1. Added `MoveState` enum (Always/Sometimes/Never) for per-block move tracking
+2. Added `MovedAnalysis` struct with per-block entry/exit states (similar to InitializationAnalysis)
+3. Added `analyze_moves_per_block` function that propagates move state through CFG
+4. Updated `compute_drop_points` to use `MovedAnalysis` instead of global `moved_slots`
+5. Now generates precise drops for conditional branches:
+   - Slot moved in then-branch only → generates drop for else-branch exit
+   - Slot moved in else-branch only → generates drop for then-branch exit
+6. Updated `test_drop_with_conditional` to use non-copy types and verify correct behavior
+
+**Key insight:**
+With per-block move analysis, the static analysis correctly handles if/else branches:
+- Each exit block now checks its own move state, not global moves
+- MoveState::Always means slot is definitely moved on all paths to this exit (no drop)
+- MoveState::Sometimes/Never means slot may still have a value (generate drop)
+
+**Remaining limitation:**
+The fallback pass in `cleanup_frame` is still needed for temporaries (expression results)
+because `InitializationAnalysis` only tracks let-bindings, not expression temporaries.
+A future improvement would be to track temporary initialization.
 
 ### Phase 5: Remove slot_states for Move Tracking
 

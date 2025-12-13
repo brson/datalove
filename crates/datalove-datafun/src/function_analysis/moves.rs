@@ -56,6 +56,60 @@ impl<'db> MoveInfo<'db> {
     }
 }
 
+/// State of whether a slot has been moved.
+///
+/// Used for per-block tracking of move status to enable precise drop point insertion.
+#[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
+pub enum MoveState {
+    /// Slot is definitely moved on all paths to this point.
+    Always,
+    /// Slot is moved on some paths but not others.
+    Sometimes,
+    /// Slot is not moved on any path to this point.
+    Never,
+}
+
+impl MoveState {
+    /// Merge two move states (for CFG joins).
+    pub fn merge(self, other: MoveState) -> MoveState {
+        use MoveState::*;
+        match (self, other) {
+            (Always, Always) => Always,
+            (Never, Never) => Never,
+            _ => Sometimes,
+        }
+    }
+}
+
+/// Per-block move analysis result.
+///
+/// Tracks move state for each slot at block boundaries, similar to InitializationAnalysis.
+#[salsa::tracked]
+pub struct MovedAnalysis<'db> {
+    /// State of each slot at entry to each block.
+    #[returns(ref)]
+    pub entry_states: Vec<(super::BlockId, Vec<MoveState>)>,
+    /// State of each slot at exit from each block.
+    #[returns(ref)]
+    pub exit_states: Vec<(super::BlockId, Vec<MoveState>)>,
+}
+
+impl<'db> MovedAnalysis<'db> {
+    /// Get the move state at block exit.
+    pub fn get_exit_state(
+        self,
+        db: &'db dyn crate::Db,
+        block_id: super::BlockId,
+        slot_id: SlotId,
+    ) -> Option<MoveState> {
+        self.exit_states(db)
+            .iter()
+            .find(|(bid, _)| *bid == block_id)
+            .and_then(|(_, states)| states.get(slot_id.0 as usize))
+            .copied()
+    }
+}
+
 /// Function registry for resolving function calls to their definitions.
 struct FunctionRegistry<'db> {
     functions: HashMap<InternedText<'db>, StmtFun<'db>>,
@@ -118,6 +172,111 @@ pub fn compute_move_info<'db>(
     let last_uses = correlate_last_uses(db, &reads, live_ranges);
 
     MoveInfo::new(db, moves, last_uses)
+}
+
+/// Analyze moves per-block for precise drop point insertion.
+///
+/// This tracks which slots are moved at each block boundary, enabling
+/// the drop analysis to generate drops only for slots that weren't moved
+/// on the path to each specific exit.
+#[salsa::tracked]
+pub fn analyze_moves_per_block<'db>(
+    db: &'db dyn crate::Db,
+    func: StmtFun<'db>,
+    cfg: super::ControlFlowGraph<'db>,
+    slots: &'db [AllocatedSlot<'db>],
+    move_info: MoveInfo<'db>,
+) -> MovedAnalysis<'db> {
+    use std::collections::{HashMap, HashSet};
+    use super::BlockId;
+
+    let slot_count = slots.len();
+    let blocks = cfg.blocks(db);
+
+    // Build a map from StmtId to the set of slots moved in that statement.
+    let mut moves_by_stmt: HashMap<StmtId, HashSet<SlotId>> = HashMap::new();
+    for move_op in move_info.moves(db) {
+        // Only track actual moves, not copies.
+        if move_op.move_kind(db) != MoveKind::Copy {
+            moves_by_stmt
+                .entry(move_op.stmt_id(db))
+                .or_default()
+                .insert(move_op.slot_id(db));
+        }
+    }
+
+    // Initialize entry/exit states for all blocks.
+    let mut entry_map: HashMap<BlockId, Vec<MoveState>> = HashMap::new();
+    let mut exit_map: HashMap<BlockId, Vec<MoveState>> = HashMap::new();
+
+    // All slots start as Never moved at entry to the first block.
+    let initial_state: Vec<MoveState> = vec![MoveState::Never; slot_count];
+
+    if !blocks.is_empty() {
+        entry_map.insert(blocks[0].block_id, initial_state.clone());
+    }
+
+    // Initialize all blocks with Never for non-entry blocks.
+    for block in blocks {
+        if !entry_map.contains_key(&block.block_id) {
+            entry_map.insert(block.block_id, vec![MoveState::Never; slot_count]);
+        }
+        exit_map.insert(block.block_id, vec![MoveState::Never; slot_count]);
+    }
+
+    // Fixed-point iteration: propagate move state through CFG.
+    let mut changed = true;
+    while changed {
+        changed = false;
+
+        for block in blocks {
+            // Get entry state for this block.
+            let entry = entry_map.get(&block.block_id).unwrap().clone();
+
+            // Compute exit state by processing statements in this block.
+            let mut state = entry.clone();
+            for &stmt_id in &block.statements {
+                if let Some(moved_slots) = moves_by_stmt.get(&stmt_id) {
+                    for &slot_id in moved_slots {
+                        let idx = slot_id.0 as usize;
+                        if idx < slot_count {
+                            state[idx] = MoveState::Always;
+                        }
+                    }
+                }
+            }
+
+            // Update exit state if changed.
+            let old_exit = exit_map.get(&block.block_id).unwrap();
+            if &state != old_exit {
+                exit_map.insert(block.block_id, state.clone());
+                changed = true;
+            }
+
+            // Propagate to successor blocks.
+            for edge in cfg.edges(db) {
+                if edge.from == block.block_id {
+                    let successor_entry = entry_map.get_mut(&edge.to).unwrap();
+                    let block_exit = exit_map.get(&block.block_id).unwrap();
+
+                    // Merge states: for each slot, merge with current successor entry.
+                    for i in 0..slot_count {
+                        let merged = successor_entry[i].merge(block_exit[i]);
+                        if merged != successor_entry[i] {
+                            successor_entry[i] = merged;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Convert HashMap to Vec for Salsa storage.
+    let entry_states: Vec<(BlockId, Vec<MoveState>)> = entry_map.into_iter().collect();
+    let exit_states: Vec<(BlockId, Vec<MoveState>)> = exit_map.into_iter().collect();
+
+    MovedAnalysis::new(db, entry_states, exit_states)
 }
 
 /// Walk statements to collect move operations and reads.

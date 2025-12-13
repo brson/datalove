@@ -146,8 +146,11 @@ pub fn analyze_function<'db>(
     // Phase 5: Move tracking.
     let move_info = moves::compute_move_info(db, func, slots, live_ranges, tycheck_result);
 
-    // Phase 6: Drop points.
-    let drop_points = drops::compute_drop_points(db, func, control_flow, slots, init_analysis, move_info, tycheck_result);
+    // Phase 5.5: Per-block move analysis for precise drop points.
+    let moved_analysis = moves::analyze_moves_per_block(db, func, control_flow, slots, move_info);
+
+    // Phase 6: Drop points (using per-block move analysis).
+    let drop_points = drops::compute_drop_points(db, func, control_flow, slots, init_analysis, moved_analysis, tycheck_result);
 
     // Phase 7: Frame layout with types.
     let frame_layout = build_frame_layout(db, func, slots, tycheck_result);

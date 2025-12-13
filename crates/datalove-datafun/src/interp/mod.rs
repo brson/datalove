@@ -1521,14 +1521,15 @@ fn execute_cfg_statement<'db>(
 
 /// Clean up a stack frame using analysis-computed drop points.
 ///
-/// Phase 4: Use drop_points as source of truth, combined with runtime slot_states
+/// Uses drop_points as source of truth, combined with runtime slot_states
 /// to handle conditional moves. Drop points identify non-copy, initialized, owned
 /// slots that need cleanup. Runtime slot_states filter out slots that were actually
 /// moved at runtime (handling conditional branches).
 ///
-/// Note: The drop_points analysis may be conservative about moves (marks a slot as
-/// "moved" if it's moved in any branch). We also do a fallback pass to catch
-/// Available+Owned slots that the analysis missed, to ensure no leaks.
+/// Also includes a fallback pass for temporaries not tracked by initialization
+/// analysis. The InitializationAnalysis only tracks let-statement bindings, not
+/// expression temporaries. A future improvement would be to track temporary
+/// initialization, eliminating the need for this fallback.
 fn cleanup_frame<'db>(
     ctx: &mut InterpContext<'db>,
     frame: StackFrame<'db>,
@@ -1582,9 +1583,9 @@ fn cleanup_frame<'db>(
         destroy_slot_contents(ctx, slot_info, &frame.frame_data);
     }
 
-    // Pass 2: Fallback - clean up Available+Owned slots not mentioned in drop_points.
-    // This catches cases where the analysis is too conservative (marks slot as moved
-    // but at runtime it wasn't).
+    // Pass 2: Fallback for temporaries not tracked by initialization analysis.
+    // The analysis only tracks let-bindings as initialized, not expression temporaries.
+    // This pass catches Available+Owned slots that don't have drop points.
     for (slot_index, slot_info) in slots.iter().enumerate() {
         let slot_id = slot_info.slot_id(ctx.db);
 
@@ -1604,7 +1605,7 @@ fn cleanup_frame<'db>(
         }
 
         // This slot is Available+Owned but not in drop_points.
-        // Likely a copy type or analysis missed it. Destroy to be safe.
+        // Likely a temporary or a copy type. Destroy to be safe.
         destroy_slot_contents(ctx, slot_info, &frame.frame_data);
     }
 }
