@@ -1,13 +1,17 @@
 use rmx::prelude::*;
+use rmx::std::collections::{BTreeMap, HashMap};
 
 use bct::package_resolve2::{
     PackageWorldMap,
     ImportDemandMap,
     PackageWorldModuleGraphWithErrors,
+    PackageWorldModuleGraph,
+    ResolvedPackageModule,
     resolve_package_world,
 };
 
 use crate::package::PackageWorld;
+use crate::module_graph::{ModuleGraph, ModuleGraphBuilder, ModuleId, ResolvedImport};
 
 #[salsa::tracked]
 pub fn resolve_package_world_with_imports<'db>(
@@ -19,9 +23,323 @@ pub fn resolve_package_world_with_imports<'db>(
     resolve_package_world(db, package_world_map, import_demand_map)
 }
 
+/// Convert a PackageWorldModuleGraph to a ModuleGraph.
+///
+/// This bridges the package system with the core compiler's module abstraction.
+/// The resulting ModuleGraph can be used with `typecheck_module_graph`.
+pub fn to_module_graph<'db>(
+    db: &'db dyn crate::Db,
+    package_world: PackageWorld,
+    graph: PackageWorldModuleGraph<'db>,
+) -> ModuleGraph {
+    // Build a mapping from PackageModule to its module path string.
+    let mut pkg_module_to_path: HashMap<bct::package2::PackageModule, String> = HashMap::new();
+
+    // Traverse the package world to build paths.
+    let world_map = crate::package::package_world_map(db, package_world);
+    for (import_space, packages) in world_map.map(db) {
+        for (package_name, package) in packages {
+            for (module_name, package_module) in package.modules(db) {
+                let path = format!("{}/{}/{}", import_space, package_name, module_name);
+                pkg_module_to_path.insert(*package_module, path);
+            }
+        }
+    }
+
+    // Sort modules in topological order.
+    let sorted_modules = crate::tycheck::topological_sort_modules(db, graph)
+        .unwrap_or_else(|_| graph.map(db).keys().copied().collect());
+
+    // Build ModuleGraph.
+    let mut builder = ModuleGraphBuilder::new(db);
+
+    // Map from PackageModule to ModuleId for import resolution.
+    let mut pkg_to_module_id: HashMap<bct::package2::PackageModule, ModuleId> = HashMap::new();
+
+    // First pass: add all modules.
+    for pkg_module in &sorted_modules {
+        let path = pkg_module_to_path.get(pkg_module)
+            .cloned()
+            .unwrap_or_else(|| pkg_module.name(db).to_string());
+        let source = pkg_module.text(db);
+        let module_id = builder.add_module(path, source);
+        pkg_to_module_id.insert(*pkg_module, module_id);
+    }
+
+    // Second pass: add imports.
+    // Note: The ModuleGraph uses pre-resolved imports, but we need to
+    // map import demands to actual function imports. For now, we'll
+    // rely on the typecheck phase to resolve function names.
+    // Here we just record module-level dependencies.
+
+    // Actually, looking at the structure, the PackageWorldModuleGraph only
+    // tracks module dependencies, not individual function imports.
+    // The function imports are resolved during typechecking.
+    // For the ModuleGraph, we need to track the function-level imports.
+
+    // The current design has resolved imports at the function level,
+    // but PackageWorldModuleGraph only has module-level deps.
+    // We'll need to build the function-level imports from the AST.
+
+    builder.build()
+}
+
+/// Convert a PackageWorldModuleGraph to a ModuleGraph with resolved imports.
+///
+/// This version parses each module to extract import statements and
+/// resolves them to function-level imports.
+pub fn to_module_graph_with_imports<'db>(
+    db: &'db dyn crate::Db,
+    package_world: PackageWorld,
+    graph: PackageWorldModuleGraph<'db>,
+) -> ModuleGraph {
+    use crate::ast::Statement;
+
+    // Build a mapping from PackageModule to its module path string.
+    let mut pkg_module_to_path: HashMap<bct::package2::PackageModule, String> = HashMap::new();
+
+    // Traverse the package world to build paths.
+    let world_map = crate::package::package_world_map(db, package_world);
+    for (import_space, packages) in world_map.map(db) {
+        for (package_name, package) in packages {
+            for (module_name, package_module) in package.modules(db) {
+                let path = format!("{}/{}/{}", import_space, package_name, module_name);
+                pkg_module_to_path.insert(*package_module, path);
+            }
+        }
+    }
+
+    // Sort modules in topological order.
+    let sorted_modules = crate::tycheck::topological_sort_modules(db, graph)
+        .unwrap_or_else(|_| graph.map(db).keys().copied().collect());
+
+    // Build ModuleGraph.
+    let mut builder = ModuleGraphBuilder::new(db);
+
+    // Map from PackageModule to ModuleId for import resolution.
+    let mut pkg_to_module_id: HashMap<bct::package2::PackageModule, ModuleId> = HashMap::new();
+
+    // First pass: add all modules.
+    for pkg_module in &sorted_modules {
+        let path = pkg_module_to_path.get(pkg_module)
+            .cloned()
+            .unwrap_or_else(|| pkg_module.name(db).to_string());
+        let source = pkg_module.text(db);
+        let module_id = builder.add_module(path, source);
+        pkg_to_module_id.insert(*pkg_module, module_id);
+    }
+
+    // Build alias maps for each module (require statement -> PackageModule).
+    let graph_map = graph.map(db);
+
+    // Second pass: resolve imports for each module.
+    for pkg_module in &sorted_modules {
+        let module_id = *pkg_to_module_id.get(pkg_module).unwrap();
+
+        // Parse the module to get import statements.
+        let source = pkg_module.text(db);
+        let parse_result = crate::parser::parse(db, source);
+        let script = parse_result.script(db);
+
+        // Build alias map from require statements.
+        let mut alias_map: HashMap<bct::text::InternedText, bct::package2::PackageModule> = HashMap::new();
+        if let Some(deps) = graph_map.get(pkg_module) {
+            let mut demand_to_module = HashMap::new();
+            for (demand, resolved) in deps {
+                if let ResolvedPackageModule::Resolved(resolved_module) = resolved {
+                    demand_to_module.insert(demand, *resolved_module);
+                }
+            }
+
+            for statement in script.statements(db) {
+                if let Statement::Require(crate::ast::StmtRequire::Module(req)) = statement {
+                    let import_space = req.import_space(db);
+                    let package_alias = req.package_alias(db);
+                    let module_alias = req.module_alias(db);
+
+                    let demand = (
+                        import_space.as_str(db).S(),
+                        package_alias.as_str(db).S(),
+                        module_alias.as_str(db).S(),
+                    );
+
+                    if let Some(&resolved_module) = demand_to_module.get(&demand) {
+                        alias_map.insert(module_alias, resolved_module);
+                    }
+                }
+            }
+        }
+
+        // Process import statements.
+        for statement in script.statements(db) {
+            if let Statement::Import(import) = statement {
+                let module_name = import.module_name(db);
+                let item_name = import.item_name(db);
+
+                if let Some(&source_pkg_module) = alias_map.get(&module_name) {
+                    if let Some(&source_module_id) = pkg_to_module_id.get(&source_pkg_module) {
+                        // Add the resolved import.
+                        let local_name = item_name.as_str(db).to_string();
+                        let export_name = item_name.as_str(db).to_string();
+                        builder.add_import(module_id, local_name, source_module_id, export_name);
+                    }
+                }
+            }
+        }
+    }
+
+    builder.build()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_to_module_graph_with_imports() {
+        let ref db = crate::Database::default();
+
+        let worldfile = r#"
+----------
+module sys/std/u32
+----------
+
+fun negate(x: @u32): @u32
+  ret @0
+end fun
+
+fun add(x: @u32, y: @u32): @u32
+  ret @0
+end fun
+
+----------
+module sys/util/math
+----------
+
+require module sys/std/u32
+
+import u32.negate
+import u32.add
+
+fun double_negate(n: @u32): @u32
+  ret negate(n)
+end fun
+
+fun add_three(a: @u32, b: @u32, c: @u32): @u32
+  let sum_ab: @u32 = add(a, b)
+  ret add(sum_ab, c)
+end fun
+"#;
+
+        let package_world_raw = crate::package_load_worldfile::load_world_from_worldfile(worldfile.as_bytes()).X();
+        let package_world = crate::package::import_from_loader(db, package_world_raw);
+
+        // Resolve imports.
+        let resolution = resolve_package_world_with_imports(db, package_world);
+        let pkg_graph = resolution.result(db).expect("resolution should succeed");
+
+        // Convert to ModuleGraph.
+        let module_graph = to_module_graph_with_imports(db, package_world, pkg_graph);
+
+        // Verify structure.
+        let modules = module_graph.modules(db);
+        assert_eq!(modules.len(), 2, "should have 2 modules");
+
+        // Verify paths.
+        let paths: Vec<_> = modules.iter()
+            .map(|m| m.id(db).path(db).clone())
+            .collect();
+        assert!(paths.contains(&"sys/std/u32".to_string()));
+        assert!(paths.contains(&"sys/util/math".to_string()));
+
+        // Find the math module and check its imports.
+        let math_module = modules.iter()
+            .find(|m| m.id(db).path(db).contains("math"))
+            .expect("should have math module");
+        let math_imports = module_graph.get_imports(db, math_module.id(db));
+        assert_eq!(math_imports.len(), 2, "math should have 2 imports");
+
+        // Check import names.
+        let import_names: Vec<_> = math_imports.iter()
+            .map(|i| i.local_name.clone())
+            .collect();
+        assert!(import_names.contains(&"negate".to_string()));
+        assert!(import_names.contains(&"add".to_string()));
+    }
+
+    #[test]
+    fn test_typecheck_module_graph() {
+        let ref db = crate::Database::default();
+
+        let worldfile = r#"
+----------
+module sys/std/u32
+----------
+
+fun negate(x: @u32): @u32
+  ret @0
+end fun
+
+fun add(x: @u32, y: @u32): @u32
+  ret @0
+end fun
+
+----------
+module sys/util/math
+----------
+
+require module sys/std/u32
+
+import u32.negate
+import u32.add
+
+fun double_negate(n: @u32): @u32
+  ret negate(n)
+end fun
+
+fun add_three(a: @u32, b: @u32, c: @u32): @u32
+  let sum_ab: @u32 = add(a, b)
+  ret add(sum_ab, c)
+end fun
+"#;
+
+        let package_world_raw = crate::package_load_worldfile::load_world_from_worldfile(worldfile.as_bytes()).X();
+        let package_world = crate::package::import_from_loader(db, package_world_raw);
+
+        // Resolve imports.
+        let resolution = resolve_package_world_with_imports(db, package_world);
+        let pkg_graph = resolution.result(db).expect("resolution should succeed");
+
+        // Convert to ModuleGraph.
+        let module_graph = to_module_graph_with_imports(db, package_world, pkg_graph);
+
+        // Typecheck using the new function.
+        let typecheck_result = crate::tycheck::typecheck_module_graph(db, module_graph);
+
+        // Check that there are no errors.
+        assert!(typecheck_result.is_ok(db), "typecheck should succeed");
+
+        // Verify exports.
+        let module_exports = typecheck_result.module_exports(db);
+
+        // Find u32 module.
+        let u32_module_id = module_graph.modules(db).iter()
+            .find(|m| m.id(db).path(db).contains("u32"))
+            .map(|m| m.id(db))
+            .expect("should have u32 module");
+
+        let u32_exports = module_exports.get(&u32_module_id).expect("should have u32 exports");
+        assert_eq!(u32_exports.functions(db).len(), 2);
+
+        // Find math module.
+        let math_module_id = module_graph.modules(db).iter()
+            .find(|m| m.id(db).path(db).contains("math"))
+            .map(|m| m.id(db))
+            .expect("should have math module");
+
+        let math_exports = module_exports.get(&math_module_id).expect("should have math exports");
+        assert_eq!(math_exports.functions(db).len(), 2);
+    }
     use rmx::std::path::PathBuf;
     use rmx::futures::executor::block_on;
 

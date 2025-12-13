@@ -684,6 +684,117 @@ pub fn typecheck_package_world<'db>(
     PackageWorldTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, function_analyses)
 }
 
+/// Typecheck a module graph (package-agnostic).
+///
+/// This is the core typechecking function that works with the package-agnostic
+/// ModuleGraph abstraction. Modules are processed in dependency order.
+#[salsa::tracked]
+pub fn typecheck_module_graph<'db>(
+    db: &'db dyn crate::Db,
+    graph: crate::module_graph::ModuleGraph,
+) -> crate::module_graph::ModuleGraphTypecheckResult<'db> {
+    use crate::module_graph::{ModuleId, ModuleExports as MgModuleExports, ModuleImports as MgModuleImports, ModuleGraphTypecheckResult};
+
+    let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
+    let mut module_exports_map: BTreeMap<ModuleId, MgModuleExports<'db>> = BTreeMap::new();
+    let mut module_imports_map: BTreeMap<ModuleId, MgModuleImports<'db>> = BTreeMap::new();
+    let mut function_analyses: Vec<(crate::ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>)> = Vec::new();
+
+    // Build a map from module path to ModuleId for quick lookup.
+    let mut path_to_id: HashMap<String, ModuleId> = HashMap::new();
+    for module in graph.iter_modules(db) {
+        let id = module.id(db);
+        path_to_id.insert(id.path(db).clone(), id);
+    }
+
+    // Process each module in dependency order.
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let source = module.source(db);
+
+        // Parse the module.
+        let parse_result = crate::parser::parse(db, source);
+        let script = parse_result.script(db);
+
+        // Create type context for this module.
+        let mut ctx = TypeContext::new(db, source);
+
+        // Track imports for this module.
+        let mut module_import_functions: Vec<(InternedText<'db>, ModuleId, InternedText<'db>)> = Vec::new();
+
+        // Add imported functions to context from the pre-resolved imports.
+        let resolved_imports = graph.get_imports(db, module_id);
+        for import in resolved_imports {
+            let source_module_id = import.source_module;
+
+            // Look up the function in the source module's exports.
+            if let Some(exports) = module_exports_map.get(&source_module_id) {
+                let export_name = InternedText::new(db, import.export_name.clone());
+                let func_opt = exports.functions(db).iter()
+                    .find(|(name, _)| *name == export_name)
+                    .map(|(_, func_type)| *func_type);
+
+                if let Some(func_type) = func_opt {
+                    let local_name = InternedText::new(db, import.local_name.clone());
+                    ctx.add_function(local_name, func_type);
+                    module_import_functions.push((local_name, source_module_id, export_name));
+                } else {
+                    ctx.add_error(TypeError::UnresolvedName(
+                        format!("{} (export not found)", import.export_name)
+                    ));
+                }
+            } else {
+                ctx.add_error(TypeError::UnresolvedName(
+                    format!("module {} (not typechecked yet)", source_module_id.path(db))
+                ));
+            }
+        }
+
+        // First pass: collect all function signatures from this module.
+        for statement in script.statements(db) {
+            if let Statement::Fun(stmt) = statement {
+                collect_function_signature(&mut ctx, &stmt);
+            }
+        }
+
+        // Second pass: type check all statements.
+        for statement in script.statements(db) {
+            check_statement(&mut ctx, statement);
+        }
+
+        // Collect errors for this module.
+        if !ctx.errors.is_empty() {
+            module_errors.insert(module_id, ctx.errors.clone());
+        }
+
+        // Collect exports for this module.
+        let exports_functions = collect_module_exports(db, script);
+        let exports = MgModuleExports::new(db, module_id, exports_functions);
+        module_exports_map.insert(module_id, exports);
+
+        // Collect imports for this module.
+        let imports = MgModuleImports::new(db, module_id, module_import_functions);
+        module_imports_map.insert(module_id, imports);
+
+        // Analyze all functions in this module.
+        let errors = ctx
+            .errors
+            .iter()
+            .map(|e| TypeErrorEntry::new(db, e.clone()))
+            .collect();
+        let module_typecheck_result = TypecheckResult::new(db, script, errors, ctx.expr_types);
+
+        for statement in script.statements(db) {
+            if let Statement::Fun(func_stmt) = statement {
+                let analysis = crate::function_analysis::analyze_function(db, *func_stmt, module_typecheck_result);
+                function_analyses.push((*func_stmt, analysis));
+            }
+        }
+    }
+
+    ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, function_analyses)
+}
+
 /// Collect function signature without checking body (first pass).
 pub fn collect_function_signature<'db>(
     ctx: &mut TypeContext<'db>,
@@ -2211,7 +2322,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
 
 /// Topologically sort modules by dependencies.
 /// Returns modules in dependency order (leaves first).
-fn topological_sort_modules<'db>(
+pub fn topological_sort_modules<'db>(
     db: &'db dyn crate::Db,
     graph: bct::package_resolve2::PackageWorldModuleGraph<'db>,
 ) -> Result<Vec<bct::package2::PackageModule>, TypeError> {

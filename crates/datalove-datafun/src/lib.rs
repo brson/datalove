@@ -15,7 +15,10 @@ pub mod funlit_equiv;
 // Interpreter module.
 pub mod interp;
 
-// Module system.
+// Module graph abstraction (core compiler uses this).
+pub mod module_graph;
+
+// Package system (to be extracted to separate crate).
 pub mod package;
 pub mod package_load;
 pub mod package_load_worldfile;
