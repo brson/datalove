@@ -103,7 +103,7 @@ With per-block move analysis, the static analysis correctly handles if/else bran
 **Remaining limitation:**
 The fallback pass in `cleanup_frame` is still needed for temporaries (expression results)
 because `InitializationAnalysis` only tracks let-bindings, not expression temporaries.
-A future improvement would be to track temporary initialization.
+Phase 5 addresses this by extending InitializationAnalysis to track temps.
 
 ### Phase 4.6: Add Uninitialized Slot State ✓ COMPLETE
 
@@ -179,42 +179,87 @@ temps. However, with context-aware allocation, the fallback is efficient:
 - Only a few temps need fallback cleanup (return values, if-conditions)
 - Unused temps (in HasDest context) are never allocated
 
-A future improvement could extend InitializationAnalysis to track temps, eliminating
-the fallback entirely.
+Phase 5 extends InitializationAnalysis to track temps, eliminating the fallback entirely
+and removing the need for runtime `slot_states`.
 
-### Phase 5: Remove slot_states for Move Tracking
+### Phase 5: Extend Initialization Analysis, Remove slot_states
 
-**Files**: `interp/mod.rs`, `interp/frame.rs`, `function_analysis/moves.rs`
+**Files**: `function_analysis/liveness.rs`, `function_analysis/drops.rs`, `interp/mod.rs`, `interp/frame.rs`
 
-1. Move tracking should come from analysis, not runtime:
-   - Analysis knows which reads are last-use moves
-   - Interpreter doesn't need to track Moved state
+**Problem**: The fallback pass in `cleanup_frame` relies on runtime `slot_states` to know which
+temps are Available. This is because `InitializationAnalysis` only tracks let-bindings, not
+expression temporaries. To remove `slot_states` entirely, analysis must be the sole source of truth.
 
-2. Remove `slot_states: Vec<SlotState>` from StackFrame
+**Solution**: Extend `InitializationAnalysis` to track temp slot initialization, then drop_points
+can handle all cleanup and `slot_states` becomes unnecessary.
 
-3. When reading a slot:
-   - If analysis says this is a move → don't mark anything, just return
-   - If analysis says this is a copy → clone
+1. Extend `InitializationAnalysis` to track temp slots:
+   - Currently only tracks named slots (let-bindings)
+   - Add tracking for temp slots by their `SlotId`
+   - Mark temp initialized when expression writes to it
+   - Mark temp "moved" when consumed (binop/unop operands destroyed inline)
 
-4. Run tests - fix regressions
+2. Update `compute_drop_points` to include temps:
+   - Temps with `NeedsDest` context that remain initialized at exit need drop points
+   - Temps consumed inline (operands) are already moved, no drop needed
+
+3. Remove fallback pass from `cleanup_frame`:
+   - Pass 1 (drop_points) now handles everything
+   - No need to scan for Available+Owned slots
+
+4. Remove `slot_states: Vec<SlotState>` from `StackFrame`
+
+5. Remove all `mark_temp_slot_available`, `mark_temp_slot_moved` calls
+
+6. Update slot reading:
+   - Analysis knows which reads are last-use moves via `MoveInfo`
+   - Interpreter doesn't mark Moved, just returns value
+   - Copy types clone, move types return borrowed ref
+
+7. Run tests - fix regressions
+
+**Key insight**: With this change, the interpreter becomes purely execution-focused.
+All ownership/lifetime decisions come from static analysis.
 
 ### Phase 6: Clean Up Argument Passing
 
-**Files**: `interp/mod.rs`
+**Files**: `interp/mod.rs`, `function_analysis/slot_allocation.rs`
+
+**Problem**: Arguments are heap-allocated, then stored as Reference slots (pointers), requiring
+complex cleanup logic in `cleanup_args_after_frame` with `is_copy_type` checks.
+
+**Solution**: Write argument values directly into callee's frame slots using DPS.
 
 1. Current mess:
-   - Caller evaluates args → `Vec<Value>` (TempOwned)
-   - Creates Reference slots with just pointers
-   - `cleanup_args_after_frame` cleans up `arg_values`
+   - Caller evaluates args → `Vec<Value>` (TempOwned on heap)
+   - Creates Reference slots storing pointers to arg values
+   - `cleanup_args_after_frame` cleans up `arg_values` with copy-type checks
 
 2. New model:
-   - For in/out args: ownership transfers to callee's Owned slot
-   - For ref/mut args: callee gets Borrowed slot, caller retains ownership
-   - No separate `arg_values` cleanup needed
+   - Change parameter slots from Reference to Local (Owned)
+   - Caller evaluates arg directly into callee's parameter slot via DPS
+   - For `in` args: value written directly to callee frame slot, callee owns it
+   - For `out` args: same as `in`, callee writes output value there
+   - For `ref`/`mut` args: keep as Reference (pointer to caller's slot)
+   - No separate `arg_values` vector needed
+   - No `cleanup_args_after_frame` needed - normal drop_points handles params
 
-3. Remove `cleanup_args_after_frame`
+3. Update `slot_allocation.rs`:
+   - Parameters with `in`/`out` mode: allocate as Local (Owned), not Reference
+   - Parameters with `ref`/`mut` mode: keep as Reference (Borrowed)
 
-4. Run tests - fix regressions
+4. Update `execute_function_body`:
+   - Instead of storing pointers in Reference slots, evaluate args with dest = param slot
+   - Remove `arg_values` vector and `cleanup_args_after_frame`
+
+5. Update `compute_drop_points`:
+   - `in` parameter slots may need drop points (if not moved by function)
+   - `ref`/`mut` parameter slots still skipped (Borrowed)
+
+6. Run tests - fix regressions
+
+**Benefit**: Eliminates heap allocation for arguments, simplifies cleanup, unifies
+parameter handling with normal local variables.
 
 ### Phase 7: Return Values as Out Arguments
 
@@ -238,11 +283,14 @@ they point to callee frame memory that's about to be deallocated.
    - If NeedsDest context: use caller's temp slot as return_dest
 
 5. Update slot_allocation for return expressions:
-   - Return expressions use HasDest (caller provides destination)
+   - Return expressions change from NeedsDest to HasDest (caller provides destination)
    - No callee-side temp needed for returns
 
-6. Handle Option/Result return type wrapping:
+6. Move Option/Result wrapping to callee side:
+   - Currently wrapping happens in `execute_function_body` *after* heap clone
+   - Move wrapping into `eval_return_expression_frame` *before* writing to return_dest
    - When return type is `?T` but expression is `T`, write as Some(T) to dest
+   - When return type is `!T` but expression is `T`, write as Ok(T) to dest
    - TryReturn (`?`) still uses InterpError mechanism for early return
 
 7. Remove heap allocation path for return values
@@ -250,9 +298,10 @@ they point to callee frame memory that's about to be deallocated.
 8. Run tests - fix regressions
 
 **Complexity areas**:
-- Nested calls `f(g())`: g's return writes to f's arg temp
-- Option/Result wrapping requires typed destination
-- Script-level calls: pass None for return_dest, fall back to current behavior
+- Nested calls `f(g())`: Works naturally - g's return_dest is f's arg temp slot
+- Option/Result wrapping: Callee must know return type to wrap correctly (available from func signature)
+- Script-level calls: Pass None for return_dest, keep heap allocation as fallback
+- Eventually script scope could also use DPS with a "script output slot"
 
 ### Phase 8: Simplify Value
 
@@ -282,6 +331,8 @@ they point to callee frame memory that's about to be deallocated.
 - `crates/datalove-datafun/src/function_analysis/mod.rs`
 - `crates/datalove-datafun/src/function_analysis/slot_allocation.rs`
 - `crates/datalove-datafun/src/function_analysis/drops.rs`
+- `crates/datalove-datafun/src/function_analysis/liveness.rs` (InitializationAnalysis)
+- `crates/datalove-datafun/src/function_analysis/moves.rs` (MoveInfo, MovedAnalysis)
 - `crates/datalove-datafun/src/interp/mod.rs`
 - `crates/datalove-datafun/src/interp/frame.rs`
 - `crates/datalove-datafun/src/interp/value.rs`
