@@ -16,6 +16,7 @@ Clean up the interpreter's ownership model so that:
 - **Phase 4**: COMPLETE
 - **Phase 4.5**: COMPLETE (per-block move analysis for precise conditional drops)
 - **Phase 4.6**: COMPLETE (Uninitialized slot state for precise temp tracking)
+- **Phase 4.7**: NOT STARTED (precise temp slot allocation - see details below)
 - **Phases 5-7**: Not started
 
 ## Incremental Phases
@@ -133,6 +134,67 @@ With DPS (Destination-Passing Style), many temp slots are allocated but never us
 because values are written directly to their final destination. Previously all slots
 started as `Available`, causing redundant destroy calls on uninitialized memory.
 Now slots explicitly track their lifecycle: Uninitialized → Available → Moved.
+
+### Phase 4.7: Precise Temp Slot Allocation
+
+**Goal**: Only allocate temp slots for expressions that actually need them.
+
+**Problem**: Currently `slot_allocation.rs` allocates a temp for every expression, but DPS
+means many are never used (stay Uninitialized). This wastes frame memory and requires
+iterating all slots in the fallback cleanup pass.
+
+**Analysis - When temps ARE needed:**
+1. BinOp/UnaryOp operands (always - borrow semantics requires materialized values)
+2. Return expressions (dest=None, value escapes to caller)
+3. Coercion candidates (Option/Result/Data targets, eval without dest first)
+4. Function call results (caller needs somewhere to receive result)
+5. Function arguments (evaluated before passing)
+
+**Analysis - When temps are UNUSED:**
+1. Name in `let y = x` → DPS writes directly to y's Local slot
+2. Literal in `let y = 42` → DPS writes directly to y's Local slot
+3. Tuple/list/struct element when parent has dest → writes to field offset
+4. Any expression that receives a caller-provided destination
+
+**Key Insight**: Temps are needed exactly when an expression is in a "no-dest position".
+This is statically determinable by analyzing expression context.
+
+**Approach**: Add expression context analysis to determine temp need at allocation time.
+
+**Sub-phases:**
+
+**4.7.1**: Add ExpressionContext enum to slot_allocation
+```rust
+enum ExprContext {
+    HasDest,    // Parent provides destination (let RHS, tuple element, etc.)
+    NeedsDest,  // Expression must provide its own temp (return, binop operand)
+}
+```
+
+**4.7.2**: Mark expressions with their context during slot allocation
+- Let statement RHS: HasDest (writes to Local slot)
+- Tuple/list/struct elements: HasDest if parent has dest
+- BinOp/UnaryOp operands: NeedsDest (borrow context)
+- Return expression: NeedsDest
+- If condition: NeedsDest (condition must materialize for branching)
+
+**4.7.3**: Only allocate temps for NeedsDest expressions
+- Skip temp allocation for HasDest expressions entirely
+- For Name expressions: never allocate temp (either moves borrow or clones to dest)
+
+**4.7.4**: Remove fallback cleanup pass
+- With precise temp allocation, all temps are tracked properly
+- Either: extend InitializationAnalysis to track temps
+- Or: temp slots that are marked Available are exactly those that need cleanup
+
+**Files**: `function_analysis/slot_allocation.rs`, `function_analysis/drops.rs`
+
+**Risk**: Complex context propagation. May need to handle edge cases.
+
+**Alternative approach**: Keep current slot allocation, just improve drop analysis:
+- Track which temp slots are marked Available at each exit point
+- Generate drop points for temps based on "marked Available" analysis
+- This is simpler but doesn't save frame memory
 
 ### Phase 5: Remove slot_states for Move Tracking
 
