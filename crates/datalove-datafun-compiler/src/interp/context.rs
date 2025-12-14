@@ -249,6 +249,14 @@ impl InterpContext<'_> {
         self.module_graph_typecheck.is_some()
     }
 
+    /// Populate script-level imports using ModuleGraph.
+    ///
+    /// Parses require/import statements from the script and resolves them
+    /// against the available modules in the graph.
+    pub fn populate_script_imports(&mut self, script: crate::script::Script, graph: ModuleGraph) {
+        self.module_functions_graph.populate_script_imports_for_graph(self.db, script, graph);
+    }
+
     /// Pretty-print a value using this context's runtime and tydesc_table.
     pub fn pretty_print_value(&mut self, value: &Value) -> Result<String, InterpError> {
         use datalove_rt as rt;
@@ -495,6 +503,87 @@ impl<'db> ModuleFunctionTableGraph<'db> {
     pub fn add_import(&mut self, name: InternedText<'db>, func: ast::StmtFun<'db>, source_module: ModuleId) {
         self.imported_functions.insert(name, (func, source_module));
     }
+
+    /// Populate script-level imports using ModuleGraph.
+    ///
+    /// Parses require/import statements from the script and resolves them
+    /// against the available modules in the graph.
+    pub fn populate_script_imports_for_graph(
+        &mut self,
+        db: &'db dyn crate::Db,
+        script: crate::script::Script,
+        graph: ModuleGraph,
+    ) {
+        // Build a map from module alias to ModuleId.
+        let module_alias_map = build_module_alias_map_for_graph(db, script, graph);
+
+        // Process all units to find import statements.
+        let units = script.units(db);
+        for unit_index in 0..units.len() {
+            let parsed = crate::parser::parse_script_unit(db, script, unit_index);
+
+            for statement in parsed.statements(db) {
+                if let ast::Statement::Import(import_stmt) = statement {
+                    let module_name = import_stmt.module_name(db);
+                    let item_name = import_stmt.item_name(db);
+
+                    if let Some(&module_id) = module_alias_map.get(&module_name) {
+                        if let Some(module_funcs) = self.module_all_functions.get(&module_id) {
+                            if let Some(&func) = module_funcs.get(&item_name) {
+                                self.imported_functions.insert(item_name, (func, module_id));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Build module alias map for a script using ModuleGraph.
+///
+/// Maps module aliases (from require statements) to ModuleId.
+fn build_module_alias_map_for_graph<'db>(
+    db: &'db dyn crate::Db,
+    script: crate::script::Script,
+    graph: ModuleGraph,
+) -> HashMap<InternedText<'db>, ModuleId> {
+    use crate::ast::{Statement, StmtRequire};
+
+    let mut alias_map = HashMap::new();
+
+    // Build a map from path string to ModuleId.
+    let mut path_to_module: HashMap<String, ModuleId> = HashMap::new();
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let path = module_id.path(db).clone();
+        path_to_module.insert(path, module_id);
+    }
+
+    // Process all units to find require module statements.
+    let units = script.units(db);
+    for unit_index in 0..units.len() {
+        let parsed = crate::parser::parse_script_unit(db, script, unit_index);
+
+        for statement in parsed.statements(db) {
+            if let Statement::Require(StmtRequire::Module(require_mod)) = statement {
+                // Extract import space, package, and module from the require statement.
+                let import_space = require_mod.import_space(db).as_str(db);
+                let package_alias = require_mod.package_alias(db).as_str(db);
+                let module_alias_text = require_mod.module_alias(db);
+
+                // Build the path string (e.g., "sys/std/u32").
+                let path = format!("{}/{}/{}", import_space, package_alias, module_alias_text.as_str(db));
+
+                // Look up the ModuleId.
+                if let Some(&module_id) = path_to_module.get(&path) {
+                    alias_map.insert(module_alias_text, module_id);
+                }
+            }
+        }
+    }
+
+    alias_map
 }
 
 // ============================================================================

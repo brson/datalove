@@ -33,21 +33,23 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     let package_world = datafun::package::import_from_loader(&db, package_world_raw);
 
-    // Resolve and typecheck the package world.
+    // Resolve and convert to ModuleGraph.
     let resolution = datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
-    let graph = resolution.result(&db)
+    let pkg_graph = resolution.result(&db)
         .map_err(|e| format!("Package resolution failed: {:?}", e))?;
 
-    let typecheck_result = datafun::tycheck::typecheck_package_world(&db, graph);
+    // Convert to package-agnostic ModuleGraph and typecheck.
+    let module_graph = datafun::to_module_graph(&db, package_world, pkg_graph);
+    let typecheck_result = datafun::tycheck::typecheck_module_graph(&db, module_graph);
 
-    // Check for package world typecheck errors.
+    // Check for typecheck errors.
     let module_errors = typecheck_result.module_errors(&db);
-    if !module_errors.is_empty() {
-        let error_count: usize = module_errors.values().map(|v| v.len()).sum();
+    let error_count: usize = module_errors.values().map(|v| v.len()).sum();
+    if error_count > 0 {
         let mut error_details = Vec::new();
-        for (module, errors) in module_errors.iter() {
+        for (module_id, errors) in module_errors.iter() {
             for err in errors {
-                error_details.push(format!("  {}: {:?}", module.name(&db), err));
+                error_details.push(format!("  {}: {:?}", module_id.path(&db), err));
             }
         }
         return Err(format!(
@@ -57,24 +59,58 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         ));
     }
 
-    // Execute the script with the new interpreter.
-    let mut result = datafun::interp::execute_script(&db, script, package_world, typecheck_result)
-        .map_err(|e| format!("Execution error: {:?}", e))?;
+    // Create interpreter context using ModuleGraph path.
+    let mut ctx = datafun::interp::InterpContext::new_with_module_graph(&db, typecheck_result)
+        .map_err(|e| format!("Failed to create interpreter context: {:?}", e))?;
 
-    // Create RAII guard for automatic cleanup.
-    let _guard = unsafe {
-        datalove_rt::rust::ValueGuard::from_raw(
-            result.runtime.handle(),
-            result.value.tydesc,
-            result.value.ptr,
-        )
+    // Populate script-level imports from require/import statements.
+    ctx.populate_script_imports(script, module_graph);
+
+    // Execute the script unit.
+    datafun::interp::execute_script_unit(&mut ctx, script, 0)
+        .map_err(|e| {
+            // Clean up any variables before returning error.
+            // Only destroy Available variables - Moved ones have been consumed.
+            let vars: Vec<_> = ctx.script_scope.variables.drain().collect();
+            for (_, var) in vars {
+                if var.state == datafun::interp::ScriptVarState::Available {
+                    datafun::interp::destroy_value(&mut ctx, var.value);
+                }
+            }
+            format!("Execution error: {:?}", e)
+        })?;
+
+    // Extract and pretty-print the output variable.
+    let output_name = bct::text::InternedText::new(&db, S("output"));
+    let output = match ctx.script_scope.variables.remove(&output_name) {
+        Some(var) => {
+            let output_str = ctx.pretty_print_value(&var.value)
+                .map_err(|e| format!("Failed to pretty-print output: {:?}", e))?;
+            datafun::interp::destroy_value(&mut ctx, var.value);
+            output_str
+        }
+        None => {
+            // Clean up remaining variables.
+            // Only destroy Available variables - Moved ones have been consumed.
+            let vars: Vec<_> = ctx.script_scope.variables.drain().collect();
+            for (_, var) in vars {
+                if var.state == datafun::interp::ScriptVarState::Available {
+                    datafun::interp::destroy_value(&mut ctx, var.value);
+                }
+            }
+            return Err("No output variable".to_string());
+        }
     };
 
-    // Pretty-print the output.
-    let output = datafun::interp::pretty_print_value(&mut result)
-        .map_err(|e| format!("Failed to pretty-print output: {:?}", e))?;
+    // Clean up remaining variables.
+    // Only destroy Available variables - Moved ones have been consumed.
+    let vars: Vec<_> = ctx.script_scope.variables.drain().collect();
+    for (_, var) in vars {
+        if var.state == datafun::interp::ScriptVarState::Available {
+            datafun::interp::destroy_value(&mut ctx, var.value);
+        }
+    }
 
-    // Guard cleans up automatically on drop.
     Ok(output)
 }
 

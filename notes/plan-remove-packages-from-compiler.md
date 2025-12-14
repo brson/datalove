@@ -4,6 +4,46 @@
 
 Complete the removal of package concepts (`PackageWorld`, `PackageModule`, `PackageWorldModuleGraph`, etc.) from `datalove-datafun-compiler`, leaving only the package-agnostic `ModuleGraph`/`ModuleId` abstractions.
 
+## Progress
+
+### Phase 3 (Partial) - COMPLETED
+
+Updated datafun crate callers to use ModuleGraph path where possible:
+
+1. **std_tests.rs** - Fully converted to ModuleGraph path:
+   - Uses `to_module_graph()` to convert PackageWorld
+   - Uses `typecheck_module_graph()` instead of `typecheck_package_world()`
+   - Uses `InterpContext::new_with_module_graph()`
+   - Calls `populate_script_imports()` for script-level imports
+   - All 20 tests pass
+
+2. **tycheck_world_tests.rs** - Fully converted to ModuleGraph path:
+   - Uses `typecheck_module_graph()` instead of `typecheck_package_world()`
+   - Iterates over `ModuleId` instead of `PackageModule`
+   - All 3 tests pass
+
+3. **worldfile_analysis.rs:analyze_script_section()** - Kept package path:
+   - Scripts with function definitions require per-unit typechecking with module context
+   - The ModuleGraph path's basic `type_check()` doesn't provide proper function analysis
+   - Would need `type_check_with_module_graph()` to fully migrate
+   - All 158 interp_tests pass
+
+### New Methods Added
+
+1. **InterpContext::populate_script_imports()** - Public method to populate script imports using ModuleGraph
+
+2. **ModuleFunctionTableGraph::populate_script_imports_for_graph()** - Parses require/import statements and resolves against ModuleGraph
+
+3. **build_module_alias_map_for_graph()** - Helper to map module aliases to ModuleId
+
+### Remaining Work
+
+- **analyze_script_section()** still uses package path due to function typechecking requirements
+- Cannot remove `execute_script()` until analyze_script_section is fully migrated
+- Need `type_check_with_module_graph()` for scripts with function definitions
+
+---
+
 ## Current State
 
 The compiler has **two parallel paths**:

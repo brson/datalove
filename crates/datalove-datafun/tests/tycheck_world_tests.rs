@@ -179,27 +179,31 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         return Ok(rmx::serde_json::to_string_pretty(&output).X());
     }
 
-    let graph = result.ok().X();
+    let pkg_graph = result.ok().X();
 
-    // Typecheck the package world.
-    let typecheck_result = datalove_datafun::tycheck::typecheck_package_world(&db, graph);
+    // Convert to package-agnostic ModuleGraph and typecheck.
+    let module_graph = datalove_datafun::to_module_graph(&db, package_world, pkg_graph);
+    let typecheck_result = datalove_datafun::tycheck::typecheck_module_graph(&db, module_graph);
 
     // Collect module information.
     let mut modules_output = BTreeMap::new();
 
+    let graph = typecheck_result.graph(&db);
     let module_exports = typecheck_result.module_exports(&db);
     let module_errors = typecheck_result.module_errors(&db);
 
-    // Get all modules from the graph and sort by name for consistent ordering.
-    let mut modules: Vec<_> = graph.map(&db).keys().copied().collect();
-    modules.sort_by_key(|m| m.name(&db).to_string());
+    // Get all modules from the graph and sort by path for consistent ordering.
+    let mut module_ids: Vec<_> = graph.module_by_id(&db).keys().copied().collect();
+    module_ids.sort_by_key(|id: &datalove_datafun::module_graph::ModuleId| id.path(&db).clone());
 
-    for module in modules {
-        let module_name = module.name(&db).to_string();
+    for module_id in module_ids {
+        // Extract just the module name from the path (e.g., "sys/std/u32" -> "u32").
+        let path = module_id.path(&db);
+        let module_name = path.split('/').last().unwrap_or(&path).to_string();
 
         // Get function exports.
         let mut functions = Vec::new();
-        if let Some(exports) = module_exports.get(&module) {
+        if let Some(exports) = module_exports.get(&module_id) {
             for (name, func_type) in exports.functions(&db) {
                 let param_types: Vec<_> = func_type.param_types(&db).iter().map(|p| {
                     typeandheap_to_string(&db, *p)
@@ -216,7 +220,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         }
 
         // Get errors.
-        let errors: Vec<_> = module_errors.get(&module)
+        let errors: Vec<_> = module_errors.get(&module_id)
             .map(|errs| errs.iter().map(|e| error_to_json(e)).collect())
             .unwrap_or_else(Vec::new);
 

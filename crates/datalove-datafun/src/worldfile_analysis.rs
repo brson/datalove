@@ -168,9 +168,12 @@ pub fn analyze_worldfile(
     }
 
     // Clean up any remaining variables in the interp_ctx before dropping.
-    let remaining_vars: Vec<_> = interp_ctx.script_scope.variables.drain().map(|(_, var)| var.value).collect();
-    for value in remaining_vars {
-        datalove_datafun_compiler::interp::destroy_value(&mut interp_ctx, value);
+    // Only destroy Available variables - Moved ones have been consumed.
+    let remaining_vars: Vec<_> = interp_ctx.script_scope.variables.drain().collect();
+    for (_, var) in remaining_vars {
+        if var.state == datalove_datafun_compiler::interp::ScriptVarState::Available {
+            datalove_datafun_compiler::interp::destroy_value(&mut interp_ctx, var.value);
+        }
     }
 
     Ok(analyses)
@@ -305,6 +308,10 @@ fn analyze_expr_section<'db>(
 }
 
 /// Analyze a script section by executing the complete script.
+///
+/// Note: This still uses the package-world path (execute_script) because scripts
+/// with function definitions require per-unit typechecking with module context,
+/// which the ModuleGraph path doesn't support yet.
 fn analyze_script_section(
     db: &dyn salsa::Database,
     package_world: datalove_datafun_pkg::PackageWorld,
