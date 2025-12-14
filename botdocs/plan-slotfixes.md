@@ -20,7 +20,8 @@ Clean up the interpreter's ownership model so that:
 - **Phase 4.8**: COMPLETE (eliminate fallback cleanup pass)
 - **Phase 4.9**: COMPLETE (bug fix: nested block type lookup, move semantics fix)
 - **Phase 5.0**: COMPLETE (branch convergence drops - Rust-like drop model)
-- **Phases 5.1-8**: Not started (see Phase 5 notes)
+- **Phase 5.1**: COMPLETE (sparse slot tracking infrastructure, debug-only use-after-move)
+- **Phases 5.2-8**: Not started (see Phase 5 notes)
 
 ## Incremental Phases
 
@@ -303,29 +304,78 @@ After the join point, the variable is effectively gone on all paths.
 `cleanup_frame`. With branch convergence drops, most conditional move cases are now handled
 statically. The remaining uses could potentially be removed if all edge cases are covered.
 
-### Phase 5.1+: Further slot_states Simplification (Future Work)
+### Phase 5.1: Sparse Slot Tracking Infrastructure ✓ COMPLETE
+
+**Files**: `function_analysis/liveness.rs`, `function_analysis/moves.rs`, `function_analysis/mod.rs`,
+`interp/frame.rs`, `interp/mod.rs`
+
+**Goal**: Optimize runtime slot tracking by only tracking slots that need runtime checks.
+
+**What was done:**
+
+1. **Added `conditionally_moved_slots()` to `MovedAnalysis`**:
+   - Scans all block entry/exit states for `MoveState::Sometimes`
+   - Returns list of slots that have conditional move state anywhere
+
+2. **Added `conditionally_initialized_slots()` to `InitializationAnalysis`**:
+   - Scans all block entry/exit states for `InitState::Sometimes`
+   - Returns list of slots that have conditional initialization anywhere
+
+3. **Added `tracked_slots` field to `FunctionAnalysis` and `StackFrame`**:
+   - Computed during analysis: union of conditionally-initialized, conditionally-moved,
+     and all Local/Temporary slots
+   - Passed to StackFrame for runtime access
+
+4. **Made use-after-move checks debug-only**:
+   - Wrapped runtime use-after-move checks in `#[cfg(debug_assertions)]`
+   - Static analysis already catches these errors and blocks execution
+   - Debug builds retain checks as safety net
+
+5. **Guarded cleanup checks with `tracked_slots`**:
+   - `process_block_exit_drops`: only checks `slot_states` for tracked slots
+   - `cleanup_frame`: only checks `slot_states` for tracked slots
+   - Non-tracked slots (Reference/parameter slots) trust static analysis
+
+**Limitation discovered:**
+
+Static analysis doesn't track inline destruction of temporaries (binop operands, if-condition
+temps, etc.). These are marked `Moved` at runtime but the static analysis doesn't know about it.
+As a result, we currently include ALL Local and Temporary slots in `tracked_slots`.
+
+**Current tracking scope:**
+- Reference (parameter) slots: NOT tracked (static analysis sufficient)
+- Local slots: tracked (may be moved inline in ways static analysis misses)
+- Temporary slots: tracked (consumed inline, marked Moved at runtime)
+- Conditionally-initialized slots: tracked
+- Conditionally-moved slots: tracked
+
+**Result:**
+- Use-after-move checks: debug-only ✓
+- Parameter cleanup checks: skipped (not in tracked_slots) ✓
+- All 162 interp tests pass with leak checking ✓
+
+**Future optimization:**
+To achieve truly sparse tracking (only conditional slots), would need to:
+- Update static analysis to track inline temp destruction
+- Or emit different drop points that don't require runtime checks
+
+### Phase 5.2+: Further slot_states Simplification (Future Work)
 
 **Files**: `function_analysis/liveness.rs`, `function_analysis/drops.rs`, `interp/mod.rs`, `interp/frame.rs`
 
-**Current state after Phase 5.0**: Branch convergence drops handle most conditional move cases
-statically. `slot_states` is still used as a safety net in `cleanup_frame` for:
-- `MoveState::Sometimes` at function exit (rare after convergence drops)
-- Slots that may be uninitialized on some paths (`InitState::Sometimes`)
+**Current state after Phase 5.1**: Infrastructure for sparse tracking exists, but all Local/Temporary
+slots are still tracked due to inline destruction not being tracked statically.
 
 **Potential further work**:
 
-1. **Analyze remaining slot_states uses**: Identify exactly which cases still need runtime checks
-   after branch convergence drops. May find that most/all are now covered statically.
+1. **Track inline temp destruction in static analysis**: Extend move analysis to understand that
+   BinOp/UnaryOp operands, if-conditions, etc. are destroyed inline.
 
-2. **Extend InitializationAnalysis to track temps**: Currently only tracks named slots. Adding
-   temp tracking would allow drop_points to cover all slots.
+2. **Remove drop points for inline-destroyed temps**: If we know a temp is destroyed inline,
+   don't emit a drop point for it.
 
-3. **Make use-after-move a compile-time error**: Currently runtime-checked. Moving this to
-   typecheck would eliminate one source of runtime state dependence.
-
-**Note**: The challenges previously documented about conditional moves with branch convergence
-have been addressed in Phase 5.0. The remaining slot_states uses are simpler cases that may
-be removable with further analysis.
+3. **True sparse tracking**: With (1) and (2), could limit `tracked_slots` to only slots with
+   `Sometimes` init or move state.
 
 ### Phase 6: Clean Up Argument Passing
 

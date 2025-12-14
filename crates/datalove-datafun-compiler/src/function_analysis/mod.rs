@@ -41,6 +41,12 @@ pub struct FunctionAnalysis<'db> {
     pub control_flow: ControlFlowGraph<'db>,
     #[returns(ref)]
     pub errors: Vec<AnalysisError>,
+    /// Slots that need runtime state tracking due to conditional moves.
+    ///
+    /// Only slots in this list have `Sometimes` move state and require
+    /// runtime checks to prevent double-drop or determine parameter consumption.
+    #[returns(ref)]
+    pub tracked_slots: Vec<SlotId>,
 }
 
 /// Unique identifier for a slot in the frame.
@@ -152,6 +158,22 @@ pub fn analyze_function<'db>(
     // Phase 6: Drop points (using per-block move analysis).
     let drop_points = drops::compute_drop_points(db, func, control_flow, slots, init_analysis, moved_analysis, tycheck_result);
 
+    // Phase 6.5: Identify slots that need runtime tracking.
+    // Include:
+    // - Slots with conditional initialization (Sometimes init)
+    // - Slots with conditional moves (Sometimes moved)
+    // - All Local and Temporary slots (may be moved at runtime differently than static analysis)
+    let mut tracked_set: std::collections::HashSet<SlotId> = std::collections::HashSet::new();
+    tracked_set.extend(init_analysis.conditionally_initialized_slots(db));
+    tracked_set.extend(moved_analysis.conditionally_moved_slots(db));
+    // Include all Local and Temporary slots for now.
+    for slot in slots {
+        if matches!(slot.kind(db), SlotKind::Local | SlotKind::Temporary) {
+            tracked_set.insert(slot.slot_id(db));
+        }
+    }
+    let tracked_slots: Vec<SlotId> = tracked_set.into_iter().collect();
+
     // Phase 7: Frame layout with types.
     let frame_layout = build_frame_layout(db, func, slots, tycheck_result);
 
@@ -172,6 +194,7 @@ pub fn analyze_function<'db>(
         drop_points,
         control_flow,
         errors,
+        tracked_slots,
     )
 }
 

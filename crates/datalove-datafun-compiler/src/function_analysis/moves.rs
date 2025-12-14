@@ -108,6 +108,27 @@ impl<'db> MovedAnalysis<'db> {
             .and_then(|(_, states)| states.get(slot_id.0 as usize))
             .copied()
     }
+
+    /// Get slots that have conditional move state (`Sometimes`) anywhere in the function.
+    ///
+    /// These slots need runtime tracking because static analysis cannot determine
+    /// whether they are moved at certain program points.
+    pub fn conditionally_moved_slots(self, db: &'db dyn crate::Db) -> Vec<SlotId> {
+        use std::collections::HashSet;
+
+        let mut result = HashSet::new();
+
+        // Check all entry and exit states for Sometimes.
+        for (_, states) in self.entry_states(db).iter().chain(self.exit_states(db).iter()) {
+            for (idx, &state) in states.iter().enumerate() {
+                if state == MoveState::Sometimes {
+                    result.insert(SlotId(idx as u32));
+                }
+            }
+        }
+
+        result.into_iter().collect()
+    }
 }
 
 /// Function registry for resolving function calls to their definitions.

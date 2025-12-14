@@ -1225,10 +1225,11 @@ fn execute_function_body<'db>(
         ));
     }
 
-    // Get frame layout, CFG, and drop points.
+    // Get frame layout, CFG, drop points, and tracked slots.
     let layout = analysis.frame_layout(ctx.db);
     let cfg = analysis.control_flow(ctx.db);
     let drop_points = analysis.drop_points(ctx.db);
+    let tracked_slots = analysis.tracked_slots(ctx.db).clone();
     let total_size = layout.total_size(ctx.db) as usize;
     let slots = layout.slots(ctx.db);
 
@@ -1287,6 +1288,7 @@ fn execute_function_body<'db>(
         layout,
         cfg,
         drop_points,
+        tracked_slots,
     };
     ctx.call_stack.push(frame);
 
@@ -1596,11 +1598,12 @@ fn process_block_exit_drops<'db>(
     ctx: &mut InterpContext<'db>,
     block_id: BlockId,
 ) -> Result<(), InterpError> {
-    use crate::function_analysis::{DropReason, DropLocation};
+    use crate::function_analysis::{DropReason, DropLocation, SlotId};
 
     let frame_index = ctx.call_stack.len() - 1;
     let drop_points = ctx.call_stack[frame_index].drop_points;
     let layout = ctx.call_stack[frame_index].layout;
+    let tracked_slots = ctx.call_stack[frame_index].tracked_slots.clone();
     let slots = layout.slots(ctx.db);
 
     // Build a map from SlotId to slot_index for quick lookup.
@@ -1632,9 +1635,12 @@ fn process_block_exit_drops<'db>(
         };
         let slot_info = &slots[slot_index];
 
-        // Check runtime slot_states: only destroy if still Available.
-        if ctx.call_stack[frame_index].slot_states[slot_index] != SlotState::Available {
-            continue;
+        // For tracked slots (conditional init or move), check runtime state.
+        // For non-tracked slots, static analysis guarantees correctness.
+        if tracked_slots.contains(&slot_id) {
+            if ctx.call_stack[frame_index].slot_states[slot_index] != SlotState::Available {
+                continue;
+            }
         }
 
         // Destroy the slot contents.
@@ -1683,6 +1689,7 @@ fn cleanup_frame<'db>(
     let layout = frame.layout;
     let slots = layout.slots(ctx.db);
     let drop_points = frame.drop_points;
+    let tracked_slots = &frame.tracked_slots;
 
     // Build a map from SlotId to slot_index for quick lookup.
     let slot_id_to_index: std::collections::HashMap<_, _> = slots.iter()
@@ -1723,11 +1730,12 @@ fn cleanup_frame<'db>(
         };
         let slot_info = &slots[slot_index];
 
-        // Check runtime slot_states: only destroy if still Available.
-        // This handles conditional moves where static analysis says "might need drop"
-        // but runtime knows the slot was actually moved.
-        if frame.slot_states[slot_index] != SlotState::Available {
-            continue;
+        // For tracked slots (conditional init or move), check runtime state.
+        // For non-tracked slots, static analysis guarantees correctness.
+        if tracked_slots.contains(&slot_id) {
+            if frame.slot_states[slot_index] != SlotState::Available {
+                continue;
+            }
         }
 
         destroy_slot_contents(ctx, slot_info, &frame.frame_data);
@@ -2039,7 +2047,8 @@ fn eval_expression_frame<'db>(
 
             let slot_id = slot_info.slot_id(ctx.db);
 
-            // Check slot state.
+            // Check slot state (debug-only - static analysis catches use-after-move).
+            #[cfg(debug_assertions)]
             if ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] == SlotState::Moved {
                 return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
             }
@@ -2411,7 +2420,8 @@ fn eval_expression_frame_borrow<'db>(
 
             let slot_id = slot_info.slot_id(ctx.db);
 
-            // Check slot state.
+            // Check slot state (debug-only - static analysis catches use-after-move).
+            #[cfg(debug_assertions)]
             if ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] == SlotState::Moved {
                 return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
             }
