@@ -1531,9 +1531,11 @@ fn execute_cfg_statement<'db>(
 /// moved at runtime (handling conditional branches).
 ///
 /// Also includes a fallback pass for temporaries not tracked by initialization
-/// analysis. The InitializationAnalysis only tracks let-statement bindings, not
-/// expression temporaries. A future improvement would be to track temporary
-/// initialization, eliminating the need for this fallback.
+/// analysis. InitializationAnalysis only tracks let-bindings, not expression temps.
+/// However, with context-aware slot allocation (Phase 4.7), this pass is efficient:
+/// - Most temps are marked Moved after consumption (binop/unop operands)
+/// - Only a few temps need fallback cleanup (return values, if-conditions)
+/// - Unused temps (in HasDest context) are never allocated
 fn cleanup_frame<'db>(
     ctx: &mut InterpContext<'db>,
     frame: StackFrame<'db>,

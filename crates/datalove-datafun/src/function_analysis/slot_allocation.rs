@@ -3,7 +3,22 @@
 use rmx::prelude::*;
 use bct::text::InternedText;
 use crate::ast::{Statement, StmtLet, StmtFun, StmtRet, StmtIf, ExprFun, ExprFunKind};
+use crate::datalit::ast::TypeHint;
 use super::{SlotId, SlotKind};
+
+/// Expression context for temp slot allocation.
+///
+/// Determines whether an expression needs its own temp slot or will use
+/// a destination provided by its parent.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum ExprContext {
+    /// Parent provides a destination (let RHS, tuple element, etc.).
+    /// Expression writes directly to parent's destination, no temp needed.
+    HasDest,
+    /// Expression must provide its own destination.
+    /// Allocate a temp slot for the result.
+    NeedsDest,
+}
 
 /// Result of slot allocation.
 #[salsa::tracked]
@@ -61,17 +76,34 @@ impl<'db> SlotAllocationBuilder<'db> {
                 // Allocate slot for the let binding.
                 let name_str = let_stmt.name(db).text(db).to_string();
                 self.alloc_slot(Some(name_str), SlotKind::Local, None);
-                // Analyze the value expression.
-                self.analyze_expr(db, let_stmt.value(db));
+
+                // Check if let has a coercible type hint (Option/Result/Data).
+                // If so, the RHS needs a temp because interpreter evaluates without dest
+                // first to check if coercion is needed.
+                let needs_coercion_check = let_stmt.type_hint(db).map_or(false, |th| {
+                    matches!(
+                        th.type_hint(db),
+                        TypeHint::Option(_) | TypeHint::Result(_) | TypeHint::Data
+                    )
+                });
+
+                let rhs_ctx = if needs_coercion_check {
+                    ExprContext::NeedsDest
+                } else {
+                    ExprContext::HasDest
+                };
+                self.analyze_expr(db, let_stmt.value(db), rhs_ctx);
             }
             Statement::Fun(_) => {
                 // Nested functions not yet supported.
             }
             Statement::Ret(ret_stmt) => {
-                self.analyze_expr(db, ret_stmt.value(db));
+                // Return expression needs its own temp (value escapes frame).
+                self.analyze_expr(db, ret_stmt.value(db), ExprContext::NeedsDest);
             }
             Statement::If(if_stmt) => {
-                self.analyze_expr(db, if_stmt.condition(db));
+                // Condition needs its own temp for branching.
+                self.analyze_expr(db, if_stmt.condition(db), ExprContext::NeedsDest);
 
                 // Allocate slot for then binding if present.
                 if let Some(name) = if_stmt.then_binding(db) {
@@ -102,53 +134,85 @@ impl<'db> SlotAllocationBuilder<'db> {
         }
     }
 
-    /// Analyze an expression and allocate temporaries.
-    fn analyze_expr(&mut self, db: &'db dyn crate::Db, expr: ExprFun<'db>) {
+    /// Analyze an expression and allocate temporaries based on context.
+    ///
+    /// - HasDest: Parent provides destination, no temp needed for this expression.
+    /// - NeedsDest: Expression must allocate its own temp slot.
+    ///
+    /// Note: Subexpressions may still need temps even if parent has dest.
+    fn analyze_expr(&mut self, db: &'db dyn crate::Db, expr: ExprFun<'db>, ctx: ExprContext) {
         match expr.expr(db) {
             ExprFunKind::Name(_) => {
-                // Variable reads need a temp slot (for copy-type clones; unused for moves).
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                // Name expressions never need their own temp:
+                // - If HasDest: clones directly to parent's destination
+                // - If NeedsDest + move type: returns borrowed ref to source
+                // - If NeedsDest + copy type: needs temp, but we can't know type here
+                //
+                // For copy types with NeedsDest, we still need a temp. But since we
+                // don't know types at allocation time, we allocate conservatively
+                // only when NeedsDest.
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::BinOp(binop) => {
-                self.analyze_expr(db, binop.lhs(db));
-                self.analyze_expr(db, binop.rhs(db));
-                // Binary operation needs a temporary for its result.
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                // Operands always need temps (borrow semantics).
+                self.analyze_expr(db, binop.lhs(db), ExprContext::NeedsDest);
+                self.analyze_expr(db, binop.rhs(db), ExprContext::NeedsDest);
+                // Result temp depends on context.
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::FunctionCall(call) => {
+                // Arguments need temps (evaluated before call).
                 for arg in call.args(db) {
-                    self.analyze_expr(db, *arg);
+                    self.analyze_expr(db, *arg, ExprContext::NeedsDest);
                 }
-                // Function call needs a temporary for its result.
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                // Result temp depends on context.
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::Tuple(tuple) => {
+                // Elements write to tuple field offsets if parent has dest.
+                let elem_ctx = ctx;
                 for elem in tuple.elements(db) {
-                    self.analyze_expr(db, *elem);
+                    self.analyze_expr(db, *elem, elem_ctx);
                 }
-                // Tuple construction needs a temporary.
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::UnaryOp(unary) => {
-                self.analyze_expr(db, unary.operand(db));
-                // Unary operation needs a temporary.
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                // Operand needs temp (borrow semantics).
+                self.analyze_expr(db, unary.operand(db), ExprContext::NeedsDest);
+                // Result temp depends on context.
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::TryOption(try_opt) => {
-                self.analyze_expr(db, try_opt.operand(db));
-                // Try operation needs a temporary.
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                // Operand needs temp (for unwrapping).
+                self.analyze_expr(db, try_opt.operand(db), ExprContext::NeedsDest);
+                // Result temp depends on context.
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::TryResult(try_res) => {
-                self.analyze_expr(db, try_res.operand(db));
-                // Try operation needs a temporary.
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                // Operand needs temp (for unwrapping).
+                self.analyze_expr(db, try_res.operand(db), ExprContext::NeedsDest);
+                // Result temp depends on context.
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::ParseError(_) => {
                 // No slots needed.
             }
 
-            // New inline variants - allocate slots for nested expressions.
+            // Simple literals - temp depends on context.
             ExprFunKind::True(_) |
             ExprFunKind::False(_) |
             ExprFunKind::None(_) |
@@ -156,77 +220,115 @@ impl<'db> SlotAllocationBuilder<'db> {
             ExprFunKind::Float(_) |
             ExprFunKind::Hex(_) |
             ExprFunKind::String(_) => {
-                // Simple literals need a temporary slot.
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
-            }
-            ExprFunKind::List(list) => {
-                for elem in list.elements(db) {
-                    self.analyze_expr(db, *elem);
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+            }
+
+            // Collection literals - propagate context to elements.
+            ExprFunKind::List(list) => {
+                let elem_ctx = ctx;
+                for elem in list.elements(db) {
+                    self.analyze_expr(db, *elem, elem_ctx);
+                }
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::Set(set) => {
+                let elem_ctx = ctx;
                 for elem in set.elements(db) {
-                    self.analyze_expr(db, *elem);
+                    self.analyze_expr(db, *elem, elem_ctx);
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::Map(map) => {
+                let elem_ctx = ctx;
                 for entry in map.entries(db) {
-                    self.analyze_expr(db, entry.key(db));
-                    self.analyze_expr(db, entry.value(db));
+                    self.analyze_expr(db, entry.key(db), elem_ctx);
+                    self.analyze_expr(db, entry.value(db), elem_ctx);
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::Tensor(tensor) => {
+                let elem_ctx = ctx;
                 for elem in tensor.elements(db) {
-                    self.analyze_expr(db, *elem);
+                    self.analyze_expr(db, *elem, elem_ctx);
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::AnonTuple(tuple) => {
+                let elem_ctx = ctx;
                 for elem in tuple.elements(db) {
-                    self.analyze_expr(db, *elem);
+                    self.analyze_expr(db, *elem, elem_ctx);
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::NamedTuple(tuple) => {
+                let elem_ctx = ctx;
                 for elem in tuple.elements(db) {
-                    self.analyze_expr(db, *elem);
+                    self.analyze_expr(db, *elem, elem_ctx);
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::AnonStruct(s) => {
+                let elem_ctx = ctx;
                 for field in s.fields(db) {
-                    self.analyze_expr(db, field.value(db));
+                    self.analyze_expr(db, field.value(db), elem_ctx);
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::NamedStruct(s) => {
+                let elem_ctx = ctx;
                 for field in s.fields(db) {
-                    self.analyze_expr(db, field.value(db));
+                    self.analyze_expr(db, field.value(db), elem_ctx);
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::AnonEnum(e) => {
+                // Payload writes to enum data area if parent has dest.
                 if let Some(payload) = e.payload(db) {
-                    self.analyze_expr(db, payload);
+                    self.analyze_expr(db, payload, ctx);
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::NamedEnum(e) => {
                 if let Some(payload) = e.payload(db) {
-                    self.analyze_expr(db, payload);
+                    self.analyze_expr(db, payload, ctx);
                 }
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::Data(d) => {
-                self.analyze_expr(db, d.value(db));
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                // Inner value writes to data payload if parent has dest.
+                self.analyze_expr(db, d.value(db), ctx);
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
             ExprFunKind::Err(e) => {
-                self.analyze_expr(db, e.value(db));
-                self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                // Inner value writes to error payload if parent has dest.
+                self.analyze_expr(db, e.value(db), ctx);
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot(None, SlotKind::Temporary, Some(expr));
+                }
             }
         }
     }
