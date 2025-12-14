@@ -17,7 +17,7 @@ Clean up the interpreter's ownership model so that:
 - **Phase 4.5**: COMPLETE (per-block move analysis for precise conditional drops)
 - **Phase 4.6**: COMPLETE (Uninitialized slot state for precise temp tracking)
 - **Phase 4.7**: COMPLETE (context-aware temp slot allocation)
-- **Phases 5-7**: Not started
+- **Phases 5-8**: Not started
 
 ## Incremental Phases
 
@@ -216,7 +216,45 @@ the fallback entirely.
 
 4. Run tests - fix regressions
 
-### Phase 7: Simplify Value
+### Phase 7: Return Values as Out Arguments
+
+**Files**: `interp/mod.rs`, `interp/frame.rs`, `function_analysis/slot_allocation.rs`
+
+**Problem**: Return values are currently cloned to heap before frame cleanup because
+they point to callee frame memory that's about to be deallocated.
+
+**Solution**: Caller provides return destination; callee writes directly there via DPS.
+
+1. Add `return_dest: Option<Destination>` parameter to `execute_function_body`
+
+2. Store return_dest in StackFrame or thread through execution
+
+3. Modify `eval_return_expression_frame`:
+   - If return_dest provided: evaluate with that dest
+   - Value lands in caller memory, no heap clone needed
+
+4. Modify call site handling in `eval_expression_frame` for FunctionCall:
+   - If HasDest context: pass parent's dest as return_dest
+   - If NeedsDest context: use caller's temp slot as return_dest
+
+5. Update slot_allocation for return expressions:
+   - Return expressions use HasDest (caller provides destination)
+   - No callee-side temp needed for returns
+
+6. Handle Option/Result return type wrapping:
+   - When return type is `?T` but expression is `T`, write as Some(T) to dest
+   - TryReturn (`?`) still uses InterpError mechanism for early return
+
+7. Remove heap allocation path for return values
+
+8. Run tests - fix regressions
+
+**Complexity areas**:
+- Nested calls `f(g())`: g's return writes to f's arg temp
+- Option/Result wrapping requires typed destination
+- Script-level calls: pass None for return_dest, fall back to current behavior
+
+### Phase 8: Simplify Value
 
 **Files**: `interp/value.rs`, `interp/memory.rs`, `interp/mod.rs`
 
