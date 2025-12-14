@@ -1,8 +1,8 @@
 //! Drop point insertion for resource management.
 
 use rmx::prelude::*;
-use std::collections::HashSet;
-use super::{SlotId, ProgramPoint, StmtId, Position, SlotKind, InitState};
+use std::collections::{HashSet, HashMap};
+use super::{SlotId, ProgramPoint, StmtId, BlockId, Position, SlotKind, InitState};
 use super::cfg::{ControlFlowGraph, Terminator};
 use super::liveness::InitializationAnalysis;
 use super::moves::{MoveInfo, MovedAnalysis, MoveState};
@@ -21,8 +21,17 @@ pub struct DropPoints<'db> {
 #[salsa::tracked]
 pub struct DropPoint<'db> {
     pub slot_id: SlotId,
-    pub location: ProgramPoint,
+    pub location: DropLocation,
     pub reason: DropReason,
+}
+
+/// Location of a drop point.
+#[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
+pub enum DropLocation {
+    /// Drop after a specific statement.
+    AfterStmt(StmtId),
+    /// Drop at block exit (before terminator, when exiting via Goto).
+    BlockExit(BlockId),
 }
 
 /// Reason for dropping a value.
@@ -30,6 +39,7 @@ pub struct DropPoint<'db> {
 pub enum DropReason {
     EndOfScope,
     EarlyReturn,
+    BranchExit,      // slot consumed in sibling branch, drop here for convergence
     Moved,           // slot was moved, no drop needed
     Uninitialized,   // slot never initialized, no drop needed
 }
@@ -46,8 +56,10 @@ impl<'db> DropPoints<'db> {
 /// This identifies where each slot must be dropped to ensure proper resource cleanup.
 /// Copy types are automatically skipped as they don't require cleanup.
 ///
-/// Uses per-block move analysis to generate precise drops: a slot only gets a drop
-/// point at an exit if it was NOT definitely moved on all paths to that exit.
+/// Uses per-block move analysis to generate precise drops:
+/// 1. At function exits (Return/TryReturn): drop slots not moved on that path
+/// 2. At branch convergence (Goto to join blocks): when a slot is moved in one
+///    branch but not another, drop it in the branch where it's not moved
 #[salsa::tracked]
 pub fn compute_drop_points<'db>(
     db: &'db dyn crate::Db,
@@ -60,8 +72,86 @@ pub fn compute_drop_points<'db>(
 ) -> DropPoints<'db> {
     let mut drops = Vec::new();
     let blocks = cfg.blocks(db);
+    let edges = cfg.edges(db);
 
-    // For each exit block, insert drops for all slots that need dropping.
+    // Build a map of incoming edges for each block (to find join points).
+    let mut incoming: HashMap<BlockId, Vec<BlockId>> = HashMap::new();
+    for edge in edges {
+        incoming.entry(edge.to).or_default().push(edge.from);
+    }
+
+    // Phase 1: Insert drops at branch convergence points (Goto to join blocks).
+    // For each join block (block with multiple incoming edges), check if any slot
+    // has different move states across predecessors. If so, insert drops in the
+    // predecessors where the slot is NOT moved.
+    for (join_block_id, predecessors) in &incoming {
+        if predecessors.len() <= 1 {
+            // Not a join point, skip.
+            continue;
+        }
+
+        // For each slot, check move states across all predecessors.
+        for slot in slots {
+            let slot_id = slot.slot_id(db);
+
+            // Skip reference slots.
+            if slot.kind(db) == SlotKind::Reference {
+                continue;
+            }
+
+            // Skip copy types.
+            let slot_type = get_slot_type(db, slot, tycheck_result, func);
+            if is_copy_type(db, slot_type) {
+                continue;
+            }
+
+            // Get exit move state for each predecessor.
+            let mut any_always = false;
+            let mut never_preds = Vec::new();
+
+            for &pred_block_id in predecessors {
+                // Check if initialized at predecessor exit.
+                let init_state = init_analysis.get_exit_state(db, pred_block_id, slot_id)
+                    .unwrap_or(InitState::Never);
+
+                if matches!(init_state, InitState::Never) {
+                    // Not initialized on this path, no drop needed.
+                    continue;
+                }
+
+                let move_state = moved_analysis.get_exit_state(db, pred_block_id, slot_id)
+                    .unwrap_or(MoveState::Never);
+
+                match move_state {
+                    MoveState::Always => {
+                        any_always = true;
+                    }
+                    MoveState::Never => {
+                        never_preds.push(pred_block_id);
+                    }
+                    MoveState::Sometimes => {
+                        // Already conditionally moved - can't statically resolve.
+                        // Will need runtime check at function exit.
+                    }
+                }
+            }
+
+            // If any predecessor has Always (definitely moved) and some have Never,
+            // insert drops in the Never predecessors.
+            if any_always && !never_preds.is_empty() {
+                for pred_block_id in never_preds {
+                    drops.push(DropPoint::new(
+                        db,
+                        slot_id,
+                        DropLocation::BlockExit(pred_block_id),
+                        DropReason::BranchExit,
+                    ));
+                }
+            }
+        }
+    }
+
+    // Phase 2: Insert drops at function exits (Return/TryReturn).
     for block in blocks {
         match &block.terminator {
             Terminator::Return | Terminator::TryReturn => {
@@ -120,18 +210,14 @@ pub fn compute_drop_points<'db>(
                         drops.push(DropPoint::new(
                             db,
                             slot_id,
-                            ProgramPoint {
-                                stmt_id: last_stmt,
-                                position: Position::After,
-                            },
+                            DropLocation::AfterStmt(last_stmt),
                             reason,
                         ));
                     }
                 }
             }
             Terminator::Branch { .. } | Terminator::Goto(_) => {
-                // No drops at branches or gotos.
-                // Drops happen at the exit points (returns).
+                // Drops at Goto handled in Phase 1 (branch convergence).
             }
             Terminator::LoopContinue(_) | Terminator::LoopBreak(_) => {
                 // No drops at loop control flow.

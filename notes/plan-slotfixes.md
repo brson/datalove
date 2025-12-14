@@ -19,7 +19,8 @@ Clean up the interpreter's ownership model so that:
 - **Phase 4.7**: COMPLETE (context-aware temp slot allocation)
 - **Phase 4.8**: COMPLETE (eliminate fallback cleanup pass)
 - **Phase 4.9**: COMPLETE (bug fix: nested block type lookup, move semantics fix)
-- **Phases 5-8**: Not started (Phase 5 needs rethinking - see notes)
+- **Phase 5.0**: COMPLETE (branch convergence drops - Rust-like drop model)
+- **Phases 5.1-8**: Not started (see Phase 5 notes)
 
 ## Incremental Phases
 
@@ -253,78 +254,78 @@ slot is marked Moved and cleanup skips it; the destination owns the heap data.
 
 **Result**: 159 interp tests pass with leak checking.
 
-### Phase 5: Extend Initialization Analysis, Remove slot_states
+### Phase 5.0: Branch Convergence Drops (Rust-like Model) ✓ COMPLETE
+
+**Files**: `function_analysis/drops.rs`, `interp/mod.rs`
+
+**Discovery**: During Phase 4.9, a conditional move convergence test revealed that when a slot
+is moved in one branch but not another, the slot needs to be dropped in the non-moving branch
+before the branches converge. This is exactly how Rust handles conditional moves.
+
+**Research**: Rust uses "drop flags" - per-variable boolean flags that track at runtime whether
+a value needs dropping. However, Rust also uses compile-time analysis to insert drops at branch
+exits when move states differ across branches, minimizing runtime flag checks.
+
+**Implementation**:
+
+1. **Extended drop location model**: Added `DropLocation` enum:
+   - `AfterStmt(StmtId)`: Drop after a specific statement (existing behavior)
+   - `BlockExit(BlockId)`: Drop when leaving a block via Goto (new)
+
+2. **Added BranchExit drop reason**: New `DropReason::BranchExit` for drops inserted at branch
+   convergence points.
+
+3. **Updated `compute_drop_points` with two phases**:
+   - Phase 1: For each join point (block with multiple incoming edges), check if any slot has
+     different move states across predecessors. If slot is `MoveState::Always` from one
+     predecessor and `MoveState::Never` from another, insert `BlockExit` drop in the `Never`
+     predecessor.
+   - Phase 2: Process function exits (Return/TryReturn) as before.
+
+4. **Added `process_block_exit_drops` function** to interpreter:
+   - Called when executing `Terminator::Goto`
+   - Finds all `DropLocation::BlockExit` drops for the current block
+   - Destroys slot contents and marks slot as Moved
+   - Ensures cleanup_frame won't double-drop
+
+5. **Updated `cleanup_frame`** to skip `BranchExit` drops (handled inline).
+
+**Key insight**: This implements the same drop semantics as Rust - a variable moved in one branch
+is considered "consumed" in all branches. In the branch where it's not moved, we insert a drop.
+After the join point, the variable is effectively gone on all paths.
+
+**Result**:
+- Test `296_conditional_move_convergence` passes with leak checking
+- All 159 interp tests pass with leak checking
+- Memory model now matches Rust's drop semantics for conditional moves
+
+**Remaining work**: `slot_states` is still used as a safety net for runtime checks in
+`cleanup_frame`. With branch convergence drops, most conditional move cases are now handled
+statically. The remaining uses could potentially be removed if all edge cases are covered.
+
+### Phase 5.1+: Further slot_states Simplification (Future Work)
 
 **Files**: `function_analysis/liveness.rs`, `function_analysis/drops.rs`, `interp/mod.rs`, `interp/frame.rs`
 
-**Problem**: Runtime `slot_states` is still needed to track conditional moves (slot may be moved
-in one branch but not another). To remove `slot_states` entirely, the static analysis must
-track temp initialization and conditional move state precisely so cleanup_frame can use only
-drop_points without runtime checks.
+**Current state after Phase 5.0**: Branch convergence drops handle most conditional move cases
+statically. `slot_states` is still used as a safety net in `cleanup_frame` for:
+- `MoveState::Sometimes` at function exit (rare after convergence drops)
+- Slots that may be uninitialized on some paths (`InitState::Sometimes`)
 
-**Solution**: Extend `InitializationAnalysis` to track temp slot initialization, then drop_points
-can handle all cleanup and `slot_states` becomes unnecessary.
+**Potential further work**:
 
-1. Extend `InitializationAnalysis` to track temp slots:
-   - Currently only tracks named slots (let-bindings)
-   - Add tracking for temp slots by their `SlotId`
-   - Mark temp initialized when expression writes to it
-   - Mark temp "moved" when consumed (binop/unop operands destroyed inline)
+1. **Analyze remaining slot_states uses**: Identify exactly which cases still need runtime checks
+   after branch convergence drops. May find that most/all are now covered statically.
 
-2. Update `compute_drop_points` to include temps:
-   - Temps with `NeedsDest` context that remain initialized at exit need drop points
-   - Temps consumed inline (operands) are already moved, no drop needed
+2. **Extend InitializationAnalysis to track temps**: Currently only tracks named slots. Adding
+   temp tracking would allow drop_points to cover all slots.
 
-3. Remove fallback pass from `cleanup_frame`:
-   - Pass 1 (drop_points) now handles everything
-   - No need to scan for Available+Owned slots
+3. **Make use-after-move a compile-time error**: Currently runtime-checked. Moving this to
+   typecheck would eliminate one source of runtime state dependence.
 
-4. Remove `slot_states: Vec<SlotState>` from `StackFrame`
-
-5. Remove all `mark_temp_slot_available`, `mark_temp_slot_moved` calls
-
-6. Update slot reading:
-   - Analysis knows which reads are last-use moves via `MoveInfo`
-   - Interpreter doesn't mark Moved, just returns value
-   - Copy types clone, move types return borrowed ref
-
-7. Run tests - fix regressions
-
-**Key insight**: With this change, the interpreter becomes purely execution-focused.
-All ownership/lifetime decisions come from static analysis.
-
-**Phase 5 Challenges (discovered during Phase 4.9 investigation):**
-
-The goal to completely remove `slot_states` faces fundamental challenges:
-
-1. **Conditional moves with branch convergence**: When a slot is moved in one branch but not
-   another, and the branches converge before exit, the static analysis marks the slot as
-   "Sometimes moved". At cleanup, we need to know which path was actually taken:
-   - If the slot was moved: skip cleanup (already consumed)
-   - If the slot was not moved: cleanup needed
-   Without runtime tracking, we can't distinguish these cases.
-
-2. **Options to address this**:
-   - **Path-sensitive drops**: Generate separate drop points for each incoming CFG path to
-     a join point. Complex and may duplicate cleanup code.
-   - **Embedded moved flag**: Write a sentinel value when moving, check before dropping.
-     Changes the memory model.
-   - **Keep slot_states for named slots**: Accept that some runtime tracking is needed for
-     conditional moves, but simplify to only track named slots (temps have deterministic
-     lifecycle).
-
-3. **Temps have deterministic lifecycle**: Temps are created, used, and destroyed within a
-   single expression/statement. They don't participate in conditional move patterns. The
-   `mark_temp_slot_*` calls maintain consistency for error cleanup, but could potentially
-   be eliminated if error handling is reworked.
-
-4. **Use-after-move detection**: Currently runtime-checked (line 1901). Could become a
-   compile-time error if typecheck enforces linear types strictly.
-
-**Recommendation**: Phase 5 may need to be split:
-- Phase 5a: Make use-after-move a compile-time error (typecheck)
-- Phase 5b: Simplify slot_states to only track what's truly needed (conditional moves)
-- Phase 5c: Revisit complete removal after Phase 6-7 changes (which may eliminate the need)
+**Note**: The challenges previously documented about conditional moves with branch convergence
+have been addressed in Phase 5.0. The remaining slot_states uses are simpler cases that may
+be removable with further analysis.
 
 ### Phase 6: Clean Up Argument Passing
 
