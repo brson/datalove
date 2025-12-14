@@ -28,7 +28,6 @@ With core->runtime calls.
 - clean up demo files
 - alternate backend
 - generics
-- filterable example tests
 
 
 ----------
