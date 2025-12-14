@@ -6,28 +6,17 @@ strongly and statically typed -
 for efficient data modeling and transformation,
 with a monumental standard library.
 
+Datalove is built around a simple idea:
+first let us define a very simple but complete language
+for writing, typing, and transforming a comprehensive
+set of modern pure data types.
+Let's do that really well.
+Then we'll add I/O to it &mdash; carefully.
 
-## Do not contribute; do not use
-
-This project is not open to contribution.
-Issues and pull requests will be closed without consideration.
-Do not use this project.
-It is neither stable nor supported.
 
 
-## Installation
 
-Install from source with [Rust](https://rustup.rs)
 
-```
-cargo install datalove-cli
-```
-
-Run the REPL with
-
-````
-datalove repl
-```
 
 
 ## Datalove novelties for language enthusiasts
