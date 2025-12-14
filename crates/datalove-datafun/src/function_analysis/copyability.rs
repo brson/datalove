@@ -185,17 +185,33 @@ fn get_local_type<'db>(
     local_name: Option<bct::text::InternedText<'db>>,
     expr_types: &[Option<crate::tycheck::TypeAndHeap<'db>>],
 ) -> crate::tycheck::TypeAndHeap<'db> {
+    if let Some(name) = local_name {
+        // Find the let statement with this name recursively.
+        if let Some(ty) = find_local_type_in_stmts(db, func.body(db), name, expr_types) {
+            return ty;
+        }
+    }
+    // Fallback to placeholder if local not found or no type.
+    create_placeholder_type(db)
+}
+
+/// Recursively search for a let binding in statements (including nested blocks).
+fn find_local_type_in_stmts<'db>(
+    db: &'db dyn crate::Db,
+    stmts: &[crate::ast::Statement<'db>],
+    name: bct::text::InternedText<'db>,
+    expr_types: &[Option<crate::tycheck::TypeAndHeap<'db>>],
+) -> Option<crate::tycheck::TypeAndHeap<'db>> {
     use salsa::plumbing::AsId;
     use crate::ast::Statement;
 
-    if let Some(name) = local_name {
-        // Find the let statement with this name.
-        for stmt in func.body(db) {
-            if let Statement::Let(let_stmt) = stmt {
+    for stmt in stmts {
+        match stmt {
+            Statement::Let(let_stmt) => {
                 if let_stmt.name(db) == name {
                     // First, check if there's an explicit type hint.
                     if let Some(type_hint) = let_stmt.type_hint(db) {
-                        return convert_type_hint_to_type(db, type_hint);
+                        return Some(convert_type_hint_to_type(db, type_hint));
                     }
 
                     // No type hint - get the type from the RHS expression.
@@ -204,14 +220,32 @@ fn get_local_type<'db>(
                     let index = expr_id.index() as usize;
 
                     if let Some(Some(ty)) = expr_types.get(index) {
-                        return *ty;
+                        return Some(*ty);
                     }
                 }
             }
+            Statement::If(if_stmt) => {
+                // Search in then-body.
+                if let Some(ty) = find_local_type_in_stmts(db, if_stmt.then_body(db), name, expr_types) {
+                    return Some(ty);
+                }
+                // Search in else-body if present.
+                if let Some(else_body) = if_stmt.else_body(db) {
+                    if let Some(ty) = find_local_type_in_stmts(db, else_body, name, expr_types) {
+                        return Some(ty);
+                    }
+                }
+            }
+            Statement::Loop(loop_stmt) => {
+                // Search in loop body.
+                if let Some(ty) = find_local_type_in_stmts(db, loop_stmt.body(db), name, expr_types) {
+                    return Some(ty);
+                }
+            }
+            _ => {}
         }
     }
-    // Fallback to placeholder if local not found or no type.
-    create_placeholder_type(db)
+    None
 }
 
 /// Convert a type hint to a TypeAndHeap.

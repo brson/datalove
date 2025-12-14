@@ -18,7 +18,8 @@ Clean up the interpreter's ownership model so that:
 - **Phase 4.6**: COMPLETE (Uninitialized slot state for precise temp tracking)
 - **Phase 4.7**: COMPLETE (context-aware temp slot allocation)
 - **Phase 4.8**: COMPLETE (eliminate fallback cleanup pass)
-- **Phases 5-8**: Not started
+- **Phase 4.9**: COMPLETE (bug fix: nested block type lookup, move semantics fix)
+- **Phases 5-8**: Not started (Phase 5 needs rethinking - see notes)
 
 ## Incremental Phases
 
@@ -200,6 +201,58 @@ The fallback pass was catching:
 
 With these handled inline, all temps are properly marked Moved before cleanup_frame runs.
 
+### Phase 4.9: Bug Fix - Nested Block Type Lookup and Move Semantics ✓ COMPLETE
+
+**Files**: `function_analysis/copyability.rs`, `interp/mod.rs`, `interp/memory.rs`
+
+**Discovery**: While investigating Phase 5, a test for conditional moves with branch convergence
+revealed a memory leak. The test `296_conditional_move_convergence` exercises:
+```
+fun test(cond: bool): u32
+    let x = [@1, @2]
+    if cond
+        let _sink = x  // Move x to _sink in then-branch only
+    end if
+    ret @0
+end fun
+```
+
+**Bug 1: Nested block type lookup**
+
+`get_local_type` in `copyability.rs` only searched top-level statements in `func.body()`,
+missing let-bindings defined in nested blocks (if-then/else, loops). This caused `_sink`
+to be incorrectly identified as a copy type (fallback to bool placeholder), so no drop
+point was generated.
+
+**Fix**: Added `find_local_type_in_stmts` helper that recursively searches through:
+- If statement then-bodies and else-bodies
+- Loop statement bodies
+
+**Bug 2: Move semantics for Local slots with dest**
+
+When evaluating a Name expression for a move type (like `x` in `let _sink = x`), the code
+ignored the `dest` parameter and just returned a borrowed pointer to the source slot.
+This meant:
+- x was marked Moved
+- But _sink's slot was never written to
+- x's slot still had the list but was marked Moved (never cleaned up)
+- Memory leak!
+
+**Fix**: Updated Name expression handling for move types in Local/Temporary slots:
+- If dest is provided: use new `move_value_to_dest` to shallow-copy the value
+- Mark source slot as Moved
+- Return borrowed pointer to dest
+
+**New function: `move_value_to_dest`** (memory.rs)
+
+Added a function that does shallow copy (memcpy) instead of deep clone. This transfers
+ownership of heap-allocated data (like list buffers) without duplicating them. The source
+slot is marked Moved and cleanup skips it; the destination owns the heap data.
+
+**Test added**: `296_conditional_move_convergence.world`
+
+**Result**: 159 interp tests pass with leak checking.
+
 ### Phase 5: Extend Initialization Analysis, Remove slot_states
 
 **Files**: `function_analysis/liveness.rs`, `function_analysis/drops.rs`, `interp/mod.rs`, `interp/frame.rs`
@@ -239,6 +292,39 @@ can handle all cleanup and `slot_states` becomes unnecessary.
 
 **Key insight**: With this change, the interpreter becomes purely execution-focused.
 All ownership/lifetime decisions come from static analysis.
+
+**Phase 5 Challenges (discovered during Phase 4.9 investigation):**
+
+The goal to completely remove `slot_states` faces fundamental challenges:
+
+1. **Conditional moves with branch convergence**: When a slot is moved in one branch but not
+   another, and the branches converge before exit, the static analysis marks the slot as
+   "Sometimes moved". At cleanup, we need to know which path was actually taken:
+   - If the slot was moved: skip cleanup (already consumed)
+   - If the slot was not moved: cleanup needed
+   Without runtime tracking, we can't distinguish these cases.
+
+2. **Options to address this**:
+   - **Path-sensitive drops**: Generate separate drop points for each incoming CFG path to
+     a join point. Complex and may duplicate cleanup code.
+   - **Embedded moved flag**: Write a sentinel value when moving, check before dropping.
+     Changes the memory model.
+   - **Keep slot_states for named slots**: Accept that some runtime tracking is needed for
+     conditional moves, but simplify to only track named slots (temps have deterministic
+     lifecycle).
+
+3. **Temps have deterministic lifecycle**: Temps are created, used, and destroyed within a
+   single expression/statement. They don't participate in conditional move patterns. The
+   `mark_temp_slot_*` calls maintain consistency for error cleanup, but could potentially
+   be eliminated if error handling is reworked.
+
+4. **Use-after-move detection**: Currently runtime-checked (line 1901). Could become a
+   compile-time error if typecheck enforces linear types strictly.
+
+**Recommendation**: Phase 5 may need to be split:
+- Phase 5a: Make use-after-move a compile-time error (typecheck)
+- Phase 5b: Simplify slot_states to only track what's truly needed (conditional moves)
+- Phase 5c: Revisit complete removal after Phase 6-7 changes (which may eliminate the need)
 
 ### Phase 6: Clean Up Argument Passing
 
@@ -352,10 +438,11 @@ they point to callee frame memory that's about to be deallocated.
 - `crates/datalove-datafun/src/function_analysis/drops.rs`
 - `crates/datalove-datafun/src/function_analysis/liveness.rs` (InitializationAnalysis)
 - `crates/datalove-datafun/src/function_analysis/moves.rs` (MoveInfo, MovedAnalysis)
+- `crates/datalove-datafun/src/function_analysis/copyability.rs` (copy type detection, slot type lookup)
 - `crates/datalove-datafun/src/interp/mod.rs`
 - `crates/datalove-datafun/src/interp/frame.rs`
 - `crates/datalove-datafun/src/interp/value.rs`
-- `crates/datalove-datafun/src/interp/memory.rs`
+- `crates/datalove-datafun/src/interp/memory.rs` (clone_value_to_dest, move_value_to_dest)
 
 ## Scope
 

@@ -1,0 +1,15 @@
+----------
+script
+----------
+
+// Test conditional move with branch convergence.
+// x is moved in then-branch only, branches converge before ret.
+fun test(cond: bool): u32
+    let x = [@1, @2]
+    if cond
+        let _sink = x
+    end if
+    ret @0
+end fun
+
+let output = test(@true)

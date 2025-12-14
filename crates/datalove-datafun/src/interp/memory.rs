@@ -75,6 +75,39 @@ pub(super) fn clone_value_to_dest<'db>(
     }
 }
 
+/// Move a value into a pre-allocated destination (shallow copy).
+///
+/// Unlike `clone_value_to_dest`, this does a shallow memcpy of the structure
+/// bytes, transferring ownership of any heap-allocated data. The source
+/// should be marked as Moved after calling this to prevent double-free.
+pub(super) fn move_value_to_dest(
+    value: Value,
+    dest: Destination,
+) -> Value {
+    use datalove_rt::rtdt::TyDescRef;
+
+    let src_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+    let dst_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+
+    if src_ref.size() == dst_ref.size() {
+        // Shallow copy: just copy the structure bytes (including any pointers).
+        unsafe {
+            std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, src_ref.size() as usize);
+        }
+    } else {
+        panic!(
+            "move_value_to_dest: incompatible sizes {} vs {}",
+            src_ref.size(), dst_ref.size()
+        );
+    }
+
+    Value {
+        ptr: dest.ptr,
+        tydesc: dest.tydesc,
+        location: ValueLocation::Borrowed,
+    }
+}
+
 /// Destroy only the contents of a value without freeing its memory.
 ///
 /// Use this for values stored inline in frame buffers, where the memory

@@ -54,7 +54,7 @@ use context::{parse_module_functions, build_module_alias_map, cleanup_script_sco
 use control::{find_slot_by_name, extract_bool, evaluate_branch_condition, eval_try_option, eval_try_result};
 use tydesc::{type_hint_to_tydesc, value_tydesc_for_option, value_tydesc_for_result};
 use frame::CfgControl;
-use memory::{clone_value, clone_value_to_dest};
+use memory::{clone_value, clone_value_to_dest, move_value_to_dest};
 use types::{is_u32_value, is_int_value, is_f32_value, is_bool_value, is_copy_type};
 use alloc::{
     allocate_bool, allocate_f32, allocate_u32_raw, allocate_bigint,
@@ -1963,10 +1963,29 @@ fn eval_expression_frame<'db>(
                     }
                     Ok(result)
                 } else {
-                    // For Move types, allocate and copy from frame, then mark as moved.
-                    let value = read_value_from_slot(ctx, frame_index, slot_info)?;
-                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
-                    Ok(value)
+                    // For Move types, move to dest if provided, then mark source as moved.
+                    // The move does a shallow copy (memcpy), transferring heap ownership.
+                    let offset = slot_info.offset(ctx.db) as usize;
+                    let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
+
+                    let datalit_ty = match ty.ty(ctx.db) {
+                        crate::tycheck::Type::Datalit(dt) => dt.clone(),
+                        _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
+                    };
+                    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+
+                    let source_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::Borrowed };
+
+                    if let Some(d) = dest {
+                        // Move to destination (shallow copy), mark source as Moved.
+                        let result = move_value_to_dest(source_value, d);
+                        ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
+                        Ok(result)
+                    } else {
+                        // No dest: return borrowed pointer to source, mark as Moved.
+                        ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
+                        Ok(source_value)
+                    }
                 }
             }
         }
