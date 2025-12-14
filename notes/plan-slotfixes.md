@@ -17,6 +17,7 @@ Clean up the interpreter's ownership model so that:
 - **Phase 4.5**: COMPLETE (per-block move analysis for precise conditional drops)
 - **Phase 4.6**: COMPLETE (Uninitialized slot state for precise temp tracking)
 - **Phase 4.7**: COMPLETE (context-aware temp slot allocation)
+- **Phase 4.8**: COMPLETE (eliminate fallback cleanup pass)
 - **Phases 5-8**: Not started
 
 ## Incremental Phases
@@ -169,26 +170,44 @@ This is statically determinable by analyzing expression context at allocation ti
 **Result:**
 - Significantly fewer temp slots allocated
 - Frame memory reduced
-- Fallback cleanup pass still needed (for temps like return values, if-conditions)
-- But fallback is now efficient because most temps are Moved or never allocated
+- Fallback cleanup pass was still needed (addressed in Phase 4.8)
 
-**Remaining limitation:**
-The fallback cleanup pass wasn't removed because InitializationAnalysis doesn't track
-temps. However, with context-aware allocation, the fallback is efficient:
-- Most temps are marked Moved after consumption (binop/unop operands)
-- Only a few temps need fallback cleanup (return values, if-conditions)
-- Unused temps (in HasDest context) are never allocated
+### Phase 4.8: Eliminate Fallback Cleanup Pass ✓ COMPLETE
 
-Phase 5 extends InitializationAnalysis to track temps, eliminating the fallback entirely
-and removing the need for runtime `slot_states`.
+**Files**: `interp/mod.rs`
+
+**Goal**: Remove the fallback cleanup pass from `cleanup_frame` by destroying temporaries inline.
+
+**What was done:**
+
+1. Mark condition temps as Moved after `evaluate_branch_condition`:
+   - Added `mark_temp_slot_moved(ctx, if_s.condition(ctx.db))` after branch evaluation
+   - Condition values are destroyed by `evaluate_branch_condition`, slot now marked Moved
+
+2. Destroy return value temps after heap clone:
+   - Modified return value handling to always destroy original contents after cloning
+   - If ptr is in Available slot: mark it Moved so cleanup_frame skips it
+   - If ptr is in Moved slot or external (Reference): destroy was already needed
+
+3. Removed fallback pass from `cleanup_frame`:
+   - Deleted the "Pass 2: Fallback" section that scanned for Available+Owned slots
+   - Now only drop_points processing remains, using slot_states for conditional moves
+
+**Key insight:**
+The fallback pass was catching:
+- If-condition temps (now marked Moved inline)
+- Return value temps (now destroyed inline with slot marked Moved)
+
+With these handled inline, all temps are properly marked Moved before cleanup_frame runs.
 
 ### Phase 5: Extend Initialization Analysis, Remove slot_states
 
 **Files**: `function_analysis/liveness.rs`, `function_analysis/drops.rs`, `interp/mod.rs`, `interp/frame.rs`
 
-**Problem**: The fallback pass in `cleanup_frame` relies on runtime `slot_states` to know which
-temps are Available. This is because `InitializationAnalysis` only tracks let-bindings, not
-expression temporaries. To remove `slot_states` entirely, analysis must be the sole source of truth.
+**Problem**: Runtime `slot_states` is still needed to track conditional moves (slot may be moved
+in one branch but not another). To remove `slot_states` entirely, the static analysis must
+track temp initialization and conditional move state precisely so cleanup_frame can use only
+drop_points without runtime checks.
 
 **Solution**: Extend `InitializationAnalysis` to track temp slot initialization, then drop_points
 can handle all cleanup and `slot_states` becomes unnecessary.

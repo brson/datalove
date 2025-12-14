@@ -1241,7 +1241,7 @@ fn execute_function_body<'db>(
     let result = execute_function_body_with_frame(ctx);
 
     // Pop the frame and capture slot states for argument cleanup.
-    let frame = ctx.call_stack.pop().unwrap();
+    let mut frame = ctx.call_stack.pop().unwrap();
     let final_slot_states = frame.slot_states.clone();
 
     // If result is Borrowed (pointing to frame memory), clone to heap before frame cleanup.
@@ -1281,29 +1281,35 @@ fn execute_function_body<'db>(
                     ));
                 }
 
-                // Destroy the original value's internal allocations if it's in a Moved slot.
-                // Available slots will be cleaned up by cleanup_frame, so we skip those.
-                // Check if the original pointer is in an Available slot.
+                // Destroy the original value's contents and mark slot as Moved.
+                // This handles return value temps inline, eliminating need for fallback cleanup.
                 let original_ptr = value.ptr;
                 let layout = frame.layout;
                 let slots = layout.slots(ctx.db);
-                let is_in_available_slot = slots.iter().enumerate().any(|(slot_index, slot_info)| {
-                    if frame.slot_states[slot_index] != SlotState::Available {
-                        return false;
-                    }
-                    let offset = slot_info.offset(ctx.db) as usize;
-                    let slot_ptr = unsafe { frame.frame_data.as_ptr().add(offset) as *const u8 };
-                    slot_ptr == original_ptr
-                });
 
-                if !is_in_available_slot {
-                    // Original is in a Moved slot (or not in any slot), destroy its contents.
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        ctx.runtime.handle(),
-                        original_ptr,
-                        value.tydesc,
-                    );
+                // Find the slot containing this value.
+                // If in Available slot: mark Moved (cleanup_frame will skip it)
+                // If in Moved slot or not in frame: contents still need destroying
+                for (slot_index, slot_info) in slots.iter().enumerate() {
+                    let offset = slot_info.offset(ctx.db) as usize;
+                    let slot_ptr = frame.frame_data.as_ptr().add(offset) as *const u8;
+                    if slot_ptr == original_ptr {
+                        if frame.slot_states[slot_index] == SlotState::Available {
+                            // Mark as Moved so cleanup_frame skips it.
+                            frame.slot_states[slot_index] = SlotState::Moved;
+                        }
+                        break;
+                    }
                 }
+
+                // Always destroy the original contents after cloning.
+                // For Available slots: we just marked it Moved, so cleanup_frame won't double-destroy.
+                // For Moved/external: contents weren't destroyed yet, we need to do it here.
+                datalove_rt::c::dtlv_rti_any_destroy_local(
+                    ctx.runtime.handle(),
+                    original_ptr,
+                    value.tydesc,
+                );
 
                 value.ptr = heap_ptr;
                 value.location = ValueLocation::TempOwned;
@@ -1440,6 +1446,9 @@ fn execute_function_body_with_frame<'db>(
                             if_s.else_binding(ctx.db),
                         )?;
 
+                        // Mark condition temp as Moved (contents destroyed by evaluate_branch_condition).
+                        mark_temp_slot_moved(ctx, if_s.condition(ctx.db));
+
                         current_block_id = if is_true { *then_block } else { *else_block };
                     }
                     ast::Statement::Let(_) => {
@@ -1530,25 +1539,19 @@ fn execute_cfg_statement<'db>(
 /// slots that need cleanup. Runtime slot_states filter out slots that were actually
 /// moved at runtime (handling conditional branches).
 ///
-/// Also includes a fallback pass for temporaries not tracked by initialization
-/// analysis. InitializationAnalysis only tracks let-bindings, not expression temps.
-/// However, with context-aware slot allocation (Phase 4.7), this pass is efficient:
-/// - Most temps are marked Moved after consumption (binop/unop operands)
-/// - Only a few temps need fallback cleanup (return values, if-conditions)
-/// - Unused temps (in HasDest context) are never allocated
+/// Temporaries are handled inline during evaluation:
+/// - BinOp/UnaryOp operands: marked Moved after destroy_value
+/// - If-condition temps: marked Moved after evaluate_branch_condition
+/// - Return value temps: marked Moved after heap clone
 fn cleanup_frame<'db>(
     ctx: &mut InterpContext<'db>,
     frame: StackFrame<'db>,
 ) {
-    use std::collections::HashSet;
-    use crate::function_analysis::{DropReason, SlotId, SlotOwnership};
+    use crate::function_analysis::DropReason;
 
     let layout = frame.layout;
     let slots = layout.slots(ctx.db);
     let drop_points = frame.drop_points;
-
-    // Track which slots we've processed from drop_points.
-    let mut processed_slots: HashSet<SlotId> = HashSet::new();
 
     // Build a map from SlotId to slot_index for quick lookup.
     let slot_id_to_index: std::collections::HashMap<_, _> = slots.iter()
@@ -1556,10 +1559,9 @@ fn cleanup_frame<'db>(
         .map(|(idx, slot)| (slot.slot_id(ctx.db), idx))
         .collect();
 
-    // Pass 1: Process drop points from the analysis.
+    // Process drop points from the analysis.
     for drop_point in drop_points.drops(ctx.db) {
         let slot_id = drop_point.slot_id(ctx.db);
-        processed_slots.insert(slot_id);
 
         // Only process actual drops, not markers for moved/uninitialized slots.
         match drop_point.reason(ctx.db) {
@@ -1586,32 +1588,6 @@ fn cleanup_frame<'db>(
             continue;
         }
 
-        destroy_slot_contents(ctx, slot_info, &frame.frame_data);
-    }
-
-    // Pass 2: Fallback for temporaries not tracked by initialization analysis.
-    // The analysis only tracks let-bindings as initialized, not expression temporaries.
-    // This pass catches Available+Owned slots that don't have drop points.
-    for (slot_index, slot_info) in slots.iter().enumerate() {
-        let slot_id = slot_info.slot_id(ctx.db);
-
-        // Skip if we already processed this slot from drop_points.
-        if processed_slots.contains(&slot_id) {
-            continue;
-        }
-
-        // Skip if not Available (Uninitialized or Moved at runtime).
-        if frame.slot_states[slot_index] != SlotState::Available {
-            continue;
-        }
-
-        // Skip Borrowed slots - caller owns the data.
-        if slot_info.kind(ctx.db).ownership() == SlotOwnership::Borrowed {
-            continue;
-        }
-
-        // This slot is Available+Owned but not in drop_points.
-        // Likely a temporary or a copy type. Destroy to be safe.
         destroy_slot_contents(ctx, slot_info, &frame.frame_data);
     }
 }
