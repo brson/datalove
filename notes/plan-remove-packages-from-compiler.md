@@ -44,6 +44,137 @@ Updated datafun crate callers to use ModuleGraph path where possible:
 
 ---
 
+## Next Steps: Implementation Details
+
+### Step 1: Add type_check_with_module_graph
+
+**File:** `crates/datalove-datafun-compiler/src/tycheck.rs`
+
+Add `type_check_with_module_graph()` function (~20 lines):
+- Reuse existing `build_module_alias_map_for_graph()` (line 2452)
+- Copy import resolution pattern from `typecheck_module_graph()` lines 727-763
+- Look up exports from `ModuleGraphTypecheckResult.module_exports()`
+
+```rust
+pub fn type_check_with_module_graph<'db>(
+    db: &'db dyn crate::Db,
+    source: bct::input::Source,
+    script: Script<'db>,
+    graph: crate::module_graph::ModuleGraph,
+    graph_typecheck: crate::module_graph::ModuleGraphTypecheckResult<'db>,
+) -> TypecheckResult<'db>
+```
+
+### Step 2: Update execute_fun_statement
+
+**File:** `crates/datalove-datafun-compiler/src/interp/mod.rs`
+
+Update `execute_fun_statement()` (lines 476-489) to use the new function:
+
+```rust
+// Current code (line 476-489):
+let unit_typecheck = if let Some(typecheck_result) = ctx.typecheck_result {
+    // Package-world mode.
+    crate::tycheck::type_check_with_package_world(...)
+} else {
+    // ModuleGraph or standalone mode - use basic typecheck.
+    crate::tycheck::type_check(ctx.db, unit_source, parsed_unit)
+};
+
+// New code:
+let unit_typecheck = if let Some(typecheck_result) = ctx.typecheck_result {
+    // Package-world mode (legacy).
+    crate::tycheck::type_check_with_package_world(...)
+} else if let Some(graph_typecheck) = ctx.module_graph_typecheck {
+    // ModuleGraph mode - use new function with imports.
+    let graph = graph_typecheck.graph(ctx.db);
+    crate::tycheck::type_check_with_module_graph(
+        ctx.db,
+        unit_source,
+        parsed_unit,
+        graph,
+        graph_typecheck,
+    )
+} else {
+    // Standalone mode - basic typecheck.
+    crate::tycheck::type_check(ctx.db, unit_source, parsed_unit)
+};
+```
+
+### Step 3: Update analyze_script_section
+
+**File:** `crates/datalove-datafun/src/worldfile_analysis.rs`
+
+Change `analyze_script_section()` (lines 315-386) to mirror `analyze_scriptunit_section()`:
+
+Current signature:
+```rust
+fn analyze_script_section(
+    db: &dyn salsa::Database,
+    package_world: datalove_datafun_pkg::PackageWorld,
+    source: &str,
+) -> AnyResult<SectionAnalysis>
+```
+
+New signature:
+```rust
+fn analyze_script_section<'db>(
+    db: &'db dyn salsa::Database,
+    typecheck_result: ModuleGraphTypecheckResult<'db>,
+    source: &str,
+) -> AnyResult<SectionAnalysis>
+```
+
+Implementation:
+1. Create fresh InterpContext with `new_with_module_graph(db, typecheck_result)`
+2. Populate script imports via `ctx.module_functions_graph.populate_script_imports_for_graph()`
+3. Execute script units via `execute_script_unit()`
+4. Extract output variable, pretty-print, clean up
+
+Update call site in `analyze_worldfile()` line 163.
+
+### Step 4: Remove Package-World Code
+
+After Step 3 works and tests pass, remove the now-unused package-world code:
+
+**tycheck.rs:**
+- Remove `type_check_with_package_world()` (lines ~460-529)
+- Remove `type_check_with_package_world_for_diagnostics()` (lines ~439-453)
+- Remove `typecheck_package_world()` (lines ~565-685)
+- Remove `build_script_module_alias_map()` (lines ~2486-2534)
+- Remove `PackageWorldTypecheckResult` struct (lines ~131-152)
+- Remove `ModuleExports` / `ModuleImports` that use PackageModule (lines ~106-129)
+
+**interp/mod.rs:**
+- Remove `execute_script()` (lines ~108-193)
+- Update `execute_fun_statement()` to remove package-world branch
+
+**interp/context.rs:**
+- Remove `InterpContext::new_with_typecheck()` (lines ~126-161)
+- Remove `InterpContext::new_unchecked()` (lines ~167-193)
+- Remove `package_world` field
+- Remove `typecheck_result` field (PackageWorld version)
+- Remove `current_module` field (PackageModule version)
+- Remove `module_functions: ModuleFunctionTable` field and struct
+
+### Step 5: Clean Up Imports
+
+- Remove re-exports of `PackageWorldTypecheckResult` from lib.rs
+- Remove `bct::package2` imports from compiler files
+
+### Execution Order
+
+1. Step 1 - Add `type_check_with_module_graph` (additive, safe)
+2. Step 2 - Update `execute_fun_statement` to use it
+3. Run tests - verify everything still works
+4. Step 3 - Update `analyze_script_section` (key migration)
+5. Run tests - critical checkpoint
+6. Step 4 - Remove package-world code (cleanup)
+7. Step 5 - Clean up imports
+8. Final test run
+
+---
+
 ## Current State
 
 The compiler has **two parallel paths**:
