@@ -1182,8 +1182,8 @@ fn execute_function_body<'db>(
     // Allocate frame data.
     let mut frame_data = vec![0u8; total_size];
 
-    // Initialize slot states (all Available initially).
-    let mut slot_states = vec![SlotState::Available; slots.len()];
+    // Initialize slot states (all Uninitialized until written to).
+    let mut slot_states = vec![SlotState::Uninitialized; slots.len()];
 
     // Initialize parameters by writing argument values to their slot offsets.
     let params = func.params(ctx.db);
@@ -1220,6 +1220,10 @@ fn execute_function_body<'db>(
         let ptr_bytes = arg_value.ptr as usize;
         frame_data[offset..offset + std::mem::size_of::<usize>()]
             .copy_from_slice(&ptr_bytes.to_ne_bytes());
+
+        // Mark parameter slot as Available (it now contains a valid pointer).
+        let slot_id = slot_info.slot_id(ctx.db);
+        slot_states[slot_id.0 as usize] = SlotState::Available;
     }
 
     // Create and push the stack frame.
@@ -1594,7 +1598,7 @@ fn cleanup_frame<'db>(
             continue;
         }
 
-        // Skip if not Available (was moved at runtime).
+        // Skip if not Available (Uninitialized or Moved at runtime).
         if frame.slot_states[slot_index] != SlotState::Available {
             continue;
         }
@@ -1721,6 +1725,19 @@ fn mark_temp_slot_available<'db>(ctx: &mut InterpContext<'db>, expr: ast::ExprFu
     if let Some(slot_info) = layout.get_temp_slot_for_expr(ctx.db, expr) {
         let slot_id = slot_info.slot_id(ctx.db);
         ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+    }
+}
+
+/// Mark a temporary slot as Moved after its contents have been destroyed.
+///
+/// This prevents cleanup_frame from trying to destroy the slot again.
+fn mark_temp_slot_moved<'db>(ctx: &mut InterpContext<'db>, expr: ast::ExprFun<'db>) {
+    let frame_index = ctx.call_stack.len() - 1;
+    let layout = ctx.call_stack[frame_index].layout;
+
+    if let Some(slot_info) = layout.get_temp_slot_for_expr(ctx.db, expr) {
+        let slot_id = slot_info.slot_id(ctx.db);
+        ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
     }
 }
 
@@ -2004,14 +2021,14 @@ fn eval_expression_frame<'db>(
             // Execute binop with borrowed operands.
             let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(result_dest))?;
 
-            // Clean up temporary operand values.
+            // Clean up temporary operand values and mark their slots as Moved.
             destroy_value(ctx, lhs);
             if lhs.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, lhs_expr);
+                mark_temp_slot_moved(ctx, lhs_expr);
             }
             destroy_value(ctx, rhs);
             if rhs.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, rhs_expr);
+                mark_temp_slot_moved(ctx, rhs_expr);
             }
 
             // If result went to our temp slot (not caller's dest), mark Available for cleanup.
@@ -2044,10 +2061,10 @@ fn eval_expression_frame<'db>(
             // Execute unop with borrowed operand.
             let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(result_dest))?;
 
-            // Clean up temporary operand value.
+            // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
             if operand.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, operand_expr);
+                mark_temp_slot_moved(ctx, operand_expr);
             }
 
             // If result went to our temp slot, mark Available for cleanup.
@@ -2331,14 +2348,14 @@ fn eval_expression_frame_borrow<'db>(
             // Execute binop with borrowed operands.
             let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(result_dest))?;
 
-            // Clean up temporary operand values.
+            // Clean up temporary operand values and mark slots as Moved.
             destroy_value(ctx, lhs);
             if lhs.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, lhs_expr);
+                mark_temp_slot_moved(ctx, lhs_expr);
             }
             destroy_value(ctx, rhs);
             if rhs.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, rhs_expr);
+                mark_temp_slot_moved(ctx, rhs_expr);
             }
 
             if dest.is_none() && result.location == ValueLocation::Borrowed {
@@ -2361,10 +2378,10 @@ fn eval_expression_frame_borrow<'db>(
             // Execute unop with borrowed operand.
             let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(result_dest))?;
 
-            // Clean up temporary operand value.
+            // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
             if operand.location == ValueLocation::Borrowed {
-                mark_temp_slot_available(ctx, operand_expr);
+                mark_temp_slot_moved(ctx, operand_expr);
             }
 
             if dest.is_none() && result.location == ValueLocation::Borrowed {

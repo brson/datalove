@@ -15,6 +15,7 @@ Clean up the interpreter's ownership model so that:
 - **Phase 3**: COMPLETE (dual-mode comparison identified key findings)
 - **Phase 4**: COMPLETE
 - **Phase 4.5**: COMPLETE (per-block move analysis for precise conditional drops)
+- **Phase 4.6**: COMPLETE (Uninitialized slot state for precise temp tracking)
 - **Phases 5-7**: Not started
 
 ## Incremental Phases
@@ -102,6 +103,36 @@ With per-block move analysis, the static analysis correctly handles if/else bran
 The fallback pass in `cleanup_frame` is still needed for temporaries (expression results)
 because `InitializationAnalysis` only tracks let-bindings, not expression temporaries.
 A future improvement would be to track temporary initialization.
+
+### Phase 4.6: Add Uninitialized Slot State ✓ COMPLETE
+
+**Files**: `interp/frame.rs`, `interp/mod.rs`
+
+**What was done:**
+1. Added `Uninitialized` variant to `SlotState` enum:
+   - `Uninitialized`: slot has not been written to yet (skip cleanup)
+   - `Available`: slot contains a valid value (needs cleanup)
+   - `Moved`: slot has been moved from or explicitly destroyed (skip cleanup)
+
+2. Slots now start as `Uninitialized` instead of `Available`
+
+3. Parameter slots are marked `Available` after writing pointers
+
+4. Added `mark_temp_slot_moved()` function to mark slots after `destroy_value()`
+
+5. Updated BinOp/UnaryOp evaluation to:
+   - Mark operand temp slots as `Moved` after destroying their contents
+   - Mark result temp slots as `Available` after writing results
+
+6. `cleanup_frame` now correctly skips:
+   - `Uninitialized` slots (never written to, e.g., unused DPS temp slots)
+   - `Moved` slots (already destroyed inline)
+
+**Key insight:**
+With DPS (Destination-Passing Style), many temp slots are allocated but never used
+because values are written directly to their final destination. Previously all slots
+started as `Available`, causing redundant destroy calls on uninitialized memory.
+Now slots explicitly track their lifecycle: Uninitialized → Available → Moved.
 
 ### Phase 5: Remove slot_states for Move Tracking
 

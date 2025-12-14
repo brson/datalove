@@ -9,12 +9,16 @@ use super::Value;
 
 /// Slot state for frame-based execution.
 ///
-/// Tracks whether a slot is available for use or has been moved from.
+/// Tracks the lifecycle of a slot's contents for proper cleanup.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum SlotState {
-    /// Slot is available for reading (either reference or owned value).
+    /// Slot has not been written to yet. Contains uninitialized/zero bytes.
+    /// Cleanup should skip these slots.
+    Uninitialized,
+    /// Slot contains a valid value that needs cleanup if not moved.
     Available,
-    /// Slot has been moved from (only applicable to non-copy types).
+    /// Slot has been moved from or explicitly destroyed.
+    /// Cleanup should skip these slots.
     Moved,
 }
 
