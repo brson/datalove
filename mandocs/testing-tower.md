@@ -41,13 +41,13 @@ Generative tests driven by `ast_gen`.
 - datalove-rt-tests/tests/btreemap_proptests
 - datalove-rt-tests/tests/btreeset_tests
 - datalove-rt-tests/tests/tensor_tests
-- datalove-rt-tests/tests/roundtrip_tests
 
 fixme: should have ast_gen collections tests too
 
 
 ## Other test suites
 
+- datalove-rt-tests/tests/roundtrip_tests
 - datalove-repl/tests/engine_tests
 - datalove-cli/tests/script_tests
 - datalove-cli/tests/error_tests
