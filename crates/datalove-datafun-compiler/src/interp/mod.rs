@@ -1,31 +1,82 @@
 //! Analysis-driven interpreter with linear type semantics.
 //!
-//! # Architecture
+//! # Overview
 //!
-//! The interpreter executes datafun code in two modes:
+//! The interpreter executes Datafun code after typecheck and function analysis.
+//! It operates in two modes: script scope for top-level statements, and frame-based
+//! execution for function bodies. Both modes enforce linear type semantics and use
+//! destination-passing style (DPS) to minimize heap allocations.
 //!
-//! - **Script scope**: Top-level statements (let bindings, function definitions)
-//!   execute directly with script-level variable tracking.
+//! # Execution Flow
 //!
-//! - **Frame-based execution**: Function bodies execute using a stack frame with
-//!   slots computed by `function_analysis`. This enables destination-passing style
-//!   (DPS) to minimize heap allocations.
+//! 1. **Entry**: [`execute_script_with_module_graph`] receives a typechecked script
+//! 2. **Preparation**: Imports are resolved, functions are analyzed for frame layout
+//! 3. **Execution**: Script units execute sequentially; each statement processes in
+//!    script scope, while function calls create stack frames
+//! 4. **Result**: Script returns via the `output` variable binding
 //!
-//! # Value Ownership
+//! # Two Execution Modes
 //!
-//! Values track ownership via `ValueLocation`:
-//! - `Borrowed`: Points into frame memory or caller's data. Don't free.
-//! - `TempOwned`: Heap-allocated temporary. Must free structure after use.
+//! **Script scope** (`ScriptScope`): Evaluates top-level `let` bindings and `fun`
+//! definitions. Variables are stored by name in a hashmap with move-state tracking.
+//! Linear values are moved on use; copy values are cloned.
 //!
-//! Linear types are enforced by marking slots as `Moved` after use.
-//! Copy types are cloned transparently.
+//! **Frame-based** (`StackFrame`): Evaluates function bodies. The `function_analysis`
+//! module computes a `FrameLayout` mapping each variable and temporary to a byte
+//! offset in a packed buffer. The `ControlFlowGraph` (CFG) drives execution through
+//! basic blocks with explicit terminators for branches, loops, and returns.
+//!
+//! # Value Ownership Model
+//!
+//! `ValueLocation` tracks memory ownership:
+//! - `Borrowed`: Points into frame buffer or caller's data. Never freed by holder.
+//! - `TempOwned`: Heap allocation that must be freed after use.
+//!
+//! When a function returns a `Borrowed` value (pointing to frame memory), the
+//! interpreter clones it to the heap before destroying the frame.
+//!
+//! # Linear Type Semantics
+//!
+//! Copy types (bool, fixed integers, f32) clone transparently. Linear types (int,
+//! string, collections) use move semantics. `SlotState` tracks each slot:
+//! - `Uninitialized`: Not yet written; skip cleanup
+//! - `Available`: Contains valid data; needs cleanup if not moved
+//! - `Moved`: Ownership transferred; skip cleanup
+//!
+//! Operators use borrow semantics (`eval_*_borrow` functions): operands are cloned
+//! for the operation, leaving originals intact. Variables consumed by function args
+//! or `ret` are marked `Moved`.
+//!
+//! # Destination-Passing Style
+//!
+//! Expressions accept an optional `Destination` specifying where to write results.
+//! This avoids allocating temporaries when the caller already has storage. Frame
+//! slots serve as destinations for let bindings and expression temporaries.
+//!
+//! # Control Flow
+//!
+//! Frame execution walks the CFG: execute statements in a block, then follow the
+//! terminator. Terminators handle:
+//! - `Return`: Function exit
+//! - `Branch`: If-statement condition evaluation
+//! - `Goto`: Unconditional jump (with branch-exit drops for convergence)
+//! - `LoopContinue`/`LoopBreak`: Loop control
+//!
+//! # Cleanup
+//!
+//! `DropPoints` from function analysis identifies slots needing cleanup. At function
+//! exit, `cleanup_frame` destroys slots still in `Available` state. Branch-exit
+//! drops handle convergence: when a slot is moved in one branch but not another,
+//! the non-moved branch drops it at exit so both paths converge with the slot
+//! consumed.
 //!
 //! # Key Types
 //!
-//! - [`InterpContext`]: Main interpreter state (runtime, module graph, call stack)
-//! - [`Value`]: Runtime value with pointer, type descriptor, and ownership
-//! - [`StackFrame`]: Function execution frame with slot storage
-//! - [`ScriptScope`]: Top-level variable bindings for REPL/script execution
+//! - [`InterpContext`]: Runtime state, module graph, call stack, type descriptor table
+//! - [`Value`]: Pointer + type descriptor + ownership location
+//! - [`StackFrame`]: Packed byte buffer, per-slot state, CFG, drop points
+//! - [`ScriptScope`]: Named variable bindings with move tracking
+//! - [`Destination`]: Target location for DPS expression evaluation
 
 mod value;
 mod error;
