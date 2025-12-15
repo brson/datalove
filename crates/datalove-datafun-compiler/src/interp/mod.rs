@@ -192,6 +192,84 @@ pub fn execute_script<'db>(
     })
 }
 
+/// Execute a complete script using ModuleGraph typecheck result.
+///
+/// This is the ModuleGraph equivalent of `execute_script()`. It takes a
+/// pre-typechecked module graph instead of a PackageWorld.
+pub fn execute_script_with_module_graph<'db>(
+    db: &'db dyn crate::Db,
+    script: crate::script::Script,
+    graph_typecheck: crate::module_graph::ModuleGraphTypecheckResult<'db>,
+) -> Result<ScriptResult<'db>, InterpError> {
+    // Create interpreter context using ModuleGraph.
+    let mut ctx = InterpContext::new_with_module_graph(db, graph_typecheck)?;
+    ctx.script = Some(script);
+
+    // Populate script-level imports using ModuleGraph.
+    let graph = graph_typecheck.graph(db);
+    ctx.populate_script_imports(script, graph);
+
+    // Typecheck and analyze script-level functions.
+    let units = script.units(db);
+    for unit_index in 0..units.len() {
+        let parsed_unit = crate::parser::parse_script_unit(db, script, unit_index);
+        let unit_source = units[unit_index].source(db);
+
+        // Typecheck the script unit with module graph context.
+        let unit_typecheck = crate::tycheck::type_check_with_module_graph(
+            db,
+            unit_source,
+            parsed_unit,
+            graph,
+            graph_typecheck,
+        );
+
+        // Check for script unit typecheck errors.
+        let errors = unit_typecheck.errors(db);
+        if !errors.is_empty() {
+            let type_errors: Vec<_> = errors.iter().map(|e| e.error(db)).collect();
+            return Err(InterpError::TypecheckErrors(type_errors));
+        }
+
+        // Analyze each function in the unit.
+        for statement in parsed_unit.statements(db) {
+            if let crate::ast::Statement::Fun(func_stmt) = statement {
+                let analysis = crate::function_analysis::analyze_function(db, *func_stmt, unit_typecheck);
+                ctx.script_function_analyses.insert(*func_stmt, analysis);
+            }
+        }
+    }
+
+    // Execute all script units.
+    let units = script.units(db);
+    for unit_index in 0..units.len() {
+        if let Err(e) = execute_unit(&mut ctx, script, unit_index) {
+            cleanup_script_scope(&mut ctx);
+            return Err(e);
+        }
+    }
+
+    // Return the output variable if present.
+    let output_name = bct::text::InternedText::new(db, "output");
+    let value = match ctx.script_scope.variables.remove(&output_name) {
+        Some(var) => var.value,
+        None => {
+            cleanup_script_scope(&mut ctx);
+            return Err(InterpError::NoOutputVariable);
+        }
+    };
+
+    // Clean up any remaining variables before moving out runtime and tydesc_table.
+    cleanup_script_scope(&mut ctx);
+
+    // Return the value, runtime, and tydesc_table (which keeps the memory alive).
+    Ok(ScriptResult {
+        value,
+        runtime: ctx.runtime,
+        tydesc_table: ctx.tydesc_table,
+    })
+}
+
 /// Pretty-print a value using the runtime pretty printer.
 ///
 /// Returns a string representation in valid datalit syntax.

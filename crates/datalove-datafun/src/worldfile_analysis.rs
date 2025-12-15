@@ -160,7 +160,7 @@ pub fn analyze_worldfile(
                 analyze_expr_section(db, &mut interp_ctx, &source)?
             }
             WorldfileSection::Script { source } => {
-                analyze_script_section(db, package_world, &source)?
+                analyze_script_section(db, typecheck_result, &source)?
             }
         };
 
@@ -308,12 +308,9 @@ fn analyze_expr_section<'db>(
 }
 
 /// Analyze a script section by executing the complete script.
-///
-/// Note: This still uses the package-world path (execute_script) because it
-/// handles script typechecking and function analysis correctly.
-fn analyze_script_section(
-    db: &dyn salsa::Database,
-    package_world: datalove_datafun_pkg::PackageWorld,
+fn analyze_script_section<'db>(
+    db: &'db dyn salsa::Database,
+    graph_typecheck: datalove_datafun_compiler::module_graph::ModuleGraphTypecheckResult<'db>,
     source: &str,
 ) -> AnyResult<SectionAnalysis> {
     // Parse the script source.
@@ -325,32 +322,14 @@ fn analyze_script_section(
     let parsed_ast = datalove_datafun_compiler::parser::parse_script_unit(db, script, 0);
     let serde_ast = datalove_datafun_compiler::ast_serde::Script::from_ast(db, parsed_ast);
 
-    // Resolve and typecheck the package world.
-    let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
-    let graph = match resolution.result(db) {
-        Ok(graph) => graph,
-        Err(e) => {
-            return Ok(SectionAnalysis::Script(ScriptAnalysis {
-                ast: serde_ast,
-                typecheck: TypecheckResult::Error {
-                    errors: vec![format!("Resolution error: {:?}", e)],
-                },
-                output: String::new(),
-            }));
-        }
-    };
-
-    let typecheck_result = datalove_datafun_compiler::tycheck::typecheck_package_world(db, graph);
-
-    // Execute the script.
-    match datalove_datafun_compiler::interp::execute_script(db, script, package_world, typecheck_result) {
+    // Execute the script using ModuleGraph path.
+    match datalove_datafun_compiler::interp::execute_script_with_module_graph(db, script, graph_typecheck) {
         Ok(mut result) => {
             // Pretty-print the output.
             let output = datalove_datafun_compiler::interp::pretty_print_value(&mut result)
                 .unwrap_or_else(|e| format!("Error: {:?}", e));
 
             // Destroy the value using the runtime's destroy function.
-            // This must happen before the result is dropped to ensure the runtime is still active.
             unsafe {
                 let rt_handle = result.runtime.handle();
                 datalove_rt::c::dtlv_rti_any_destroy_local(
