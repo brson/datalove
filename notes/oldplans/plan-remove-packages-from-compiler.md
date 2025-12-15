@@ -78,17 +78,19 @@ Updated `analyze_script_section()` to use `execute_script_with_module_graph()`.
 - Simplified `new_with_module_graph()` to not create dummy PackageWorld
 - Updated CLI and REPL to use ModuleGraph path
 
-### Remaining Dead Code (not blocking)
+### Phase 5 COMPLETED: Clean up dead code in tycheck.rs
 
-The following dead code remains in tycheck.rs but doesn't affect functionality:
-- `ModuleExports` and `ModuleImports` (package versions)
+Removed all remaining package-related dead code from tycheck.rs:
+- `ModuleExports` and `ModuleImports` (package versions using `PackageModule`)
 - `PackageWorldTypecheckResult` struct
 - `type_check_with_package_world()` and `type_check_with_package_world_for_diagnostics()`
 - `typecheck_package_world()`
-- `topological_sort_modules()` (compiler version, pkg crate has its own)
-- `build_module_alias_map()` and `build_script_module_alias_map()`
+- `topological_sort_modules()` (compiler version)
+- `build_module_alias_map()` (package version)
+- `build_script_module_alias_map()`
+- Removed unused `BTreeSet` import
 
-This can be cleaned up in a follow-up commit.
+All 256 tests pass (159 interp, 20 std, 3 tycheck_world, 74 compiler).
 
 ---
 
