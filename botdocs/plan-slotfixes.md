@@ -21,7 +21,8 @@ Clean up the interpreter's ownership model so that:
 - **Phase 4.9**: COMPLETE (bug fix: nested block type lookup, move semantics fix)
 - **Phase 5.0**: COMPLETE (branch convergence drops - Rust-like drop model)
 - **Phase 5.1**: COMPLETE (sparse slot tracking infrastructure, debug-only use-after-move)
-- **Phases 5.2-8**: Not started (see Phase 5 notes)
+- **Phase 5.2**: COMPLETE (inline destruction tracking - exclude BinOp/UnaryOp/if-condition temps)
+- **Phases 6-8**: Not started (see Phase 6+ notes)
 
 ## Incremental Phases
 
@@ -354,28 +355,55 @@ As a result, we currently include ALL Local and Temporary slots in `tracked_slot
 - Parameter cleanup checks: skipped (not in tracked_slots) ✓
 - All 162 interp tests pass with leak checking ✓
 
-**Future optimization:**
-To achieve truly sparse tracking (only conditional slots), would need to:
-- Update static analysis to track inline temp destruction
-- Or emit different drop points that don't require runtime checks
+### Phase 5.2: Inline Destruction Tracking ✓ COMPLETE
 
-### Phase 5.2+: Further slot_states Simplification (Future Work)
+**Files**: `function_analysis/slot_allocation.rs`, `function_analysis/drops.rs`, `function_analysis/mod.rs`
 
-**Files**: `function_analysis/liveness.rs`, `function_analysis/drops.rs`, `interp/mod.rs`, `interp/frame.rs`
+**Goal**: Track which temps are destroyed inline by the interpreter, exclude them from runtime tracking.
 
-**Current state after Phase 5.1**: Infrastructure for sparse tracking exists, but all Local/Temporary
-slots are still tracked due to inline destruction not being tracked statically.
+**What was done:**
 
-**Potential further work**:
+1. **Added `SlotDestruction` enum to slot_allocation.rs**:
+   - `InlineDestroyed`: Temp destroyed inline by interpreter (no drop point, no runtime tracking)
+   - `NormalCleanup`: Slot cleaned up at scope end via drop points
 
-1. **Track inline temp destruction in static analysis**: Extend move analysis to understand that
-   BinOp/UnaryOp operands, if-conditions, etc. are destroyed inline.
+2. **Extended `AllocatedSlot` with `destruction` field**:
+   - Stores how the slot's contents will be cleaned up
 
-2. **Remove drop points for inline-destroyed temps**: If we know a temp is destroyed inline,
-   don't emit a drop point for it.
+3. **Marked inline-destroyed temps during slot allocation**:
+   - BinOp operand temps: `InlineDestroyed` (destroyed after binop evaluation)
+   - UnaryOp operand temps: `InlineDestroyed` (destroyed after unop evaluation)
+   - If-condition temps: `InlineDestroyed` (destroyed after branch evaluation)
+   - All sub-expressions inherit destruction mode from parent
 
-3. **True sparse tracking**: With (1) and (2), could limit `tracked_slots` to only slots with
-   `Sometimes` init or move state.
+4. **Updated `tracked_slots` computation in mod.rs**:
+   - Only include Local/Temporary slots with `NormalCleanup`
+   - Exclude `InlineDestroyed` slots from runtime tracking
+
+5. **Updated `compute_drop_points` in drops.rs**:
+   - Skip `InlineDestroyed` slots in both Phase 1 (branch convergence) and Phase 2 (function exits)
+   - These slots don't need drop points since they're handled inline
+
+**Key insight:**
+Inline-destroyed temps have a deterministic lifecycle - they're created and destroyed within a single
+expression evaluation. The interpreter handles their destruction directly (e.g., BinOp destroys
+operands after the operation), so:
+- No drop points needed (no cleanup at scope end)
+- No runtime tracking needed (slot_states checks unnecessary)
+
+**Result:**
+- `tracked_slots` now excludes inline-destroyed temps
+- Drop point computation skips inline-destroyed temps
+- All 162 interp tests pass with leak checking ✓
+
+**Slots now excluded from tracking:**
+- Reference (parameter) slots: static analysis sufficient
+- InlineDestroyed temps: BinOp/UnaryOp operands, if-conditions
+
+**Slots still tracked:**
+- Local slots with NormalCleanup
+- Temporary slots with NormalCleanup (e.g., return values, function call results)
+- Conditionally-initialized/moved slots
 
 ### Phase 6: Clean Up Argument Passing
 

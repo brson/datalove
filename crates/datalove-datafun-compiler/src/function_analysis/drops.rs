@@ -6,7 +6,7 @@ use super::{SlotId, ProgramPoint, StmtId, BlockId, Position, SlotKind, InitState
 use super::cfg::{ControlFlowGraph, Terminator};
 use super::liveness::InitializationAnalysis;
 use super::moves::{MoveInfo, MovedAnalysis, MoveState};
-use super::slot_allocation::AllocatedSlot;
+use super::slot_allocation::{AllocatedSlot, SlotDestruction};
 use super::copyability::{is_copy_type, get_slot_type};
 use crate::ast::StmtFun;
 
@@ -99,6 +99,11 @@ pub fn compute_drop_points<'db>(
                 continue;
             }
 
+            // Skip inline-destroyed slots (destroyed inline by interpreter).
+            if slot.destruction(db) == SlotDestruction::InlineDestroyed {
+                continue;
+            }
+
             // Skip copy types.
             let slot_type = get_slot_type(db, slot, tycheck_result, func);
             if is_copy_type(db, slot_type) {
@@ -167,6 +172,11 @@ pub fn compute_drop_points<'db>(
 
                     // Reference slots are never dropped (caller owns the data).
                     if slot.kind(db) == SlotKind::Reference {
+                        continue;
+                    }
+
+                    // Inline-destroyed slots are handled by interpreter, no drop point needed.
+                    if slot.destruction(db) == SlotDestruction::InlineDestroyed {
                         continue;
                     }
 

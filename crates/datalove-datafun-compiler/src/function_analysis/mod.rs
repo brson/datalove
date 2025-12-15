@@ -162,13 +162,18 @@ pub fn analyze_function<'db>(
     // Include:
     // - Slots with conditional initialization (Sometimes init)
     // - Slots with conditional moves (Sometimes moved)
-    // - All Local and Temporary slots (may be moved at runtime differently than static analysis)
+    // - Local and Temporary slots with NormalCleanup (may need drop points)
+    // Exclude:
+    // - InlineDestroyed slots (destroyed inline by interpreter, no runtime tracking needed)
+    // - Reference (parameter) slots (static analysis sufficient)
     let mut tracked_set: std::collections::HashSet<SlotId> = std::collections::HashSet::new();
     tracked_set.extend(init_analysis.conditionally_initialized_slots(db));
     tracked_set.extend(moved_analysis.conditionally_moved_slots(db));
-    // Include all Local and Temporary slots for now.
+    // Include Local/Temporary slots with NormalCleanup.
     for slot in slots {
-        if matches!(slot.kind(db), SlotKind::Local | SlotKind::Temporary) {
+        if matches!(slot.kind(db), SlotKind::Local | SlotKind::Temporary)
+            && slot.destruction(db) == slot_allocation::SlotDestruction::NormalCleanup
+        {
             tracked_set.insert(slot.slot_id(db));
         }
     }
