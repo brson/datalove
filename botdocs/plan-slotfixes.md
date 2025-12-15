@@ -22,7 +22,9 @@ Clean up the interpreter's ownership model so that:
 - **Phase 5.0**: COMPLETE (branch convergence drops - Rust-like drop model)
 - **Phase 5.1**: COMPLETE (sparse slot tracking infrastructure, debug-only use-after-move)
 - **Phase 5.2**: COMPLETE (inline destruction tracking - exclude BinOp/UnaryOp/if-condition temps)
-- **Phases 6-8**: Not started (see Phase 6+ notes)
+- **Phase 6**: NO-OP (frame-based args already use DPS; script scope will be rewritten later)
+- **Phase 7**: COMPLETE (Return DPS + unified coercion)
+- **Phase 8**: Not started (simplify Value)
 
 ## Incremental Phases
 
@@ -405,89 +407,56 @@ operands after the operation), so:
 - Temporary slots with NormalCleanup (e.g., return values, function call results)
 - Conditionally-initialized/moved slots
 
-### Phase 6: Clean Up Argument Passing
+### Phase 6: Argument Passing - NO-OP
 
-**Files**: `interp/mod.rs`, `function_analysis/slot_allocation.rs`
+Frame-based calls already use DPS with temp slots for arguments. Script scope will be rewritten later.
+No changes needed.
 
-**Problem**: Arguments are heap-allocated, then stored as Reference slots (pointers), requiring
-complex cleanup logic in `cleanup_args_after_frame` with `is_copy_type` checks.
+### Phase 7: Return DPS + Unified Coercion ✓ COMPLETE
 
-**Solution**: Write argument values directly into callee's frame slots using DPS.
+**Files**: `interp/mod.rs`, `interp/frame.rs`
 
-1. Current mess:
-   - Caller evaluates args → `Vec<Value>` (TempOwned on heap)
-   - Creates Reference slots storing pointers to arg values
-   - `cleanup_args_after_frame` cleans up `arg_values` with copy-type checks
+**Goal**: Caller provides return destination to callee; return expressions write directly to caller's
+memory via DPS. Coercion (T→Option<T>) uses existing mechanism instead of duplicate wrapping code.
 
-2. New model:
-   - Change parameter slots from Reference to Local (Owned)
-   - Caller evaluates arg directly into callee's parameter slot via DPS
-   - For `in` args: value written directly to callee frame slot, callee owns it
-   - For `out` args: same as `in`, callee writes output value there
-   - For `ref`/`mut` args: keep as Reference (pointer to caller's slot)
-   - No separate `arg_values` vector needed
-   - No `cleanup_args_after_frame` needed - normal drop_points handles params
+**What was done:**
 
-3. Update `slot_allocation.rs`:
-   - Parameters with `in`/`out` mode: allocate as Local (Owned), not Reference
-   - Parameters with `ref`/`mut` mode: keep as Reference (Borrowed)
+1. **Added `return_dest: Option<Destination>` to `StackFrame`**:
+   - Stores destination for return value (caller's memory)
+   - If Some, return expressions write directly there
+   - If None, falls back to heap allocation (script scope)
 
-4. Update `execute_function_body`:
-   - Instead of storing pointers in Reference slots, evaluate args with dest = param slot
-   - Remove `arg_values` vector and `cleanup_args_after_frame`
+2. **Updated `execute_function_body`**:
+   - Added `return_dest` parameter
+   - Passes it to frame creation
+   - When `return_dest` is Some, skips heap cloning of Borrowed return values
 
-5. Update `compute_drop_points`:
-   - `in` parameter slots may need drop points (if not moved by function)
-   - `ref`/`mut` parameter slots still skipped (Borrowed)
+3. **Updated `eval_function_call_frame`**:
+   - Added `return_dest` parameter
+   - Passes caller's `dest` through to `execute_function_body`
 
-6. Run tests - fix regressions
+4. **Updated `eval_return_expression_frame`**:
+   - If `return_dest` is Some: evaluates into caller's memory with coercion
+   - For Option/Result destinations: evaluates without dest first, then coerces if needed
+   - If `return_dest` is None: falls back to heap allocation with wrapping
 
-**Benefit**: Eliminates heap allocation for arguments, simplifies cleanup, unifies
-parameter handling with normal local variables.
+5. **Removed duplicate Option/Result wrapping from `execute_function_body`**:
+   - Old code wrapped all Ok values in Some/Ok at function boundary
+   - Now coercion happens in `eval_return_expression_frame` where it belongs
+   - Kept try-operator error handling (`OptionNone`/`ResultErr`) for early returns
 
-### Phase 7: Return Values as Out Arguments
+**Key insight:**
+T→Option<T> coercion is a value conversion that should happen at the point of assignment, not
+at function return. With Return DPS, the return expression evaluates into a typed destination,
+and coercion kicks in via the existing `coerce_value_to_dest` mechanism.
 
-**Files**: `interp/mod.rs`, `interp/frame.rs`, `function_analysis/slot_allocation.rs`
+**Result:**
+- Return values written directly to caller's memory when `return_dest` provided
+- No heap cloning needed for frame-based calls
+- Coercion unified through `coerce_value_to_dest` mechanism
+- All 162 interp tests pass with leak checking ✓
 
-**Problem**: Return values are currently cloned to heap before frame cleanup because
-they point to callee frame memory that's about to be deallocated.
-
-**Solution**: Caller provides return destination; callee writes directly there via DPS.
-
-1. Add `return_dest: Option<Destination>` parameter to `execute_function_body`
-
-2. Store return_dest in StackFrame or thread through execution
-
-3. Modify `eval_return_expression_frame`:
-   - If return_dest provided: evaluate with that dest
-   - Value lands in caller memory, no heap clone needed
-
-4. Modify call site handling in `eval_expression_frame` for FunctionCall:
-   - If HasDest context: pass parent's dest as return_dest
-   - If NeedsDest context: use caller's temp slot as return_dest
-
-5. Update slot_allocation for return expressions:
-   - Return expressions change from NeedsDest to HasDest (caller provides destination)
-   - No callee-side temp needed for returns
-
-6. Move Option/Result wrapping to callee side:
-   - Currently wrapping happens in `execute_function_body` *after* heap clone
-   - Move wrapping into `eval_return_expression_frame` *before* writing to return_dest
-   - When return type is `?T` but expression is `T`, write as Some(T) to dest
-   - When return type is `!T` but expression is `T`, write as Ok(T) to dest
-   - TryReturn (`?`) still uses InterpError mechanism for early return
-
-7. Remove heap allocation path for return values
-
-8. Run tests - fix regressions
-
-**Complexity areas**:
-- Nested calls `f(g())`: Works naturally - g's return_dest is f's arg temp slot
-- Option/Result wrapping: Callee must know return type to wrap correctly (available from func signature)
-- Script-level calls: Pass None for return_dest, keep heap allocation as fallback
-- Eventually script scope could also use DPS with a "script output slot"
-
-### Phase 8: Simplify Value
+### Phase 8: Simplify Value (Not Yet Started)
 
 **Files**: `interp/value.rs`, `interp/memory.rs`, `interp/mod.rs`
 
@@ -499,29 +468,18 @@ they point to callee frame memory that's about to be deallocated.
 
 3. Run tests - fix regressions
 
-## Testing Strategy
-
-- Run full test suite after each sub-step
-- Add specific tests for:
-  - Slot ownership derivation
-  - Drop point execution
-  - Move vs copy in function args
-  - Nested function calls
-  - Early returns
-  - Conditional branches with different drop paths
-
 ## Key Files
 
-- `crates/datalove-datafun/src/function_analysis/mod.rs`
-- `crates/datalove-datafun/src/function_analysis/slot_allocation.rs`
-- `crates/datalove-datafun/src/function_analysis/drops.rs`
-- `crates/datalove-datafun/src/function_analysis/liveness.rs` (InitializationAnalysis)
-- `crates/datalove-datafun/src/function_analysis/moves.rs` (MoveInfo, MovedAnalysis)
-- `crates/datalove-datafun/src/function_analysis/copyability.rs` (copy type detection, slot type lookup)
-- `crates/datalove-datafun/src/interp/mod.rs`
-- `crates/datalove-datafun/src/interp/frame.rs`
-- `crates/datalove-datafun/src/interp/value.rs`
-- `crates/datalove-datafun/src/interp/memory.rs` (clone_value_to_dest, move_value_to_dest)
+- `crates/datalove-datafun-compiler/src/function_analysis/mod.rs`
+- `crates/datalove-datafun-compiler/src/function_analysis/slot_allocation.rs`
+- `crates/datalove-datafun-compiler/src/function_analysis/drops.rs`
+- `crates/datalove-datafun-compiler/src/function_analysis/liveness.rs`
+- `crates/datalove-datafun-compiler/src/function_analysis/moves.rs`
+- `crates/datalove-datafun-compiler/src/function_analysis/copyability.rs`
+- `crates/datalove-datafun-compiler/src/interp/mod.rs`
+- `crates/datalove-datafun-compiler/src/interp/frame.rs`
+- `crates/datalove-datafun-compiler/src/interp/value.rs`
+- `crates/datalove-datafun-compiler/src/interp/memory.rs`
 
 ## Scope
 

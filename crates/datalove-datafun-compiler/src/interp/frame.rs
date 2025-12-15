@@ -5,7 +5,7 @@
 
 use crate::function_analysis::{ControlFlowGraph, DropPoints, FrameLayout, SlotId};
 use crate::ast;
-use super::Value;
+use super::{Destination, Value};
 
 /// Slot state for frame-based execution.
 ///
@@ -48,4 +48,9 @@ pub struct StackFrame<'db> {
     pub drop_points: DropPoints<'db>,
     /// Slots that need runtime tracking due to conditional moves.
     pub tracked_slots: Vec<SlotId>,
+    /// Destination for return value (caller's memory).
+    ///
+    /// If Some, return expressions write directly to this destination.
+    /// If None, return values are heap-allocated (script scope fallback).
+    pub return_dest: Option<Destination>,
 }

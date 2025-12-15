@@ -1062,13 +1062,17 @@ fn eval_function_call_in_script_scope<'db>(
 
     // Execute the function body with arguments.
     // Set current_module if this is a module function.
-    execute_function_body(ctx, func, func_module, arg_values)
+    // Script scope doesn't have a return destination - use heap fallback.
+    execute_function_body(ctx, func, func_module, arg_values, None)
 }
 
 /// Evaluate a function call from frame-based execution.
+///
+/// If `return_dest` is provided, the return value is written directly to that location.
 fn eval_function_call_frame<'db>(
     ctx: &mut InterpContext<'db>,
     call_expr: ast::ExprFunctionCall<'db>,
+    return_dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     let name = call_expr.name(ctx.db);
     let arg_exprs = call_expr.args(ctx.db);
@@ -1117,18 +1121,20 @@ fn eval_function_call_frame<'db>(
         arg_values.push(value);
     }
 
-    // Execute the function body with arguments.
-    execute_function_body(ctx, func, func_module, arg_values)
+    // Execute the function body with arguments and return destination.
+    execute_function_body(ctx, func, func_module, arg_values, return_dest)
 }
 
 /// Execute a function body and return its result.
 ///
 /// This uses frame-based execution with analysis-driven slot allocation.
+/// If `return_dest` is provided, return expressions write directly to caller's memory.
 fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
     func_module: Option<ModuleId>,
     arg_values: Vec<Value>,
+    return_dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Helper to clean up arguments on early error (before frame execution).
     // All arguments must be destroyed since they were never used.
@@ -1289,6 +1295,7 @@ fn execute_function_body<'db>(
         cfg,
         drop_points,
         tracked_slots,
+        return_dest,
     };
     ctx.call_stack.push(frame);
 
@@ -1299,12 +1306,16 @@ fn execute_function_body<'db>(
     let mut frame = ctx.call_stack.pop().unwrap();
     let final_slot_states = frame.slot_states.clone();
 
-    // If result is Borrowed (pointing to frame memory), clone to heap before frame cleanup.
-    // This is necessary because the frame memory will be deallocated.
-    // We use proper cloning (not memcpy) to handle types with internal pointers.
+    // Handle return value based on whether we have a return_dest.
     let result = match result {
+        Ok(value) if return_dest.is_some() => {
+            // Return value was written directly to caller's memory via DPS.
+            // No cloning needed - just return the value as-is.
+            Ok(value)
+        }
         Ok(mut value) if value.location == ValueLocation::Borrowed => {
-            // Allocate heap space and clone the value properly.
+            // No return_dest and result is Borrowed (pointing to frame memory).
+            // Clone to heap before frame cleanup since frame will be deallocated.
             unsafe {
                 let heap_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(
                     ctx.runtime.handle(),
@@ -1337,29 +1348,23 @@ fn execute_function_body<'db>(
                 }
 
                 // Destroy the original value's contents and mark slot as Moved.
-                // This handles return value temps inline, eliminating need for fallback cleanup.
                 let original_ptr = value.ptr;
                 let layout = frame.layout;
                 let slots = layout.slots(ctx.db);
 
                 // Find the slot containing this value.
-                // If in Available slot: mark Moved (cleanup_frame will skip it)
-                // If in Moved slot or not in frame: contents still need destroying
                 for (slot_index, slot_info) in slots.iter().enumerate() {
                     let offset = slot_info.offset(ctx.db) as usize;
                     let slot_ptr = frame.frame_data.as_ptr().add(offset) as *const u8;
                     if slot_ptr == original_ptr {
                         if frame.slot_states[slot_index] == SlotState::Available {
-                            // Mark as Moved so cleanup_frame skips it.
                             frame.slot_states[slot_index] = SlotState::Moved;
                         }
                         break;
                     }
                 }
 
-                // Always destroy the original contents after cloning.
-                // For Available slots: we just marked it Moved, so cleanup_frame won't double-destroy.
-                // For Moved/external: contents weren't destroyed yet, we need to do it here.
+                // Destroy the original contents after cloning.
                 datalove_rt::c::dtlv_rti_any_destroy_local(
                     ctx.runtime.handle(),
                     original_ptr,
@@ -1383,55 +1388,31 @@ fn execute_function_body<'db>(
     // Restore previous module.
     restore_module_context(ctx, prev_module);
 
-    // Handle Option/Result return type wrapping.
+    // Handle try-operator early returns (? and ! operators).
+    // Note: T→Option<T> coercion is handled during return expression evaluation via DPS,
+    // so we don't need to wrap Ok values here. We only handle try-operator errors.
     use crate::datalit::ast::TypeHint;
     let return_type = func.return_type(ctx.db);
-    if let Some(ret_type) = return_type {
-        match ret_type.type_hint(ctx.db) {
-            TypeHint::Option(_) => {
-                // If the function's return type is ?T, wrap result in Some or catch OptionNone as None.
-                match result {
-                    Ok(value) => {
-                        // Check if value is already an Option (e.g., from @none literal).
-                        let value_tag = unsafe { (*value.tydesc).type_tag };
-                        if value_tag == datalove_rt::rtdt::TyTag::Option {
-                            // Already an Option - return directly, don't double-wrap.
-                            return Ok(value);
-                        }
-                        // Wrap non-Option result in Some.
-                        return allocate_option_some_from_value(ctx, value);
-                    }
-                    Err(InterpError::OptionNone) => {
-                        // Early return with None - allocate Option::None.
-                        let inner_tydesc = value_tydesc_for_option(ctx, ret_type);
-                        return allocate_option_none(ctx, inner_tydesc);
-                    }
-                    Err(e) => return Err(e),
+    match &result {
+        Err(InterpError::OptionNone) => {
+            // Early return via ? operator - create Option::None.
+            if let Some(ret_type) = return_type {
+                if matches!(ret_type.type_hint(ctx.db), TypeHint::Option(_)) {
+                    let inner_tydesc = value_tydesc_for_option(ctx, ret_type);
+                    return allocate_option_none(ctx, inner_tydesc);
                 }
             }
-            TypeHint::Result(_) => {
-                // If the function's return type is !T, wrap result in Ok or catch ResultErr as Err.
-                match result {
-                    Ok(value) => {
-                        // Check if value is already a Result (e.g., from @error literal).
-                        let value_tag = unsafe { (*value.tydesc).type_tag };
-                        if value_tag == datalove_rt::rtdt::TyTag::Result {
-                            // Already a Result - return directly, don't double-wrap.
-                            return Ok(value);
-                        }
-                        // Wrap non-Result value in Ok.
-                        return allocate_result_ok_from_value(ctx, value);
-                    }
-                    Err(InterpError::ResultErr { tydesc, ptr }) => {
-                        // Early return with Err - allocate Result::Err.
-                        let ok_tydesc = value_tydesc_for_result(ctx, ret_type);
-                        return allocate_result_err(ctx, ok_tydesc, tydesc, ptr);
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-            _ => {}
         }
+        Err(InterpError::ResultErr { tydesc, ptr }) => {
+            // Early return via ! operator - create Result::Err.
+            if let Some(ret_type) = return_type {
+                if matches!(ret_type.type_hint(ctx.db), TypeHint::Result(_)) {
+                    let ok_tydesc = value_tydesc_for_result(ctx, ret_type);
+                    return allocate_result_err(ctx, ok_tydesc, *tydesc, *ptr);
+                }
+            }
+        }
+        _ => {}
     }
 
     result
@@ -2189,7 +2170,8 @@ fn eval_expression_frame<'db>(
 
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Evaluate function call with arguments in frame context.
-            eval_function_call_frame(ctx, call_expr)
+            // Pass caller's dest as return destination for DPS.
+            eval_function_call_frame(ctx, call_expr, dest)
         }
 
         ast::ExprFunKind::UnaryOp(unary_expr) => {
@@ -2349,13 +2331,70 @@ fn eval_expression_frame<'db>(
     }
 }
 
-/// Evaluate a return expression with the function's return type as context.
+/// Evaluate a return expression with destination from frame.
 ///
-/// This is needed for @none/@error literals which require a typed destination.
+/// If the frame has a `return_dest`, the expression is evaluated and written to
+/// caller's memory, with coercion if needed. Otherwise, falls back to heap allocation.
 fn eval_return_expression_frame<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
 ) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::TyTag;
+
+    let frame_index = ctx.call_stack.len() - 1;
+
+    // Check if we have a return destination from caller.
+    if let Some(return_dest) = ctx.call_stack[frame_index].return_dest {
+        let dest_tag = unsafe { (*return_dest.tydesc).type_tag };
+
+        // Check if dest is Option/Result (may need coercion).
+        let needs_coercion_check = matches!(dest_tag, TyTag::Option | TyTag::Result | TyTag::Data);
+
+        if needs_coercion_check {
+            // Evaluate WITHOUT destination first to check if coercion is needed.
+            let value = eval_expression_frame(ctx, expr, None)?;
+
+            // Check if coercion is needed (value type doesn't match dest type).
+            let value_tag = unsafe { (*value.tydesc).type_tag };
+            if value.tydesc != return_dest.tydesc && value_tag != dest_tag {
+                // Need to coerce T → Option<T> or T → Result<T>.
+                coerce_value_to_dest(ctx, value, return_dest)?;
+            } else {
+                // No coercion needed - write value to dest.
+                if value.location == ValueLocation::TempOwned {
+                    // Copy contents and free structure.
+                    let size = unsafe { (*value.tydesc).size as usize };
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            value.ptr,
+                            return_dest.ptr,
+                            size,
+                        );
+                    }
+                    free_value_structure(ctx, value);
+                } else {
+                    // Value is Borrowed - clone to dest.
+                    clone_value_to_dest(ctx, value, return_dest);
+                }
+            }
+        } else {
+            // No coercion possible - evaluate directly into dest via DPS.
+            eval_expression_frame(ctx, expr, Some(return_dest))?;
+        }
+
+        // Return as Borrowed - caller owns the destination memory.
+        return Ok(Value {
+            ptr: return_dest.ptr,
+            tydesc: return_dest.tydesc,
+            location: ValueLocation::Borrowed,
+        });
+    }
+
+    // No return_dest - fall back to heap allocation (script scope path).
+    // Get the function's return type to check if wrapping/coercion is needed.
+    let func = ctx.call_stack[frame_index].func;
+    let return_type = func.return_type(ctx.db);
+
     // Check if this is a @none or @error literal that needs typed context.
     let needs_typed_dest = matches!(
         expr.expr(ctx.db),
@@ -2364,9 +2403,7 @@ fn eval_return_expression_frame<'db>(
 
     if needs_typed_dest {
         // Get the function's return type to provide as destination.
-        let frame_index = ctx.call_stack.len() - 1;
-        let func = ctx.call_stack[frame_index].func;
-        if let Some(ret_type) = func.return_type(ctx.db) {
+        if let Some(ret_type) = return_type {
             let ret_tydesc = type_hint_to_tydesc(ctx, ret_type);
             let ret_ptr = unsafe {
                 datalove_rt::c::dtlv_rti_mem_alloc_local(
@@ -2392,8 +2429,35 @@ fn eval_return_expression_frame<'db>(
         }
     }
 
-    // For other expressions, evaluate without special destination.
-    eval_expression_frame(ctx, expr, None)
+    // Evaluate expression without destination.
+    let value = eval_expression_frame(ctx, expr, None)?;
+
+    // Check if we need to wrap the value in Option/Result for return type coercion.
+    // This handles the case where return_dest is None (e.g., nested function calls).
+    if let Some(ret_type) = return_type {
+        use crate::datalit::ast::TypeHint;
+        match ret_type.type_hint(ctx.db) {
+            TypeHint::Option(_) => {
+                // Check if value needs wrapping (not already an Option).
+                let value_tag = unsafe { (*value.tydesc).type_tag };
+                if value_tag != TyTag::Option {
+                    // Wrap value in Some.
+                    return allocate_option_some_from_value(ctx, value);
+                }
+            }
+            TypeHint::Result(_) => {
+                // Check if value needs wrapping (not already a Result).
+                let value_tag = unsafe { (*value.tydesc).type_tag };
+                if value_tag != TyTag::Result {
+                    // Wrap value in Ok.
+                    return allocate_result_ok_from_value(ctx, value);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(value)
 }
 
 // ============================================================================
@@ -2542,7 +2606,7 @@ fn eval_expression_frame_borrow<'db>(
         // For function calls in borrow context, the call itself uses normal semantics
         // (arguments may be moved depending on parameter modes).
         ast::ExprFunKind::FunctionCall(call_expr) => {
-            eval_function_call_frame(ctx, call_expr)
+            eval_function_call_frame(ctx, call_expr, dest)
         }
 
         // For other expressions (literals, etc.), delegate to normal evaluation.
