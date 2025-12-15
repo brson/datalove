@@ -3,7 +3,6 @@
 Most features appear in all of these tests.
 
 - datalove-datalit/tests/parser_tests
-- datalove-datalit/tests/parser_panic_tests
 - datalove-datalit/tests/resolve_tests
 - datalove-datalit/tests/tycheck_tests
 - datalove-datalit/tests/pretty_tests
@@ -14,33 +13,28 @@ Most features appear in all of these tests.
 - datalove-datafun/tests/interp_tests
 - datalove-datafun/tests/std_tests
 
+
 ## AST-gen tests
 
 Generative tests driven by `ast_gen`.
 
 - datalove-datalit/tests/ast_gen_tests - 
-  Tests of the AST generator.
-
+    Tests of the AST generator.
 - datalove-datafun-compiler/tests/funlit_equiv_tests -
-  Checks that datalit expressions and type hints are
-  parsed and typechecked the same by both datafun and datalit.
-
+    Checks that datalit expressions and type hints are
+    parsed and typechecked the same by both datafun and datalit.
 - datalove-datafun-compiler/tests/error_equiv_tests -
-  Checks that datalit expressions and type hints with
-  errors are parsed and typechecked the same by both datafun and datalit.
-
+    Checks that datalit expressions and type hints with
+    errors are parsed and typechecked the same by both datafun and datalit.
 - datalove-rt-tests/tests/clone_tests
 - datalove-rt-tests/tests/cmp_tests
 - datalove-rt-tests/tests/eq_tests
 - datalove-rt-tests/tests/destroy_tests
-
 - datalove-rt-tests/tests/cmp_total_tests -
-  fixme: not using ast_gen
-
+    fixme: not using ast_gen
 - datalove-rt-tests/tests/eq_unique_tests -
-  fixme: not using ast_gen
+    fixme: not using ast_gen
 
-- fixme: should have ast_gen collections tests too
 
 ## Runtime collections
 
@@ -51,12 +45,16 @@ Generative tests driven by `ast_gen`.
 - datalove-rt-tests/tests/tensor_tests
 - datalove-rt-tests/tests/roundtrip_tests
 
+fixme: should have ast_gen collections tests too
+
+
 ## Other test suites
 
 - datalove-repl/tests/engine_tests
 - datalove-cli/tests/script_tests
 - datalove-cli/tests/error_tests
 - datalove-cli/tests/type_error_tests
+- datalove-datalit/tests/parser_panic_tests
 
 
 ## Missing suites implied by datalit/datafun symmetry
@@ -64,6 +62,7 @@ Generative tests driven by `ast_gen`.
 - datalove-datafun-compiler/tests/resolve_tests
 - datalove-datafun-compiler/tests/pretty_tests
 - datalove-datafun-compiler/tests/roundtrip_tests
+
 
 ## Testing utilities
 
