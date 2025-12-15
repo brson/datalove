@@ -25,9 +25,7 @@ Generative tests driven by `ast_gen`.
 - datalove-rt-tests/tests/eq_tests
 - datalove-rt-tests/tests/destroy_tests
 - datalove-rt-tests/tests/cmp_total_tests -
-    fixme: not using ast_gen
 - datalove-rt-tests/tests/eq_unique_tests -
-    fixme: not using ast_gen
 - datalove-datafun-compiler/tests/funlit_equiv_tests -
     Checks that datalit expressions and type hints are
     parsed and typechecked the same by both datafun and datalit.
