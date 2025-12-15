@@ -20,12 +20,6 @@ Generative tests driven by `ast_gen`.
 
 - datalove-datalit/tests/ast_gen_tests - 
     Tests of the AST generator.
-- datalove-datafun-compiler/tests/funlit_equiv_tests -
-    Checks that datalit expressions and type hints are
-    parsed and typechecked the same by both datafun and datalit.
-- datalove-datafun-compiler/tests/error_equiv_tests -
-    Checks that datalit expressions and type hints with
-    errors are parsed and typechecked the same by both datafun and datalit.
 - datalove-rt-tests/tests/clone_tests
 - datalove-rt-tests/tests/cmp_tests
 - datalove-rt-tests/tests/eq_tests
@@ -34,6 +28,12 @@ Generative tests driven by `ast_gen`.
     fixme: not using ast_gen
 - datalove-rt-tests/tests/eq_unique_tests -
     fixme: not using ast_gen
+- datalove-datafun-compiler/tests/funlit_equiv_tests -
+    Checks that datalit expressions and type hints are
+    parsed and typechecked the same by both datafun and datalit.
+- datalove-datafun-compiler/tests/error_equiv_tests -
+    Checks that datalit expressions and type hints with
+    errors are parsed and typechecked the same by both datafun and datalit.
 
 
 ## Runtime collections
