@@ -36,11 +36,48 @@ Updated datafun crate callers to use ModuleGraph path where possible:
 
 3. **build_module_alias_map_for_graph()** - Helper to map module aliases to ModuleId
 
-### Remaining Work
+4. **type_check_with_module_graph()** - Typechecks scripts with module graph support for import resolution (added in Step 1)
 
-- **analyze_script_section()** still uses package path due to function typechecking requirements
-- Cannot remove `execute_script()` until analyze_script_section is fully migrated
-- Need `type_check_with_module_graph()` for scripts with function definitions
+### Step 1 COMPLETED: type_check_with_module_graph
+
+Added `type_check_with_module_graph()` to `tycheck.rs`. This function:
+- Takes `(db, source, script, graph, graph_typecheck)` parameters
+- Builds path-to-id map from the module graph
+- Uses `build_module_alias_map_for_graph()` to resolve require statements
+- Resolves imports against `graph_typecheck.module_exports()`
+- Does standard two-pass typechecking (signatures then statements)
+
+### Step 2 COMPLETED: execute_fun_statement updated
+
+Updated `execute_fun_statement()` to use `type_check_with_module_graph()` when in ModuleGraph mode:
+- Checks `ctx.module_graph_typecheck` first
+- If present, uses `type_check_with_module_graph()` with the graph from typecheck result
+- Falls back to basic `type_check()` for standalone mode
+
+### Step 3 TODO: Add execute_script_with_module_graph
+
+**File:** `crates/datalove-datafun-compiler/src/interp/mod.rs`
+
+Add new function that mirrors `execute_script()` but uses ModuleGraph types:
+- Takes `(db, script, ModuleGraphTypecheckResult)` - no PackageWorld
+- Uses `InterpContext::new_with_module_graph()`
+- Uses `ctx.populate_script_imports(script, graph)`
+- Uses `type_check_with_module_graph()` for script unit typechecking
+- Has access to `ctx.script_function_analyses` since it's in the compiler crate
+
+This solves the problem of not being able to access private fields from the datafun crate.
+
+### Step 4 TODO: Update analyze_script_section
+
+**File:** `crates/datalove-datafun/src/worldfile_analysis.rs`
+
+Change to use the new `execute_script_with_module_graph()` function instead of
+`execute_script()` with PackageWorld.
+
+### Remaining Work After Steps 3-4
+
+- Remove `execute_script()` once no longer needed
+- Remove package-world code from compiler (Phase 4 of original plan)
 
 ---
 

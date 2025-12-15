@@ -309,9 +309,8 @@ fn analyze_expr_section<'db>(
 
 /// Analyze a script section by executing the complete script.
 ///
-/// Note: This still uses the package-world path (execute_script) because scripts
-/// with function definitions require per-unit typechecking with module context,
-/// which the ModuleGraph path doesn't support yet.
+/// Note: This still uses the package-world path (execute_script) because it
+/// handles script typechecking and function analysis correctly.
 fn analyze_script_section(
     db: &dyn salsa::Database,
     package_world: datalove_datafun_pkg::PackageWorld,

@@ -528,6 +528,91 @@ pub fn type_check_with_package_world<'db>(
     TypecheckResult::new(db, script, errors, ctx.expr_types)
 }
 
+/// Typecheck a script with module graph support.
+///
+/// This version of type_check allows scripts to import functions from modules
+/// in the module graph. Used for script units that define functions requiring
+/// access to imported function signatures.
+#[salsa::tracked]
+pub fn type_check_with_module_graph<'db>(
+    db: &'db dyn crate::Db,
+    source: bct::input::Source,
+    script: Script<'db>,
+    graph: crate::module_graph::ModuleGraph,
+    graph_typecheck: crate::module_graph::ModuleGraphTypecheckResult<'db>,
+) -> TypecheckResult<'db> {
+    use crate::module_graph::ModuleId;
+
+    let mut ctx = TypeContext::new(db, source);
+
+    // Build path-to-id map from the module graph.
+    let mut path_to_id: HashMap<String, ModuleId> = HashMap::new();
+    for module in graph.iter_modules(db) {
+        let id = module.id(db);
+        path_to_id.insert(id.path(db).clone(), id);
+    }
+
+    // Build module alias map from require statements.
+    let module_exports_map = graph_typecheck.module_exports(db);
+    let alias_map = build_module_alias_map_for_graph(db, script, &path_to_id);
+
+    // Process import statements to populate function signatures.
+    for statement in script.statements(db) {
+        if let Statement::Import(import) = statement {
+            let module_name = import.module_name(db);
+            let item_name = import.item_name(db);
+
+            // Look up the module in the alias map.
+            if let Some(&source_module_id) = alias_map.get(&module_name) {
+                // Look up the module exports.
+                if let Some(exports) = module_exports_map.get(&source_module_id) {
+                    // Look up the function in the exports.
+                    let func_opt = exports.functions(db).iter()
+                        .find(|(name, _)| *name == item_name)
+                        .map(|(_, func_type)| *func_type);
+
+                    if let Some(func_type) = func_opt {
+                        // Add the function to the context.
+                        ctx.add_function(item_name, func_type);
+                    } else {
+                        ctx.add_error(TypeError::UnresolvedName(
+                            format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
+                        ));
+                    }
+                } else {
+                    ctx.add_error(TypeError::UnresolvedName(
+                        format!("module {} (not typechecked)", module_name.as_str(db))
+                    ));
+                }
+            } else {
+                ctx.add_error(TypeError::UnresolvedName(
+                    format!("module {} (not required)", module_name.as_str(db))
+                ));
+            }
+        }
+    }
+
+    // First pass: collect all function signatures.
+    for statement in script.statements(db) {
+        if let Statement::Fun(stmt) = statement {
+            collect_function_signature(&mut ctx, stmt);
+        }
+    }
+
+    // Second pass: type check all statements (including function bodies).
+    for statement in script.statements(db) {
+        check_statement(&mut ctx, statement);
+    }
+
+    let errors = ctx
+        .errors
+        .into_iter()
+        .map(|e| TypeErrorEntry::new(db, e))
+        .collect();
+
+    TypecheckResult::new(db, script, errors, ctx.expr_types)
+}
+
 /// Look up the type of a variable after typechecking.
 ///
 /// This re-runs typechecking to get the variable type.

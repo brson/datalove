@@ -475,7 +475,7 @@ fn execute_fun_statement<'db>(
 
                     // Typecheck the unit using appropriate mode.
                     let unit_typecheck = if let Some(typecheck_result) = ctx.typecheck_result {
-                        // Package-world mode.
+                        // Package-world mode (legacy).
                         crate::tycheck::type_check_with_package_world(
                             ctx.db,
                             unit_source,
@@ -483,8 +483,18 @@ fn execute_fun_statement<'db>(
                             ctx.package_world,
                             typecheck_result,
                         )
+                    } else if let Some(graph_typecheck) = ctx.module_graph_typecheck {
+                        // ModuleGraph mode - use new function with imports.
+                        let graph = graph_typecheck.graph(ctx.db);
+                        crate::tycheck::type_check_with_module_graph(
+                            ctx.db,
+                            unit_source,
+                            parsed_unit,
+                            graph,
+                            graph_typecheck,
+                        )
                     } else {
-                        // ModuleGraph or standalone mode - use basic typecheck.
+                        // Standalone mode - basic typecheck.
                         crate::tycheck::type_check(ctx.db, unit_source, parsed_unit)
                     };
 
