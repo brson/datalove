@@ -456,59 +456,61 @@ and coercion kicks in via the existing `coerce_value_to_dest` mechanism.
 - Coercion unified through `coerce_value_to_dest` mechanism
 - All 162 interp tests pass with leak checking ✓
 
-#### Remaining Non-DPS Cases to Fix
+#### Remaining Non-DPS Callers to Fix
 
-The following code paths still bypass DPS and need to be eliminated:
+These are cases where function calls don't receive a return destination:
 
 **1. Script scope calls** (line ~1015)
 ```rust
 execute_function_body(ctx, func, func_module, arg_values, None)
 ```
 - `eval_function_call_in_script_scope()` passes `None` for return_dest
-- Falls back to heap allocation
-- **Must fix**: Script scope must provide a return destination
+- **Fix**: Allocate heap buffer before call, pass as return_dest
 
-**2. Borrowed frame returns without return_dest** (lines ~1265-1326)
-- When `return_dest` is None AND return expression yields Borrowed value
-- Must clone to heap before frame cleanup since frame will be deallocated
-- Uses `dtlv_rti_clone_local()` for types with internal pointers
+**2. Let statement coercion check** (line ~1907)
+```rust
+let value = eval_expression_frame(ctx, let_stmt.value(ctx.db), None)?;
+```
+- When dest is Option/Result/Data, evaluates RHS with `None` first to check if coercion needed
+- If RHS is a function call, that call loses DPS
+- **Fix**: Evaluate with dest; handle coercion differently
 
-**3. Option/Result wrapping when return_dest is None** (lines ~2386-2406)
-- When function returns T but return type is Option<T> or Result<T>
-- Calls `allocate_option_some_from_value()` or `allocate_result_ok_from_value()`
-- Allocates wrapper on heap, copies inner value, frees original
+**3. Return expression coercion check** (line ~2304)
+```rust
+let value = eval_expression_frame(ctx, expr, None)?;
+```
+- When return_dest is Option/Result/Data, evaluates with `None` first
+- If expression is a function call, that call loses DPS
+- **Fix**: Evaluate with dest; handle coercion differently
 
-**4. Coercion check path** (lines ~2303-2328)
-- Even when `return_dest` IS provided, evaluates without dest first
-- Checks if T→Option<T> or T→Result<T> coercion needed
-- Then copies/coerces to dest afterward
-- NOT pure DPS - should evaluate directly into dest with coercion
+#### Consequences of No return_dest (to be deleted)
 
-**5. @none/@error typed literals** (lines ~2354-2378)
-- When returning typed `@none` or `@error` literals
-- Allocates heap memory for typed destination
-- Evaluates into temporary heap buffer
+These code paths exist only because callers pass `None`:
 
-**6. Copy type reads** (lines ~2004-2015)
-- Reading copy-type from Reference slot always clones
-- Uses `clone_value_to_dest()` regardless of dest availability
-- Correct behavior (must preserve original), but not pure DPS
+- **Borrowed frame returns** (lines ~1265-1326): Clone to heap before frame cleanup
+- **Option/Result wrapping** (lines ~2386-2406): Allocate wrapper on heap
+- **@none/@error fallback** (lines ~2354-2378): Allocate typed heap buffer
 
-**7. Try-operator early returns** (lines ~1346-1362)
-- ? or ! operators trigger early return with Option::None or Result::Err
-- Allocates wrapper on heap, bypasses normal return expression evaluation
+Once all callers provide return_dest, these paths can be deleted.
 
 #### Phase 7 Completion Plan
 
-To fully eliminate non-DPS paths and remove the fallback:
+**7.1**: Script scope provides return destination
+- Allocate heap buffer before call based on function return type
+- Pass as return_dest to `execute_function_body`
 
-**7.1**: Script scope provides return destination - allocate heap buffer before call, pass as return_dest
-**7.2**: Fix coercion check path - evaluate directly into dest with type-aware DPS
-**7.3**: Fix try-operator early returns - write directly to return_dest
-**7.4**: Fix @none/@error literals - use return_dest directly
-**7.5**: Ensure all call paths have return_dest (nested calls, etc.)
-**7.6**: Remove `return_dest: Option<Destination>` - make it non-optional `Destination`
-**7.7**: Delete all heap allocation fallback code paths
+**7.2**: Fix coercion check paths (let statement + return expression)
+- Always evaluate with dest
+- Check coercion afterward based on what was written vs dest type
+- Function calls must receive dest
+
+**7.3**: Change `return_dest: Option<Destination>` to `return_dest: Destination`
+- All callers now required to provide destination
+
+**7.4**: Delete fallback code paths
+- Remove heap clone for Borrowed returns
+- Remove heap allocation for Option/Result wrapping
+- Remove @none/@error heap fallback
 
 ### Phase 8: Simplify Value (Not Yet Started)
 
