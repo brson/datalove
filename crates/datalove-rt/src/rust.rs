@@ -3,7 +3,6 @@
 //! This module provides an idiomatic Rust interface around the C-ABI functions.
 
 use crate::c::{LocalRtHandle, RtStatus};
-use crate::impls::rt_local::RtLocal;
 
 /// Safe wrapper around a Datalove runtime instance.
 ///

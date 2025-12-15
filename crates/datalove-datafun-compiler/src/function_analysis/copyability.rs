@@ -162,7 +162,7 @@ fn get_param_type<'db>(
     param_name: Option<bct::text::InternedText<'db>>,
     _tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> crate::tycheck::TypeAndHeap<'db> {
-    use crate::datalit::ast::TypeHint;
+    
 
     if let Some(name) = param_name {
         for param in func.params(db) {

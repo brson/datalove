@@ -6,7 +6,6 @@ use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
 use bct::input::Source;
-use bct::package2::PackageModule;
 use bct::package_resolve2::{ImportDemand, ImportDemandMap, PackageWorldMap};
 
 use datalove_datafun_compiler::parser;

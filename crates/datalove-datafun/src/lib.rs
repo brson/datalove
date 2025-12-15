@@ -3,9 +3,7 @@
 //! This crate re-exports both the compiler and package system,
 //! providing bridge modules that connect them.
 
-#![allow(unused)]
 
-use rmx::prelude::*;
 
 // Re-export compiler.
 pub use datalove_datafun_compiler::*;

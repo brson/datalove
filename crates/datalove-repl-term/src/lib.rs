@@ -1,6 +1,5 @@
 //! Crossterm Ratatui REPL.
 
-#![allow(unused)]
 
 use rmx::prelude::*;
 

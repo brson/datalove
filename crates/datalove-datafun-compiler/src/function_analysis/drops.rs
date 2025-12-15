@@ -1,11 +1,11 @@
 //! Drop point insertion for resource management.
 
 use rmx::prelude::*;
-use std::collections::{HashSet, HashMap};
-use super::{SlotId, ProgramPoint, StmtId, BlockId, Position, SlotKind, InitState};
+use std::collections::HashMap;
+use super::{SlotId, StmtId, BlockId, SlotKind, InitState};
 use super::cfg::{ControlFlowGraph, Terminator};
 use super::liveness::InitializationAnalysis;
-use super::moves::{MoveInfo, MovedAnalysis, MoveState};
+use super::moves::{MovedAnalysis, MoveState};
 use super::slot_allocation::{AllocatedSlot, SlotDestruction};
 use super::copyability::{is_copy_type, get_slot_type};
 use crate::ast::StmtFun;

@@ -1,7 +1,7 @@
 //! Control flow graph construction.
 
 use rmx::prelude::*;
-use crate::ast::{Statement, StmtFun, StmtRet, StmtIf, StmtLoop, ExprFun, ExprFunKind};
+use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind};
 use super::{StmtId, BlockId};
 
 /// Control flow graph for a function.

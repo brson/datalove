@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use bct::text::InternedText;
 use std::collections::HashMap;
 use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind, ParamMode};
-use super::{SlotId, ExprId, StmtId, LiveRanges, ProgramPoint};
+use super::{SlotId, ExprId, StmtId, LiveRanges};
 use super::slot_allocation::AllocatedSlot;
 
 /// Information about a read operation.

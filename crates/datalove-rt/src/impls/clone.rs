@@ -1,6 +1,6 @@
 //! Deep cloning for runtime values.
 
-use crate::{c::{LocalRtHandle, RtStatus}, impls::{alloc, rt_local}, rtdt};
+use crate::{c::{LocalRtHandle, RtStatus}, impls::rt_local, rtdt};
 
 /// Clone any type into the local heap.
 ///

@@ -1,5 +1,4 @@
 use rmx::prelude::*;
-use bct::text::InternedText;
 use crate::ast::*;
 use crate::tycheck::*;
 

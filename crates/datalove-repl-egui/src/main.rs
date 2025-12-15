@@ -1,6 +1,5 @@
 //! Native binary entry point for datalove-repl-egui.
 
-#![allow(unused)]
 
 use rmx::prelude::*;
 

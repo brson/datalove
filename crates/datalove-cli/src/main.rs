@@ -1,10 +1,8 @@
-#![allow(unused)]
 
 use rmx::prelude::*;
 
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
-use std::collections::HashMap;
 
 mod docs;
 
@@ -292,7 +290,7 @@ impl LitOpCommand {
         }
 
         // Instantiate values with RAII guards for cleanup.
-        let mut rt = datalove_rt::rust::Runtime::new();
+        let rt = datalove_rt::rust::Runtime::new();
         let mut tydesc_table1 = datalit::tydesc_table::TyDescTable::new(&db);
         let inst1 = datalit::instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table1, typechecked1)?;
         let _guard1 = unsafe {

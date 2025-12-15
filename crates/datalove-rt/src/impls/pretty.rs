@@ -2,8 +2,6 @@
 //!
 //! Produces valid datalit syntax that can be parsed back.
 
-use rmx::prelude::*;
-use crate::impls::rt_local;
 use crate::rtdt;
 use crate::c::{LocalRtHandle, RtStatus};
 
@@ -607,13 +605,10 @@ unsafe fn push_str(
     }
 }
 
-fn align_up(offset: usize, align: usize) -> usize {
-    (offset + align - 1) & !(align - 1)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::impls::rt_local;
     use crate::impls::rt_local::RtLocal;
 
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {

@@ -7,9 +7,8 @@
 
 use bct::text::InternedText;
 
-use super::{InterpContext, InterpError, Value, ValueLocation, SlotState, Destination};
+use super::{InterpContext, InterpError, Value, ValueLocation, SlotState};
 use super::memory::destroy_value;
-use super::types::is_bool_value;
 
 /// Find a slot by variable name in the frame layout.
 pub(super) fn find_slot_by_name<'db>(
@@ -20,24 +19,6 @@ pub(super) fn find_slot_by_name<'db>(
     layout.slots(db).iter()
         .find(|s| s.name(db) == Some(name))
         .copied()
-}
-
-/// Extract a boolean value from a Bool-typed Value.
-///
-/// Returns an error if the value is not a Bool type.
-/// Destroys the value after extraction.
-pub(super) fn extract_bool<'db>(ctx: &mut InterpContext<'db>, value: Value) -> Result<bool, InterpError> {
-    if !is_bool_value(value) {
-        let type_tag = unsafe { (*value.tydesc).type_tag };
-        destroy_value(ctx, value);
-        return Err(InterpError::RuntimeError(
-            format!("Expected Bool in condition, got {:?}", type_tag)
-        ));
-    }
-
-    let result = unsafe { *(value.ptr as *const bool) };
-    destroy_value(ctx, value);
-    Ok(result)
 }
 
 /// Evaluate a branch condition for if-statements.

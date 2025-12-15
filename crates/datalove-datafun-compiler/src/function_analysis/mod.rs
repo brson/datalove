@@ -211,7 +211,7 @@ fn build_frame_layout<'db>(
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> FrameLayout<'db> {
     use salsa::plumbing::AsId;
-    use crate::ast::{Statement, ExprFun};
+    
 
     let expr_types = tycheck_result.expr_types(db);
 
@@ -277,8 +277,8 @@ fn get_local_type<'db>(
     local_name: Option<InternedText<'db>>,
     expr_types: &[Option<crate::tycheck::TypeAndHeap<'db>>],
 ) -> crate::tycheck::TypeAndHeap<'db> {
-    use salsa::plumbing::AsId;
-    use crate::ast::{Statement, ExprFun};
+    
+    
 
     if let Some(name) = local_name {
         // Find the statement with this name (let or if-binding).

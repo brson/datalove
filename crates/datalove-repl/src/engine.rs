@@ -1,7 +1,6 @@
 //! REPL engine for evaluating Datalove expressions and statements.
 
 use rmx::prelude::*;
-use serde::{Serialize, Deserialize};
 use bct::input::Source;
 use std::collections::BTreeMap;
 
@@ -14,7 +13,7 @@ pub struct Engine<'db> {
     /// Persistent interpreter context.
     interp_ctx: datafun::interp::InterpContext<'db>,
     /// Module graph for the REPL (empty for now).
-    module_graph: datafun::module_graph::ModuleGraph,
+    _module_graph: datafun::module_graph::ModuleGraph,
     /// Typecheck result for the module graph.
     typecheck_result: datafun::module_graph::ModuleGraphTypecheckResult<'db>,
 }
@@ -25,8 +24,8 @@ struct ReplHistory {
 
 
 struct HistoryEntry {
-    command: Command,
-    last_eval: Eval,
+    _command: Command,
+    _last_eval: Eval,
     /// Not all commands produce script units.
     script_status: Option<ScriptUnitStatus>,
 }
@@ -76,8 +75,8 @@ impl ReplHistory {
         active: bool,
     ) {
         self.entries.push(HistoryEntry {
-            command,
-            last_eval: eval,
+            _command: command,
+            _last_eval: eval,
             script_status: Some(ScriptUnitStatus {
                 script_unit,
                 active,
@@ -87,16 +86,10 @@ impl ReplHistory {
 
     fn add_non_script_entry(&mut self, command: Command, eval: Eval) {
         self.entries.push(HistoryEntry {
-            command,
-            last_eval: eval,
+            _command: command,
+            _last_eval: eval,
             script_status: None,
         });
-    }
-
-    fn deactivate_last(&mut self) {
-        let mut last = self.entries.last_mut().X();
-        let mut script_unit = last.script_status.as_mut().X();
-        script_unit.active = false;
     }
 }
 
@@ -126,7 +119,7 @@ impl<'db> Engine<'db> {
             db,
             history: ReplHistory::new(),
             interp_ctx,
-            module_graph,
+            _module_graph: module_graph,
             typecheck_result,
         })
     }

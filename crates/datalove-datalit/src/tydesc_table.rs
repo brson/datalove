@@ -6,7 +6,6 @@
 
 use rmx::prelude::*;
 use std::collections::HashMap;
-use bct::text::InternedText;
 use crate::tycheck::*;
 use crate::rtdt;
 

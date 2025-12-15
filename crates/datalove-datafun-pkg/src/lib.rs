@@ -7,7 +7,6 @@
 //! The caller uses datafun's parser to extract import demands, then passes
 //! them to this crate for resolution.
 
-#![allow(unused)]
 
 use rmx::prelude::*;
 

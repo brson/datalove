@@ -1,6 +1,5 @@
 //! Destructor implementation for all Datalove types.
 
-use rmx::prelude::*;
 use crate::{impls::rt_local, rtdt};
 use crate::c::{LocalRtHandle, RtStatus};
 
@@ -100,7 +99,7 @@ pub unsafe fn any_destroy_local(
 
             // Tensor has allocations.
             rtdt::TyTag::Tensor => {
-                let tensor = unsafe { &*(value_in as *const rtdt::Tensor) };
+                let tensor = &*(value_in as *const rtdt::Tensor);
                 let tensor_ptr = value_in as *mut rtdt::Tensor;
 
                 let element_ty = ty.tensor_element_ty();
@@ -111,7 +110,7 @@ pub unsafe fn any_destroy_local(
                 if !tensor.ptr_base.is_null() && tensor.capacity_elems > 0 {
                     let element_size = element_ty.size() as usize;
                     for i in 0..tensor.capacity_elems {
-                        let element_ptr = unsafe { tensor.ptr_base.add((i as usize) * element_size) };
+                        let element_ptr = tensor.ptr_base.add((i as usize) * element_size);
                         let status = any_destroy_local(rt, element_ptr, element_tydesc);
                         if status != RtStatus::Ok {
                             return status;
@@ -121,38 +120,30 @@ pub unsafe fn any_destroy_local(
 
                 // Free the data buffer if it exists.
                 if !tensor.ptr_base.is_null() && tensor.capacity_elems > 0 {
-                    unsafe {
-                        rt_ref.alloc.free(
-                            element_ty.size(),
-                            element_ty.align(),
-                            tensor.capacity_elems,
-                            tensor.ptr_base,
-                        );
-                    }
+                    rt_ref.alloc.free(
+                        element_ty.size(),
+                        element_ty.align(),
+                        tensor.capacity_elems,
+                        tensor.ptr_base,
+                    );
                 }
 
                 // Free the shape array if it exists.
                 if !tensor.shape.is_null() && rank > 0 {
-                    unsafe {
-                        rt_ref.alloc.free(4, 4, rank, tensor.shape as *mut u8);
-                    }
+                    rt_ref.alloc.free(4, 4, rank, tensor.shape as *mut u8);
                 }
 
                 // Free the stride array if it exists.
                 if !tensor.strides.is_null() && rank > 0 {
-                    unsafe {
-                        rt_ref.alloc.free(4, 4, rank, tensor.strides as *mut u8);
-                    }
+                    rt_ref.alloc.free(4, 4, rank, tensor.strides as *mut u8);
                 }
 
                 // Clear the tensor fields.
-                unsafe {
-                    (*tensor_ptr).ptr_base = std::ptr::null_mut();
-                    (*tensor_ptr).offset_elems = 0;
-                    (*tensor_ptr).capacity_elems = 0;
-                    (*tensor_ptr).shape = std::ptr::null();
-                    (*tensor_ptr).strides = std::ptr::null();
-                }
+                (*tensor_ptr).ptr_base = std::ptr::null_mut();
+                (*tensor_ptr).offset_elems = 0;
+                (*tensor_ptr).capacity_elems = 0;
+                (*tensor_ptr).shape = std::ptr::null();
+                (*tensor_ptr).strides = std::ptr::null();
 
                 RtStatus::Ok
             }

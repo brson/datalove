@@ -1,6 +1,5 @@
 //! The Ratatui REPL application.
 
-#![allow(unused)]
 
 use rmx::prelude::*;
 

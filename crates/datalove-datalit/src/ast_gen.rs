@@ -1,5 +1,5 @@
 use rmx::prelude::*;
-use bct::text::{InternedText, Text};
+use bct::text::InternedText;
 use rand::{Rng, SeedableRng};
 
 use crate::ast::*;

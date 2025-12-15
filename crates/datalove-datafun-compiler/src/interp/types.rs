@@ -18,11 +18,6 @@ pub(super) fn is_f32_value(value: Value) -> bool {
     unsafe { (*value.tydesc).type_tag == TyTag::F32 }
 }
 
-/// Check if a value is a Bool type.
-pub(super) fn is_bool_value(value: Value) -> bool {
-    unsafe { (*value.tydesc).type_tag == TyTag::Bool }
-}
-
 /// Check if a value is a copy type.
 ///
 /// Copy types (u32, bool, f32, fixed-width ints) can be implicitly cloned.

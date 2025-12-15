@@ -262,11 +262,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_cmp_total_local(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_add(
     rt: LocalRtHandle,
     a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
+    _a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    b_tydesc: *const rtdt::TyDesc,
+    _b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
+    _result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
         return RtStatus::Error;
@@ -283,11 +283,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_add(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_sub(
     rt: LocalRtHandle,
     a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
+    _a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    b_tydesc: *const rtdt::TyDesc,
+    _b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
+    _result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
         return RtStatus::Error;
@@ -304,11 +304,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_sub(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_mul(
     rt: LocalRtHandle,
     a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
+    _a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    b_tydesc: *const rtdt::TyDesc,
+    _b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
+    _result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
         return RtStatus::Error;
@@ -325,9 +325,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_mul(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_neg(
     rt: LocalRtHandle,
     a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
+    _a_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
+    _result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || result_out.is_null() {
         return RtStatus::Error;
@@ -345,11 +345,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_neg(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_div_checked(
     rt: LocalRtHandle,
     a_in: *const u8,
-    a_tydesc: *const rtdt::TyDesc,
+    _a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    b_tydesc: *const rtdt::TyDesc,
+    _b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    result_tydesc: *const rtdt::TyDesc,
+    _result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
         return RtStatus::Error;

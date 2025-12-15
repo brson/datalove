@@ -1,9 +1,8 @@
 //! Bigint arithmetic operations for the Datalove runtime.
 
-use rmx::prelude::*;
 use crate::rtdt;
 use crate::impls::rt_local::RtLocal;
-use crate::c::{LocalRtHandle, RtStatus};
+use crate::c::RtStatus;
 
 /// Convert rtdt::Int to String for printing.
 pub(crate) unsafe fn int_to_string_impl(int_ptr: *const rtdt::Int) -> String {
@@ -268,7 +267,7 @@ pub(crate) unsafe fn int_sub_impl(
         neg_b_limbs.copy_from_slice(b_limbs);
 
         // Create temporary rtdt::Int for -b.
-        let mut neg_b = rtdt::Int {
+        let neg_b = rtdt::Int {
             data: neg_b_limbs_ptr as *const u32,
             size_and_sign: -b_size,
             capacity: b_abs_size as u32,

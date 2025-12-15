@@ -5,7 +5,6 @@
 
 use std::cmp::Ordering;
 
-use bct::text::Text;
 
 use crate::ast::*;
 

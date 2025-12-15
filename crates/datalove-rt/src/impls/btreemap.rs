@@ -13,7 +13,6 @@ const MAP_NODE_B: u32 = rtdt::MAP_NODE_B;
 // Offset constants for MapNode header fields.
 const TAG_OFFSET: u32 = 0;
 const LEN_OFFSET: u32 = 4;  // Aligned to u32.
-const HEADER_SIZE: u32 = 8;  // tag (u8) + padding + len (u32).
 
 /// Allocate and initialize a new internal node.
 unsafe fn alloc_internal_node(
@@ -203,9 +202,9 @@ unsafe fn leaf_values_ptr(
 
 /// Create an empty BTreeMap.
 pub unsafe fn btreemap_create_impl(
-    rt: &mut RtLocal,
+    _rt: &mut RtLocal,
     value_out: *mut u8,
-    tydesc: rtdt::TyDescRef,
+    _tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
         if value_out.is_null() {
@@ -368,7 +367,7 @@ unsafe fn find_leaf_for_key(
     mut node: *mut MapNode,
     key: *const u8,
     key_tydesc: rtdt::TyDescRef,
-    value_tydesc: rtdt::TyDescRef,
+    _value_tydesc: rtdt::TyDescRef,
 ) -> *mut MapNode {
     unsafe {
         loop {
@@ -564,7 +563,7 @@ unsafe fn split_leaf(
 
         // Determine which leaf should receive the new key.
         let cmp_result = super::cmp::cmp_total(key, key_tydesc.as_ptr(), separator_key_buf.as_ptr(), key_tydesc.as_ptr());
-        let mut insert_result = match cmp_result {
+        let insert_result = match cmp_result {
             crate::c::RtOrdering::Less => {
                 // Key goes in left leaf.
                 leaf_insert_or_update(rt, leaf, key, value, key_tydesc, value_tydesc)
@@ -776,9 +775,9 @@ pub unsafe fn btreemap_insert_impl(
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: rtdt::TyDescRef,
     key_in: *mut u8,
-    key_tydesc: rtdt::TyDescRef,
+    _key_tydesc: rtdt::TyDescRef,
     value_in: *mut u8,
-    value_tydesc: rtdt::TyDescRef,
+    _value_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
         if btreemap_value_mut.is_null()
@@ -878,7 +877,7 @@ unsafe fn find_leaf_with_path(
     mut node: *mut MapNode,
     key: *const u8,
     key_tydesc: rtdt::TyDescRef,
-    value_tydesc: rtdt::TyDescRef,
+    _value_tydesc: rtdt::TyDescRef,
     path: &mut Vec<*mut MapNode>,
 ) -> *mut MapNode {
     unsafe {
@@ -1279,8 +1278,6 @@ unsafe fn borrow_from_left_internal(
         let node_children_ptr = internal_child_ptrs_ptr(node, key_tydesc);
         let parent_keys_ptr = internal_keys_ptr(parent, key_tydesc);
 
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-
         // Shift node's keys and children right to make room.
         if node_len > 0 {
             std::ptr::copy(
@@ -1291,7 +1288,7 @@ unsafe fn borrow_from_left_internal(
             std::ptr::copy(
                 node_children_ptr,
                 node_children_ptr.add(1),
-                (node_len as usize + 1),
+                node_len as usize + 1,
             );
         }
 
@@ -1332,15 +1329,13 @@ unsafe fn borrow_from_right_internal(
         let right_children_ptr = internal_child_ptrs_ptr(right, key_tydesc);
         let parent_keys_ptr = internal_keys_ptr(parent, key_tydesc);
 
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-
         // Move parent separator down to node.
         let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
         std::ptr::copy_nonoverlapping(parent_key, node_keys_ptr.add(node_len as usize * key_size), key_size);
 
         // Move first child pointer from right to node.
         let right_first_child = *right_children_ptr.add(0);
-        *node_children_ptr.add((node_len as usize + 1)) = right_first_child;
+        *node_children_ptr.add(node_len as usize + 1) = right_first_child;
 
         // Move first key from right to parent.
         std::ptr::copy_nonoverlapping(right_keys_ptr, parent_key, key_size);
@@ -1736,7 +1731,7 @@ pub unsafe fn btreemap_remove_impl(
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: rtdt::TyDescRef,
     key_ref: *const u8,
-    key_tydesc: rtdt::TyDescRef,
+    _key_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
         if btreemap_value_mut.is_null()

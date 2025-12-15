@@ -13,6 +13,7 @@ use std::thread;
 enum WorkerRequest {
     Parse { id: u64, input: Input },
     Eval { id: u64, command: Command },
+    #[allow(dead_code)]
     Shutdown,
 }
 

@@ -11,8 +11,8 @@ use datalove_rt::rtdt::layout::compute_option_layout;
 
 use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
 use super::memory::destroy_value;
-use super::types::{is_u32_value, is_int_value, is_f32_value};
-use super::alloc::{allocate_bool, allocate_f32, allocate_u32_raw, allocate_bigint, widen_u32_to_int};
+use super::types::{is_u32_value, is_int_value};
+use super::alloc::{allocate_bool, allocate_f32, allocate_u32_raw, allocate_bigint};
 
 // ============================================================================
 // Result Writers

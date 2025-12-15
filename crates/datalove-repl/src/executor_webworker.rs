@@ -35,7 +35,7 @@ impl ReplExecutor for WebWorkerExecutor {
 
         // Create the worker as a module worker to support ES6 imports.
         // The worker script is in the worker-dist directory.
-        let mut options = WorkerOptions::new();
+        let options = WorkerOptions::new();
         options.set_type(WorkerType::Module);
 
         let worker = Worker::new_with_options("./worker-dist/worker.js", &options)

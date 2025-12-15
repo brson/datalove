@@ -2,15 +2,12 @@ use rmx::prelude::*;
 
 use bct::{
     input::Source,
-    chunk::Chunk,
     lexer::{
-        Token,
         TokenKind,
         Sigil
     },
     bracer::{
         Bracer,
-        BracerIter,
         TreeToken,
     },
     text::InternedText,
@@ -1551,14 +1548,6 @@ impl<'db> DynParser<'db> {
             true
         } else {
             false
-        }
-    }
-
-    /// Consume a required sigil. Panics if not found.
-    /// Use this only in contexts where the sigil is guaranteed to exist.
-    fn need_sigil(&mut self, sigil: Sigil) {
-        if !self.eat_sigil(sigil) {
-            panic!("expected sigil {}", sigil.as_str());
         }
     }
 

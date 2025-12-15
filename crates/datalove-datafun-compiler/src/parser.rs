@@ -3,7 +3,6 @@ use rmx::prelude::*;
 use rmx::core::iter::Peekable;
 use bct::{
     input::Source,
-    chunk::Chunk,
     lexer::{
         Token,
         TokenKind,
@@ -18,7 +17,6 @@ use bct::{
     source_map,
     lexer,
     bracer,
-    lines,
 };
 use salsa::Accumulator;
 

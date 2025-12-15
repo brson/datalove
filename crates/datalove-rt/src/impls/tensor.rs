@@ -113,7 +113,7 @@ pub unsafe fn tensor_create_from_slice_impl(
     shape_tydesc_ref: TyDescRef,
     layout: u8,
     tensor_value_out: *mut u8,
-    tensor_tydesc_ref: TyDescRef,
+    _tensor_tydesc_ref: TyDescRef,
 ) -> RtStatus {
     unsafe {
         if tensor_value_out.is_null() || slice_ptr_ref.is_null() || shape_in.is_null() {
@@ -775,9 +775,9 @@ pub unsafe fn tensor_slice_impl(
 
         // Helper function for error path.
         unsafe fn error_path(
-            rt_ref: &mut RtLocal,
+            _rt_ref: &mut RtLocal,
             tensor_value_in: *mut u8,
-            tensor_tydesc_ref: TyDescRef,
+            _tensor_tydesc_ref: TyDescRef,
             result_value_out: *mut u8,
             result_tydesc_ref: TyDescRef,
         ) -> RtStatus {
@@ -974,9 +974,9 @@ pub unsafe fn tensor_reshape_impl(
 
         // Helper function for error path.
         unsafe fn error_path(
-            rt_ref: &mut RtLocal,
+            _rt_ref: &mut RtLocal,
             tensor_value_in: *mut u8,
-            tensor_tydesc_ref: TyDescRef,
+            _tensor_tydesc_ref: TyDescRef,
             result_value_out: *mut u8,
             result_tydesc_ref: TyDescRef,
         ) -> RtStatus {

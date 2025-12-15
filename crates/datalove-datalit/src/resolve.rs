@@ -1,5 +1,5 @@
 use rmx::prelude::*;
-use bct::text::{InternedText, Text};
+use bct::text::InternedText;
 use std::collections::HashMap;
 
 use crate::ast::*;
@@ -128,14 +128,6 @@ impl<'db> Scope<'db> {
             bindings: HashMap::new(),
             parent: None,
             depth: 0,
-        }
-    }
-
-    fn push_child(&self) -> Self {
-        Scope {
-            bindings: HashMap::new(),
-            parent: Some(Box::new(self.clone())),
-            depth: self.depth + 1,
         }
     }
 

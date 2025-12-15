@@ -5,7 +5,6 @@
 use rmx::prelude::*;
 use datalove_diagnostic::{SpanEntry, ByteSpan};
 use crate::ast::ExprFun;
-use bct::text::Text;
 
 /// Salsa accumulator for datafun expression spans.
 /// Emitted during parsing to record source locations.

@@ -1,8 +1,6 @@
-#![allow(unused)]
 
 use rmx::prelude::*;
 
-use salsa::Database as Db;
 
 #[salsa::db]
 #[derive(Default, Clone)]

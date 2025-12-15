@@ -13,9 +13,9 @@ use crate::c::RtStatus;
 
 /// Create an empty List.
 pub unsafe fn list_create_impl(
-    rt: &mut RtLocal,
+    _rt: &mut RtLocal,
     value_out: *mut u8,
-    tydesc: rtdt::TyDescRef,
+    _tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
         if value_out.is_null() {
@@ -104,7 +104,6 @@ pub unsafe fn list_destroy_impl(
         }
 
         let element_ty = tydesc.list_element_ty();
-        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = value_in as *mut List;
         let data_ptr = (*list_ptr).data as *mut u8;
@@ -145,7 +144,6 @@ pub unsafe fn list_clear_impl(
         }
 
         let element_ty = tydesc.list_element_ty();
-        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = value_mut as *mut List;
         let data_ptr = (*list_ptr).data as *mut u8;
@@ -234,7 +232,7 @@ pub unsafe fn list_get_impl(
 pub unsafe fn list_set_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: rtdt::TyDescRef,
+    _list_tydesc: rtdt::TyDescRef,
     index: u32,
     element_in: *mut u8,
     element_tydesc: rtdt::TyDescRef,
@@ -281,7 +279,7 @@ pub unsafe fn list_set_impl(
 pub unsafe fn list_push_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: rtdt::TyDescRef,
+    _list_tydesc: rtdt::TyDescRef,
     element_in: *mut u8,
     element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
@@ -322,7 +320,7 @@ pub unsafe fn list_push_impl(
 /// - If list is non-empty, sets option to Some and moves the element.
 /// - If list is empty, sets option to None.
 pub unsafe fn list_pop_impl(
-    rt: &mut RtLocal,
+    _rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: rtdt::TyDescRef,
     option_value_out: *mut u8,
@@ -335,7 +333,6 @@ pub unsafe fn list_pop_impl(
         }
 
         let element_ty = list_tydesc.list_element_ty();
-        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
@@ -375,7 +372,7 @@ pub unsafe fn list_pop_impl(
 pub unsafe fn list_insert_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
-    list_tydesc: rtdt::TyDescRef,
+    _list_tydesc: rtdt::TyDescRef,
     index: u32,
     element_in: *mut u8,
     element_tydesc: rtdt::TyDescRef,
@@ -431,7 +428,7 @@ pub unsafe fn list_insert_impl(
 /// - If index is valid, sets option to Some and moves the element.
 /// - If index is out of bounds, sets option to None.
 pub unsafe fn list_remove_impl(
-    rt: &mut RtLocal,
+    _rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: rtdt::TyDescRef,
     index: u32,
@@ -445,7 +442,6 @@ pub unsafe fn list_remove_impl(
         }
 
         let element_ty = list_tydesc.list_element_ty();
-        let element_tydesc = element_ty.as_ptr();
 
         let list_ptr = list_value_mut as *mut List;
         let size = (*list_ptr).size;
@@ -631,30 +627,6 @@ pub unsafe fn list_extend_from_slice_impl(
 // ============================================================================
 // Helper Functions (private)
 // ============================================================================
-
-/// Get pointer to the data buffer of a list.
-#[inline]
-unsafe fn list_data_ptr(list_ptr: *const List) -> *const u8 {
-    unsafe { (*list_ptr).data }
-}
-
-/// Get mutable pointer to the data buffer of a list.
-#[inline]
-unsafe fn list_data_ptr_mut(list_ptr: *mut List) -> *mut u8 {
-    unsafe { (*list_ptr).data as *mut u8 }
-}
-
-/// Get the current size of a list.
-#[inline]
-unsafe fn list_size(list_ptr: *const List) -> u32 {
-    unsafe { (*list_ptr).size }
-}
-
-/// Get the current capacity of a list.
-#[inline]
-unsafe fn list_capacity(list_ptr: *const List) -> u32 {
-    unsafe { (*list_ptr).capacity }
-}
 
 /// Calculate the new capacity when growing.
 ///

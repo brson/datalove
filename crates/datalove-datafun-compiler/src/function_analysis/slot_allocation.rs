@@ -2,7 +2,7 @@
 
 use rmx::prelude::*;
 use bct::text::InternedText;
-use crate::ast::{Statement, StmtLet, StmtFun, StmtRet, StmtIf, ExprFun, ExprFunKind};
+use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind};
 use crate::datalit::ast::TypeHint;
 use super::{SlotId, SlotKind};
 

@@ -1061,7 +1061,6 @@ unsafe fn propagate_split_up(
 
             let root_keys_ptr = internal_keys_ptr(new_root, element_tydesc);
             let root_children_ptr = internal_child_ptrs_ptr(new_root, element_tydesc);
-            let element_size = element_tydesc_ref.size() as usize;
 
             // Clone separator into new root.
             let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;

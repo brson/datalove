@@ -172,7 +172,7 @@ fn collect_reads_from_expr<'db>(
     slots: &[AllocatedSlot<'db>],
     reads: &mut Vec<ReadLocation>,
 ) {
-    use bct::text::InternedText;
+    
 
     match expr.expr(db) {
         ExprFunKind::Name(name) => {

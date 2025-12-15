@@ -1,10 +1,9 @@
 //! Web frontend for the Datalove REPL.
 
-#![allow(unused)]
-
 use wasm_bindgen::prelude::*;
-use datalove_repl::app::ReplApp;
-use datalove_repl::BlockingExecutor;
+
+#[cfg(target_arch = "wasm32")]
+use datalove_repl::{app::ReplApp, BlockingExecutor};
 
 /// WASM wrapper for ReplApp.
 ///

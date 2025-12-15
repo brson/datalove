@@ -114,20 +114,18 @@ fn eq_tydesc(
     td_a: rtdt::TyDescRef,
     td_b: rtdt::TyDescRef,
 ) -> bool {
-    unsafe {
+    // Type tags must match.
+    if td_a.type_tag() != td_b.type_tag() {
+        return false;
+    }
 
-        // Type tags must match.
-        if td_a.type_tag() != td_b.type_tag() {
-            return false;
-        }
+    // Size and alignment should match for same type.
+    if td_a.size() != td_b.size() || td_a.align() != td_b.align() {
+        return false;
+    }
 
-        // Size and alignment should match for same type.
-        if td_a.size() != td_b.size() || td_a.align() != td_b.align() {
-            return false;
-        }
-
-        // For composite types, we need to compare the structure recursively.
-        match td_a.type_tag() {
+    // For composite types, we need to compare the structure recursively.
+    match td_a.type_tag() {
             rtdt::TyTag::Bool | rtdt::TyTag::U8 | rtdt::TyTag::I8 |
             rtdt::TyTag::U16 | rtdt::TyTag::I16 | rtdt::TyTag::U32 | rtdt::TyTag::I32 |
             rtdt::TyTag::F32 | rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::F64 |
@@ -246,11 +244,10 @@ fn eq_tydesc(
                 let inner_ty_b = td_b.option_inner_ty();
                 eq_tydesc(inner_ty_a, inner_ty_b)
             }
-            rtdt::TyTag::Result => {
-                let ok_ty_a = td_a.result_ok_ty();
-                let ok_ty_b = td_b.result_ok_ty();
-                eq_tydesc(ok_ty_a, ok_ty_b)
-            }
+        rtdt::TyTag::Result => {
+            let ok_ty_a = td_a.result_ok_ty();
+            let ok_ty_b = td_b.result_ok_ty();
+            eq_tydesc(ok_ty_a, ok_ty_b)
         }
     }
 }

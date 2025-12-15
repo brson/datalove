@@ -1,11 +1,8 @@
 //! The Datalove REPL evaluation engine.
 
-#![allow(unused)]
 
 use rmx::prelude::*;
-use std::sync::Arc;
 use serde::{Serialize, Deserialize};
-use bct::input::Source;
 
 pub use datalove_datafun as datafun;
 

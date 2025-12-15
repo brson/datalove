@@ -102,33 +102,26 @@ pub use context::{
     ScriptVariable, ScriptVarState, ScriptResult,
 };
 use context::cleanup_script_scope;
-use control::{find_slot_by_name, extract_bool, evaluate_branch_condition, eval_try_option, eval_try_result};
+use control::{find_slot_by_name, evaluate_branch_condition, eval_try_option, eval_try_result};
 use tydesc::{type_hint_to_tydesc, value_tydesc_for_option, value_tydesc_for_result};
 use frame::CfgControl;
 use memory::{clone_value, clone_value_to_dest, move_value_to_dest};
-use types::{is_u32_value, is_int_value, is_f32_value, is_bool_value, is_copy_type};
+use types::is_copy_type;
 use alloc::{
-    allocate_bool, allocate_f32, allocate_u32_raw, allocate_bigint,
+    allocate_bool, allocate_f32, allocate_u32_raw,
     allocate_option_none, allocate_option_some_from_value,
-    allocate_result_ok_from_value, allocate_result_err, widen_u32_to_int,
-};
-use arith::{
-    write_u32_result, write_f32_result, write_bool_result, write_option_u32_result,
-    eval_add_checked, eval_sub_checked, eval_mul_checked, eval_div_checked,
-    eval_add_optional, eval_sub_optional, eval_mul_optional, eval_div_optional,
-    eval_comparison,
+    allocate_result_ok_from_value, allocate_result_err,
 };
 use collections::{
     allocate_tuple_from_values, allocate_struct_from_values,
     allocate_list_from_values, allocate_map_from_values, allocate_set_from_values,
 };
 use literals::{
-    allocate_float_literal, allocate_int_literal, allocate_string,
     allocate_inline_int_literal, write_inline_int_to_dest, write_option_none_to_dest,
     allocate_inline_string,
 };
 use arith_widening::{execute_binop, execute_unop};
-use coerce::{narrow_int_to_u32, coerce_value_to_dest};
+use coerce::coerce_value_to_dest;
 
 use bct::text::InternedText;
 

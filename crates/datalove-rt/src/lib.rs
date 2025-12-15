@@ -38,9 +38,6 @@
 //!
 //! Argument pointers are never null, they instead use the datalit option.
 
-#![allow(unused)]
-
-use rmx::prelude::*;
 
 pub use datalove_rtdt as rtdt;
 

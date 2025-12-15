@@ -4,7 +4,6 @@
 //! Used to verify both datalit and datafun parsers/typecheckers produce equivalent errors.
 
 use rmx::prelude::*;
-use bct::text::InternedText;
 use rand::{Rng, SeedableRng};
 
 use crate::ast::*;
@@ -1009,7 +1008,7 @@ fn apply_swap_map_key_value<'db>(
         }
 
         // Build map entries with first entry's key/value swapped.
-        let mut entry_strs: Vec<String> = entries.iter().enumerate().map(|(i, e)| {
+        let entry_strs: Vec<String> = entries.iter().enumerate().map(|(i, e)| {
             let key_pp = pretty_print(db, e.key(db));
             let val_pp = pretty_print(db, e.value(db));
             if i == 0 {

@@ -6,7 +6,6 @@
 //!
 //! See `notes/anytype.md` for the complete design specification.
 
-#![allow(unused)]
 
 use crate::*;
 
@@ -92,12 +91,6 @@ impl Data {
     #[inline]
     fn immediate_u61(&self) -> u64 {
         self.primary >> VALUE_SHIFT
-    }
-
-    /// Extract 61-bit immediate value (sign-extended).
-    #[inline]
-    fn immediate_i61(&self) -> i64 {
-        (self.primary as i64) >> VALUE_SHIFT
     }
 
     /// Create primary word from 61-bit immediate value.

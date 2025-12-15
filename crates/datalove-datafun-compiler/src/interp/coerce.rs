@@ -3,61 +3,9 @@
 //! Handles automatic coercion between compatible types:
 //! - T → Option<T> (wrap in Some)
 //! - T → Result<T> (wrap in Ok)
-//! - Int → u32 (narrowing conversion)
 
 use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
 use super::memory::destroy_value;
-
-/// Narrow an Int value to u32.
-///
-/// Reads the Int value and converts it to a u32. Returns an error if the Int
-/// value is too large to fit in u32 or is negative.
-pub(super) fn narrow_int_to_u32<'db>(
-    ctx: &mut InterpContext<'db>,
-    int_value: Value,
-) -> Result<Value, InterpError> {
-    use crate::datalit::tycheck::Type;
-
-    let int_ptr = int_value.ptr as *const datalove_rt::rtdt::Int;
-
-    let u32_value = unsafe {
-        let size_and_sign = (*int_ptr).size_and_sign;
-        let size = size_and_sign.unsigned_abs() as usize;
-        let is_negative = size_and_sign < 0;
-
-        if is_negative {
-            return Err(InterpError::RuntimeError(
-                "Cannot narrow negative Int to u32".to_string()
-            ));
-        }
-
-        if size == 0 {
-            0u32
-        } else if size == 1 {
-            let limb_ptr = (*int_ptr).data as *const u32;
-            *limb_ptr
-        } else {
-            return Err(InterpError::RuntimeError(
-                "Int value too large to fit in u32".to_string()
-            ));
-        }
-    };
-
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
-
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-
-    unsafe {
-        *(ptr as *mut u32) = u32_value;
-    }
-
-    destroy_value(ctx, int_value);
-
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
-}
 
 /// Coerce a value to a destination type.
 ///
