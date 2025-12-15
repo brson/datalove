@@ -54,30 +54,41 @@ Updated `execute_fun_statement()` to use `type_check_with_module_graph()` when i
 - If present, uses `type_check_with_module_graph()` with the graph from typecheck result
 - Falls back to basic `type_check()` for standalone mode
 
-### Step 3 TODO: Add execute_script_with_module_graph
+### Step 3 COMPLETED: execute_script_with_module_graph
 
-**File:** `crates/datalove-datafun-compiler/src/interp/mod.rs`
-
-Add new function that mirrors `execute_script()` but uses ModuleGraph types:
+Added `execute_script_with_module_graph()` to `interp/mod.rs`. This function:
 - Takes `(db, script, ModuleGraphTypecheckResult)` - no PackageWorld
 - Uses `InterpContext::new_with_module_graph()`
 - Uses `ctx.populate_script_imports(script, graph)`
 - Uses `type_check_with_module_graph()` for script unit typechecking
-- Has access to `ctx.script_function_analyses` since it's in the compiler crate
 
-This solves the problem of not being able to access private fields from the datafun crate.
+### Step 4 COMPLETED: Update analyze_script_section
 
-### Step 4 TODO: Update analyze_script_section
+Updated `analyze_script_section()` to use `execute_script_with_module_graph()`.
 
-**File:** `crates/datalove-datafun/src/worldfile_analysis.rs`
+### Phase 4 COMPLETED: Remove package-world code from interpreter
 
-Change to use the new `execute_script_with_module_graph()` function instead of
-`execute_script()` with PackageWorld.
+- Removed `execute_script()` from interp/mod.rs
+- Removed package-world branch from `execute_fun_statement()`
+- Removed package fields from InterpContext: `package_world`, `current_module`, `typecheck_result`, `module_functions`
+- Removed `ModuleFunctionTable` struct (kept `ModuleFunctionTableGraph`)
+- Removed `ModuleRef::Package` enum variant (now uses `Option<ModuleId>` directly)
+- Removed `parse_module_functions()` and `build_module_alias_map()` (package versions)
+- Removed `new_with_typecheck()` and `new_unchecked()` constructors
+- Simplified `new_with_module_graph()` to not create dummy PackageWorld
+- Updated CLI and REPL to use ModuleGraph path
 
-### Remaining Work After Steps 3-4
+### Remaining Dead Code (not blocking)
 
-- Remove `execute_script()` once no longer needed
-- Remove package-world code from compiler (Phase 4 of original plan)
+The following dead code remains in tycheck.rs but doesn't affect functionality:
+- `ModuleExports` and `ModuleImports` (package versions)
+- `PackageWorldTypecheckResult` struct
+- `type_check_with_package_world()` and `type_check_with_package_world_for_diagnostics()`
+- `typecheck_package_world()`
+- `topological_sort_modules()` (compiler version, pkg crate has its own)
+- `build_module_alias_map()` and `build_script_module_alias_map()`
+
+This can be cleaned up in a follow-up commit.
 
 ---
 

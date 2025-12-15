@@ -13,10 +13,10 @@ pub struct Engine<'db> {
     history: ReplHistory,
     /// Persistent interpreter context.
     interp_ctx: datafun::interp::InterpContext<'db>,
-    /// Package world for the REPL (empty for now).
-    package_world: datafun::package::PackageWorld,
-    /// Typecheck result for the package world.
-    typecheck_result: datafun::tycheck::PackageWorldTypecheckResult<'db>,
+    /// Module graph for the REPL (empty for now).
+    module_graph: datafun::module_graph::ModuleGraph,
+    /// Typecheck result for the module graph.
+    typecheck_result: datafun::module_graph::ModuleGraphTypecheckResult<'db>,
 }
 
 struct ReplHistory {
@@ -109,22 +109,24 @@ impl<'db> Engine<'db> {
         };
         let package_world = datafun::package::import_from_loader(db, empty_package_world);
 
-        // Resolve and typecheck the empty package world.
+        // Resolve and convert to ModuleGraph.
         let resolution = datafun::package_resolve::resolve_package_world_with_imports(db, package_world);
-        let graph = resolution.result(db)
+        let pkg_graph = resolution.result(db)
             .map_err(|e| rmx::anyhow::anyhow!("Package resolution failed: {:?}", e))?;
 
-        let typecheck_result = datafun::tycheck::typecheck_package_world(db, graph);
+        // Convert to package-agnostic ModuleGraph and typecheck.
+        let module_graph = datafun::to_module_graph(db, package_world, pkg_graph);
+        let typecheck_result = datafun::tycheck::typecheck_module_graph(db, module_graph);
 
         // Create interpreter context.
-        let interp_ctx = datafun::interp::InterpContext::new_with_typecheck(db, package_world, typecheck_result)
+        let interp_ctx = datafun::interp::InterpContext::new_with_module_graph(db, typecheck_result)
             .map_err(|e| rmx::anyhow::anyhow!("Failed to create interpreter context: {:?}", e))?;
 
         Ok(Engine {
             db,
             history: ReplHistory::new(),
             interp_ctx,
-            package_world,
+            module_graph,
             typecheck_result,
         })
     }
@@ -133,10 +135,9 @@ impl<'db> Engine<'db> {
         self.history = ReplHistory::new();
 
         // Create a fresh interpreter context.
-        // Note: We reuse the same package_world and typecheck_result.
-        if let Ok(ctx) = datafun::interp::InterpContext::new_with_typecheck(
+        // Note: We reuse the same module_graph and typecheck_result.
+        if let Ok(ctx) = datafun::interp::InterpContext::new_with_module_graph(
             self.db,
-            self.package_world,
             self.typecheck_result,
         ) {
             self.interp_ctx = ctx;

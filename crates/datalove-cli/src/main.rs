@@ -499,17 +499,19 @@ impl ScriptCommand {
         };
         let package_world = datafun::package::import_from_loader(&db, empty_package_world);
 
-        // Resolve and typecheck the empty package world.
+        // Resolve and convert to ModuleGraph.
         let resolution = datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
-        let graph = match resolution.result(&db) {
+        let pkg_graph = match resolution.result(&db) {
             Ok(g) => g,
             Err(e) => bail!("Package resolution failed: {:?}", e),
         };
 
-        let typecheck_result = datafun::tycheck::typecheck_package_world(&db, graph);
+        // Convert to package-agnostic ModuleGraph and typecheck.
+        let module_graph = datafun::to_module_graph(&db, package_world, pkg_graph);
+        let typecheck_result = datafun::tycheck::typecheck_module_graph(&db, module_graph);
 
-        // Execute the script with the new interpreter.
-        let mut result = match datafun::interp::execute_script(&db, script, package_world, typecheck_result) {
+        // Execute the script using ModuleGraph path.
+        let mut result = match datafun::interp::execute_script_with_module_graph(&db, script, typecheck_result) {
             Ok(r) => r,
             Err(e) => bail!("Execution error: {:?}", e),
         };
@@ -579,30 +581,32 @@ impl ScriptCommand {
 
         let package_world = datafun::package::import_from_loader(&db, package_world_raw);
 
-        // Resolve and typecheck the package world.
+        // Resolve and convert to ModuleGraph.
         let resolution = datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
-        let graph = match resolution.result(&db) {
+        let pkg_graph = match resolution.result(&db) {
             Ok(g) => g,
             Err(e) => bail!("Package resolution failed: {:?}", e),
         };
 
-        let typecheck_result = datafun::tycheck::typecheck_package_world(&db, graph);
+        // Convert to package-agnostic ModuleGraph and typecheck.
+        let module_graph = datafun::to_module_graph(&db, package_world, pkg_graph);
+        let typecheck_result = datafun::tycheck::typecheck_module_graph(&db, module_graph);
 
         // Check for package world typecheck errors.
         let module_errors = typecheck_result.module_errors(&db);
         if !module_errors.is_empty() {
             let error_count: usize = module_errors.values().map(|v| v.len()).sum();
             eprintln!("Package world has {} typecheck error(s):", error_count);
-            for (module, errors) in module_errors.iter() {
+            for (module_id, errors) in module_errors.iter() {
                 for err in errors {
-                    eprintln!("  {}: {:?}", module.name(&db), err);
+                    eprintln!("  {}: {:?}", module_id.path(&db), err);
                 }
             }
             bail!("Package world typecheck failed");
         }
 
-        // Execute the script with the new interpreter.
-        let mut result = match datafun::interp::execute_script(&db, script, package_world, typecheck_result) {
+        // Execute the script using ModuleGraph path.
+        let mut result = match datafun::interp::execute_script_with_module_graph(&db, script, typecheck_result) {
             Ok(r) => r,
             Err(e) => bail!("Execution error: {:?}", e),
         };
@@ -661,14 +665,16 @@ impl TypecheckStdCommand {
 
         let package_world = datafun::package::import_from_loader(&db, package_world_raw);
 
-        // Resolve and typecheck the package world.
+        // Resolve and convert to ModuleGraph.
         let resolution = datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
-        let graph = match resolution.result(&db) {
+        let pkg_graph = match resolution.result(&db) {
             Ok(g) => g,
             Err(e) => bail!("Package resolution failed: {:?}", e),
         };
 
-        let typecheck_result = datafun::tycheck::typecheck_package_world(&db, graph);
+        // Convert to package-agnostic ModuleGraph and typecheck.
+        let module_graph = datafun::to_module_graph(&db, package_world, pkg_graph);
+        let typecheck_result = datafun::tycheck::typecheck_module_graph(&db, module_graph);
 
         // Report typecheck errors.
         let module_errors = typecheck_result.module_errors(&db);
@@ -678,9 +684,9 @@ impl TypecheckStdCommand {
         } else {
             let error_count: usize = module_errors.values().map(|v| v.len()).sum();
             println!("Found {} typecheck error(s):", error_count);
-            for (module, errors) in module_errors.iter() {
+            for (module_id, errors) in module_errors.iter() {
                 for err in errors {
-                    println!("  {}: {:?}", module.name(&db), err);
+                    println!("  {}: {:?}", module_id.path(&db), err);
                 }
             }
             bail!("Typecheck failed with {} error(s)", error_count);

@@ -22,7 +22,7 @@
 //!
 //! # Key Types
 //!
-//! - [`InterpContext`]: Main interpreter state (runtime, package world, call stack)
+//! - [`InterpContext`]: Main interpreter state (runtime, module graph, call stack)
 //! - [`Value`]: Runtime value with pointer, type descriptor, and ownership
 //! - [`StackFrame`]: Function execution frame with slot storage
 //! - [`ScriptScope`]: Top-level variable bindings for REPL/script execution
@@ -47,10 +47,10 @@ pub use error::InterpError;
 pub use frame::{SlotState, StackFrame};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
 pub use context::{
-    InterpContext, ScriptScope, ModuleFunctionTable, ModuleFunctionTableGraph,
+    InterpContext, ScriptScope, ModuleFunctionTableGraph,
     ScriptVariable, ScriptVarState, ScriptResult,
 };
-use context::{parse_module_functions, build_module_alias_map, cleanup_script_scope};
+use context::cleanup_script_scope;
 use control::{find_slot_by_name, extract_bool, evaluate_branch_condition, eval_try_option, eval_try_result};
 use tydesc::{type_hint_to_tydesc, value_tydesc_for_option, value_tydesc_for_result};
 use frame::CfgControl;
@@ -81,19 +81,9 @@ use coerce::{narrow_int_to_u32, coerce_value_to_dest};
 
 use bct::text::InternedText;
 
-use bct::package2::PackageWorld;
 use crate::module_graph::ModuleId;
 use crate::ast::{self, StmtFun};
 use crate::function_analysis::{Terminator, BlockId};
-
-/// Reference to a module (either PackageModule or ModuleId).
-///
-/// Used by the interpreter to track which module a function belongs to.
-#[derive(Copy, Clone)]
-enum ModuleRef {
-    Package(bct::package2::PackageModule),
-    Graph(ModuleId),
-}
 
 // ============================================================================
 // Script Execution Entry Points
@@ -101,101 +91,9 @@ enum ModuleRef {
 
 /// Execute a complete script in batch mode.
 ///
-/// This is the top-level entry point for running a complete script file
-/// against a package world. The caller must have already typechecked the
-/// package world and script; the interpreter will refuse to run if there
-/// are any typecheck errors.
-pub fn execute_script<'db>(
-    db: &'db dyn crate::Db,
-    script: crate::script::Script,
-    package_world: PackageWorld,
-    typecheck_result: crate::tycheck::PackageWorldTypecheckResult<'db>,
-) -> Result<ScriptResult<'db>, InterpError> {
-    // Create interpreter context (validates typecheck result has no errors).
-    let mut ctx = InterpContext::new_with_typecheck(db, package_world, typecheck_result)?;
-    ctx.script = Some(script);
-
-    // Populate script-level imports.
-    ctx.module_functions.populate_script_imports(db, script, package_world);
-
-    // Typecheck and analyze script-level functions.
-    let units = script.units(db);
-    for unit_index in 0..units.len() {
-        let parsed_unit = crate::parser::parse_script_unit(db, script, unit_index);
-        let unit_source = units[unit_index].source(db);
-
-        // Typecheck the script unit with package world context.
-        let unit_typecheck = crate::tycheck::type_check_with_package_world(
-            db,
-            unit_source,
-            parsed_unit,
-            package_world,
-            typecheck_result,
-        );
-
-        // Check for script unit typecheck errors.
-        let errors = unit_typecheck.errors(db);
-        if !errors.is_empty() {
-            let type_errors: Vec<_> = errors.iter().map(|e| e.error(db)).collect();
-            return Err(InterpError::TypecheckErrors(type_errors));
-        }
-
-        // Analyze each function in the unit.
-        for statement in parsed_unit.statements(db) {
-            if let crate::ast::Statement::Fun(func_stmt) = statement {
-                let analysis = crate::function_analysis::analyze_function(db, *func_stmt, unit_typecheck);
-                ctx.script_function_analyses.insert(*func_stmt, analysis);
-            }
-        }
-    }
-
-    // Helper to cleanup script scope variables.
-    fn cleanup_script_scope(ctx: &mut InterpContext<'_>) {
-        let vars: Vec<_> = ctx.script_scope.variables.drain().collect();
-        for (_, var) in vars {
-            if var.state == ScriptVarState::Available {
-                // Available: destroy contents and free structure.
-                destroy_value(ctx, var.value);
-            }
-            // Moved: ownership was transferred to consumer, nothing to do.
-        }
-    }
-
-    // Execute all script units.
-    let units = script.units(db);
-    for unit_index in 0..units.len() {
-        if let Err(e) = execute_unit(&mut ctx, script, unit_index) {
-            cleanup_script_scope(&mut ctx);
-            return Err(e);
-        }
-    }
-
-    // Return the output variable if present.
-    // Remove it from the HashMap to avoid double-free.
-    let output_name = bct::text::InternedText::new(db, "output");
-    let value = match ctx.script_scope.variables.remove(&output_name) {
-        Some(var) => var.value,
-        None => {
-            cleanup_script_scope(&mut ctx);
-            return Err(InterpError::NoOutputVariable);
-        }
-    };
-
-    // Clean up any remaining variables before moving out runtime and tydesc_table.
-    cleanup_script_scope(&mut ctx);
-
-    // Return the value, runtime, and tydesc_table (which keeps the memory alive).
-    Ok(ScriptResult {
-        value,
-        runtime: ctx.runtime,
-        tydesc_table: ctx.tydesc_table,
-    })
-}
-
-/// Execute a complete script using ModuleGraph typecheck result.
-///
-/// This is the ModuleGraph equivalent of `execute_script()`. It takes a
-/// pre-typechecked module graph instead of a PackageWorld.
+/// This is the top-level entry point for running a complete script file.
+/// The caller must have already typechecked the module graph and script;
+/// the interpreter will refuse to run if there are any typecheck errors.
 pub fn execute_script_with_module_graph<'db>(
     db: &'db dyn crate::Db,
     script: crate::script::Script,
@@ -353,8 +251,8 @@ pub fn execute_script_unit<'db>(
     script: crate::script::Script,
     unit_index: usize,
 ) -> Result<Option<Value>, InterpError> {
-    // Verify context has typecheck result (either package-aware or module-graph mode).
-    if ctx.typecheck_result.is_none() && !ctx.is_module_graph_mode() {
+    // Verify context has typecheck result.
+    if !ctx.is_typechecked() {
         return Err(InterpError::RuntimeError(
             "InterpContext not initialized with typecheck result".to_string()
         ));
@@ -552,17 +450,8 @@ fn execute_fun_statement<'db>(
                     let unit_source = units[unit_index].source(ctx.db);
 
                     // Typecheck the unit using appropriate mode.
-                    let unit_typecheck = if let Some(typecheck_result) = ctx.typecheck_result {
-                        // Package-world mode (legacy).
-                        crate::tycheck::type_check_with_package_world(
-                            ctx.db,
-                            unit_source,
-                            parsed_unit,
-                            ctx.package_world,
-                            typecheck_result,
-                        )
-                    } else if let Some(graph_typecheck) = ctx.module_graph_typecheck {
-                        // ModuleGraph mode - use new function with imports.
+                    let unit_typecheck = if let Some(graph_typecheck) = ctx.module_graph_typecheck {
+                        // ModuleGraph mode - use function with imports.
                         let graph = graph_typecheck.graph(ctx.db);
                         crate::tycheck::type_check_with_module_graph(
                             ctx.db,
@@ -865,49 +754,21 @@ fn eval_expression_in_script_scope_borrow<'db>(
 fn lookup_function<'db>(
     ctx: &InterpContext<'db>,
     name: InternedText<'db>,
-) -> Result<(ast::StmtFun<'db>, Option<ModuleRef>), InterpError> {
+) -> Result<(ast::StmtFun<'db>, Option<ModuleId>), InterpError> {
     // First check script scope.
     if let Some(&func) = ctx.script_scope.functions.get(&name) {
         return Ok((func, None));
     }
 
-    // Check PackageModule-based lookup (when using PackageWorld).
-    if let Some(current_module) = ctx.current_module {
-        if let Some(module_funcs) = ctx.module_functions.get_module_functions(current_module) {
-            if let Some(&func) = module_funcs.get(&name) {
-                return Ok((func, Some(ModuleRef::Package(current_module))));
-            }
-        }
-
-        // Check what the current module imported from other modules using typecheck result.
-        if let Some(typecheck_result) = &ctx.typecheck_result {
-            let module_imports_map = typecheck_result.module_imports(ctx.db);
-
-            if let Some(imports) = module_imports_map.get(&current_module) {
-                // Look for the function in the imports.
-                for (local_name, source_module, _source_name) in imports.functions(ctx.db) {
-                    if *local_name == name {
-                        // Found the import - look up the function AST from the source module.
-                        if let Some(module_funcs) = ctx.module_functions.get_module_functions(*source_module) {
-                            if let Some(&func_ast) = module_funcs.get(&name) {
-                                return Ok((func_ast, Some(ModuleRef::Package(*source_module))));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Check ModuleGraph-based lookup (when using ModuleGraph).
+    // Check module-based lookup (when executing inside a module).
     if let Some(current_module_id) = ctx.current_module_id {
         if let Some(module_funcs) = ctx.module_functions_graph.get_module_functions(current_module_id) {
             if let Some(&func) = module_funcs.get(&name) {
-                return Ok((func, Some(ModuleRef::Graph(current_module_id))));
+                return Ok((func, Some(current_module_id)));
             }
         }
 
-        // Check what the current module imported from other modules using ModuleGraph typecheck result.
+        // Check what the current module imported from other modules.
         if let Some(typecheck_result) = &ctx.module_graph_typecheck {
             let module_imports_map = typecheck_result.module_imports(ctx.db);
 
@@ -918,7 +779,7 @@ fn lookup_function<'db>(
                         // Found the import - look up the function AST from the source module.
                         if let Some(module_funcs) = ctx.module_functions_graph.get_module_functions(*source_module_id) {
                             if let Some(&func_ast) = module_funcs.get(&name) {
-                                return Ok((func_ast, Some(ModuleRef::Graph(*source_module_id))));
+                                return Ok((func_ast, Some(*source_module_id)));
                             }
                         }
                     }
@@ -927,14 +788,9 @@ fn lookup_function<'db>(
         }
     }
 
-    // Check script-level imported functions (PackageModule-based).
-    if let Some((func, module)) = ctx.module_functions.get(name) {
-        return Ok((func, Some(ModuleRef::Package(module))));
-    }
-
-    // Check script-level imported functions (ModuleGraph-based).
+    // Check script-level imported functions.
     if let Some((func, module_id)) = ctx.module_functions_graph.get(name) {
-        return Ok((func, Some(ModuleRef::Graph(module_id))));
+        return Ok((func, Some(module_id)));
     }
 
     // Function not found.
@@ -1220,7 +1076,7 @@ fn eval_function_call_frame<'db>(
 fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
-    func_module: Option<ModuleRef>,
+    func_module: Option<ModuleId>,
     arg_values: Vec<Value>,
 ) -> Result<Value, InterpError> {
     // Helper to clean up arguments on early error (before frame execution).
@@ -1266,37 +1122,22 @@ fn execute_function_body<'db>(
     }
 
     // Helper to restore previous module context.
-    fn restore_module_context(ctx: &mut InterpContext<'_>, prev: (Option<bct::package2::PackageModule>, Option<ModuleId>)) {
-        ctx.current_module = prev.0;
-        ctx.current_module_id = prev.1;
+    fn restore_module_context(ctx: &mut InterpContext<'_>, prev: Option<ModuleId>) {
+        ctx.current_module_id = prev;
     }
 
     // Save previous module context.
-    let prev_module = (ctx.current_module, ctx.current_module_id);
+    let prev_module = ctx.current_module_id;
 
-    // Set current module based on the variant.
-    match func_module {
-        Some(ModuleRef::Package(pm)) => ctx.current_module = Some(pm),
-        Some(ModuleRef::Graph(mid)) => ctx.current_module_id = Some(mid),
-        None => {}
+    // Set current module if the function is from a module.
+    if let Some(module_id) = func_module {
+        ctx.current_module_id = Some(module_id);
     }
 
     // Get function analysis.
-    // First check script-level function analyses, then package-based, then ModuleGraph-based.
+    // First check script-level function analyses, then ModuleGraph-based.
     let analysis = if let Some(analysis) = ctx.script_function_analyses.get(&func) {
         *analysis
-    } else if let Some(typecheck_result) = &ctx.typecheck_result {
-        let analyses = typecheck_result.function_analyses(ctx.db);
-        match analyses.iter().find(|(f, _)| *f == func).map(|(_, a)| *a) {
-            Some(a) => a,
-            None => {
-                restore_module_context(ctx, prev_module);
-                cleanup_args_on_error(ctx, arg_values);
-                return Err(InterpError::RuntimeError(
-                    format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
-                ));
-            }
-        }
     } else if let Some(typecheck_result) = &ctx.module_graph_typecheck {
         let analyses = typecheck_result.function_analyses(ctx.db);
         match analyses.iter().find(|(f, _)| *f == func).map(|(_, a)| *a) {
