@@ -22,8 +22,8 @@ Clean up the interpreter's ownership model so that:
 - **Phase 5.0**: COMPLETE (branch convergence drops - Rust-like drop model)
 - **Phase 5.1**: COMPLETE (sparse slot tracking infrastructure, debug-only use-after-move)
 - **Phase 5.2**: COMPLETE (inline destruction tracking - exclude BinOp/UnaryOp/if-condition temps)
-- **Phase 6**: NO-OP (frame-based args already use DPS; script scope will be rewritten later)
-- **Phase 7**: COMPLETE (Return DPS + unified coercion)
+- **Phase 6**: NO-OP (frame-based args already use DPS)
+- **Phase 7**: IN PROGRESS (Return DPS + unified coercion - remaining non-DPS cases)
 - **Phase 8**: Not started (simplify Value)
 
 ## Incremental Phases
@@ -409,10 +409,10 @@ operands after the operation), so:
 
 ### Phase 6: Argument Passing - NO-OP
 
-Frame-based calls already use DPS with temp slots for arguments. Script scope will be rewritten later.
+Frame-based calls already use DPS with temp slots for arguments.
 No changes needed.
 
-### Phase 7: Return DPS + Unified Coercion ✓ COMPLETE
+### Phase 7: Return DPS + Unified Coercion - IN PROGRESS
 
 **Files**: `interp/mod.rs`, `interp/frame.rs`
 
@@ -450,11 +450,65 @@ T→Option<T> coercion is a value conversion that should happen at the point of 
 at function return. With Return DPS, the return expression evaluates into a typed destination,
 and coercion kicks in via the existing `coerce_value_to_dest` mechanism.
 
-**Result:**
+**Partial result:**
 - Return values written directly to caller's memory when `return_dest` provided
 - No heap cloning needed for frame-based calls
 - Coercion unified through `coerce_value_to_dest` mechanism
 - All 162 interp tests pass with leak checking ✓
+
+#### Remaining Non-DPS Cases to Fix
+
+The following code paths still bypass DPS and need to be eliminated:
+
+**1. Script scope calls** (line ~1015)
+```rust
+execute_function_body(ctx, func, func_module, arg_values, None)
+```
+- `eval_function_call_in_script_scope()` passes `None` for return_dest
+- Falls back to heap allocation
+- **Must fix**: Script scope must provide a return destination
+
+**2. Borrowed frame returns without return_dest** (lines ~1265-1326)
+- When `return_dest` is None AND return expression yields Borrowed value
+- Must clone to heap before frame cleanup since frame will be deallocated
+- Uses `dtlv_rti_clone_local()` for types with internal pointers
+
+**3. Option/Result wrapping when return_dest is None** (lines ~2386-2406)
+- When function returns T but return type is Option<T> or Result<T>
+- Calls `allocate_option_some_from_value()` or `allocate_result_ok_from_value()`
+- Allocates wrapper on heap, copies inner value, frees original
+
+**4. Coercion check path** (lines ~2303-2328)
+- Even when `return_dest` IS provided, evaluates without dest first
+- Checks if T→Option<T> or T→Result<T> coercion needed
+- Then copies/coerces to dest afterward
+- NOT pure DPS - should evaluate directly into dest with coercion
+
+**5. @none/@error typed literals** (lines ~2354-2378)
+- When returning typed `@none` or `@error` literals
+- Allocates heap memory for typed destination
+- Evaluates into temporary heap buffer
+
+**6. Copy type reads** (lines ~2004-2015)
+- Reading copy-type from Reference slot always clones
+- Uses `clone_value_to_dest()` regardless of dest availability
+- Correct behavior (must preserve original), but not pure DPS
+
+**7. Try-operator early returns** (lines ~1346-1362)
+- ? or ! operators trigger early return with Option::None or Result::Err
+- Allocates wrapper on heap, bypasses normal return expression evaluation
+
+#### Phase 7 Completion Plan
+
+To fully eliminate non-DPS paths and remove the fallback:
+
+**7.1**: Script scope provides return destination - allocate heap buffer before call, pass as return_dest
+**7.2**: Fix coercion check path - evaluate directly into dest with type-aware DPS
+**7.3**: Fix try-operator early returns - write directly to return_dest
+**7.4**: Fix @none/@error literals - use return_dest directly
+**7.5**: Ensure all call paths have return_dest (nested calls, etc.)
+**7.6**: Remove `return_dest: Option<Destination>` - make it non-optional `Destination`
+**7.7**: Delete all heap allocation fallback code paths
 
 ### Phase 8: Simplify Value (Not Yet Started)
 
@@ -483,8 +537,8 @@ and coercion kicks in via the existing `coerce_value_to_dest` mechanism.
 
 ## Scope
 
-- **Script scope**: Leave alone for now. Unify with frame-based model in a future cleanup.
-- **Focus**: Frame-based function execution only.
+- **Script scope**: Now included - must provide return destination like frame-based calls.
+- **Goal**: All function calls use DPS for return values. No heap allocation fallbacks.
 
 ## Risk Areas
 
