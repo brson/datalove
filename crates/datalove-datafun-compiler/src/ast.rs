@@ -177,11 +177,8 @@ pub enum ExprFunKind<'db> {
 
     // Aggregate expressions.
     AnonTuple(ExprAnonTuple<'db>),
-    NamedTuple(ExprNamedTuple<'db>),
     AnonStruct(ExprAnonStruct<'db>),
-    NamedStruct(ExprNamedStruct<'db>),
     AnonEnum(ExprAnonEnum<'db>),
-    NamedEnum(ExprNamedEnum<'db>),
 
     // Wrapper expressions.
     Data(ExprData<'db>),
@@ -349,27 +346,9 @@ pub struct ExprAnonTuple<'db> {
 }
 
 #[salsa::tracked]
-pub struct ExprNamedTuple<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    pub name: InternedText<'db>,
-    #[returns(ref)]
-    pub elements: Vec<ExprFun<'db>>,
-}
-
-#[salsa::tracked]
 pub struct ExprAnonStruct<'db> {
     pub heap: datalit::ast::Heap,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    #[returns(ref)]
-    pub fields: Vec<ExprStructField<'db>>,
-}
-
-#[salsa::tracked]
-pub struct ExprNamedStruct<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    pub name: InternedText<'db>,
     #[returns(ref)]
     pub fields: Vec<ExprStructField<'db>>,
 }
@@ -384,15 +363,6 @@ pub struct ExprStructField<'db> {
 pub struct ExprAnonEnum<'db> {
     pub heap: datalit::ast::Heap,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    pub variant_name: InternedText<'db>,
-    pub payload: Option<ExprFun<'db>>,
-}
-
-#[salsa::tracked]
-pub struct ExprNamedEnum<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    pub enum_name: InternedText<'db>,
     pub variant_name: InternedText<'db>,
     pub payload: Option<ExprFun<'db>>,
 }

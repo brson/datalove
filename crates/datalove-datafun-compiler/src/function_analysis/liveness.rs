@@ -511,27 +511,12 @@ fn collect_reads<'db>(
                 collect_reads(db, *elem, stmt_id, slots, last_use_points);
             }
         }
-        ExprFunKind::NamedTuple(tuple) => {
-            for elem in tuple.elements(db) {
-                collect_reads(db, *elem, stmt_id, slots, last_use_points);
-            }
-        }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
                 collect_reads(db, field.value(db), stmt_id, slots, last_use_points);
             }
         }
-        ExprFunKind::NamedStruct(s) => {
-            for field in s.fields(db) {
-                collect_reads(db, field.value(db), stmt_id, slots, last_use_points);
-            }
-        }
         ExprFunKind::AnonEnum(e) => {
-            if let Some(payload) = e.payload(db) {
-                collect_reads(db, payload, stmt_id, slots, last_use_points);
-            }
-        }
-        ExprFunKind::NamedEnum(e) => {
             if let Some(payload) = e.payload(db) {
                 collect_reads(db, payload, stmt_id, slots, last_use_points);
             }

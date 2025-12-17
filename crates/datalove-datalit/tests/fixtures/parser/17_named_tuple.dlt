@@ -1,3 +1,0 @@
-: @tuple Bar (
-  @bool, @u32,
-) / @tuple Bar (@true, @1)

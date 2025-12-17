@@ -92,9 +92,6 @@ pub fn compute_type_layout<'db>(
         Type::AnonTuple(tuple) => {
             compute_tuple_layout(db, &tuple.fields(db))
         }
-        Type::NamedTuple(tuple) => {
-            compute_tuple_layout(db, &tuple.fields(db))
-        }
 
         // Struct: same as tuple.
         Type::AnonStruct(struct_ty) => {
@@ -104,19 +101,9 @@ pub fn compute_type_layout<'db>(
                 .collect();
             compute_tuple_layout(db, &field_types)
         }
-        Type::NamedStruct(struct_ty) => {
-            let field_types: Vec<_> = struct_ty.fields(db)
-                .iter()
-                .map(|f| f.ty(db))
-                .collect();
-            compute_tuple_layout(db, &field_types)
-        }
 
         // Enum: discriminant + max variant size.
         Type::AnonEnum(enum_ty) => {
-            compute_enum_layout(db, &enum_ty.variants(db))
-        }
-        Type::NamedEnum(enum_ty) => {
             compute_enum_layout(db, &enum_ty.variants(db))
         }
 

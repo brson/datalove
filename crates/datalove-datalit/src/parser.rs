@@ -234,44 +234,13 @@ impl<'db> DynParser<'db> {
                             )
                         }
                     }
-                } else if let Some(name) = self.eat_name() {
-                    // Named tuple.
-                    match self.peek() {
-                        Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                            self.next(); // Consume the branch.
-                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                            let mut sub_parser = DynParser {
-                                db: self.db,
-                                tokens,
-                                pos: 0,
-                                source_text: self.source_text,
-                                expr_spans: Vec::new(),
-                            };
-                            let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
-                            ast::TypeHint::NamedTuple(ast::TypeHintNamedTuple::new(
-                                self.db,
-                                name,
-                                fields,
-                            ))
-                        }
-                        _ => {
-                            self.emit_type_hint_error(
-                                keyword_text,
-                                keyword_span,
-                                "expected () after tuple name",
-                                "D001",
-                                "expected '(' after tuple name"
-                            )
-                        }
-                    }
                 } else {
-                    // Neither anonymous nor named - error.
                     self.emit_type_hint_error(
                         keyword_text,
                         keyword_span,
-                        "expected name or () after tuple keyword",
+                        "expected () after tuple keyword",
                         "D001",
-                        "expected name or '(' after 'tuple'"
+                        "expected '(' after 'tuple'"
                     )
                 }
             }
@@ -305,44 +274,13 @@ impl<'db> DynParser<'db> {
                             )
                         }
                     }
-                } else if let Some(name) = self.eat_name() {
-                    // Named struct.
-                    match self.peek() {
-                        Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
-                            self.next(); // Consume the branch.
-                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                            let mut sub_parser = DynParser {
-                                db: self.db,
-                                tokens,
-                                pos: 0,
-                                source_text: self.source_text,
-                                expr_spans: Vec::new(),
-                            };
-                            let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
-                            ast::TypeHint::NamedStruct(ast::TypeHintNamedStruct::new(
-                                self.db,
-                                name,
-                                fields,
-                            ))
-                        }
-                        _ => {
-                            self.emit_type_hint_error(
-                                keyword_text,
-                                keyword_span,
-                                "expected {} after struct name",
-                                "D002",
-                                "expected '{' after struct name"
-                            )
-                        }
-                    }
                 } else {
-                    // Neither anonymous nor named - error.
                     self.emit_type_hint_error(
                         keyword_text,
                         keyword_span,
-                        "expected name or {} after struct keyword",
+                        "expected {} after struct keyword",
                         "D002",
-                        "expected name or '{' after 'struct'"
+                        "expected '{' after 'struct'"
                     )
                 }
             }
@@ -379,45 +317,13 @@ impl<'db> DynParser<'db> {
                             )
                         }
                     }
-                } else if let Some(name) = self.eat_name() {
-                    // Named enum.
-                    match self.peek() {
-                        Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
-                            self.next(); // Consume the branch.
-                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                            let mut sub_parser = DynParser {
-                                db: self.db,
-                                tokens,
-                                pos: 0,
-                                source_text: self.source_text,
-                                expr_spans: Vec::new(),
-                            };
-                            let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
-                            ast::TypeHint::NamedEnum(ast::TypeHintNamedEnum::new(
-                                self.db,
-                                name,
-                                variants,
-                            ))
-                        }
-                        _ => {
-                            let (text, span) = self.current_text_span();
-                            self.emit_type_hint_error(
-                                text,
-                                span,
-                                "expected {} after enum name",
-                                "D004",
-                                "expected '{' after enum name"
-                            )
-                        }
-                    }
                 } else {
-                    // Neither anonymous nor named - error.
                     self.emit_type_hint_error(
                         keyword_text,
                         keyword_span,
-                        "expected name or {} after enum keyword",
+                        "expected {} after enum keyword",
                         "D003",
-                        "expected name or '{' after 'enum'"
+                        "expected '{' after 'enum'"
                     )
                 }
             }
@@ -1047,103 +953,11 @@ impl<'db> DynParser<'db> {
 
                 return ast::Expr::Tensor(ast::ExprTensor::new(self.db, shape, elements));
             }
-            Some("tuple") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
-                self.eat_word("tuple");
-                let name = match self.eat_name() {
-                    Some(n) => n,
-                    None => {
-                        return self.emit_expr_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected name after tuple keyword",
-                            "D014",
-                            "expected tuple name"
-                        );
-                    }
-                };
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                        };
-                        let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
-                        return ast::Expr::NamedTuple(ast::ExprNamedTuple::new(
-                            self.db,
-                            name,
-                            elements,
-                        ));
-                    }
-                    _ => {
-                        return self.emit_expr_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected () after tuple name",
-                            "D014",
-                            "expected '(' after tuple name"
-                        );
-                    }
-                }
-            }
-            Some("struct") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
-                self.eat_word("struct");
-                let name = match self.eat_name() {
-                    Some(n) => n,
-                    None => {
-                        return self.emit_expr_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected name after struct keyword",
-                            "D015",
-                            "expected struct name"
-                        );
-                    }
-                };
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                        };
-                        let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
-                        return ast::Expr::NamedStruct(ast::ExprNamedStruct::new(
-                            self.db,
-                            name,
-                            fields,
-                        ));
-                    }
-                    _ => {
-                        return self.emit_expr_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected {} after struct name",
-                            "D015",
-                            "expected '{' after struct name"
-                        );
-                    }
-                }
-            }
             Some("enum") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("enum");
-                // Enum expression syntax:
-                // - enum Variant (anonymous, no payload)
-                // - enum Variant(...) (anonymous, with single value payload)
-                // - enum EnumName.Variant (named, with dot separator)
-                // - enum EnumName.Variant(...) (named, with single value payload)
-                let first_name = match self.eat_name() {
+                // Enum expression syntax: enum Variant or enum Variant(...).
+                let variant_name = match self.eat_name() {
                     Some(n) => n,
                     None => {
                         return self.emit_expr_error(
@@ -1155,67 +969,26 @@ impl<'db> DynParser<'db> {
                         );
                     }
                 };
-                if self.peek_sigil(Sigil::Dot) {
-                    // Named enum: enum EnumName.Variant [(...)]
-                    self.eat_sigil(Sigil::Dot);
-                    let variant_name = match self.eat_name() {
-                        Some(n) => n,
-                        None => {
-                            let (text, span) = self.current_text_span();
-                            return self.emit_expr_error(
-                                text,
-                                span,
-                                "expected variant name after '.' in named enum",
-                                "D016",
-                                "expected variant name after '.'"
-                            );
-                        }
+                let payload = if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.peek() {
+                    // Parse a single expression as payload.
+                    self.next(); // Consume the branch.
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
                     };
-                    let payload = if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.peek() {
-                        // Parse a single expression as payload.
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                        };
-                        Some(sub_parser.parse_expr_full())
-                    } else {
-                        None
-                    };
-                    return ast::Expr::NamedEnum(ast::ExprNamedEnum::new(
-                        self.db,
-                        first_name,
-                        variant_name,
-                        payload,
-                    ));
+                    Some(sub_parser.parse_expr_full())
                 } else {
-                    // Anonymous enum: enum Variant [(...)]
-                    let variant_name = first_name;
-                    let payload = if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.peek() {
-                        // Parse a single expression as payload.
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                        };
-                        Some(sub_parser.parse_expr_full())
-                    } else {
-                        None
-                    };
-                    return ast::Expr::AnonEnum(ast::ExprAnonEnum::new(
-                        self.db,
-                        variant_name,
-                        payload,
-                    ));
-                }
+                    None
+                };
+                return ast::Expr::AnonEnum(ast::ExprAnonEnum::new(
+                    self.db,
+                    variant_name,
+                    payload,
+                ));
             }
             Some("map") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
@@ -1801,29 +1574,6 @@ fn test_parse_string() {
 }
 
 #[test]
-fn test_parse_struct() {
-    let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @struct Foo { field1: @bool } / @struct Foo { field1 = @true }"));
-    let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
-    match type_hint {
-        ast::TypeHint::NamedStruct(s) => {
-            assert_eq!(s.name(db).as_str(db), "Foo");
-            assert_eq!(s.fields(db).len(), 1);
-        }
-        _ => panic!("expected named struct type hint"),
-    }
-    let expr = ast.expr(db).expr(db);
-    match expr {
-        ast::Expr::NamedStruct(s) => {
-            assert_eq!(s.name(db).as_str(db), "Foo");
-            assert_eq!(s.fields(db).len(), 1);
-        }
-        _ => panic!("expected named struct expr"),
-    }
-}
-
-#[test]
 fn test_parse_map() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": @map <@u32, @u32> / @map { @0 = @5, @2 = @2 }"));
@@ -1858,29 +1608,6 @@ fn test_parse_set() {
             assert_eq!(s.elements(db).len(), 3);
         }
         _ => panic!("expected set expr"),
-    }
-}
-
-#[test]
-fn test_parse_named_tuple() {
-    let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @tuple Bar (@bool, @u32) / @tuple Bar (@true, @1)"));
-    let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint(db).unwrap().type_hint(db);
-    match type_hint {
-        ast::TypeHint::NamedTuple(t) => {
-            assert_eq!(t.name(db).as_str(db), "Bar");
-            assert_eq!(t.fields(db).len(), 2);
-        }
-        _ => panic!("expected named tuple type hint"),
-    }
-    let expr = ast.expr(db).expr(db);
-    match expr {
-        ast::Expr::NamedTuple(t) => {
-            assert_eq!(t.name(db).as_str(db), "Bar");
-            assert_eq!(t.elements(db).len(), 2);
-        }
-        _ => panic!("expected named tuple expr"),
     }
 }
 
@@ -1932,28 +1659,6 @@ fn test_parse_enum_variant_with_tuple() {
             }
         }
         _ => panic!("expected anonymous enum"),
-    }
-}
-
-#[test]
-fn test_parse_named_enum_with_dot() {
-    let ref db = crate::Database::default();
-    let source = Source::new(db, S("@enum Quux.Bar(@(@true, @1))"));
-    let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
-    match expr {
-        ast::Expr::NamedEnum(e) => {
-            assert_eq!(e.enum_name(db).as_str(db), "Quux");
-            assert_eq!(e.variant_name(db).as_str(db), "Bar");
-            assert!(e.payload(db).is_some());
-            // Verify the payload is a tuple.
-            let payload = e.payload(db).unwrap();
-            match payload.expr(db).expr(db) {
-                ast::Expr::AnonTuple(t) => assert_eq!(t.elements(db).len(), 2),
-                _ => panic!("expected tuple payload"),
-            }
-        }
-        _ => panic!("expected named enum"),
     }
 }
 

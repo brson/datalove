@@ -1,42 +1,6 @@
 use datalove_datalit::{ast_gen::*, Database};
 
 #[test]
-fn test_nested_named_types_should_resolve() {
-    // Test that named types nested in type hints should be resolvable
-    let db = Database::default();
-
-    let source_text = r#"
-: @tuple Outer (
-  @struct Inner {
-    x: @u32
-  }
-) / @tuple Outer (
-  @struct Inner {
-    x = @1
-  }
-)
-"#;
-
-    let source = bct::input::Source::new(&db, source_text.into());
-    let parsed = datalove_datalit::parser::parse_integration_test(&db, source);
-    let resolved = datalove_datalit::resolve::resolve_names(&db, source, parsed);
-    let typechecked = datalove_datalit::tycheck::type_check(&db, parsed, resolved);
-
-    let has_errors = !typechecked.errors(&db).is_empty();
-    let has_type = typechecked.root_type(&db).is_some();
-
-    if has_errors {
-        println!("\nErrors:");
-        for error_entry in typechecked.errors(&db) {
-            println!("  {:?}", error_entry.error(&db));
-        }
-    }
-
-    assert!(!has_errors, "Should not have resolution/typecheck errors");
-    assert!(has_type, "Should have a type");
-}
-
-#[test]
 fn test_gen_expr_full_seeded() {
     let db = Database::default();
     let config = AstGenConfig::default();
@@ -218,17 +182,7 @@ fn test_max_collection_size_enforced() {
                     check_collection_size(db, &elem.expr(db).expr(db), max_size);
                 }
             }
-            Expr::NamedTuple(tuple) => {
-                for elem in tuple.elements(db) {
-                    check_collection_size(db, &elem.expr(db).expr(db), max_size);
-                }
-            }
             Expr::AnonStruct(st) => {
-                for field in st.fields(db) {
-                    check_collection_size(db, &field.value(db).expr(db).expr(db), max_size);
-                }
-            }
-            Expr::NamedStruct(st) => {
                 for field in st.fields(db) {
                     check_collection_size(db, &field.value(db).expr(db).expr(db), max_size);
                 }
@@ -499,17 +453,7 @@ fn test_result_error_case_generation() {
                         check_for_err(db, &elem.expr(db).expr(db), seen);
                     }
                 }
-                Expr::NamedTuple(tuple) => {
-                    for elem in tuple.elements(db) {
-                        check_for_err(db, &elem.expr(db).expr(db), seen);
-                    }
-                }
                 Expr::AnonStruct(st) => {
-                    for field in st.fields(db) {
-                        check_for_err(db, &field.value(db).expr(db).expr(db), seen);
-                    }
-                }
-                Expr::NamedStruct(st) => {
                     for field in st.fields(db) {
                         check_for_err(db, &field.value(db).expr(db).expr(db), seen);
                     }

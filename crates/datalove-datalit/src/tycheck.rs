@@ -22,11 +22,8 @@ pub enum Type<'db> {
     Int,
     String,
     AnonTuple(TypeAnonTuple<'db>),
-    NamedTuple(TypeNamedTuple<'db>),
     AnonStruct(TypeAnonStruct<'db>),
-    NamedStruct(TypeNamedStruct<'db>),
     AnonEnum(TypeAnonEnum<'db>),
-    NamedEnum(TypeNamedEnum<'db>),
     List(TypeList<'db>),
     Map(TypeMap<'db>),
     Set(TypeSet<'db>),
@@ -50,19 +47,7 @@ pub struct TypeAnonTuple<'db> {
 }
 
 #[salsa::tracked]
-pub struct TypeNamedTuple<'db> {
-    pub name: InternedText<'db>,
-    pub fields: Vec<TypeAndHeap<'db>>,
-}
-
-#[salsa::tracked]
 pub struct TypeAnonStruct<'db> {
-    pub fields: Vec<TypeNamedField<'db>>,
-}
-
-#[salsa::tracked]
-pub struct TypeNamedStruct<'db> {
-    pub name: InternedText<'db>,
     pub fields: Vec<TypeNamedField<'db>>,
 }
 
@@ -74,12 +59,6 @@ pub struct TypeNamedField<'db> {
 
 #[salsa::tracked]
 pub struct TypeAnonEnum<'db> {
-    pub variants: Vec<TypeEnumVariant<'db>>,
-}
-
-#[salsa::tracked]
-pub struct TypeNamedEnum<'db> {
-    pub name: InternedText<'db>,
     pub variants: Vec<TypeEnumVariant<'db>>,
 }
 
@@ -321,87 +300,6 @@ fn synthesize<'db>(
                 }
                 return Err(TypeError::IntOutOfRange);
             }
-        }
-
-        // Rule: Syn-NamedTuple
-        Expr::NamedTuple(t) => {
-            let name = t.name(db);
-            let resolution = ctx
-                .lookup_resolution(name)
-                .ok_or_else(|| {
-                    // T002: Unresolved name (named tuple).
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        let msg = format!("cannot find type `{}`", name.as_str(db));
-                        DiagnosticBuilder::error(db, &msg)
-                            .code("T002")
-                            .primary_label(text, span, "not found in this scope")
-                            .note("named types must be defined in the type hint before they can be used")
-                            .emit_type();
-                    }
-                    TypeError::UnresolvedName(name.as_str(db).to_string())
-                })?;
-
-            let definition = resolution.definition(db);
-            let expected_type = convert_type_hint(db, definition)?;
-
-            // Check elements against expected type.
-            check(ctx, expr, expected_type)?;
-
-            expected_type.ty(db).clone()
-        }
-
-        // Rule: Syn-NamedStruct
-        Expr::NamedStruct(s) => {
-            let name = s.name(db);
-            let resolution = ctx
-                .lookup_resolution(name)
-                .ok_or_else(|| {
-                    // T003: Unresolved name (named struct).
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        let msg = format!("cannot find type `{}`", name.as_str(db));
-                        DiagnosticBuilder::error(db, &msg)
-                            .code("T003")
-                            .primary_label(text, span, "not found in this scope")
-                            .note("named types must be defined in the type hint before they can be used")
-                            .emit_type();
-                    }
-                    TypeError::UnresolvedName(name.as_str(db).to_string())
-                })?;
-
-            let definition = resolution.definition(db);
-            let expected_type = convert_type_hint(db, definition)?;
-
-            // Check fields against expected type.
-            check(ctx, expr, expected_type)?;
-
-            expected_type.ty(db).clone()
-        }
-
-        // Rule: Syn-NamedEnum
-        Expr::NamedEnum(e) => {
-            let name = e.enum_name(db);
-            let resolution = ctx
-                .lookup_resolution(name)
-                .ok_or_else(|| {
-                    // T004: Unresolved name (named enum).
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        let msg = format!("cannot find type `{}`", name.as_str(db));
-                        DiagnosticBuilder::error(db, &msg)
-                            .code("T004")
-                            .primary_label(text, span, "not found in this scope")
-                            .note("named types must be defined in the type hint before they can be used")
-                            .emit_type();
-                    }
-                    TypeError::UnresolvedName(name.as_str(db).to_string())
-                })?;
-
-            let definition = resolution.definition(db);
-            let expected_type = convert_type_hint(db, definition)?;
-
-            // Check variant and payload against expected type.
-            check(ctx, expr, expected_type)?;
-
-            expected_type.ty(db).clone()
         }
 
         // Rule: Syn-AnonTuple - synthesize tuple by synthesizing each element.
@@ -1149,84 +1047,10 @@ fn check<'db>(
             Ok(())
         }
 
-        // Rule: Check-NamedStruct (anon struct -> named struct coercion)
-        (Expr::AnonStruct(s), Type::NamedStruct(expected_struct)) => {
-            let fields = s.fields(db);
-            let expected_fields = expected_struct.fields(db);
-
-            if fields.len() != expected_fields.len() {
-                // T040: Struct arity mismatch (anon -> named coercion).
-                if let Some((text, span)) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "struct has wrong number of fields")
-                        .code("T040")
-                        .primary_label(text, span, &format!("expected {} field(s), found {}",
-                            expected_fields.len(), fields.len()))
-                        .emit_type();
-                }
-                return Err(TypeError::ArityMismatch {
-                    expected: expected_fields.len(),
-                    actual: fields.len(),
-                });
-            }
-
-            for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
-                let field_name = field.name(db);
-                let expected_name = expected_field.name(db);
-
-                if field_name != expected_name {
-                    // T043: Struct field order mismatch (anon -> named coercion).
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, "struct fields in wrong order")
-                            .code("T043")
-                            .primary_label(text, span, &format!("expected field `{}`, found `{}`",
-                                expected_name.as_str(db), field_name.as_str(db)))
-                            .note("struct fields must appear in the same order as the type definition")
-                            .emit_type();
-                    }
-                    return Err(TypeError::FieldOrderMismatch);
-                }
-
-                check(ctx, field.value(db), expected_field.ty(db))?;
-            }
-
-            Ok(())
-        }
-
-        // Named struct must match exactly.
-        (Expr::NamedStruct(s), Type::NamedStruct(expected_struct)) => {
-            let name = s.name(db);
-            let expected_name = expected_struct.name(db);
-
-            if name != expected_name {
-                // T023: Named struct type mismatch.
-                if let Some((text, span)) = ctx.get_span(expr) {
-                    let msg = format!("mismatched struct types");
-                    DiagnosticBuilder::error(db, &msg)
-                        .code("T023")
-                        .primary_label(text, span, &format!("expected `@struct {}`, found `@struct {}`",
-                            expected_name.as_str(db), name.as_str(db)))
-                        .emit_type();
-                }
-                return Err(TypeError::TypeMismatch {
-                    expected: format!("@struct {}", expected_name.as_str(db)),
-                    actual: format!("@struct {}", name.as_str(db)),
-                });
-            }
-
-            let fields = s.fields(db);
-            let expected_fields = expected_struct.fields(db);
-
-            for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
-                check(ctx, field.value(db), expected_field.ty(db))?;
-            }
-
-            Ok(())
-        }
-
         // Rule: Check-TypedAnonEnum - validate type hint against expected type.
         // When an anonymous enum expression has a direct enum type hint (not wrapped
         // in Option/Result), the hinted type must be equivalent to the expected type.
-        (Expr::AnonEnum(_), Type::AnonEnum(_)) if expr.type_hint(db).is_some() && matches!(expr.type_hint(db).unwrap().type_hint(db), TypeHint::AnonEnum(_) | TypeHint::NamedEnum(_)) => {
+        (Expr::AnonEnum(_), Type::AnonEnum(_)) if expr.type_hint(db).is_some() && matches!(expr.type_hint(db).unwrap().type_hint(db), TypeHint::AnonEnum(_)) => {
             let type_hint_and_heap = expr.type_hint(db).unwrap();
             let hinted_type = convert_type_hint(db, type_hint_and_heap)?;
             let hinted_type_inner = hinted_type.ty(db);
@@ -1295,131 +1119,6 @@ fn check<'db>(
                     if let Some((text, span)) = ctx.get_span(expr) {
                         DiagnosticBuilder::error(db, "enum variant payload mismatch")
                             .code("T025")
-                            .primary_label(text, span, "expected payload, found no payload")
-                            .emit_type();
-                    }
-                    Err(TypeError::TypeMismatch {
-                        expected: "payload".to_string(),
-                        actual: "no payload".to_string(),
-                    })
-                }
-            }
-        }
-
-        // Rule: Check-NamedEnum (anon enum -> named enum coercion)
-        (Expr::AnonEnum(e), Type::NamedEnum(expected_enum)) => {
-            let variant_name = e.variant_name(db);
-            let expected_variants = expected_enum.variants(db);
-
-            let expected_variant = expected_variants
-                .iter()
-                .find(|v| v.name(db) == variant_name)
-                .ok_or_else(|| {
-                    // T045: Enum variant not found (anon -> named coercion).
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, &format!("variant `{}` not found in enum", variant_name.as_str(db)))
-                            .code("T045")
-                            .primary_label(text, span, "variant not defined")
-                            .emit_type();
-                    }
-                    TypeError::VariantNotFound(variant_name.as_str(db).to_string())
-                })?;
-
-            match (e.payload(db), expected_variant.payload(db)) {
-                (Some(payload), Some(expected_payload)) => {
-                    check(ctx, payload, expected_payload)
-                }
-                (None, None) => Ok(()),
-                (Some(_), None) => {
-                    // T026: Enum variant payload mismatch (has payload, expected none) - NamedEnum coercion.
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
-                            .code("T026")
-                            .primary_label(text, span, "expected no payload, found payload")
-                            .emit_type();
-                    }
-                    Err(TypeError::TypeMismatch {
-                        expected: "no payload".to_string(),
-                        actual: "payload".to_string(),
-                    })
-                }
-                (None, Some(_)) => {
-                    // T027: Enum variant payload mismatch (no payload, expected payload) - NamedEnum coercion.
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
-                            .code("T027")
-                            .primary_label(text, span, "expected payload, found no payload")
-                            .emit_type();
-                    }
-                    Err(TypeError::TypeMismatch {
-                        expected: "payload".to_string(),
-                        actual: "no payload".to_string(),
-                    })
-                }
-            }
-        }
-
-        // Named enum must match exactly.
-        (Expr::NamedEnum(e), Type::NamedEnum(expected_enum)) => {
-            let enum_name = e.enum_name(db);
-            let expected_name = expected_enum.name(db);
-
-            if enum_name != expected_name {
-                // T028: Named enum type mismatch.
-                if let Some((text, span)) = ctx.get_span(expr) {
-                    let msg = format!("mismatched enum types");
-                    DiagnosticBuilder::error(db, &msg)
-                        .code("T028")
-                        .primary_label(text, span, &format!("expected `@enum {}`, found `@enum {}`",
-                            expected_name.as_str(db), enum_name.as_str(db)))
-                        .emit_type();
-                }
-                return Err(TypeError::TypeMismatch {
-                    expected: format!("@enum {}", expected_name.as_str(db)),
-                    actual: format!("@enum {}", enum_name.as_str(db)),
-                });
-            }
-
-            let variant_name = e.variant_name(db);
-            let expected_variants = expected_enum.variants(db);
-
-            let expected_variant = expected_variants
-                .iter()
-                .find(|v| v.name(db) == variant_name)
-                .ok_or_else(|| {
-                    // T046: Enum variant not found (named enum exact match).
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, &format!("variant `{}` not found in enum", variant_name.as_str(db)))
-                            .code("T046")
-                            .primary_label(text, span, "variant not defined")
-                            .emit_type();
-                    }
-                    TypeError::VariantNotFound(variant_name.as_str(db).to_string())
-                })?;
-
-            match (e.payload(db), expected_variant.payload(db)) {
-                (Some(payload), Some(expected_payload)) => {
-                    check(ctx, payload, expected_payload)
-                }
-                (None, None) => Ok(()),
-                (Some(_), None) => {
-                    // T029: Enum variant payload mismatch (has payload, expected none) - NamedEnum exact.
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
-                            .code("T029")
-                            .primary_label(text, span, "expected no payload, found payload")
-                            .emit_type();
-                    }
-                    Err(TypeError::TypeMismatch {
-                        expected: "no payload".to_string(),
-                        actual: "payload".to_string(),
-                    })
-                }
-                (None, Some(_)) => {
-                    // T030: Enum variant payload mismatch (no payload, expected payload) - NamedEnum exact.
-                    if let Some((text, span)) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, "enum variant payload mismatch")
-                            .code("T030")
                             .primary_label(text, span, "expected payload, found no payload")
                             .emit_type();
                     }
@@ -1507,64 +1206,6 @@ fn check<'db>(
         // Rule: Check-Error
         (Expr::Err(_), Type::Error) => Ok(()),
 
-        // Rule: Check-NamedTuple (anon tuple -> named tuple coercion)
-        (Expr::AnonTuple(t), Type::NamedTuple(expected_tuple)) => {
-            let elements = t.elements(db);
-            let expected_fields = expected_tuple.fields(db);
-
-            if elements.len() != expected_fields.len() {
-                // T041: Tuple arity mismatch (anon -> named coercion).
-                if let Some((text, span)) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "tuple has wrong number of elements")
-                        .code("T041")
-                        .primary_label(text, span, &format!("expected {} element(s), found {}",
-                            expected_fields.len(), elements.len()))
-                        .emit_type();
-                }
-                return Err(TypeError::ArityMismatch {
-                    expected: expected_fields.len(),
-                    actual: elements.len(),
-                });
-            }
-
-            for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-                check(ctx, *elem, *expected_field)?;
-            }
-
-            Ok(())
-        }
-
-        // Named tuple must match exactly.
-        (Expr::NamedTuple(t), Type::NamedTuple(expected_tuple)) => {
-            let name = t.name(db);
-            let expected_name = expected_tuple.name(db);
-
-            if name != expected_name {
-                // T031: Named tuple type mismatch.
-                if let Some((text, span)) = ctx.get_span(expr) {
-                    let msg = format!("mismatched tuple types");
-                    DiagnosticBuilder::error(db, &msg)
-                        .code("T031")
-                        .primary_label(text, span, &format!("expected `@tuple {}`, found `@tuple {}`",
-                            expected_name.as_str(db), name.as_str(db)))
-                        .emit_type();
-                }
-                return Err(TypeError::TypeMismatch {
-                    expected: format!("@tuple {}", expected_name.as_str(db)),
-                    actual: format!("@tuple {}", name.as_str(db)),
-                });
-            }
-
-            let elements = t.elements(db);
-            let expected_fields = expected_tuple.fields(db);
-
-            for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-                check(ctx, *elem, *expected_field)?;
-            }
-
-            Ok(())
-        }
-
         // Otherwise, try subsumption.
         _ => {
             // Synthesize from the inner expression without type hint to avoid infinite recursion.
@@ -1628,16 +1269,6 @@ pub fn convert_type_hint<'db>(
             Type::AnonTuple(TypeAnonTuple::new(db, fields?))
         }
 
-        TypeHint::NamedTuple(t) => {
-            let name = t.name(db);
-            let fields: Result<Vec<_>, _> = t
-                .fields(db)
-                .iter()
-                .map(|f| convert_type_hint(db, *f))
-                .collect();
-            Type::NamedTuple(TypeNamedTuple::new(db, name, fields?))
-        }
-
         TypeHint::AnonStruct(s) => {
             let fields: Result<Vec<_>, _> = s
                 .fields(db)
@@ -1649,20 +1280,6 @@ pub fn convert_type_hint<'db>(
                 })
                 .collect();
             Type::AnonStruct(TypeAnonStruct::new(db, fields?))
-        }
-
-        TypeHint::NamedStruct(s) => {
-            let name = s.name(db);
-            let fields: Result<Vec<_>, _> = s
-                .fields(db)
-                .iter()
-                .map(|f| {
-                    let field_name = f.name(db);
-                    let ty = convert_type_hint(db, f.type_hint(db))?;
-                    Ok(TypeNamedField::new(db, field_name, ty))
-                })
-                .collect();
-            Type::NamedStruct(TypeNamedStruct::new(db, name, fields?))
         }
 
         TypeHint::AnonEnum(e) => {
@@ -1679,23 +1296,6 @@ pub fn convert_type_hint<'db>(
                 })
                 .collect();
             Type::AnonEnum(TypeAnonEnum::new(db, variants?))
-        }
-
-        TypeHint::NamedEnum(e) => {
-            let name = e.name(db);
-            let variants: Result<Vec<_>, _> = e
-                .variants(db)
-                .iter()
-                .map(|v| {
-                    let variant_name = v.name(db);
-                    let payload = v
-                        .payload(db)
-                        .map(|p| convert_type_hint(db, p))
-                        .transpose()?;
-                    Ok(TypeEnumVariant::new(db, variant_name, payload))
-                })
-                .collect();
-            Type::NamedEnum(TypeNamedEnum::new(db, name, variants?))
         }
 
         TypeHint::List(l) => {
@@ -1776,29 +1376,11 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
                     .all(|(a, b)| types_and_heaps_equivalent(db, a, b))
         }
 
-        (Type::NamedTuple(t1), Type::NamedTuple(t2)) => {
-            t1.name(db) == t2.name(db)
-                && t1.fields(db).len() == t2.fields(db).len()
-                && t1
-                    .fields(db)
-                    .iter()
-                    .zip(t2.fields(db).iter())
-                    .all(|(a, b)| types_and_heaps_equivalent(db, a, b))
-        }
-
         (Type::AnonStruct(s1), Type::AnonStruct(s2)) => {
             let f1 = s1.fields(db);
             let f2 = s2.fields(db);
             f1.len() == f2.len()
                 && f1.iter().zip(f2.iter()).all(|(a, b)| {
-                    a.name(db) == b.name(db) && types_and_heaps_equivalent(db, &a.ty(db), &b.ty(db))
-                })
-        }
-
-        (Type::NamedStruct(s1), Type::NamedStruct(s2)) => {
-            s1.name(db) == s2.name(db)
-                && s1.fields(db).len() == s2.fields(db).len()
-                && s1.fields(db).iter().zip(s2.fields(db).iter()).all(|(a, b)| {
                     a.name(db) == b.name(db) && types_and_heaps_equivalent(db, &a.ty(db), &b.ty(db))
                 })
         }
@@ -1810,21 +1392,6 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
             v1.len() == v2.len()
                 && v1.iter().all(|var1| {
                     v2.iter().any(|var2| {
-                        var1.name(db) == var2.name(db)
-                            && match (var1.payload(db), var2.payload(db)) {
-                                (Some(p1), Some(p2)) => types_and_heaps_equivalent(db, &p1, &p2),
-                                (None, None) => true,
-                                _ => false,
-                            }
-                    })
-                })
-        }
-
-        (Type::NamedEnum(e1), Type::NamedEnum(e2)) => {
-            e1.name(db) == e2.name(db)
-                && e1.variants(db).len() == e2.variants(db).len()
-                && e1.variants(db).iter().all(|var1| {
-                    e2.variants(db).iter().any(|var2| {
                         var1.name(db) == var2.name(db)
                             && match (var1.payload(db), var2.payload(db)) {
                                 (Some(p1), Some(p2)) => types_and_heaps_equivalent(db, &p1, &p2),
@@ -1945,10 +1512,6 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
                 .collect();
             format!("({})", fields.join(", "))
         }
-        Type::NamedTuple(t) => {
-            let name = t.name(db).as_str(db);
-            format!("@tuple {}", name)
-        }
         Type::AnonStruct(s) => {
             let fields: Vec<_> = s.fields(db)
                 .iter()
@@ -1961,16 +1524,8 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
                 .collect();
             format!("{{{}}}", fields.join(", "))
         }
-        Type::NamedStruct(s) => {
-            let name = s.name(db).as_str(db);
-            format!("@struct {}", name)
-        }
-        Type::AnonEnum(_e) => {
+        Type::AnonEnum(_) => {
             format!("@enum{{...}}")
-        }
-        Type::NamedEnum(e) => {
-            let name = e.name(db).as_str(db);
-            format!("@enum {}", name)
         }
         Type::List(l) => {
             let elem = l.element_type(db);

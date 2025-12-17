@@ -145,37 +145,12 @@ fn instantiate_expr_into<'db>(
             instantiate_tuple(db, rt, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
-        (Expr::NamedTuple(tuple_expr), Type::NamedTuple(tuple_ty)) => {
-            let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tuple(db, rt, &tuple_expr.elements(db), &tuple_ty.fields(db), tydesc_table, tydesc, dest_ptr, resolved)
-        }
-
         (Expr::AnonStruct(struct_expr), Type::AnonStruct(struct_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
             instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
-        (Expr::AnonStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
-            let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc, dest_ptr, resolved)
-        }
-
-        (Expr::NamedStruct(struct_expr), Type::NamedStruct(struct_ty)) => {
-            let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields(db), tydesc_table, tydesc, dest_ptr, resolved)
-        }
-
         (Expr::AnonEnum(enum_expr), Type::AnonEnum(enum_ty)) => {
-            let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc, dest_ptr, resolved)
-        }
-
-        (Expr::AnonEnum(enum_expr), Type::NamedEnum(enum_ty)) => {
-            let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc, dest_ptr, resolved)
-        }
-
-        (Expr::NamedEnum(enum_expr), Type::NamedEnum(enum_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
             instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
@@ -1534,7 +1509,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_no_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
+        let typechecked = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1558,7 +1533,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_with_scalar_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
+        let typechecked = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1751,34 +1726,6 @@ mod tests {
     }
 
     #[test]
-    fn test_instantiate_named_tuple() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": @tuple Point(@u32, @u32) / @tuple Point(@1, @2)")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tuple);
-            let tuple_info = inst.tydesc.tuple_info();
-            assert_eq!(tuple_info.num_fields(), 2);
-
-            let fields = tuple_info.fields();
-            let u32_value_1 = *(inst.ptr.add(fields[0].offset as usize) as *const u32);
-            assert_eq!(u32_value_1, 1);
-
-            let u32_value_2 = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
-            assert_eq!(u32_value_2, 2);
-        }
-        Ok(())
-    }
-
-    #[test]
     fn test_instantiate_int_large() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": @int / @1234567890123456789")?;
@@ -1803,83 +1750,6 @@ mod tests {
                 reconstructed |= (limb as u64) << (32 * i);
             }
             assert_eq!(reconstructed, 1234567890123456789);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_named_struct() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": @struct Point {x: @u32, y: @u32} / @struct Point {x = @10, y = @20}")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Struct);
-            let struct_info = inst.tydesc.struct_info();
-            assert_eq!(struct_info.num_fields(), 2);
-
-            let fields = struct_info.fields();
-            let x_value = *(inst.ptr.add(fields[0].offset as usize) as *const u32);
-            assert_eq!(x_value, 10);
-
-            let y_value = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
-            assert_eq!(y_value, 20);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_anon_to_named_struct() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": @struct Point {x: @u32, y: @u32} / @{x = @5, y = @15}")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Struct);
-            let struct_info = inst.tydesc.struct_info();
-            assert_eq!(struct_info.num_fields(), 2);
-
-            let fields = struct_info.fields();
-            let x_value = *(inst.ptr.add(fields[0].offset as usize) as *const u32);
-            assert_eq!(x_value, 5);
-
-            let y_value = *(inst.ptr.add(fields[1].offset as usize) as *const u32);
-            assert_eq!(y_value, 15);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_enum_anon_to_named_coercion() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": @enum Status { Ok, Error } / @enum Error")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
-            let discriminant = *(inst.ptr as *const u32);
-            assert_eq!(discriminant, 1);
         }
         Ok(())
     }

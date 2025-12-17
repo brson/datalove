@@ -529,27 +529,12 @@ fn collect_moves_from_expr<'db>(
                 collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
-        ExprFunKind::NamedTuple(tuple) => {
-            for elem in tuple.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            }
-        }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
                 collect_moves_from_expr(db, field.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
-        ExprFunKind::NamedStruct(s) => {
-            for field in s.fields(db) {
-                collect_moves_from_expr(db, field.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            }
-        }
         ExprFunKind::AnonEnum(e) => {
-            if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr(db, payload, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            }
-        }
-        ExprFunKind::NamedEnum(e) => {
             if let Some(payload) = e.payload(db) {
                 collect_moves_from_expr(db, payload, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
@@ -650,27 +635,12 @@ fn collect_moves_from_expr_borrow_context<'db>(
                 collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
-        ExprFunKind::NamedTuple(tuple) => {
-            for elem in tuple.elements(db) {
-                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            }
-        }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
                 collect_moves_from_expr_borrow_context(db, field.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
-        ExprFunKind::NamedStruct(s) => {
-            for field in s.fields(db) {
-                collect_moves_from_expr_borrow_context(db, field.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            }
-        }
         ExprFunKind::AnonEnum(e) => {
-            if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr_borrow_context(db, payload, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            }
-        }
-        ExprFunKind::NamedEnum(e) => {
             if let Some(payload) = e.payload(db) {
                 collect_moves_from_expr_borrow_context(db, payload, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
@@ -793,27 +763,12 @@ fn collect_moves_from_expr_for_return<'db>(
                 collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
-        ExprFunKind::NamedTuple(tuple) => {
-            for elem in tuple.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            }
-        }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
                 collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
-        ExprFunKind::NamedStruct(s) => {
-            for field in s.fields(db) {
-                collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            }
-        }
         ExprFunKind::AnonEnum(e) => {
-            if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr_for_return(db, payload, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            }
-        }
-        ExprFunKind::NamedEnum(e) => {
             if let Some(payload) = e.payload(db) {
                 collect_moves_from_expr_for_return(db, payload, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
@@ -991,27 +946,12 @@ fn collect_reads_from_expr<'db>(
                 collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
             }
         }
-        ExprFunKind::NamedTuple(tuple) => {
-            for elem in tuple.elements(db) {
-                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
-            }
-        }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
                 collect_reads_from_expr(db, field.value(db), stmt_id, slots, reads, expr_counter);
             }
         }
-        ExprFunKind::NamedStruct(s) => {
-            for field in s.fields(db) {
-                collect_reads_from_expr(db, field.value(db), stmt_id, slots, reads, expr_counter);
-            }
-        }
         ExprFunKind::AnonEnum(e) => {
-            if let Some(payload) = e.payload(db) {
-                collect_reads_from_expr(db, payload, stmt_id, slots, reads, expr_counter);
-            }
-        }
-        ExprFunKind::NamedEnum(e) => {
             if let Some(payload) = e.payload(db) {
                 collect_reads_from_expr(db, payload, stmt_id, slots, reads, expr_counter);
             }

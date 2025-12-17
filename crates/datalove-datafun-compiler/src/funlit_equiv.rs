@@ -158,19 +158,6 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 datalit::ast_serde::Expr::AnonTuple(datalit::ast_serde::ExprAnonTuple { elements }),
             )
         }
-        ast::ExprFunKind::NamedTuple(e) => {
-            let elements = e.elements(db).iter()
-                .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
-                .collect::<Result<Vec<_>, _>>()?;
-            (
-                e.heap(db),
-                e.type_hint(db),
-                datalit::ast_serde::Expr::NamedTuple(datalit::ast_serde::ExprNamedTuple {
-                    name: e.name(db).as_str(db).to_string(),
-                    elements,
-                }),
-            )
-        }
         ast::ExprFunKind::AnonStruct(e) => {
             let fields = e.fields(db).iter()
                 .map(|field| {
@@ -187,25 +174,6 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 datalit::ast_serde::Expr::AnonStruct(datalit::ast_serde::ExprAnonStruct { fields }),
             )
         }
-        ast::ExprFunKind::NamedStruct(e) => {
-            let fields = e.fields(db).iter()
-                .map(|field| {
-                    let value = datafun_expr_to_datalit_serde(db, field.value(db))?;
-                    Ok(datalit::ast_serde::ExprStructField {
-                        name: field.name(db).as_str(db).to_string(),
-                        value,
-                    })
-                })
-                .collect::<Result<Vec<_>, ConversionError>>()?;
-            (
-                e.heap(db),
-                e.type_hint(db),
-                datalit::ast_serde::Expr::NamedStruct(datalit::ast_serde::ExprNamedStruct {
-                    name: e.name(db).as_str(db).to_string(),
-                    fields,
-                }),
-            )
-        }
         ast::ExprFunKind::AnonEnum(e) => {
             let payload = e.payload(db)
                 .map(|p| datafun_expr_to_datalit_serde(db, p))
@@ -215,21 +183,6 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 e.heap(db),
                 e.type_hint(db),
                 datalit::ast_serde::Expr::AnonEnum(datalit::ast_serde::ExprAnonEnum {
-                    variant_name: e.variant_name(db).as_str(db).to_string(),
-                    payload,
-                }),
-            )
-        }
-        ast::ExprFunKind::NamedEnum(e) => {
-            let payload = e.payload(db)
-                .map(|p| datafun_expr_to_datalit_serde(db, p))
-                .transpose()?
-                .map(Box::new);
-            (
-                e.heap(db),
-                e.type_hint(db),
-                datalit::ast_serde::Expr::NamedEnum(datalit::ast_serde::ExprNamedEnum {
-                    enum_name: e.enum_name(db).as_str(db).to_string(),
                     variant_name: e.variant_name(db).as_str(db).to_string(),
                     payload,
                 }),
@@ -373,11 +326,8 @@ pub enum HeapSerde {
 pub enum TypeSerde {
     Bool, U8, I8, U16, I16, U32, I32, U64, I64, F32, Int, String,
     AnonTuple { fields: Vec<TypeAndHeapSerde> },
-    NamedTuple { name: String, fields: Vec<TypeAndHeapSerde> },
     AnonStruct { fields: Vec<(String, TypeAndHeapSerde)> },
-    NamedStruct { name: String, fields: Vec<(String, TypeAndHeapSerde)> },
     AnonEnum { variants: Vec<(String, Option<TypeAndHeapSerde>)> },
-    NamedEnum { name: String, variants: Vec<(String, Option<TypeAndHeapSerde>)> },
     List { element: Box<TypeAndHeapSerde> },
     Map { key: Box<TypeAndHeapSerde>, value: Box<TypeAndHeapSerde> },
     Set { element: Box<TypeAndHeapSerde> },
@@ -484,28 +434,12 @@ fn datalit_type_inner_to_serde<'db>(
         Type::AnonTuple(t) => TypeSerde::AnonTuple {
             fields: t.fields(db).iter().map(|f| datalit_type_to_serde(db, *f)).collect(),
         },
-        Type::NamedTuple(t) => TypeSerde::NamedTuple {
-            name: t.name(db).as_str(db).to_string(),
-            fields: t.fields(db).iter().map(|f| datalit_type_to_serde(db, *f)).collect(),
-        },
         Type::AnonStruct(t) => TypeSerde::AnonStruct {
             fields: t.fields(db).iter()
                 .map(|f| (f.name(db).as_str(db).to_string(), datalit_type_to_serde(db, f.ty(db))))
                 .collect(),
         },
-        Type::NamedStruct(t) => TypeSerde::NamedStruct {
-            name: t.name(db).as_str(db).to_string(),
-            fields: t.fields(db).iter()
-                .map(|f| (f.name(db).as_str(db).to_string(), datalit_type_to_serde(db, f.ty(db))))
-                .collect(),
-        },
         Type::AnonEnum(t) => TypeSerde::AnonEnum {
-            variants: t.variants(db).iter()
-                .map(|v| (v.name(db).as_str(db).to_string(), v.payload(db).map(|p| datalit_type_to_serde(db, p))))
-                .collect(),
-        },
-        Type::NamedEnum(t) => TypeSerde::NamedEnum {
-            name: t.name(db).as_str(db).to_string(),
             variants: t.variants(db).iter()
                 .map(|v| (v.name(db).as_str(db).to_string(), v.payload(db).map(|p| datalit_type_to_serde(db, p))))
                 .collect(),

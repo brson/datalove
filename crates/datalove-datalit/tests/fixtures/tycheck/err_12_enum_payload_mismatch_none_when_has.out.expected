@@ -2,36 +2,24 @@
   "ast": {
     "expr": {
       "expr": {
-        "AnonEnum": {
-          "payload": null,
-          "variant_name": "Ok"
+        "ParseError": {
+          "message": "expected '/' after type hint"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Local",
       "type_hint": {
-        "NamedEnum": {
-          "name": "Result",
-          "variants": [
-            {
-              "name": "Ok",
-              "payload": {
-                "heap": "Local",
-                "type_hint": "U32"
-              }
-            }
-          ]
+        "ParseError": {
+          "message": "expected {} after enum keyword"
         }
       }
     }
   },
   "errors": [
     {
-      "actual": "no payload",
-      "expected": "payload",
-      "kind": "TypeMismatch"
+      "kind": "CannotSynthesize"
     }
   ],
   "root_type": null

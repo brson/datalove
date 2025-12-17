@@ -81,18 +81,7 @@ fn is_datalit_copy<'db>(
                 is_datalit_copy(db, field_ty.ty(db))
             })
         }
-        Type::NamedTuple(tuple) => {
-            tuple.fields(db).iter().all(|field_ty| {
-                is_datalit_copy(db, field_ty.ty(db))
-            })
-        }
         Type::AnonStruct(struct_ty) => {
-            struct_ty.fields(db).iter().all(|field| {
-                let field_type = field.ty(db);
-                is_datalit_copy(db, field_type.ty(db))
-            })
-        }
-        Type::NamedStruct(struct_ty) => {
             struct_ty.fields(db).iter().all(|field| {
                 let field_type = field.ty(db);
                 is_datalit_copy(db, field_type.ty(db))
@@ -101,13 +90,6 @@ fn is_datalit_copy<'db>(
         Type::AnonEnum(enum_ty) => {
             enum_ty.variants(db).iter().all(|variant| {
                 // Variant is copy if it has no payload OR payload is copy.
-                variant.payload(db).map_or(true, |payload_ty| {
-                    is_datalit_copy(db, payload_ty.ty(db))
-                })
-            })
-        }
-        Type::NamedEnum(enum_ty) => {
-            enum_ty.variants(db).iter().all(|variant| {
                 variant.payload(db).map_or(true, |payload_ty| {
                     is_datalit_copy(db, payload_ty.ty(db))
                 })

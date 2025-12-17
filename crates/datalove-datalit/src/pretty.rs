@@ -151,20 +151,6 @@ fn pretty_type<'db>(
             out.push(')');
         }
 
-        Type::NamedTuple(t) => {
-            out.push_str("tuple ");
-            out.push_str(t.name(db).as_str(db));
-            out.push_str(" (");
-            let fields = t.fields(db);
-            for (i, field) in fields.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                pretty_type_and_heap(db, field, out);
-            }
-            out.push(')');
-        }
-
         Type::AnonStruct(s) => {
             out.push('{');
             let fields = s.fields(db);
@@ -179,43 +165,8 @@ fn pretty_type<'db>(
             out.push('}');
         }
 
-        Type::NamedStruct(s) => {
-            out.push_str("struct ");
-            out.push_str(s.name(db).as_str(db));
-            out.push_str(" {");
-            let fields = s.fields(db);
-            for (i, field) in fields.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(field.name(db).as_str(db));
-                out.push_str(": ");
-                pretty_type_and_heap(db, &field.ty(db), out);
-            }
-            out.push('}');
-        }
-
         Type::AnonEnum(e) => {
             out.push_str("enum {");
-            let variants = e.variants(db);
-            for (i, variant) in variants.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(variant.name(db).as_str(db));
-                if let Some(payload) = variant.payload(db) {
-                    out.push('(');
-                    pretty_type_and_heap(db, &payload, out);
-                    out.push(')');
-                }
-            }
-            out.push('}');
-        }
-
-        Type::NamedEnum(e) => {
-            out.push_str("enum ");
-            out.push_str(e.name(db).as_str(db));
-            out.push_str(" {");
             let variants = e.variants(db);
             for (i, variant) in variants.iter().enumerate() {
                 if i > 0 {
@@ -337,20 +288,6 @@ fn pretty_type_hint<'db>(
             out.push(')');
         }
 
-        TypeHint::NamedTuple(t) => {
-            out.push_str("tuple ");
-            out.push_str(t.name(db).as_str(db));
-            out.push_str(" (");
-            let fields = t.fields(db);
-            for (i, field) in fields.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                pretty_type_hint_and_heap(db, *field, out);
-            }
-            out.push(')');
-        }
-
         TypeHint::AnonStruct(s) => {
             out.push('{');
             let fields = s.fields(db);
@@ -365,43 +302,8 @@ fn pretty_type_hint<'db>(
             out.push('}');
         }
 
-        TypeHint::NamedStruct(s) => {
-            out.push_str("struct ");
-            out.push_str(s.name(db).as_str(db));
-            out.push_str(" {");
-            let fields = s.fields(db);
-            for (i, field) in fields.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(field.name(db).as_str(db));
-                out.push_str(": ");
-                pretty_type_hint_and_heap(db, field.type_hint(db), out);
-            }
-            out.push('}');
-        }
-
         TypeHint::AnonEnum(e) => {
             out.push_str("enum {");
-            let variants = e.variants(db);
-            for (i, variant) in variants.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(variant.name(db).as_str(db));
-                if let Some(payload) = variant.payload(db) {
-                    out.push('(');
-                    pretty_type_hint_and_heap(db, payload, out);
-                    out.push(')');
-                }
-            }
-            out.push('}');
-        }
-
-        TypeHint::NamedEnum(e) => {
-            out.push_str("enum ");
-            out.push_str(e.name(db).as_str(db));
-            out.push_str(" {");
             let variants = e.variants(db);
             for (i, variant) in variants.iter().enumerate() {
                 if i > 0 {
@@ -518,20 +420,6 @@ fn pretty_expr<'db>(
             out.push(')');
         }
 
-        Expr::NamedTuple(t) => {
-            out.push_str("tuple ");
-            out.push_str(t.name(db).as_str(db));
-            out.push_str(" (");
-            let elements = t.elements(db);
-            for (i, elem) in elements.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                pretty_expr_full(db, *elem, out, indent);
-            }
-            out.push(')');
-        }
-
         Expr::AnonStruct(s) => {
             out.push('{');
             let fields = s.fields(db);
@@ -546,36 +434,8 @@ fn pretty_expr<'db>(
             out.push('}');
         }
 
-        Expr::NamedStruct(s) => {
-            out.push_str("struct ");
-            out.push_str(s.name(db).as_str(db));
-            out.push_str(" {");
-            let fields = s.fields(db);
-            for (i, field) in fields.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(field.name(db).as_str(db));
-                out.push_str(" = ");
-                pretty_expr_full(db, field.value(db), out, indent);
-            }
-            out.push('}');
-        }
-
         Expr::AnonEnum(e) => {
             out.push_str("enum ");
-            out.push_str(e.variant_name(db).as_str(db));
-            if let Some(payload) = e.payload(db) {
-                out.push('(');
-                pretty_expr_full(db, payload, out, indent);
-                out.push(')');
-            }
-        }
-
-        Expr::NamedEnum(e) => {
-            out.push_str("enum ");
-            out.push_str(e.enum_name(db).as_str(db));
-            out.push('.');
             out.push_str(e.variant_name(db).as_str(db));
             if let Some(payload) = e.payload(db) {
                 out.push('(');

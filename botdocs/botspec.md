@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2025-12-12
+Last verified: 2025-12-17
 
 ## Overview
 
@@ -38,17 +38,10 @@ Uses Salsa for incremental compilation. REPL-first design.
 
 ### 1.3 Aggregate Types
 
-**Interpreter Status:** Anonymous tuples and structs are implemented. Named tuples/structs/enums are [NOT IMPLEMENTED].
-
 **Anonymous Tuple:** (Implemented)
 ```
 : (@bool, @u32) / (@true, 1)
 : () / ()
-```
-
-**Named Tuple:** [NOT IMPLEMENTED]
-```
-: @tuple Bar (@bool, @u32) / @tuple Bar (@true, 1)
 ```
 
 **Anonymous Struct:** (Implemented)
@@ -56,21 +49,13 @@ Uses Salsa for incremental compilation. REPL-first design.
 : { field1: @bool, field2: @u32 } / { field1 = @true, field2 = 1 }
 ```
 
-**Named Struct:** [NOT IMPLEMENTED]
-```
-: @struct Foo { field1: @bool } / @struct Foo { field1 = @true }
-```
-
-**Anonymous Enum:** [NOT IMPLEMENTED]
+**Anonymous Enum:** (Implemented)
 ```
 : @enum { Foo, Bar(@u32) } / @enum Foo
 : @enum { Bar(@u32) } / @enum Bar(2)
 ```
 
-**Named Enum:** [NOT IMPLEMENTED]
-```
-: @enum Quux { Bar(@u32) } / @enum Quux.Bar(1)
-```
+Note: Named tuples, structs, and enums were removed from the language.
 
 ### 1.4 Special Types
 
@@ -307,7 +292,6 @@ i8 -> i16 -> i32 -> i64 -> int
 - Values implicitly wrap to `Some`/`Ok` when checking against Option/Result
 - Any type coerces to `data` (T → data)
 - Data values coerce to `?data` and `!data` (data → Option<data>, data → Result<data>)
-- Anonymous aggregates coerce to named aggregates with matching structure
 - Empty collections check against any element type
 
 ### 3.4 Copy vs Linear Types
@@ -358,5 +342,4 @@ Features from documentation that have no or minimal implementation:
 | `var`/`set` mutation | demo-datafun-script.dfs | Not implemented |
 | `@type` introspection | demo-datafun-script.dfs | Not implemented |
 | `@data` dynamic type | README.md | Implemented |
-| Named aggregates | README.md | Not implemented (named tuples, structs, enums) |
 | Full Datalove layer | README.md | Not implemented |

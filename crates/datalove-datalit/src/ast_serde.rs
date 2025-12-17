@@ -40,11 +40,8 @@ pub enum TypeHint {
     Int,
     String,
     AnonTuple(TypeHintAnonTuple),
-    NamedTuple(TypeHintNamedTuple),
     AnonStruct(TypeHintAnonStruct),
-    NamedStruct(TypeHintNamedStruct),
     AnonEnum(TypeHintAnonEnum),
-    NamedEnum(TypeHintNamedEnum),
     List(TypeHintList),
     Map(TypeHintMap),
     Set(TypeHintSet),
@@ -62,19 +59,7 @@ pub struct TypeHintAnonTuple {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct TypeHintNamedTuple {
-    pub name: String,
-    pub fields: Vec<TypeHintAndHeap>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintAnonStruct {
-    pub fields: Vec<TypeHintNamedField>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct TypeHintNamedStruct {
-    pub name: String,
     pub fields: Vec<TypeHintNamedField>,
 }
 
@@ -86,12 +71,6 @@ pub struct TypeHintNamedField {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintAnonEnum {
-    pub variants: Vec<TypeHintEnumVariant>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct TypeHintNamedEnum {
-    pub name: String,
     pub variants: Vec<TypeHintEnumVariant>,
 }
 
@@ -148,11 +127,8 @@ pub enum Expr {
     Hex(ExprHex),
     String(ExprString),
     AnonTuple(ExprAnonTuple),
-    NamedTuple(ExprNamedTuple),
     AnonStruct(ExprAnonStruct),
-    NamedStruct(ExprNamedStruct),
     AnonEnum(ExprAnonEnum),
-    NamedEnum(ExprNamedEnum),
     List(ExprList),
     Map(ExprMap),
     Set(ExprSet),
@@ -189,19 +165,7 @@ pub struct ExprAnonTuple {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprNamedTuple {
-    pub name: String,
-    pub elements: Vec<ExprFull>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprAnonStruct {
-    pub fields: Vec<ExprStructField>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprNamedStruct {
-    pub name: String,
     pub fields: Vec<ExprStructField>,
 }
 
@@ -213,13 +177,6 @@ pub struct ExprStructField {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprAnonEnum {
-    pub variant_name: String,
-    pub payload: Option<Box<ExprFull>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprNamedEnum {
-    pub enum_name: String,
     pub variant_name: String,
     pub payload: Option<Box<ExprFull>>,
 }
@@ -316,11 +273,8 @@ impl TypeHint {
             crate::ast::TypeHint::Int => TypeHint::Int,
             crate::ast::TypeHint::String => TypeHint::String,
             crate::ast::TypeHint::AnonTuple(t) => TypeHint::AnonTuple(TypeHintAnonTuple::from_ast(db, t)),
-            crate::ast::TypeHint::NamedTuple(t) => TypeHint::NamedTuple(TypeHintNamedTuple::from_ast(db, t)),
             crate::ast::TypeHint::AnonStruct(t) => TypeHint::AnonStruct(TypeHintAnonStruct::from_ast(db, t)),
-            crate::ast::TypeHint::NamedStruct(t) => TypeHint::NamedStruct(TypeHintNamedStruct::from_ast(db, t)),
             crate::ast::TypeHint::AnonEnum(t) => TypeHint::AnonEnum(TypeHintAnonEnum::from_ast(db, t)),
-            crate::ast::TypeHint::NamedEnum(t) => TypeHint::NamedEnum(TypeHintNamedEnum::from_ast(db, t)),
             crate::ast::TypeHint::List(t) => TypeHint::List(TypeHintList::from_ast(db, t)),
             crate::ast::TypeHint::Map(t) => TypeHint::Map(TypeHintMap::from_ast(db, t)),
             crate::ast::TypeHint::Set(t) => TypeHint::Set(TypeHintSet::from_ast(db, t)),
@@ -342,27 +296,9 @@ impl TypeHintAnonTuple {
     }
 }
 
-impl TypeHintNamedTuple {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintNamedTuple<'db>) -> Self {
-        TypeHintNamedTuple {
-            name: ast.name(db).text(db).S(),
-            fields: ast.fields(db).iter().map(|f| TypeHintAndHeap::from_ast(db, *f)).collect(),
-        }
-    }
-}
-
 impl TypeHintAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintAnonStruct<'db>) -> Self {
         TypeHintAnonStruct {
-            fields: ast.fields(db).iter().map(|f| TypeHintNamedField::from_ast(db, *f)).collect(),
-        }
-    }
-}
-
-impl TypeHintNamedStruct {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintNamedStruct<'db>) -> Self {
-        TypeHintNamedStruct {
-            name: ast.name(db).text(db).S(),
             fields: ast.fields(db).iter().map(|f| TypeHintNamedField::from_ast(db, *f)).collect(),
         }
     }
@@ -380,15 +316,6 @@ impl TypeHintNamedField {
 impl TypeHintAnonEnum {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintAnonEnum<'db>) -> Self {
         TypeHintAnonEnum {
-            variants: ast.variants(db).iter().map(|v| TypeHintEnumVariant::from_ast(db, *v)).collect(),
-        }
-    }
-}
-
-impl TypeHintNamedEnum {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintNamedEnum<'db>) -> Self {
-        TypeHintNamedEnum {
-            name: ast.name(db).text(db).S(),
             variants: ast.variants(db).iter().map(|v| TypeHintEnumVariant::from_ast(db, *v)).collect(),
         }
     }
@@ -473,11 +400,8 @@ impl Expr {
             crate::ast::Expr::Hex(e) => Expr::Hex(ExprHex::from_ast(db, e)),
             crate::ast::Expr::String(e) => Expr::String(ExprString::from_ast(db, e)),
             crate::ast::Expr::AnonTuple(e) => Expr::AnonTuple(ExprAnonTuple::from_ast(db, e)),
-            crate::ast::Expr::NamedTuple(e) => Expr::NamedTuple(ExprNamedTuple::from_ast(db, e)),
             crate::ast::Expr::AnonStruct(e) => Expr::AnonStruct(ExprAnonStruct::from_ast(db, e)),
-            crate::ast::Expr::NamedStruct(e) => Expr::NamedStruct(ExprNamedStruct::from_ast(db, e)),
             crate::ast::Expr::AnonEnum(e) => Expr::AnonEnum(ExprAnonEnum::from_ast(db, e)),
-            crate::ast::Expr::NamedEnum(e) => Expr::NamedEnum(ExprNamedEnum::from_ast(db, e)),
             crate::ast::Expr::List(e) => Expr::List(ExprList::from_ast(db, e)),
             crate::ast::Expr::Map(e) => Expr::Map(ExprMap::from_ast(db, e)),
             crate::ast::Expr::Set(e) => Expr::Set(ExprSet::from_ast(db, e)),
@@ -530,27 +454,9 @@ impl ExprAnonTuple {
     }
 }
 
-impl ExprNamedTuple {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprNamedTuple<'db>) -> Self {
-        ExprNamedTuple {
-            name: ast.name(db).text(db).S(),
-            elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
-        }
-    }
-}
-
 impl ExprAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAnonStruct<'db>) -> Self {
         ExprAnonStruct {
-            fields: ast.fields(db).iter().map(|f| ExprStructField::from_ast(db, *f)).collect(),
-        }
-    }
-}
-
-impl ExprNamedStruct {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprNamedStruct<'db>) -> Self {
-        ExprNamedStruct {
-            name: ast.name(db).text(db).S(),
             fields: ast.fields(db).iter().map(|f| ExprStructField::from_ast(db, *f)).collect(),
         }
     }
@@ -568,16 +474,6 @@ impl ExprStructField {
 impl ExprAnonEnum {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAnonEnum<'db>) -> Self {
         ExprAnonEnum {
-            variant_name: ast.variant_name(db).text(db).S(),
-            payload: ast.payload(db).map(|p| Box::new(ExprFull::from_ast(db, p))),
-        }
-    }
-}
-
-impl ExprNamedEnum {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprNamedEnum<'db>) -> Self {
-        ExprNamedEnum {
-            enum_name: ast.enum_name(db).text(db).S(),
             variant_name: ast.variant_name(db).text(db).S(),
             payload: ast.payload(db).map(|p| Box::new(ExprFull::from_ast(db, p))),
         }

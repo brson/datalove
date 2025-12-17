@@ -712,23 +712,6 @@ fn apply_wrong_variant<'db>(
                 description: "Changed enum variant to nonexistent name".to_string(),
             })
         }
-        Expr::NamedEnum(e) => {
-            // Build source: `: type / heap enum EnumName { .NonexistentVariant12345 payload }`
-            let enum_name = e.enum_name(db).as_str(db);
-            let wrong_variant = "NonexistentVariant12345";
-            let source = if let Some(payload) = e.payload(db) {
-                let payload_str = pretty_print(db, payload);
-                format!("{}{}enum {} {{ .{} {} }}", type_hint_str, heap_str, enum_name, wrong_variant, payload_str)
-            } else {
-                format!("{}{}enum {} {{ .{} }}", type_hint_str, heap_str, enum_name, wrong_variant)
-            };
-
-            Some(MutationResult {
-                source,
-                expected_errors: vec!["T046"], // Variant not found (named enum).
-                description: "Changed named enum variant to nonexistent name".to_string(),
-            })
-        }
         _ => None,
     }
 }
@@ -800,36 +783,6 @@ fn apply_duplicate_field<'db>(
             expected_errors: vec!["T040"], // Duplicate field.
             description: "Duplicated field name in struct".to_string(),
         })
-    } else if let (TypeHint::NamedStruct(_), Expr::NamedStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
-        let fields = s.fields(db);
-        if fields.len() < 2 {
-            return None;
-        }
-
-        let struct_name = s.name(db).as_str(db);
-        let first_name = fields[0].name(db).as_str(db);
-
-        let mut field_strs: Vec<String> = fields.iter().map(|f| {
-            let name = f.name(db).as_str(db);
-            let value = pretty_print(db, f.value(db));
-            format!("{}: {}", name, value)
-        }).collect();
-
-        // Replace second field name with first field name.
-        let second_value = pretty_print(db, fields[1].value(db));
-        field_strs[1] = format!("{}: {}", first_name, second_value);
-
-        // Build type hint string.
-        let mut type_str = String::new();
-        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
-
-        let source = format!(": {} / {}struct {} {{{}}}", type_str, heap_str, struct_name, field_strs.join(", "));
-
-        Some(MutationResult {
-            source,
-            expected_errors: vec!["T041"], // Duplicate field (named struct).
-            description: "Duplicated field name in named struct".to_string(),
-        })
     } else {
         None
     }
@@ -878,34 +831,6 @@ fn apply_wrong_field_name<'db>(
             expected_errors: vec!["T042"], // Unknown field.
             description: "Changed field name to nonexistent".to_string(),
         })
-    } else if let (TypeHint::NamedStruct(_), Expr::NamedStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
-        let fields = s.fields(db);
-        if fields.is_empty() {
-            return None;
-        }
-
-        let struct_name = s.name(db).as_str(db);
-
-        let mut field_strs: Vec<String> = fields.iter().map(|f| {
-            let name = f.name(db).as_str(db);
-            let value = pretty_print(db, f.value(db));
-            format!("{}: {}", name, value)
-        }).collect();
-
-        let first_value = pretty_print(db, fields[0].value(db));
-        field_strs[0] = format!("nonexistent_field_xyz: {}", first_value);
-
-        // Build type hint string.
-        let mut type_str = String::new();
-        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
-
-        let source = format!(": {} / {}struct {} {{{}}}", type_str, heap_str, struct_name, field_strs.join(", "));
-
-        Some(MutationResult {
-            source,
-            expected_errors: vec!["T043"], // Unknown field (named struct).
-            description: "Changed field name to nonexistent in named struct".to_string(),
-        })
     } else {
         None
     }
@@ -953,27 +878,6 @@ fn apply_wrong_payload_presence<'db>(
                 source,
                 expected_errors: vec!["T045"], // Wrong payload presence.
                 description: "Toggled enum variant payload presence".to_string(),
-            })
-        }
-        (TypeHint::NamedEnum(th_enum), Expr::NamedEnum(e)) => {
-            let enum_name = e.enum_name(db).as_str(db);
-            let variant_name = e.variant_name(db).as_str(db);
-
-            // Find this variant in the type hint to check expected payload.
-            let variants = th_enum.variants(db);
-            let variant_hint = variants.iter().find(|v| v.name(db).as_str(db) == variant_name)?;
-
-            // Flip payload presence.
-            let source = if variant_hint.payload(db).is_some() {
-                format!("{}{}enum {} {{ .{} }}", type_hint_str, heap_str, enum_name, variant_name)
-            } else {
-                format!("{}{}enum {} {{ .{} @42 }}", type_hint_str, heap_str, enum_name, variant_name)
-            };
-
-            Some(MutationResult {
-                source,
-                expected_errors: vec!["T047"], // Wrong payload presence (named enum).
-                description: "Toggled named enum variant payload presence".to_string(),
             })
         }
         _ => None,
@@ -1096,19 +1000,6 @@ fn pretty_type_hint<'db>(
             out.push(')');
         }
 
-        TypeHint::NamedTuple(t) => {
-            out.push_str("tuple ");
-            out.push_str(t.name(db).as_str(db));
-            out.push_str(" (");
-            for (i, field) in t.fields(db).iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                pretty_type_hint_and_heap(db, *field, out);
-            }
-            out.push(')');
-        }
-
         TypeHint::AnonStruct(s) => {
             out.push('{');
             for (i, field) in s.fields(db).iter().enumerate() {
@@ -1122,41 +1013,8 @@ fn pretty_type_hint<'db>(
             out.push('}');
         }
 
-        TypeHint::NamedStruct(s) => {
-            out.push_str("struct ");
-            out.push_str(s.name(db).as_str(db));
-            out.push_str(" {");
-            for (i, field) in s.fields(db).iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(field.name(db).as_str(db));
-                out.push_str(": ");
-                pretty_type_hint_and_heap(db, field.type_hint(db), out);
-            }
-            out.push('}');
-        }
-
         TypeHint::AnonEnum(e) => {
             out.push_str("enum {");
-            for (i, variant) in e.variants(db).iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(variant.name(db).as_str(db));
-                if let Some(payload) = variant.payload(db) {
-                    out.push('(');
-                    pretty_type_hint_and_heap(db, payload, out);
-                    out.push(')');
-                }
-            }
-            out.push('}');
-        }
-
-        TypeHint::NamedEnum(e) => {
-            out.push_str("enum ");
-            out.push_str(e.name(db).as_str(db));
-            out.push_str(" {");
             for (i, variant) in e.variants(db).iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");

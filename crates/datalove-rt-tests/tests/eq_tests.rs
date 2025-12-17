@@ -1086,8 +1086,8 @@ fn test_eq_list_not_equals_lengths() -> AnyResult<()> {
 #[test]
 fn test_eq_enum_no_payload_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
-    let typechecked_b = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
+    let typechecked_a = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
+    let typechecked_b = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1142,8 +1142,8 @@ fn test_eq_enum_no_payload_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_enum_no_payload_not_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
-    let typechecked_b = compile_str(&db, ": @enum Status { Ok, Error } / @enum Error")?;
+    let typechecked_a = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
+    let typechecked_b = compile_str(&db, ": @enum { Ok, Error } / @enum Error")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1198,8 +1198,8 @@ fn test_eq_enum_no_payload_not_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_enum_with_payload_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
-    let typechecked_b = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
+    let typechecked_a = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
+    let typechecked_b = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1254,8 +1254,8 @@ fn test_eq_enum_with_payload_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_enum_with_payload_not_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
-    let typechecked_b = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@99)")?;
+    let typechecked_a = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
+    let typechecked_b = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@99)")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

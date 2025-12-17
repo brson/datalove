@@ -2,7 +2,7 @@
   "ast": {
     "expr": {
       "expr": {
-        "NamedTuple": {
+        "AnonTuple": {
           "elements": [
             {
               "expr": {
@@ -26,37 +26,13 @@
               },
               "type_hint": null
             }
-          ],
-          "name": "Pair"
+          ]
         }
       },
       "heap": "Local"
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "NamedTuple": {
-          "fields": [
-            {
-              "heap": "Local",
-              "type_hint": "U32"
-            },
-            {
-              "heap": "Local",
-              "type_hint": "U32"
-            }
-          ],
-          "name": "Pair"
-        }
-      }
-    }
+    "type_hint": null
   },
   "errors": [],
-  "resolutions": [
-    {
-      "binding_id": 0,
-      "name": "Pair",
-      "scope_depth": 0
-    }
-  ]
+  "resolutions": []
 }

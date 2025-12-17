@@ -56,13 +56,8 @@ fn has_datalit_type_hint_parse_error<'db>(
         TypeHint::Option(o) => has_datalit_type_hint_parse_error(db, o.inner_type(db)),
         TypeHint::Result(r) => has_datalit_type_hint_parse_error(db, r.inner_type(db)),
         TypeHint::AnonTuple(t) => t.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, *f)),
-        TypeHint::NamedTuple(t) => t.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, *f)),
         TypeHint::AnonStruct(s) => s.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, f.type_hint(db))),
-        TypeHint::NamedStruct(s) => s.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, f.type_hint(db))),
         TypeHint::AnonEnum(e) => e.variants(db).iter().any(|v| {
-            v.payload(db).map(|p| has_datalit_type_hint_parse_error(db, p)).unwrap_or(false)
-        }),
-        TypeHint::NamedEnum(e) => e.variants(db).iter().any(|v| {
             v.payload(db).map(|p| has_datalit_type_hint_parse_error(db, p)).unwrap_or(false)
         }),
         TypeHint::Tensor(t) => has_datalit_type_hint_parse_error(db, t.element_type(db)),
@@ -92,11 +87,8 @@ fn has_parse_error<'db>(
             has_parse_error(db, e.key(db)) || has_parse_error(db, e.value(db))
         }),
         Expr::AnonTuple(t) => t.elements(db).iter().any(|e| has_parse_error(db, *e)),
-        Expr::NamedTuple(t) => t.elements(db).iter().any(|e| has_parse_error(db, *e)),
         Expr::AnonStruct(s) => s.fields(db).iter().any(|f| has_parse_error(db, f.value(db))),
-        Expr::NamedStruct(s) => s.fields(db).iter().any(|f| has_parse_error(db, f.value(db))),
         Expr::AnonEnum(e) => e.payload(db).map(|p| has_parse_error(db, p)).unwrap_or(false),
-        Expr::NamedEnum(e) => e.payload(db).map(|p| has_parse_error(db, p)).unwrap_or(false),
         Expr::Data(d) => has_parse_error(db, d.value(db)),
         Expr::Err(e) => has_parse_error(db, e.value(db)),
         Expr::Tensor(t) => t.elements(db).iter().any(|e| has_parse_error(db, *e)),
@@ -174,23 +166,11 @@ fn has_datafun_parse_error<'db>(
             check_type_hint(t.type_hint(db)) ||
             t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
         }
-        ExprFunKind::NamedTuple(t) => {
-            check_type_hint(t.type_hint(db)) ||
-            t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
-        }
         ExprFunKind::AnonStruct(s) => {
             check_type_hint(s.type_hint(db)) ||
             s.fields(db).iter().any(|f| has_datafun_parse_error(db, f.value(db)))
         }
-        ExprFunKind::NamedStruct(s) => {
-            check_type_hint(s.type_hint(db)) ||
-            s.fields(db).iter().any(|f| has_datafun_parse_error(db, f.value(db)))
-        }
         ExprFunKind::AnonEnum(e) => {
-            check_type_hint(e.type_hint(db)) ||
-            e.payload(db).map(|p| has_datafun_parse_error(db, p)).unwrap_or(false)
-        }
-        ExprFunKind::NamedEnum(e) => {
             check_type_hint(e.type_hint(db)) ||
             e.payload(db).map(|p| has_datafun_parse_error(db, p)).unwrap_or(false)
         }
@@ -239,13 +219,8 @@ fn has_type_hint_parse_error<'db>(
         TypeHint::Option(o) => has_type_hint_parse_error(db, o.inner_type(db)),
         TypeHint::Result(r) => has_type_hint_parse_error(db, r.inner_type(db)),
         TypeHint::AnonTuple(t) => t.fields(db).iter().any(|f| has_type_hint_parse_error(db, *f)),
-        TypeHint::NamedTuple(t) => t.fields(db).iter().any(|f| has_type_hint_parse_error(db, *f)),
         TypeHint::AnonStruct(s) => s.fields(db).iter().any(|f| has_type_hint_parse_error(db, f.type_hint(db))),
-        TypeHint::NamedStruct(s) => s.fields(db).iter().any(|f| has_type_hint_parse_error(db, f.type_hint(db))),
         TypeHint::AnonEnum(e) => e.variants(db).iter().any(|v| {
-            v.payload(db).map(|p| has_type_hint_parse_error(db, p)).unwrap_or(false)
-        }),
-        TypeHint::NamedEnum(e) => e.variants(db).iter().any(|v| {
             v.payload(db).map(|p| has_type_hint_parse_error(db, p)).unwrap_or(false)
         }),
         TypeHint::Tensor(t) => has_type_hint_parse_error(db, t.element_type(db)),

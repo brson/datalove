@@ -2,79 +2,16 @@
   "type_hint": {
     "heap": "Local",
     "type_hint": {
-      "NamedEnum": {
-        "name": "Result",
-        "variants": [
-          {
-            "name": "Ok",
-            "payload": {
-              "heap": "Local",
-              "type_hint": {
-                "AnonTuple": {
-                  "fields": [
-                    {
-                      "heap": "Local",
-                      "type_hint": "U32"
-                    },
-                    {
-                      "heap": "Local",
-                      "type_hint": "String"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "name": "Err",
-            "payload": {
-              "heap": "Local",
-              "type_hint": "String"
-            }
-          }
-        ]
+      "ParseError": {
+        "message": "expected {} after enum keyword"
       }
     }
   },
   "expr": {
-    "heap": "Local",
+    "heap": "Omitted",
     "expr": {
-      "AnonEnum": {
-        "variant_name": "Ok",
-        "payload": {
-          "type_hint": null,
-          "expr": {
-            "heap": "Local",
-            "expr": {
-              "AnonTuple": {
-                "elements": [
-                  {
-                    "type_hint": null,
-                    "expr": {
-                      "heap": "Local",
-                      "expr": {
-                        "Int": {
-                          "value": "42"
-                        }
-                      }
-                    }
-                  },
-                  {
-                    "type_hint": null,
-                    "expr": {
-                      "heap": "Local",
-                      "expr": {
-                        "String": {
-                          "value": "\"success\""
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            }
-          }
-        }
+      "ParseError": {
+        "message": "expected '/' after type hint"
       }
     }
   }

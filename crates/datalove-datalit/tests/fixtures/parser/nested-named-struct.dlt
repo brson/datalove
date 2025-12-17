@@ -1,5 +1,0 @@
-: @struct Outer {
-  inner: @struct Inner { x: @u32 }
-} / @struct Outer {
-  inner = @struct Inner { x = @1 }
-}

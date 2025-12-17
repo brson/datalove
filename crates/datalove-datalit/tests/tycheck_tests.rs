@@ -42,20 +42,6 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             })
         }
 
-        Type::NamedTuple(t) => {
-            let name = t.name(db).as_str(db);
-            let fields: Vec<_> = t.fields(db)
-                .iter()
-                .map(|f| type_to_json(db, *f))
-                .collect();
-            json!({
-                "kind": "NamedTuple",
-                "heap": heap_str,
-                "name": name,
-                "fields": fields
-            })
-        }
-
         Type::AnonStruct(s) => {
             let fields: Vec<_> = s.fields(db)
                 .iter()
@@ -69,25 +55,6 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             json!({
                 "kind": "AnonStruct",
                 "heap": heap_str,
-                "fields": fields
-            })
-        }
-
-        Type::NamedStruct(s) => {
-            let name = s.name(db).as_str(db);
-            let fields: Vec<_> = s.fields(db)
-                .iter()
-                .map(|f| {
-                    json!({
-                        "name": f.name(db).as_str(db),
-                        "type": type_to_json(db, f.ty(db))
-                    })
-                })
-                .collect();
-            json!({
-                "kind": "NamedStruct",
-                "heap": heap_str,
-                "name": name,
                 "fields": fields
             })
         }
@@ -106,26 +73,6 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             json!({
                 "kind": "AnonEnum",
                 "heap": heap_str,
-                "variants": variants
-            })
-        }
-
-        Type::NamedEnum(e) => {
-            let name = e.name(db).as_str(db);
-            let variants: Vec<_> = e.variants(db)
-                .iter()
-                .map(|v| {
-                    let payload = v.payload(db).map(|p| type_to_json(db, p));
-                    json!({
-                        "name": v.name(db).as_str(db),
-                        "payload": payload
-                    })
-                })
-                .collect();
-            json!({
-                "kind": "NamedEnum",
-                "heap": heap_str,
-                "name": name,
                 "variants": variants
             })
         }

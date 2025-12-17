@@ -1,1 +1,0 @@
-: @enum Quux { Bar(@u32), Baz } / @enum Quux.Bar(@42)

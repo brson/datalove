@@ -732,8 +732,8 @@ fn test_cmp_list_equal() -> AnyResult<()> {
 #[test]
 fn test_cmp_enum_less_by_discriminant() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
-    let typechecked_b = compile_str(&db, ": @enum Status { Ok, Error } / @enum Error")?;
+    let typechecked_a = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
+    let typechecked_b = compile_str(&db, ": @enum { Ok, Error } / @enum Error")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -767,8 +767,8 @@ fn test_cmp_enum_less_by_discriminant() -> AnyResult<()> {
 #[test]
 fn test_cmp_enum_equal() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
-    let typechecked_b = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
+    let typechecked_a = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
+    let typechecked_b = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -802,8 +802,8 @@ fn test_cmp_enum_equal() -> AnyResult<()> {
 #[test]
 fn test_cmp_enum_with_payload_less() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@10)")?;
-    let typechecked_b = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@20)")?;
+    let typechecked_a = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@10)")?;
+    let typechecked_b = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@20)")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

@@ -339,7 +339,7 @@ fn test_destroy_list_nested() -> AnyResult<()> {
 #[test]
 fn test_destroy_enum_no_payload() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
+    let typechecked = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -388,7 +388,7 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
 #[test]
 fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
+    let typechecked = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -437,7 +437,7 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
 #[test]
 fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Err(@"error message")"#)?;
+    let typechecked = compile_str(&db, r#": @enum { Ok(@u32), Err(@string) } / @enum Err(@"error message")"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -486,7 +486,7 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
 #[test]
 fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#": @enum Msg { Text(@string), Items(@[@string]) } / @enum Msg.Items(@[@"a", @"b", @"c"])"#)?;
+    let typechecked = compile_str(&db, r#": @enum { Text(@string), Items(@[@string]) } / @enum Items(@[@"a", @"b", @"c"])"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

@@ -1,8 +1,8 @@
 Parse errors:
-error[D001]: expected () after tuple name
+error[D001]: expected () after tuple keyword
  --> 01_tuple_missing_parens.dfs:1:13
   |
 1 | let output: tuple Foo = @5
-  |             ^^^^^ expected '(' after tuple name
+  |             ^^^^^ expected '(' after 'tuple'
 
 Error: 1 parse error(s)

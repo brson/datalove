@@ -189,9 +189,6 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
         }
 
         // Unsupported types - panic for now.
-        (NamedTuple(_), _) | (_, NamedTuple(_)) |
-        (NamedStruct(_), _) | (_, NamedStruct(_)) |
-        (NamedEnum(_), _) | (_, NamedEnum(_)) |
         (ParseError(_), _) | (_, ParseError(_)) => {
             panic!("cmp_expr: unsupported expression type for compile-time comparison")
         }
@@ -213,18 +210,15 @@ fn expr_type_tag(expr: &Expr) -> u8 {
         String(_) => 5,
         None => 6,
         AnonTuple(_) => 7,
-        NamedTuple(_) => 8,
-        AnonStruct(_) => 9,
-        NamedStruct(_) => 10,
-        AnonEnum(_) => 11,
-        NamedEnum(_) => 12,
-        List(_) => 13,
-        Set(_) => 14,
-        Map(_) => 15,
-        Tensor(_) => 16,
-        Data(_) => 17,
-        Err(_) => 18,
-        ParseError(_) => 19,
+        AnonStruct(_) => 8,
+        AnonEnum(_) => 9,
+        List(_) => 10,
+        Set(_) => 11,
+        Map(_) => 12,
+        Tensor(_) => 13,
+        Data(_) => 14,
+        Err(_) => 15,
+        ParseError(_) => 16,
     }
 }
 

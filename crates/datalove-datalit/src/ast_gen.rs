@@ -295,13 +295,10 @@ pub fn gen_type_hint<'db, R: Rng>(
     add_choice(weights.result_type, 16);
     add_choice(weights.tensor_type, 17);
     add_choice(weights.anon_tuple_type, 18);
-    add_choice(weights.named_tuple_type, 19);
-    add_choice(weights.anon_struct_type, 20);
-    add_choice(weights.named_struct_type, 21);
-    add_choice(weights.anon_enum_type, 22);
-    add_choice(weights.named_enum_type, 23);
-    add_choice(weights.data_type, 24);
-    add_choice(weights.error_type, 25);
+    add_choice(weights.anon_struct_type, 19);
+    add_choice(weights.anon_enum_type, 20);
+    add_choice(weights.data_type, 21);
+    add_choice(weights.error_type, 22);
 
     if choices.is_empty() {
         return TypeHint::Bool;
@@ -356,14 +353,6 @@ pub fn gen_type_hint<'db, R: Rng>(
             TypeHint::AnonTuple(TypeHintAnonTuple::new(db, fields))
         }
         19 => {
-            let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
-            let fields: Vec<_> = (0..count)
-                .map(|_| gen_type_hint_and_heap(db, rng, config, depth + 1))
-                .collect();
-            TypeHint::NamedTuple(TypeHintNamedTuple::new(db, name, fields))
-        }
-        20 => {
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
@@ -381,26 +370,7 @@ pub fn gen_type_hint<'db, R: Rng>(
                 .collect();
             TypeHint::AnonStruct(TypeHintAnonStruct::new(db, fields))
         }
-        21 => {
-            let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
-            let mut used_names = std::collections::HashSet::new();
-            let fields: Vec<_> = (0..count)
-                .map(|_| {
-                    // Generate unique field name.
-                    let field_name = loop {
-                        let candidate = gen_field_name(rng);
-                        if used_names.insert(candidate.clone()) {
-                            break InternedText::new(db, &candidate);
-                        }
-                    };
-                    let type_hint = gen_type_hint_and_heap(db, rng, config, depth + 1);
-                    TypeHintNamedField::new(db, field_name, type_hint)
-                })
-                .collect();
-            TypeHint::NamedStruct(TypeHintNamedStruct::new(db, name, fields))
-        }
-        22 => {
+        20 => {
             let count = rng.gen_range(1..=config.max_collection_size.max(1));
             let mut used_names = std::collections::HashSet::new();
             let variants: Vec<_> = (0..count)
@@ -423,32 +393,8 @@ pub fn gen_type_hint<'db, R: Rng>(
                 .collect();
             TypeHint::AnonEnum(TypeHintAnonEnum::new(db, variants))
         }
-        23 => {
-            let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(1..=config.max_collection_size.max(1));
-            let mut used_names = std::collections::HashSet::new();
-            let variants: Vec<_> = (0..count)
-                .map(|_| {
-                    // Generate unique variant name.
-                    let variant_name = loop {
-                        let candidate = gen_identifier(rng);
-                        if used_names.insert(candidate.clone()) {
-                            break InternedText::new(db, &candidate);
-                        }
-                    };
-                    let has_payload = rng.gen_bool(0.5);
-                    let payload = if has_payload {
-                        Some(gen_type_hint_and_heap(db, rng, config, depth + 1))
-                    } else {
-                        None
-                    };
-                    TypeHintEnumVariant::new(db, variant_name, payload)
-                })
-                .collect();
-            TypeHint::NamedEnum(TypeHintNamedEnum::new(db, name, variants))
-        }
-        24 => TypeHint::Data,
-        25 => TypeHint::Error,
+        21 => TypeHint::Data,
+        22 => TypeHint::Error,
         _ => TypeHint::Bool,
     }
 }
@@ -518,13 +464,10 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
     add_choice(weights.result_type, 16);
     add_choice(weights.tensor_type, 17);
     add_choice(weights.anon_tuple_type, 18);
-    add_choice(weights.named_tuple_type, 19);
-    add_choice(weights.anon_struct_type, 20);
-    add_choice(weights.named_struct_type, 21);
-    add_choice(weights.anon_enum_type, 22);
-    add_choice(weights.named_enum_type, 23);
-    add_choice(weights.data_type, 24);
-    add_choice(weights.error_type, 25);
+    add_choice(weights.anon_struct_type, 19);
+    add_choice(weights.anon_enum_type, 20);
+    add_choice(weights.data_type, 21);
+    add_choice(weights.error_type, 22);
 
     if choices.is_empty() {
         return TypeHint::Bool;
@@ -579,14 +522,6 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
             TypeHint::AnonTuple(TypeHintAnonTuple::new(db, fields))
         }
         19 => {
-            let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
-            let fields: Vec<_> = (0..count)
-                .map(|_| TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
-                .collect();
-            TypeHint::NamedTuple(TypeHintNamedTuple::new(db, name, fields))
-        }
-        20 => {
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
@@ -604,26 +539,7 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
                 .collect();
             TypeHint::AnonStruct(TypeHintAnonStruct::new(db, fields))
         }
-        21 => {
-            let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
-            let mut used_names = std::collections::HashSet::new();
-            let fields: Vec<_> = (0..count)
-                .map(|_| {
-                    // Generate unique field name.
-                    let name = loop {
-                        let candidate = gen_field_name(rng);
-                        if used_names.insert(candidate.clone()) {
-                            break InternedText::new(db, &candidate);
-                        }
-                    };
-                    let type_hint = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-                    TypeHintNamedField::new(db, name, type_hint)
-                })
-                .collect();
-            TypeHint::NamedStruct(TypeHintNamedStruct::new(db, name, fields))
-        }
-        22 => {
+        20 => {
             let count = rng.gen_range(1..=config.max_collection_size.max(1));
             let mut used_names = std::collections::HashSet::new();
             let variants: Vec<_> = (0..count)
@@ -646,32 +562,8 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
                 .collect();
             TypeHint::AnonEnum(TypeHintAnonEnum::new(db, variants))
         }
-        23 => {
-            let name = InternedText::new(db, &gen_identifier(rng));
-            let count = rng.gen_range(1..=config.max_collection_size.max(1));
-            let mut used_names = std::collections::HashSet::new();
-            let variants: Vec<_> = (0..count)
-                .map(|_| {
-                    // Generate unique variant name.
-                    let variant_name = loop {
-                        let candidate = gen_identifier(rng);
-                        if used_names.insert(candidate.clone()) {
-                            break InternedText::new(db, &candidate);
-                        }
-                    };
-                    let has_payload = rng.gen_bool(0.5);
-                    let payload = if has_payload {
-                        Some(TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
-                    } else {
-                        None
-                    };
-                    TypeHintEnumVariant::new(db, variant_name, payload)
-                })
-                .collect();
-            TypeHint::NamedEnum(TypeHintNamedEnum::new(db, name, variants))
-        }
-        24 => TypeHint::Data,
-        25 => TypeHint::Error,
+        21 => TypeHint::Data,
+        22 => TypeHint::Error,
         _ => TypeHint::Bool,
     }
 }
@@ -721,19 +613,6 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .collect();
             (Expr::AnonTuple(ExprAnonTuple::new(db, elements)), heap)
         }
-        TypeHint::NamedTuple(th) => {
-            let name = th.name(db);
-            let elements: Vec<_> = th
-                .fields(db)
-                .iter()
-                .map(|field| {
-                    let field_type = field.type_hint(db);
-                    let field_heap = field.heap(db);
-                    gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1)
-                })
-                .collect();
-            (Expr::NamedTuple(ExprNamedTuple::new(db, name, elements)), heap)
-        }
         TypeHint::AnonStruct(th) => {
             let fields: Vec<_> = th
                 .fields(db)
@@ -748,22 +627,6 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 })
                 .collect();
             (Expr::AnonStruct(ExprAnonStruct::new(db, fields)), heap)
-        }
-        TypeHint::NamedStruct(th) => {
-            let name = th.name(db);
-            let fields: Vec<_> = th
-                .fields(db)
-                .iter()
-                .map(|field| {
-                    let field_name = field.name(db);
-                    let field_type_and_heap = field.type_hint(db);
-                    let field_type = field_type_and_heap.type_hint(db);
-                    let field_heap = field_type_and_heap.heap(db);
-                    let value = gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1);
-                    ExprStructField::new(db, field_name, value)
-                })
-                .collect();
-            (Expr::NamedStruct(ExprNamedStruct::new(db, name, fields)), heap)
         }
         TypeHint::AnonEnum(th) => {
             let variants = th.variants(db);
@@ -781,24 +644,6 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 None => None,
             };
             (Expr::AnonEnum(ExprAnonEnum::new(db, variant_name, payload)), heap)
-        }
-        TypeHint::NamedEnum(th) => {
-            let enum_name = th.name(db);
-            let variants = th.variants(db);
-            if variants.is_empty() {
-                return (Expr::None, heap);
-            }
-            let variant = &variants[rng.gen_range(0..variants.len())];
-            let variant_name = variant.name(db);
-            let payload = match variant.payload(db) {
-                Some(payload_type_and_heap) => {
-                    let payload_type = payload_type_and_heap.type_hint(db);
-                    let payload_heap = payload_type_and_heap.heap(db);
-                    Some(gen_expr_full_with_heap(db, rng, payload_type, payload_heap, config, depth + 1))
-                }
-                None => None,
-            };
-            (Expr::NamedEnum(ExprNamedEnum::new(db, enum_name, variant_name, payload)), heap)
         }
         TypeHint::List(th) => {
             let element_type_and_heap = th.element_type(db);

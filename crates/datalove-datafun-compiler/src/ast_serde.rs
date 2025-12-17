@@ -143,11 +143,8 @@ pub enum ExprFunKind {
 
     // Aggregate expressions.
     AnonTuple(ExprAnonTuple),
-    NamedTuple(ExprNamedTuple),
     AnonStruct(ExprAnonStruct),
-    NamedStruct(ExprNamedStruct),
     AnonEnum(ExprAnonEnum),
-    NamedEnum(ExprNamedEnum),
 
     // Wrapper expressions.
     Data(ExprData),
@@ -303,25 +300,9 @@ pub struct ExprAnonTuple {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprNamedTuple {
-    pub heap: crate::datalit::ast_serde::Heap,
-    pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
-    pub name: String,
-    pub elements: Vec<ExprFun>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprAnonStruct {
     pub heap: crate::datalit::ast_serde::Heap,
     pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
-    pub fields: Vec<ExprStructField>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprNamedStruct {
-    pub heap: crate::datalit::ast_serde::Heap,
-    pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
-    pub name: String,
     pub fields: Vec<ExprStructField>,
 }
 
@@ -335,15 +316,6 @@ pub struct ExprStructField {
 pub struct ExprAnonEnum {
     pub heap: crate::datalit::ast_serde::Heap,
     pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
-    pub variant_name: String,
-    pub payload: Option<Box<ExprFun>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprNamedEnum {
-    pub heap: crate::datalit::ast_serde::Heap,
-    pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
-    pub enum_name: String,
     pub variant_name: String,
     pub payload: Option<Box<ExprFun>>,
 }
@@ -534,11 +506,8 @@ impl ExprFunKind {
 
             // Aggregate expressions.
             crate::ast::ExprFunKind::AnonTuple(e) => ExprFunKind::AnonTuple(ExprAnonTuple::from_ast(db, e)),
-            crate::ast::ExprFunKind::NamedTuple(e) => ExprFunKind::NamedTuple(ExprNamedTuple::from_ast(db, e)),
             crate::ast::ExprFunKind::AnonStruct(e) => ExprFunKind::AnonStruct(ExprAnonStruct::from_ast(db, e)),
-            crate::ast::ExprFunKind::NamedStruct(e) => ExprFunKind::NamedStruct(ExprNamedStruct::from_ast(db, e)),
             crate::ast::ExprFunKind::AnonEnum(e) => ExprFunKind::AnonEnum(ExprAnonEnum::from_ast(db, e)),
-            crate::ast::ExprFunKind::NamedEnum(e) => ExprFunKind::NamedEnum(ExprNamedEnum::from_ast(db, e)),
 
             // Wrapper expressions.
             crate::ast::ExprFunKind::Data(e) => ExprFunKind::Data(ExprData::from_ast(db, e)),
@@ -766,33 +735,11 @@ impl ExprAnonTuple {
     }
 }
 
-impl ExprNamedTuple {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprNamedTuple<'db>) -> Self {
-        ExprNamedTuple {
-            heap: heap_from_ast(ast.heap(db)),
-            type_hint: type_hint_from_ast(db, ast.type_hint(db)),
-            name: ast.name(db).as_str(db).to_string(),
-            elements: ast.elements(db).iter().map(|e| ExprFun::from_ast(db, *e)).collect(),
-        }
-    }
-}
-
 impl ExprAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAnonStruct<'db>) -> Self {
         ExprAnonStruct {
             heap: heap_from_ast(ast.heap(db)),
             type_hint: type_hint_from_ast(db, ast.type_hint(db)),
-            fields: ast.fields(db).iter().map(|f| ExprStructField::from_ast(db, *f)).collect(),
-        }
-    }
-}
-
-impl ExprNamedStruct {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprNamedStruct<'db>) -> Self {
-        ExprNamedStruct {
-            heap: heap_from_ast(ast.heap(db)),
-            type_hint: type_hint_from_ast(db, ast.type_hint(db)),
-            name: ast.name(db).as_str(db).to_string(),
             fields: ast.fields(db).iter().map(|f| ExprStructField::from_ast(db, *f)).collect(),
         }
     }
@@ -812,18 +759,6 @@ impl ExprAnonEnum {
         ExprAnonEnum {
             heap: heap_from_ast(ast.heap(db)),
             type_hint: type_hint_from_ast(db, ast.type_hint(db)),
-            variant_name: ast.variant_name(db).as_str(db).to_string(),
-            payload: ast.payload(db).map(|p| Box::new(ExprFun::from_ast(db, p))),
-        }
-    }
-}
-
-impl ExprNamedEnum {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprNamedEnum<'db>) -> Self {
-        ExprNamedEnum {
-            heap: heap_from_ast(ast.heap(db)),
-            type_hint: type_hint_from_ast(db, ast.type_hint(db)),
-            enum_name: ast.enum_name(db).as_str(db).to_string(),
             variant_name: ast.variant_name(db).as_str(db).to_string(),
             payload: ast.payload(db).map(|p| Box::new(ExprFun::from_ast(db, p))),
         }

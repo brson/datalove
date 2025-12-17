@@ -2,105 +2,25 @@
   "ast": {
     "expr": {
       "expr": {
-        "AnonEnum": {
-          "payload": {
-            "expr": {
-              "expr": {
-                "AnonTuple": {
-                  "elements": [
-                    {
-                      "expr": {
-                        "expr": {
-                          "Int": {
-                            "value": "42"
-                          }
-                        },
-                        "heap": "Local"
-                      },
-                      "type_hint": null
-                    },
-                    {
-                      "expr": {
-                        "expr": {
-                          "String": {
-                            "value": "\"success\""
-                          }
-                        },
-                        "heap": "Local"
-                      },
-                      "type_hint": null
-                    }
-                  ]
-                }
-              },
-              "heap": "Local"
-            },
-            "type_hint": null
-          },
-          "variant_name": "Ok"
+        "ParseError": {
+          "message": "expected '/' after type hint"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Local",
       "type_hint": {
-        "NamedEnum": {
-          "name": "Result",
-          "variants": [
-            {
-              "name": "Ok",
-              "payload": {
-                "heap": "Local",
-                "type_hint": {
-                  "AnonTuple": {
-                    "fields": [
-                      {
-                        "heap": "Local",
-                        "type_hint": "U32"
-                      },
-                      {
-                        "heap": "Local",
-                        "type_hint": "String"
-                      }
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "name": "Err",
-              "payload": {
-                "heap": "Local",
-                "type_hint": "String"
-              }
-            }
-          ]
+        "ParseError": {
+          "message": "expected {} after enum keyword"
         }
       }
     }
   },
-  "errors": [],
-  "root_type": {
-    "heap": "@",
-    "kind": "NamedEnum",
-    "name": "Result",
-    "variants": [
-      {
-        "name": "Ok",
-        "payload": {
-          "fields": [
-            "@u32",
-            "@string"
-          ],
-          "heap": "@",
-          "kind": "AnonTuple"
-        }
-      },
-      {
-        "name": "Err",
-        "payload": "@string"
-      }
-    ]
-  }
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
 }

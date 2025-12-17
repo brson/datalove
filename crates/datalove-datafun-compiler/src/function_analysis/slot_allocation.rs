@@ -323,23 +323,7 @@ impl<'db> SlotAllocationBuilder<'db> {
                     self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
                 }
             }
-            ExprFunKind::NamedTuple(tuple) => {
-                for elem in tuple.elements(db) {
-                    self.analyze_expr_with_destruction(db, *elem, ctx, destruction);
-                }
-                if ctx == ExprContext::NeedsDest {
-                    self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
-                }
-            }
             ExprFunKind::AnonStruct(s) => {
-                for field in s.fields(db) {
-                    self.analyze_expr_with_destruction(db, field.value(db), ctx, destruction);
-                }
-                if ctx == ExprContext::NeedsDest {
-                    self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
-                }
-            }
-            ExprFunKind::NamedStruct(s) => {
                 for field in s.fields(db) {
                     self.analyze_expr_with_destruction(db, field.value(db), ctx, destruction);
                 }
@@ -349,14 +333,6 @@ impl<'db> SlotAllocationBuilder<'db> {
             }
             ExprFunKind::AnonEnum(e) => {
                 // Payload writes to enum data area if parent has dest.
-                if let Some(payload) = e.payload(db) {
-                    self.analyze_expr_with_destruction(db, payload, ctx, destruction);
-                }
-                if ctx == ExprContext::NeedsDest {
-                    self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
-                }
-            }
-            ExprFunKind::NamedEnum(e) => {
                 if let Some(payload) = e.payload(db) {
                     self.analyze_expr_with_destruction(db, payload, ctx, destruction);
                 }

@@ -46,11 +46,8 @@ fn type_hint_to_string(db: &dyn datalove_datafun_compiler::Db, type_hint: datalo
             return format!("{{{}}}", inner_str);
         }
         TypeHint::AnonTuple(_) |
-        TypeHint::NamedTuple(_) |
         TypeHint::AnonStruct(_) |
-        TypeHint::NamedStruct(_) |
         TypeHint::AnonEnum(_) |
-        TypeHint::NamedEnum(_) |
         TypeHint::Tensor(_) |
         TypeHint::Data |
         TypeHint::Error |

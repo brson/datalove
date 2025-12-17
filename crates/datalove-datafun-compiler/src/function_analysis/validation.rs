@@ -250,27 +250,12 @@ fn collect_reads_from_expr<'db>(
                 collect_reads_from_expr(db, *elem, stmt_id, slots, reads);
             }
         }
-        ExprFunKind::NamedTuple(tuple) => {
-            for elem in tuple.elements(db) {
-                collect_reads_from_expr(db, *elem, stmt_id, slots, reads);
-            }
-        }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
                 collect_reads_from_expr(db, field.value(db), stmt_id, slots, reads);
             }
         }
-        ExprFunKind::NamedStruct(s) => {
-            for field in s.fields(db) {
-                collect_reads_from_expr(db, field.value(db), stmt_id, slots, reads);
-            }
-        }
         ExprFunKind::AnonEnum(e) => {
-            if let Some(payload) = e.payload(db) {
-                collect_reads_from_expr(db, payload, stmt_id, slots, reads);
-            }
-        }
-        ExprFunKind::NamedEnum(e) => {
             if let Some(payload) = e.payload(db) {
                 collect_reads_from_expr(db, payload, stmt_id, slots, reads);
             }
@@ -657,27 +642,12 @@ fn map_expr_ids<'db>(
                 map_expr_ids(db, *elem, stmt_id, map, expr_counter);
             }
         }
-        ExprFunKind::NamedTuple(tuple) => {
-            for elem in tuple.elements(db) {
-                map_expr_ids(db, *elem, stmt_id, map, expr_counter);
-            }
-        }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
                 map_expr_ids(db, field.value(db), stmt_id, map, expr_counter);
             }
         }
-        ExprFunKind::NamedStruct(s) => {
-            for field in s.fields(db) {
-                map_expr_ids(db, field.value(db), stmt_id, map, expr_counter);
-            }
-        }
         ExprFunKind::AnonEnum(e) => {
-            if let Some(payload) = e.payload(db) {
-                map_expr_ids(db, payload, stmt_id, map, expr_counter);
-            }
-        }
-        ExprFunKind::NamedEnum(e) => {
             if let Some(payload) = e.payload(db) {
                 map_expr_ids(db, payload, stmt_id, map, expr_counter);
             }

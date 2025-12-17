@@ -656,16 +656,10 @@ fn eval_expression_in_script_scope<'db>(
         ast::ExprFunKind::AnonTuple(tuple_expr) => {
             eval_inline_anon_tuple(ctx, EvalContext::ScriptScope, &tuple_expr, dest)
         }
-        ast::ExprFunKind::NamedTuple(_) => {
-            Err(InterpError::InvalidExpression("Named tuple not yet implemented".to_string()))
-        }
         ast::ExprFunKind::AnonStruct(struct_expr) => {
             eval_inline_anon_struct(ctx, EvalContext::ScriptScope, &struct_expr, dest)
         }
-        ast::ExprFunKind::NamedStruct(_) => {
-            Err(InterpError::InvalidExpression("Named struct not yet implemented".to_string()))
-        }
-        ast::ExprFunKind::AnonEnum(_) | ast::ExprFunKind::NamedEnum(_) => {
+        ast::ExprFunKind::AnonEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
         ast::ExprFunKind::Data(data_expr) => {
@@ -2295,16 +2289,10 @@ fn eval_expression_frame<'db>(
         ast::ExprFunKind::AnonTuple(tuple_expr) => {
             eval_inline_anon_tuple(ctx, EvalContext::Frame, &tuple_expr, dest)
         }
-        ast::ExprFunKind::NamedTuple(_) => {
-            Err(InterpError::InvalidExpression("Named tuple not yet implemented".to_string()))
-        }
         ast::ExprFunKind::AnonStruct(struct_expr) => {
             eval_inline_anon_struct(ctx, EvalContext::Frame, &struct_expr, dest)
         }
-        ast::ExprFunKind::NamedStruct(_) => {
-            Err(InterpError::InvalidExpression("Named struct not yet implemented".to_string()))
-        }
-        ast::ExprFunKind::AnonEnum(_) | ast::ExprFunKind::NamedEnum(_) => {
+        ast::ExprFunKind::AnonEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
         ast::ExprFunKind::Data(data_expr) => {

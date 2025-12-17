@@ -141,14 +141,6 @@ fn expr_enum_missing_variant_name() {
     assert_parse_error(&json, "enum without variant name");
 }
 
-/// Named enum expression missing variant name after dot.
-/// `enum Foo.` expects a variant name after the dot.
-#[test]
-fn expr_named_enum_missing_variant_after_dot() {
-    let json = parse("@enum Foo.");
-    assert_parse_error(&json, "named enum missing variant after dot");
-}
-
 /// Struct field missing name.
 /// `struct Foo { = v }` expects a name before `=`.
 #[test]

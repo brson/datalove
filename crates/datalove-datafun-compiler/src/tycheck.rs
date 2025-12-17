@@ -1163,15 +1163,6 @@ fn synthesize_expr<'db>(
             }
             synthesize_inline_anon_tuple(ctx, expr, tuple_expr)
         }
-        ExprFunKind::NamedTuple(tuple_expr) => {
-            if let Some(type_hint) = tuple_expr.type_hint(db) {
-                let expected_ty = convert_type_hint(db, type_hint)?;
-                // Check elements against expected type (catches arity mismatches).
-                check_tuple_elements(ctx, tuple_expr.elements(db), expected_ty)?;
-                return Ok(expected_ty);
-            }
-            Err(ctx.error_cannot_synthesize(expr, "named tuple requires type hint"))
-        }
         ExprFunKind::AnonStruct(struct_expr) => {
             if let Some(type_hint) = struct_expr.type_hint(db) {
                 let expected_ty = convert_type_hint(db, type_hint)?;
@@ -1181,15 +1172,6 @@ fn synthesize_expr<'db>(
             }
             synthesize_inline_anon_struct(ctx, expr, struct_expr)
         }
-        ExprFunKind::NamedStruct(struct_expr) => {
-            if let Some(type_hint) = struct_expr.type_hint(db) {
-                let expected_ty = convert_type_hint(db, type_hint)?;
-                // Check fields against expected type (catches arity mismatches).
-                check_struct_fields(ctx, struct_expr.fields(db), expected_ty)?;
-                return Ok(expected_ty);
-            }
-            Err(ctx.error_cannot_synthesize(expr, "named struct requires type hint"))
-        }
         ExprFunKind::AnonEnum(enum_expr) => {
             if let Some(type_hint) = enum_expr.type_hint(db) {
                 let expected_ty = convert_type_hint(db, type_hint)?;
@@ -1197,14 +1179,6 @@ fn synthesize_expr<'db>(
                 return Ok(expected_ty);
             }
             Err(ctx.error_cannot_synthesize(expr, "anonymous enum requires type hint"))
-        }
-        ExprFunKind::NamedEnum(enum_expr) => {
-            if let Some(type_hint) = enum_expr.type_hint(db) {
-                let expected_ty = convert_type_hint(db, type_hint)?;
-                check_enum_variant(ctx, enum_expr.variant_name(db), enum_expr.payload(db), &expected_ty)?;
-                return Ok(expected_ty);
-            }
-            Err(ctx.error_cannot_synthesize(expr, "named enum requires type hint"))
         }
 
         // Wrapper types.
@@ -2089,11 +2063,8 @@ fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit::as
         ExprFunKind::Map(e) => e.heap(db),
         ExprFunKind::Tensor(e) => e.heap(db),
         ExprFunKind::AnonTuple(e) => e.heap(db),
-        ExprFunKind::NamedTuple(e) => e.heap(db),
         ExprFunKind::AnonStruct(e) => e.heap(db),
-        ExprFunKind::NamedStruct(e) => e.heap(db),
         ExprFunKind::AnonEnum(e) => e.heap(db),
-        ExprFunKind::NamedEnum(e) => e.heap(db),
         ExprFunKind::Data(e) => e.heap(db),
         ExprFunKind::Err(e) => e.heap(db),
         // Non-literal expressions don't have an outer heap.
@@ -3092,9 +3063,6 @@ fn check_enum_variant<'db>(
     // Extract the variants from the enum type.
     let expected_variants = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::AnonEnum(enum_ty)) => {
-            enum_ty.variants(db)
-        }
-        Type::Datalit(datalit::tycheck::Type::NamedEnum(enum_ty)) => {
             enum_ty.variants(db)
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.

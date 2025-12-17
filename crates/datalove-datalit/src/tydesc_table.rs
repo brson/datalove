@@ -344,11 +344,8 @@ impl<'db> TyDescTable<'db> {
                 })
             }
             Type::AnonTuple(t) => self.create_tuple_tydesc(&t.fields(self.db)),
-            Type::NamedTuple(t) => self.create_tuple_tydesc(&t.fields(self.db)),
             Type::AnonStruct(s) => self.create_struct_tydesc(&s.fields(self.db)),
-            Type::NamedStruct(s) => self.create_struct_tydesc(&s.fields(self.db)),
             Type::AnonEnum(e) => self.create_enum_tydesc(&e.variants(self.db)),
-            Type::NamedEnum(e) => self.create_enum_tydesc(&e.variants(self.db)),
             Type::List(l) => self.create_list_tydesc(l.element_type(self.db)),
             Type::Map(m) => self.create_map_tydesc(m.key_type(self.db), m.value_type(self.db)),
             Type::Set(s) => self.create_set_tydesc(s.element_type(self.db)),
@@ -1049,7 +1046,7 @@ mod tests {
     #[test]
     fn test_create_enum_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum Status { Ok, Error } / @enum Ok")?;
+        let typechecked = compile(&db, ": @enum { Ok, Error } / @enum Ok")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1077,7 +1074,7 @@ mod tests {
     #[test]
     fn test_create_enum_with_payload_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum Result { Ok(@u32), Err(@string) } / @enum Result.Ok(@42)")?;
+        let typechecked = compile(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);

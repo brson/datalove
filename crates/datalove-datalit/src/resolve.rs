@@ -169,42 +169,6 @@ fn collect_type_hint_names_inner<'db>(
     next_id: &mut u32,
 ) {
     match type_hint {
-        TypeHint::NamedTuple(t) => {
-            let name = t.name(db);
-            let id = BindingId(*next_id);
-            *next_id += 1;
-            scope.insert(name, id, type_hint_and_heap);
-
-            // Recursively collect from fields.
-            for field in t.fields(db) {
-                collect_type_hint_names(db, field, scope, next_id);
-            }
-        }
-        TypeHint::NamedStruct(s) => {
-            let name = s.name(db);
-            let id = BindingId(*next_id);
-            *next_id += 1;
-            scope.insert(name, id, type_hint_and_heap);
-
-            // Recursively collect from fields.
-            for field in s.fields(db) {
-                let field_type = field.type_hint(db);
-                collect_type_hint_names(db, field_type, scope, next_id);
-            }
-        }
-        TypeHint::NamedEnum(e) => {
-            let name = e.name(db);
-            let id = BindingId(*next_id);
-            *next_id += 1;
-            scope.insert(name, id, type_hint_and_heap);
-
-            // Recursively collect from variants.
-            for variant in e.variants(db) {
-                if let Some(payload) = variant.payload(db) {
-                    collect_type_hint_names(db, payload, scope, next_id);
-                }
-            }
-        }
         TypeHint::AnonTuple(t) => {
             for field in t.fields(db) {
                 collect_type_hint_names(db, field, scope, next_id);
@@ -271,51 +235,6 @@ fn resolve_expr_refs<'db>(
     errors: &mut HashMap<InternedText<'db>, ResolutionError>,
 ) {
     match expr {
-        Expr::NamedTuple(t) => {
-            let name = t.name(db);
-            if let Some((binding_id, definition, scope_depth)) = scope.lookup(name) {
-                let resolution = Resolution::new(db, binding_id, scope_depth, definition);
-                resolutions.insert(name, resolution);
-            } else {
-                errors.insert(name, ResolutionError::UnboundName);
-            }
-
-            // Recursively resolve elements.
-            for element in t.elements(db) {
-                let element_expr = element.expr(db).expr(db);
-                resolve_expr_refs(db, element_expr, scope, resolutions, errors);
-            }
-        }
-        Expr::NamedStruct(s) => {
-            let name = s.name(db);
-            if let Some((binding_id, definition, scope_depth)) = scope.lookup(name) {
-                let resolution = Resolution::new(db, binding_id, scope_depth, definition);
-                resolutions.insert(name, resolution);
-            } else {
-                errors.insert(name, ResolutionError::UnboundName);
-            }
-
-            // Recursively resolve fields.
-            for field in s.fields(db) {
-                let field_value = field.value(db).expr(db).expr(db);
-                resolve_expr_refs(db, field_value, scope, resolutions, errors);
-            }
-        }
-        Expr::NamedEnum(e) => {
-            let name = e.enum_name(db);
-            if let Some((binding_id, definition, scope_depth)) = scope.lookup(name) {
-                let resolution = Resolution::new(db, binding_id, scope_depth, definition);
-                resolutions.insert(name, resolution);
-            } else {
-                errors.insert(name, ResolutionError::UnboundName);
-            }
-
-            // Recursively resolve payload if present.
-            if let Some(payload) = e.payload(db) {
-                let payload_expr = payload.expr(db).expr(db);
-                resolve_expr_refs(db, payload_expr, scope, resolutions, errors);
-            }
-        }
         Expr::AnonTuple(t) => {
             for element in t.elements(db) {
                 let element_expr = element.expr(db).expr(db);
@@ -387,81 +306,4 @@ mod tests {
     use crate::parser::parse_for_test;
     use bct::input::Source;
 
-    #[test]
-    fn test_resolve_named_struct() {
-        let ref db = crate::Database::default();
-        let source = Source::new(
-            db,
-            S(": @struct Point { x: @u32, y: @u32 } / @struct Point { x = @1, y = @2 }")
-        );
-        let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, source, ast);
-
-        // Should have one resolution for "Point".
-        assert_eq!(resolved.resolutions(db).len(), 1);
-        assert_eq!(resolved.errors(db).len(), 0);
-
-        let point_name = InternedText::new(db, S("Point"));
-        let resolutions = resolved.resolutions(db);
-        let entry = resolutions.iter().find(|entry| entry.name(db) == point_name).unwrap();
-        let resolution = entry.resolution(db);
-        assert_eq!(resolution.scope_depth(db), 0);
-    }
-
-    #[test]
-    #[ignore]
-    fn test_resolve_shadowing() {
-        let ref db = crate::Database::default();
-        // Create a nested structure where inner scope shadows outer scope.
-        // Outer: struct Outer, Inner field contains another struct Inner.
-        let source = Source::new(
-            db,
-            S(": @struct Outer { inner: @struct Inner { x: @u32 } } / @struct Outer { inner = @struct Inner { x = @1 } }")
-        );
-        let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, source, ast);
-
-        // Should have resolution for "Outer" (inner struct definition is in type hint, not referenced in expr).
-        assert_eq!(resolved.resolutions(db).len(), 1);
-        assert_eq!(resolved.errors(db).len(), 0);
-
-        let outer_name = InternedText::new(db, S("Outer"));
-        assert!(resolved.resolutions(db).iter().any(|entry| entry.name(db) == outer_name));
-    }
-
-    #[test]
-    fn test_resolve_named_tuple() {
-        let ref db = crate::Database::default();
-        let source = Source::new(
-            db,
-            S(": @tuple Pair (@u32, @u32) / @tuple Pair (@1, @2)")
-        );
-        let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, source, ast);
-
-        // Should have one resolution for "Pair".
-        assert_eq!(resolved.resolutions(db).len(), 1);
-        assert_eq!(resolved.errors(db).len(), 0);
-
-        let pair_name = InternedText::new(db, S("Pair"));
-        assert!(resolved.resolutions(db).iter().any(|entry| entry.name(db) == pair_name));
-    }
-
-    #[test]
-    fn test_resolve_named_enum() {
-        let ref db = crate::Database::default();
-        let source = Source::new(
-            db,
-            S(": @enum Result { Ok: @u32, Err: @string } / @enum Result.Ok(@42)")
-        );
-        let ast = parse_for_test(db, source);
-        let resolved = resolve_names(db, source, ast);
-
-        // Should have one resolution for "Result".
-        assert_eq!(resolved.resolutions(db).len(), 1);
-        assert_eq!(resolved.errors(db).len(), 0);
-
-        let result_name = InternedText::new(db, S("Result"));
-        assert!(resolved.resolutions(db).iter().any(|entry| entry.name(db) == result_name));
-    }
 }

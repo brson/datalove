@@ -61,11 +61,8 @@ pub enum TypeHint<'db> {
     Int,
     String,
     AnonTuple(TypeHintAnonTuple<'db>),
-    NamedTuple(TypeHintNamedTuple<'db>),
     AnonStruct(TypeHintAnonStruct<'db>),
-    NamedStruct(TypeHintNamedStruct<'db>),
     AnonEnum(TypeHintAnonEnum<'db>),
-    NamedEnum(TypeHintNamedEnum<'db>),
     List(TypeHintList<'db>),
     Map(TypeHintMap<'db>),
     Set(TypeHintSet<'db>),
@@ -83,19 +80,7 @@ pub struct TypeHintAnonTuple<'db> {
 }
 
 #[salsa::tracked]
-pub struct TypeHintNamedTuple<'db> {
-    pub name: InternedText<'db>,
-    pub fields: Vec<TypeHintAndHeap<'db>>,
-}
-
-#[salsa::tracked]
 pub struct TypeHintAnonStruct<'db> {
-    pub fields: Vec<TypeHintNamedField<'db>>,
-}
-
-#[salsa::tracked]
-pub struct TypeHintNamedStruct<'db> {
-    pub name: InternedText<'db>,
     pub fields: Vec<TypeHintNamedField<'db>>,
 }
 
@@ -107,12 +92,6 @@ pub struct TypeHintNamedField<'db> {
 
 #[salsa::tracked]
 pub struct TypeHintAnonEnum<'db> {
-    pub variants: Vec<TypeHintEnumVariant<'db>>,
-}
-
-#[salsa::tracked]
-pub struct TypeHintNamedEnum<'db> {
-    pub name: InternedText<'db>,
     pub variants: Vec<TypeHintEnumVariant<'db>>,
 }
 
@@ -173,11 +152,8 @@ pub enum Expr<'db> {
     Hex(ExprHex<'db>),
     String(ExprString<'db>),
     AnonTuple(ExprAnonTuple<'db>),
-    NamedTuple(ExprNamedTuple<'db>),
     AnonStruct(ExprAnonStruct<'db>),
-    NamedStruct(ExprNamedStruct<'db>),
     AnonEnum(ExprAnonEnum<'db>),
-    NamedEnum(ExprNamedEnum<'db>),
     List(ExprList<'db>),
     Map(ExprMap<'db>),
     Set(ExprSet<'db>),
@@ -214,19 +190,7 @@ pub struct ExprAnonTuple<'db> {
 }
 
 #[salsa::tracked]
-pub struct ExprNamedTuple<'db> {
-    pub name: InternedText<'db>,
-    pub elements: Vec<ExprFull<'db>>,
-}
-
-#[salsa::tracked]
 pub struct ExprAnonStruct<'db> {
-    pub fields: Vec<ExprStructField<'db>>,
-}
-
-#[salsa::tracked]
-pub struct ExprNamedStruct<'db> {
-    pub name: InternedText<'db>,
     pub fields: Vec<ExprStructField<'db>>,
 }
 
@@ -238,13 +202,6 @@ pub struct ExprStructField<'db> {
 
 #[salsa::tracked]
 pub struct ExprAnonEnum<'db> {
-    pub variant_name: InternedText<'db>,
-    pub payload: Option<ExprFull<'db>>,
-}
-
-#[salsa::tracked]
-pub struct ExprNamedEnum<'db> {
-    pub enum_name: InternedText<'db>,
     pub variant_name: InternedText<'db>,
     pub payload: Option<ExprFull<'db>>,
 }

@@ -1187,14 +1187,8 @@ impl<'db> Parser<'db> {
             Some("tensor") => {
                 return self.parse_lit_tensor(tokens, heap, type_hint);
             }
-            Some("tuple") => {
-                return self.parse_lit_named_tuple(tokens, heap, type_hint);
-            }
-            Some("struct") => {
-                return self.parse_lit_named_struct(tokens, heap, type_hint);
-            }
             Some("enum") => {
-                return self.parse_lit_enum(tokens, heap, type_hint);
+                return self.parse_lit_anon_enum(tokens, heap, type_hint);
             }
             Some("map") => {
                 return self.parse_lit_map(tokens, heap, type_hint);
@@ -1335,30 +1329,6 @@ impl<'db> Parser<'db> {
         ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple::new(self.db, heap, type_hint, elements))
     }
 
-    // Parse named tuple: tuple Name(expr, expr, ...)
-    fn parse_lit_named_tuple(
-        &mut self,
-        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    ) -> ast::ExprFunKind<'db> {
-        self.eat_word(tokens, "tuple");
-        let name = self.need_name(tokens);
-        let iter = match tokens.next() {
-            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
-            _ => {
-                let (text, span) = self.peek_text_span(tokens);
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, text, span,
-                    InternedText::new(self.db, "expected '(' after tuple name".S()),
-                ));
-            }
-        };
-
-        let elements = self.parse_comma_separated_exprs(iter);
-        ast::ExprFunKind::NamedTuple(ast::ExprNamedTuple::new(self.db, heap, type_hint, name, elements))
-    }
-
     // Parse anonymous struct: { name = expr, ... }
     fn parse_lit_anon_struct(
         &mut self,
@@ -1379,30 +1349,6 @@ impl<'db> Parser<'db> {
 
         let fields = self.parse_comma_separated_struct_fields(iter);
         ast::ExprFunKind::AnonStruct(ast::ExprAnonStruct::new(self.db, heap, type_hint, fields))
-    }
-
-    // Parse named struct: struct Name { name = expr, ... }
-    fn parse_lit_named_struct(
-        &mut self,
-        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    ) -> ast::ExprFunKind<'db> {
-        self.eat_word(tokens, "struct");
-        let name = self.need_name(tokens);
-        let iter = match tokens.next() {
-            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
-            _ => {
-                let (text, span) = self.peek_text_span(tokens);
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, text, span,
-                    InternedText::new(self.db, "expected '{' after struct name".S()),
-                ));
-            }
-        };
-
-        let fields = self.parse_comma_separated_struct_fields(iter);
-        ast::ExprFunKind::NamedStruct(ast::ExprNamedStruct::new(self.db, heap, type_hint, name, fields))
     }
 
     // Parse list: [expr, expr, ...]
@@ -1473,31 +1419,19 @@ impl<'db> Parser<'db> {
         ast::ExprFunKind::Map(ast::ExprMap::new(self.db, heap, type_hint, entries))
     }
 
-    // Parse enum: enum Variant or enum Name.Variant
-    fn parse_lit_enum(
+    // Parse anonymous enum: enum Variant or enum Variant(payload)
+    fn parse_lit_anon_enum(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
         heap: datalit::ast::Heap,
         type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     ) -> ast::ExprFunKind<'db> {
         self.eat_word(tokens, "enum");
-        let first_name = self.need_name(tokens);
-
-        if self.peek_sigil(tokens, Sigil::Dot) {
-            // Named enum: enum EnumName.Variant
-            self.eat_sigil(tokens, Sigil::Dot);
-            let variant_name = self.need_name(tokens);
-            let payload = self.parse_optional_enum_payload(tokens);
-            ast::ExprFunKind::NamedEnum(ast::ExprNamedEnum::new(
-                self.db, heap, type_hint, first_name, variant_name, payload
-            ))
-        } else {
-            // Anonymous enum: enum Variant
-            let payload = self.parse_optional_enum_payload(tokens);
-            ast::ExprFunKind::AnonEnum(ast::ExprAnonEnum::new(
-                self.db, heap, type_hint, first_name, payload
-            ))
-        }
+        let variant_name = self.need_name(tokens);
+        let payload = self.parse_optional_enum_payload(tokens);
+        ast::ExprFunKind::AnonEnum(ast::ExprAnonEnum::new(
+            self.db, heap, type_hint, variant_name, payload
+        ))
     }
 
     // Parse optional enum payload: (expr)
