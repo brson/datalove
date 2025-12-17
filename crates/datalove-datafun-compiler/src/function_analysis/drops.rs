@@ -84,7 +84,7 @@ pub fn compute_drop_points<'db>(
     // For each join block (block with multiple incoming edges), check if any slot
     // has different move states across predecessors. If so, insert drops in the
     // predecessors where the slot is NOT moved.
-    for (join_block_id, predecessors) in &incoming {
+    for (_join_block_id, predecessors) in &incoming {
         if predecessors.len() <= 1 {
             // Not a join point, skip.
             continue;

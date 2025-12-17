@@ -203,7 +203,7 @@ pub fn compute_move_info<'db>(
 #[salsa::tracked]
 pub fn analyze_moves_per_block<'db>(
     db: &'db dyn crate::Db,
-    func: StmtFun<'db>,
+    _func: StmtFun<'db>,
     cfg: super::ControlFlowGraph<'db>,
     slots: &'db [AllocatedSlot<'db>],
     move_info: MoveInfo<'db>,
@@ -1027,9 +1027,9 @@ fn collect_reads_from_expr<'db>(
 
 /// Correlate reads with death points from liveness analysis to identify last uses.
 fn correlate_last_uses<'db>(
-    db: &'db dyn crate::Db,
+    _db: &'db dyn crate::Db,
     reads: &[ReadInfo],
-    live_ranges: LiveRanges<'db>,
+    _live_ranges: LiveRanges<'db>,
 ) -> Vec<(SlotId, ExprId)> {
     let mut last_uses = Vec::new();
 

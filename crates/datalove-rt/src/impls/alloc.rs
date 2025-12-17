@@ -4,15 +4,20 @@
 //! On wasm32: Uses Rust's global allocator.
 
 use rmx::prelude::*;
+
+// Unix-only imports and constants (used by unix_impl and tests).
+#[cfg(not(target_arch = "wasm32"))]
 use std::ptr;
+#[cfg(not(target_arch = "wasm32"))]
 use std::collections::HashMap;
 
-/// Size of a memory page (4KB).
+#[cfg(not(target_arch = "wasm32"))]
 const PAGE_SIZE: usize = 4096;
-
-/// Size classes for small allocations.
+#[cfg(not(target_arch = "wasm32"))]
 const SIZE_CLASSES: &[usize] = &[8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_SMALL_SIZE: usize = 4096;
+#[cfg(not(target_arch = "wasm32"))]
 const NUM_SIZE_CLASSES: usize = SIZE_CLASSES.len();
 
 /// Leak detection mode.
@@ -96,6 +101,7 @@ mod unix_impl {
         }
 
         /// Create a new allocator with a specific leak check mode (not boxed).
+        #[cfg(test)]
         pub fn new_raw_with_leak_check_mode(mode: LeakCheckMode) -> AllocLocal {
             AllocLocal {
                 free_lists: [ptr::null_mut(); NUM_SIZE_CLASSES],
@@ -428,6 +434,7 @@ mod wasm_impl {
         }
 
         /// Create a new allocator with a specific leak check mode (not boxed).
+        #[cfg(test)]
         pub fn new_raw_with_leak_check_mode(mode: LeakCheckMode) -> AllocLocal {
             AllocLocal {
                 allocations: Vec::new(),

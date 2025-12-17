@@ -22,7 +22,7 @@ pub fn is_copy_type<'db>(
 }
 
 /// Convert a datalit TypeAndHeap to a datafun TypeAndHeap.
-fn convert_datalit_type<'db>(
+fn _convert_datalit_type<'db>(
     db: &'db dyn crate::Db,
     datalit_ty: crate::datalit::tycheck::TypeAndHeap<'db>,
 ) -> crate::tycheck::TypeAndHeap<'db> {

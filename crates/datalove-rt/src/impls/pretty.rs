@@ -609,7 +609,6 @@ unsafe fn push_str(
 mod tests {
     use super::*;
     use crate::impls::rt_local;
-    use crate::impls::rt_local::RtLocal;
 
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {

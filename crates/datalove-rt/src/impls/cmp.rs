@@ -539,15 +539,15 @@ unsafe fn eq_value(
                 )
             }
             rtdt::TyTag::Tensor => {
-                let tensor_a = unsafe { &*(value_a as *const rtdt::Tensor) };
-                let tensor_b = unsafe { &*(value_b as *const rtdt::Tensor) };
+                let tensor_a = &*(value_a as *const rtdt::Tensor);
+                let tensor_b = &*(value_b as *const rtdt::Tensor);
 
                 let rank = td.tensor_rank();
 
                 // Compare shapes.
                 if rank > 0 {
-                    let shape_a = unsafe { std::slice::from_raw_parts(tensor_a.shape, rank as usize) };
-                    let shape_b = unsafe { std::slice::from_raw_parts(tensor_b.shape, rank as usize) };
+                    let shape_a = std::slice::from_raw_parts(tensor_a.shape, rank as usize);
+                    let shape_b = std::slice::from_raw_parts(tensor_b.shape, rank as usize);
 
                     if shape_a != shape_b {
                         return false;
@@ -562,8 +562,8 @@ unsafe fn eq_value(
 
                     let element_ty = td.tensor_element_ty();
                     let element_size = element_ty.size() as usize;
-                    let strides_a = unsafe { std::slice::from_raw_parts(tensor_a.strides, rank as usize) };
-                    let strides_b = unsafe { std::slice::from_raw_parts(tensor_b.strides, rank as usize) };
+                    let strides_a = std::slice::from_raw_parts(tensor_a.strides, rank as usize);
+                    let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
 
                     // Iterate through all multi-dimensional indices.
                     let mut indices = vec![0u32; rank as usize];
@@ -573,18 +573,14 @@ unsafe fn eq_value(
                         for (i, &idx) in indices.iter().enumerate() {
                             offset_a += idx * strides_a[i];
                         }
-                        let elem_a = unsafe {
-                            tensor_a.ptr_base.add((offset_a as usize) * element_size)
-                        };
+                        let elem_a = tensor_a.ptr_base.add((offset_a as usize) * element_size);
 
                         // Compute linear offset for tensor_b.
                         let mut offset_b = tensor_b.offset_elems;
                         for (i, &idx) in indices.iter().enumerate() {
                             offset_b += idx * strides_b[i];
                         }
-                        let elem_b = unsafe {
-                            tensor_b.ptr_base.add((offset_b as usize) * element_size)
-                        };
+                        let elem_b = tensor_b.ptr_base.add((offset_b as usize) * element_size);
 
                         // Compare elements.
                         if !eq_value(elem_a, elem_b, element_ty, float_policy) {
@@ -613,12 +609,8 @@ unsafe fn eq_value(
                     let element_ty = td.tensor_element_ty();
                     let element_size = element_ty.size() as usize;
 
-                    let elem_a = unsafe {
-                        tensor_a.ptr_base.add((tensor_a.offset_elems as usize) * element_size)
-                    };
-                    let elem_b = unsafe {
-                        tensor_b.ptr_base.add((tensor_b.offset_elems as usize) * element_size)
-                    };
+                    let elem_a = tensor_a.ptr_base.add((tensor_a.offset_elems as usize) * element_size);
+                    let elem_b = tensor_b.ptr_base.add((tensor_b.offset_elems as usize) * element_size);
 
                     eq_value(elem_a, elem_b, element_ty, float_policy)
                 }
@@ -1204,15 +1196,15 @@ unsafe fn cmp_value(
                 )
             }
             rtdt::TyTag::Tensor => {
-                let tensor_a = unsafe { &*(value_a as *const rtdt::Tensor) };
-                let tensor_b = unsafe { &*(value_b as *const rtdt::Tensor) };
+                let tensor_a = &*(value_a as *const rtdt::Tensor);
+                let tensor_b = &*(value_b as *const rtdt::Tensor);
 
                 let rank = td.tensor_rank();
 
                 // Compare shapes lexicographically.
                 if rank > 0 {
-                    let shape_a = unsafe { std::slice::from_raw_parts(tensor_a.shape, rank as usize) };
-                    let shape_b = unsafe { std::slice::from_raw_parts(tensor_b.shape, rank as usize) };
+                    let shape_a = std::slice::from_raw_parts(tensor_a.shape, rank as usize);
+                    let shape_b = std::slice::from_raw_parts(tensor_b.shape, rank as usize);
 
                     // Compare shapes dimension by dimension.
                     for i in 0..rank as usize {
@@ -1232,8 +1224,8 @@ unsafe fn cmp_value(
 
                     let element_ty = td.tensor_element_ty();
                     let element_size = element_ty.size() as usize;
-                    let strides_a = unsafe { std::slice::from_raw_parts(tensor_a.strides, rank as usize) };
-                    let strides_b = unsafe { std::slice::from_raw_parts(tensor_b.strides, rank as usize) };
+                    let strides_a = std::slice::from_raw_parts(tensor_a.strides, rank as usize);
+                    let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
 
                     // Iterate through all multi-dimensional indices lexicographically.
                     let mut indices = vec![0u32; rank as usize];
@@ -1243,18 +1235,14 @@ unsafe fn cmp_value(
                         for (i, &idx) in indices.iter().enumerate() {
                             offset_a += idx * strides_a[i];
                         }
-                        let elem_a = unsafe {
-                            tensor_a.ptr_base.add((offset_a as usize) * element_size)
-                        };
+                        let elem_a = tensor_a.ptr_base.add((offset_a as usize) * element_size);
 
                         // Compute linear offset for tensor_b.
                         let mut offset_b = tensor_b.offset_elems;
                         for (i, &idx) in indices.iter().enumerate() {
                             offset_b += idx * strides_b[i];
                         }
-                        let elem_b = unsafe {
-                            tensor_b.ptr_base.add((offset_b as usize) * element_size)
-                        };
+                        let elem_b = tensor_b.ptr_base.add((offset_b as usize) * element_size);
 
                         // Compare elements.
                         let elem_cmp = cmp_value(elem_a, elem_b, element_ty, float_policy);
@@ -1289,12 +1277,8 @@ unsafe fn cmp_value(
                     let element_ty = td.tensor_element_ty();
                     let element_size = element_ty.size() as usize;
 
-                    let elem_a = unsafe {
-                        tensor_a.ptr_base.add((tensor_a.offset_elems as usize) * element_size)
-                    };
-                    let elem_b = unsafe {
-                        tensor_b.ptr_base.add((tensor_b.offset_elems as usize) * element_size)
-                    };
+                    let elem_a = tensor_a.ptr_base.add((tensor_a.offset_elems as usize) * element_size);
+                    let elem_b = tensor_b.ptr_base.add((tensor_b.offset_elems as usize) * element_size);
 
                     cmp_value(elem_a, elem_b, element_ty, float_policy)
                 }

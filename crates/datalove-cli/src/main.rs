@@ -19,7 +19,7 @@ struct DiagnosticContext {
 
 struct SourceInfo {
     /// File path if the source came from a file.
-    path: Option<PathBuf>,
+    _path: Option<PathBuf>,
     /// Display name for rendering (e.g., "file.dfs", "<repl-5>", "<test>").
     display_name: String,
 }
@@ -34,7 +34,7 @@ impl DiagnosticContext {
 
         DiagnosticContext {
             source_info: SourceInfo {
-                path: Some(path),
+                _path: Some(path),
                 display_name,
             },
             source_text,
@@ -42,10 +42,10 @@ impl DiagnosticContext {
     }
 
     /// Register a test source (no file path).
-    fn from_test(source_text: String) -> Self {
+    fn _from_test(source_text: String) -> Self {
         DiagnosticContext {
             source_info: SourceInfo {
-                path: None,
+                _path: None,
                 display_name: "<test>".to_string(),
             },
             source_text,
@@ -53,10 +53,10 @@ impl DiagnosticContext {
     }
 
     /// Register a REPL input.
-    fn from_repl(line_num: usize, source_text: String) -> Self {
+    fn _from_repl(line_num: usize, source_text: String) -> Self {
         DiagnosticContext {
             source_info: SourceInfo {
-                path: None,
+                _path: None,
                 display_name: format!("<repl-{}>", line_num),
             },
             source_text,

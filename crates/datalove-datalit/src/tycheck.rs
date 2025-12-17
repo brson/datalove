@@ -1965,7 +1965,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             let name = s.name(db).as_str(db);
             format!("@struct {}", name)
         }
-        Type::AnonEnum(e) => {
+        Type::AnonEnum(_e) => {
             format!("@enum{{...}}")
         }
         Type::NamedEnum(e) => {

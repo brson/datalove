@@ -207,7 +207,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 }
                             }
                         }
-                        repl::Eval::CrashReset(msg) => {
+                        repl::Eval::CrashReset(_msg) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(
                                     "  💥 ",

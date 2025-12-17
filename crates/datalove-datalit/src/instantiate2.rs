@@ -747,7 +747,6 @@ fn instantiate_list<'db>(
     let element_tydesc = tydesc_table.get_or_create(element_ty);
     let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
     let element_size = element_tydesc_ref.size();
-    let element_align = element_tydesc_ref.align();
 
     unsafe {
         // Allocate list data array.
@@ -1157,7 +1156,6 @@ fn instantiate_tensor<'db>(
     let element_tydesc = tydesc_table.get_or_create(element_ty);
     let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
     let element_size = element_tydesc_ref.size();
-    let element_align = element_tydesc_ref.align();
 
     let rank = shape.len();
     let total_elems: usize = shape.iter().map(|&d| d as usize).product();

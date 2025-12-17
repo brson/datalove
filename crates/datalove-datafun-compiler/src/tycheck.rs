@@ -1758,7 +1758,7 @@ fn check_expr<'db>(
 
     match expr_kind {
         // Handle None literals specially - they can check against any Option type.
-        ExprFunKind::None(lit) => {
+        ExprFunKind::None(_lit) => {
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::Option(_)) => {
                     // None checks against any Option<T>.
@@ -1773,7 +1773,7 @@ fn check_expr<'db>(
         }
 
         // Handle integer literals specially - they can coerce to expected integer types.
-        ExprFunKind::Int(int_expr) => {
+        ExprFunKind::Int(_int_expr) => {
             match expected.ty(db) {
                 Type::Datalit(expected_datalit_ty) => {
                     // Check if expected type is a numeric type.

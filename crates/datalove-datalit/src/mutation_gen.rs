@@ -307,7 +307,7 @@ fn apply_extra_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<Mutat
 fn apply_out_of_range_int<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
-    rng: &mut impl Rng,
+    _rng: &mut impl Rng,
 ) -> Option<MutationResult> {
     // Check if the expression has a type hint for a fixed-width integer type.
     let type_hint = expr.type_hint(db)?;

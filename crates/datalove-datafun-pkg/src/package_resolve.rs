@@ -6,7 +6,6 @@ use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use bct::package_resolve2::{
-    PackageWorldMap,
     ImportDemandMap,
     PackageWorldModuleGraphWithErrors,
     PackageWorldModuleGraph,
@@ -14,7 +13,7 @@ use bct::package_resolve2::{
     ValidationError,
     resolve_package_world,
 };
-use bct::module_graph::{ModuleGraph, ModuleGraphBuilder, ModuleId};
+use bct::module_graph::{ModuleGraph, ModuleGraphBuilder};
 
 use crate::package::PackageWorld;
 

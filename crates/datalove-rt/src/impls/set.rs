@@ -1049,7 +1049,6 @@ unsafe fn propagate_split_up(
     element_tydesc: *const TyDesc,
 ) -> RtStatus {
     unsafe {
-        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
         // If there's no parent, child must be the root.
         if path.is_empty() {
             // Create new internal root.

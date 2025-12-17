@@ -12,9 +12,8 @@ use ratatui::{
     backend::CrosstermBackend,
     Terminal,
 };
-use std::io::{self, Write};
+use std::io;
 use std::fs::File;
-use std::path::PathBuf;
 
 const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
 

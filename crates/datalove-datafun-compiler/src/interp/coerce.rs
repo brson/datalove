@@ -49,7 +49,7 @@ pub(super) fn coerce_value_to_dest<'db>(
         // Check if value type matches inner type.
         if value.tydesc == inner_tydesc.as_ptr() {
             // Wrap value in Some.
-            let layout = unsafe { compute_option_layout(dest_ref) };
+            let layout = compute_option_layout(dest_ref);
 
             // Write Some tag.
             unsafe { *(dest.ptr as *mut u8) = OptionTag::Some as u8; }
@@ -85,7 +85,7 @@ pub(super) fn coerce_value_to_dest<'db>(
         // Check if value type matches inner type.
         if value.tydesc == inner_tydesc.as_ptr() {
             // Wrap value in Ok.
-            let layout = unsafe { compute_result_layout(dest_ref) };
+            let layout = compute_result_layout(dest_ref);
 
             // Write Ok tag.
             unsafe { *(dest.ptr as *mut u8) = ResultTag::Ok as u8; }
@@ -137,7 +137,7 @@ pub(super) fn coerce_value_to_dest<'db>(
 
         // Only allow if inner type is also Data.
         if unsafe { (*option_inner_tydesc.as_ptr()).type_tag } == TyTag::Data {
-            let layout = unsafe { compute_option_layout(dest_ref) };
+            let layout = compute_option_layout(dest_ref);
 
             // Write Some tag.
             unsafe { *(dest.ptr as *mut u8) = OptionTag::Some as u8; }
@@ -168,7 +168,7 @@ pub(super) fn coerce_value_to_dest<'db>(
 
         // Only allow if inner type is also Data.
         if unsafe { (*result_inner_tydesc.as_ptr()).type_tag } == TyTag::Data {
-            let layout = unsafe { compute_result_layout(dest_ref) };
+            let layout = compute_result_layout(dest_ref);
 
             // Write Ok tag.
             unsafe { *(dest.ptr as *mut u8) = ResultTag::Ok as u8; }

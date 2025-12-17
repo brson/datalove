@@ -8,8 +8,6 @@
 //! them to this crate for resolution.
 
 
-use rmx::prelude::*;
-
 pub mod package_load;
 pub mod package_load_worldfile;
 pub mod package;

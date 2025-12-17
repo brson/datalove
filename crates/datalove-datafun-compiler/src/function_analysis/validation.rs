@@ -827,23 +827,6 @@ fn walk_and_track_init<'db>(
     }
 }
 
-/// Flatten all statements into a single vec.
-fn flatten_statements<'db>(db: &'db dyn crate::Db, stmts: &'db [Statement<'db>]) -> Vec<&'db Statement<'db>> {
-    let mut result = Vec::new();
-    for stmt in stmts {
-        result.push(stmt);
-        match stmt {
-            Statement::If(if_stmt) => {
-                result.extend(flatten_statements(db, if_stmt.then_body(db)));
-                if let Some(else_body) = if_stmt.else_body(db) {
-                    result.extend(flatten_statements(db, else_body));
-                }
-            }
-            _ => {}
-        }
-    }
-    result
-}
 
 /// Find a slot by name.
 fn find_slot_by_name<'db>(

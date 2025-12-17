@@ -3,7 +3,7 @@
 //! Plain Rust types for loading packages before converting to Salsa types.
 
 use rmx::prelude::*;
-use rmx::std::path::{PathBuf, Path};
+use rmx::std::path::PathBuf;
 use rmx::futures::channel::mpsc;
 use rmx::std::thread;
 use rmx::std::collections::BTreeMap;
@@ -125,7 +125,7 @@ fn send_modules_blocking(
     if let Err(e) = send_modules_blocking_err(
         dir, tx.C(),
     ) {
-        block_on(tx.send(Err(e)));
+        let _ = block_on(tx.send(Err(e)));
     }
 }
 

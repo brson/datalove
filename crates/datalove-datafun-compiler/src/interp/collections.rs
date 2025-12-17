@@ -33,7 +33,7 @@ pub(super) fn allocate_tuple_from_values<'db>(
     let tuple_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(tuple_tydesc) };
 
     // Compute layout to get field offsets.
-    let layout = unsafe { rtdt::layout::compute_tuple_layout(tuple_tydesc_ref) };
+    let layout = rtdt::layout::compute_tuple_layout(tuple_tydesc_ref);
 
     // Allocate memory for tuple.
     let rt_handle = ctx.runtime.handle();
@@ -104,7 +104,7 @@ pub(super) fn allocate_struct_from_values<'db>(
     let struct_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(struct_tydesc) };
 
     // Compute layout to get field offsets.
-    let layout = unsafe { rtdt::layout::compute_struct_layout(struct_tydesc_ref) };
+    let layout = rtdt::layout::compute_struct_layout(struct_tydesc_ref);
 
     // Allocate memory for struct.
     let rt_handle = ctx.runtime.handle();

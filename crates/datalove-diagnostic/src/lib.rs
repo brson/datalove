@@ -29,7 +29,7 @@ impl SpanEntry {
         SpanEntry { text_id, span }
     }
 
-    pub fn to_text_and_span<'db>(&self, db: &'db dyn salsa::Database) -> (Text<'db>, ByteSpan) {
+    pub fn to_text_and_span<'db>(&self, _db: &'db dyn salsa::Database) -> (Text<'db>, ByteSpan) {
         use salsa::plumbing::FromId;
         (Text::from_id(self.text_id), self.span.clone())
     }
@@ -352,7 +352,7 @@ impl<'db> DiagnosticBuilder<'db> {
 /// Helper functions to retrieve accumulated diagnostics and convert them back.
 impl StoredDiagnostic {
     /// Convert from stored form back to rich diagnostic.
-    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
+    pub fn to_diagnostic<'db>(&self, _db: &'db dyn salsa::Database) -> Diagnostic<'db> {
         use salsa::plumbing::FromId;
 
         Diagnostic {

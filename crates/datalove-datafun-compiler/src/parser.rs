@@ -153,7 +153,7 @@ impl<'db> Parser<'db> {
         let mut statements = vec![];
         let mut line_iter = lines.into_iter().enumerate().peekable();
 
-        while let Some((line_num, line)) = line_iter.next() {
+        while let Some((_line_num, line)) = line_iter.next() {
             if line.is_empty() {
                 continue;
             }
@@ -1071,12 +1071,12 @@ impl<'db> Parser<'db> {
                     "expected '/'"
                 );
             }
-            let (heap, expr_kind) = self.parse_lit_expr_and_heap(tokens, Some(type_hint));
+            let (_heap, expr_kind) = self.parse_lit_expr_and_heap(tokens, Some(type_hint));
             // The type_hint is already captured in the expr_kind, just return.
             return ast::ExprFun::new(self.db, expr_kind);
         }
 
-        let (heap, expr_kind) = self.parse_lit_expr_and_heap(tokens, None);
+        let (_heap, expr_kind) = self.parse_lit_expr_and_heap(tokens, None);
         ast::ExprFun::new(self.db, expr_kind)
     }
 
@@ -1842,7 +1842,7 @@ impl<'db> Parser<'db> {
     }
 
     // Split tokens by comma.
-    fn split_by_comma(&self, tokens: Vec<TreeToken<'db>>) -> Vec<Vec<TreeToken<'db>>> {
+    fn _split_by_comma(&self, tokens: Vec<TreeToken<'db>>) -> Vec<Vec<TreeToken<'db>>> {
         let mut groups = Vec::new();
         let mut current = Vec::new();
         for token in tokens {
@@ -1863,7 +1863,7 @@ impl<'db> Parser<'db> {
     }
 
     // Split tokens by equals sign (for map entries).
-    fn split_by_equals(&self, tokens: Vec<TreeToken<'db>>) -> (Vec<TreeToken<'db>>, Vec<TreeToken<'db>>) {
+    fn _split_by_equals(&self, tokens: Vec<TreeToken<'db>>) -> (Vec<TreeToken<'db>>, Vec<TreeToken<'db>>) {
         let mut key = Vec::new();
         let mut value = Vec::new();
         let mut found_equals = false;

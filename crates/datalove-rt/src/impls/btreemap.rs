@@ -1260,7 +1260,7 @@ unsafe fn borrow_from_left_leaf(
 
 /// Borrow a key from the left sibling (internal node).
 unsafe fn borrow_from_left_internal(
-    rt: &mut RtLocal,
+    _rt: &mut RtLocal,
     parent: *mut MapNode,
     parent_key_idx: usize,
     left: *mut MapNode,
@@ -1311,7 +1311,7 @@ unsafe fn borrow_from_left_internal(
 
 /// Borrow a key from the right sibling (internal node).
 unsafe fn borrow_from_right_internal(
-    rt: &mut RtLocal,
+    _rt: &mut RtLocal,
     parent: *mut MapNode,
     parent_key_idx: usize,
     node: *mut MapNode,

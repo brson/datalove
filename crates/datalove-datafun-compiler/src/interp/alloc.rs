@@ -95,7 +95,7 @@ pub(super) fn allocate_option_some_from_value<'db>(
 
     let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_value.tydesc);
     let option_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) };
-    let layout = unsafe { rtdt::layout::compute_option_layout(option_tydesc_ref) };
+    let layout = rtdt::layout::compute_option_layout(option_tydesc_ref);
 
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
@@ -137,7 +137,7 @@ pub(super) fn allocate_result_ok_from_value<'db>(
 
     let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(inner_value.tydesc);
     let result_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(result_tydesc) };
-    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc_ref) };
+    let layout = rtdt::layout::compute_result_layout(result_tydesc_ref);
 
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {
@@ -181,7 +181,7 @@ pub(super) fn allocate_result_err<'db>(
 
     let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(ok_tydesc);
     let result_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(result_tydesc) };
-    let layout = unsafe { rtdt::layout::compute_result_layout(result_tydesc_ref) };
+    let layout = rtdt::layout::compute_result_layout(result_tydesc_ref);
 
     let rt_handle = ctx.runtime.handle();
     let ptr = unsafe {

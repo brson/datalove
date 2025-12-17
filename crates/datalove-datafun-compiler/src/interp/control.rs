@@ -53,7 +53,7 @@ pub(super) fn evaluate_branch_condition<'db>(
             if is_some {
                 if let Some(binding_name) = then_binding {
                     let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
-                    let layout = unsafe { compute_option_layout(tydesc_ref) };
+                    let layout = compute_option_layout(tydesc_ref);
                     let inner_tydesc = tydesc_ref.option_inner_ty();
 
                     let frame_index = ctx.call_stack.len() - 1;
@@ -100,7 +100,7 @@ pub(super) fn evaluate_branch_condition<'db>(
             if is_ok {
                 if let Some(binding_name) = then_binding {
                     let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
-                    let layout = unsafe { compute_result_layout(tydesc_ref) };
+                    let layout = compute_result_layout(tydesc_ref);
                     let ok_tydesc = tydesc_ref.result_ok_ty();
 
                     let frame_index = ctx.call_stack.len() - 1;
@@ -127,7 +127,7 @@ pub(super) fn evaluate_branch_condition<'db>(
             } else {
                 if let Some(binding_name) = else_binding {
                     let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
-                    let layout = unsafe { compute_result_layout(tydesc_ref) };
+                    let layout = compute_result_layout(tydesc_ref);
 
                     let frame_index = ctx.call_stack.len() - 1;
                     let frame_layout = ctx.call_stack[frame_index].layout;
@@ -202,7 +202,7 @@ pub(super) fn eval_try_option<'db>(
         return Err(InterpError::OptionNone);
     }
 
-    let layout = unsafe { compute_option_layout(tydesc_ref) };
+    let layout = compute_option_layout(tydesc_ref);
     let payload_ptr = unsafe { operand_value.ptr.add(layout.payload_offset as usize) };
 
     let inner_tydesc = tydesc_ref.option_inner_ty().as_ptr();
@@ -261,7 +261,7 @@ pub(super) fn eval_try_result<'db>(
 
     let tag = unsafe { *(operand_value.ptr as *const u8) };
 
-    let layout = unsafe { compute_result_layout(tydesc_ref) };
+    let layout = compute_result_layout(tydesc_ref);
     let payload_ptr = unsafe { operand_value.ptr.add(layout.payload_offset as usize) };
 
     if tag == ResultTag::Err as u8 {

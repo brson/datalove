@@ -210,9 +210,6 @@ fn build_frame_layout<'db>(
     slots: &[slot_allocation::AllocatedSlot<'db>],
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> FrameLayout<'db> {
-    use salsa::plumbing::AsId;
-    
-
     let expr_types = tycheck_result.expr_types(db);
 
     // Build a map from slot names to their types.

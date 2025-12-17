@@ -53,7 +53,7 @@ pub(super) fn write_option_u32_result(ctx: &mut InterpContext<'_>, value: Option
     let u32_tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32);
     let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(u32_tydesc);
     let option_ref = unsafe { TyDescRef::from_ptr(option_tydesc) };
-    let layout = unsafe { compute_option_layout(option_ref) };
+    let layout = compute_option_layout(option_ref);
 
     let dest_size = dest.map(|d| unsafe { (*d.tydesc).size });
     let use_dest = dest.is_some() && dest_size == Some(option_ref.size());

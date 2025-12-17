@@ -1748,7 +1748,7 @@ fn destroy_slot_contents<'db>(
 }
 
 /// Execute a statement within a function body using frame-based execution.
-fn execute_function_statement_frame<'db>(
+fn _execute_function_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
     stmt: &ast::Statement<'db>,
 ) -> Result<(), InterpError> {
@@ -1859,7 +1859,7 @@ fn read_reference_slot<'db>(
 ///
 /// Returns a Value pointing directly into the frame buffer.
 /// The slot should be marked as Moved after this call.
-fn read_value_from_slot<'db>(
+fn _read_value_from_slot<'db>(
     ctx: &mut InterpContext<'db>,
     frame_index: usize,
     slot_info: crate::function_analysis::SlotInfo<'db>,
@@ -2634,7 +2634,7 @@ fn eval_inline_list<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
     list_expr: &ast::ExprList<'db>,
-    dest: Option<Destination>,
+    _dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     let elements = list_expr.elements(ctx.db);
     let mut values = Vec::with_capacity(elements.len());
@@ -2659,7 +2659,7 @@ fn eval_inline_set<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
     set_expr: &ast::ExprSet<'db>,
-    dest: Option<Destination>,
+    _dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     let elements = set_expr.elements(ctx.db);
     let mut values = Vec::with_capacity(elements.len());
@@ -2684,7 +2684,7 @@ fn eval_inline_map<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
     map_expr: &ast::ExprMap<'db>,
-    dest: Option<Destination>,
+    _dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     let entries = map_expr.entries(ctx.db);
     let mut kv_pairs = Vec::with_capacity(entries.len());
@@ -2724,7 +2724,7 @@ fn eval_inline_anon_tuple<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
     tuple_expr: &ast::ExprAnonTuple<'db>,
-    dest: Option<Destination>,
+    _dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     let elements = tuple_expr.elements(ctx.db);
     let mut values = Vec::with_capacity(elements.len());
@@ -2749,7 +2749,7 @@ fn eval_inline_anon_struct<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
     struct_expr: &ast::ExprAnonStruct<'db>,
-    dest: Option<Destination>,
+    _dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     let expr_fields = struct_expr.fields(ctx.db);
     let mut sorted_fields: Vec<_> = expr_fields.iter()

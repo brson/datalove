@@ -74,8 +74,8 @@ pub fn resolve_functions<'db>(
 /// Check function names for conflicts.
 /// Returns true if all function names are valid (newer declarations can shadow older ones).
 fn check_function_names<'db>(
-    db: &'db dyn crate::Db,
-    functions: &[(usize, ast::StmtFun<'db>)],
+    _db: &'db dyn crate::Db,
+    _functions: &[(usize, ast::StmtFun<'db>)],
 ) -> bool {
     true
 }
@@ -132,7 +132,7 @@ pub fn resolve_let_statement<'db>(
     }
 
     // Add let names from previous units.
-    let units = script.units(db);
+    let _units = script.units(db);
     for prev_idx in 0..unit_index {
         let prev_parsed = parser::parse_script_unit(db, script, prev_idx);
         for stmt in prev_parsed.statements(db) {

@@ -325,7 +325,6 @@ pub unsafe fn any_destroy_local(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::impls::rt_local::RtLocal;
 
     /// Helper to create a string type descriptor.
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {

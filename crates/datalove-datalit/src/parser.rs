@@ -70,12 +70,11 @@ pub fn parse_from_tokens<'db>(
                                 let subtext = tok.text(db);
                                 Some(subtext.text(db))
                             }
-                            _ => None
+                            TreeToken::Branch(_, _) => None
                         }
                     })
                 })
             }
-            _ => None
         }
     });
     parse_from_tokens_with_source(db, tokens, source_text)
@@ -1332,7 +1331,7 @@ impl<'db> DynParser<'db> {
                             // Not a number, parse error for bare identifiers.
                             let (text, span) = self.current_text_span();
                             self.next();
-                            let message = InternedText::new(
+                            let _message = InternedText::new(
                                 self.db,
                                 format!("Unexpected identifier: {}", word).S()
                             );
@@ -1639,7 +1638,6 @@ impl<'db> DynParser<'db> {
                         }
                     }
                 }
-                _ => {}
             }
         }
         // Last resort: create an empty text as a fallback.

@@ -1,9 +1,8 @@
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 use rmx::std::io::Read;
-use rmx::std::path::PathBuf;
 
-use crate::package_load::{PackageWorld, Package, PackageModule, PackageName, ModuleName};
+use crate::package_load::{PackageWorld, Package, PackageModule};
 
 /// Result of loading a worldfile that may contain both modules and a script.
 pub struct WorldfileWithScript {
@@ -59,7 +58,7 @@ pub struct ParsedWorldfile {
 /// end fun
 /// ```
 pub fn load_world_from_worldfile(
-    mut reader: impl Read,
+    reader: impl Read,
 ) -> AnyResult<PackageWorld> {
     let result = load_worldfile_with_script(reader)?;
     Ok(result.package_world)
