@@ -1572,7 +1572,7 @@ fn process_block_exit_drops<'db>(
     ctx: &mut InterpContext<'db>,
     block_id: BlockId,
 ) -> Result<(), InterpError> {
-    use crate::function_analysis::{DropReason, DropLocation, SlotId};
+    use crate::function_analysis::{DropReason, DropLocation};
 
     let frame_index = ctx.call_stack.len() - 1;
     let drop_points = ctx.call_stack[frame_index].drop_points;

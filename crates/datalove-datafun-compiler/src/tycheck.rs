@@ -3131,7 +3131,6 @@ fn check_enum_variant<'db>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmx::prelude::*;
 
     /// Tracked compile helper that does full parse + typecheck pipeline.
     #[salsa::tracked]

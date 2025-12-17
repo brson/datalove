@@ -76,6 +76,7 @@ impl<'db> SlotAllocationBuilder<'db> {
     }
 
     /// Allocate a new slot that will be destroyed inline (no drop point needed).
+    #[allow(dead_code)]
     fn alloc_slot_inline(&mut self, name: Option<String>, kind: SlotKind, expr: Option<ExprFun<'db>>) -> SlotId {
         self.alloc_slot_with_destruction(name, kind, expr, SlotDestruction::InlineDestroyed)
     }

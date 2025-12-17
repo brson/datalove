@@ -1073,27 +1073,11 @@ fn find_slot_by_name<'db>(db: &'db dyn crate::Db, slots: &[AllocatedSlot<'db>], 
 mod tests {
     use super::*;
     use crate::ast::*;
-    use crate::function_analysis::slot_allocation::SlotAllocation;
     use crate::function_analysis::cfg::build_cfg;
     use crate::function_analysis::slot_allocation::allocate_slots;
     use crate::function_analysis::liveness::{compute_live_ranges, analyze_initialization};
     use bct::input::Source;
     use bct::text::InternedText;
-
-    fn parse_function<'db>(db: &'db dyn crate::Db, source_code: &str) -> StmtFun<'db> {
-        let source = Source::new(db, S(source_code));
-        let script = crate::parser::parse_for_test(db, source);
-        let statements = script.statements(db);
-
-        // Find the first function statement.
-        for stmt in statements {
-            if let crate::ast::Statement::Fun(fun) = stmt {
-                return *fun;
-            }
-        }
-
-        panic!("No function found in source code");
-    }
 
     fn parse_and_typecheck<'db>(db: &'db dyn crate::Db, source_code: &str) -> (StmtFun<'db>, crate::tycheck::TypecheckResult<'db>) {
         let source = Source::new(db, S(source_code));

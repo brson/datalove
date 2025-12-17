@@ -311,7 +311,7 @@ mod tests {
     use super::*;
     use bct::input::Source;
     use bct::text::InternedText;
-    use crate::ast::{Statement, StmtFun};
+    use crate::ast::Statement;
     use crate::function_analysis::slot_allocation::allocate_slots;
 
     /// Salsa tracked function to test if a variable is copy type.

@@ -849,21 +849,6 @@ mod tests {
     use crate::function_analysis::liveness::{analyze_initialization, compute_live_ranges};
     use crate::function_analysis::moves::compute_move_info;
 
-    fn parse_function<'db>(db: &'db dyn crate::Db, source_code: &str) -> StmtFun<'db> {
-        let source = Source::new(db, S(source_code));
-        let script = crate::parser::parse_for_test(db, source);
-        let statements = script.statements(db);
-
-        // Find the first function statement.
-        for stmt in statements {
-            if let crate::ast::Statement::Fun(fun) = stmt {
-                return *fun;
-            }
-        }
-
-        panic!("No function found in source code");
-    }
-
     fn parse_and_typecheck<'db>(db: &'db dyn crate::Db, source_code: &str) -> (StmtFun<'db>, crate::tycheck::TypecheckResult<'db>) {
         let source = Source::new(db, S(source_code));
         let script = crate::parser::parse_for_diagnostics(db, source);
@@ -891,7 +876,7 @@ fun test()
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -925,7 +910,7 @@ fun test()
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -949,7 +934,7 @@ fun test(cond: bool)
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -983,7 +968,7 @@ fun test(x: u32)
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1185,7 +1170,7 @@ fun test(x: u32, out result: u32)
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1218,7 +1203,7 @@ fun test(x: u32, out result: u32)
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1238,7 +1223,7 @@ fun test(x: u32, out result: u32)
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1259,7 +1244,7 @@ fun test(x: u32): u32
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1292,7 +1277,7 @@ fun test(x: u32): u32
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
@@ -1313,7 +1298,7 @@ fun test(unused_param: u32): u32
 end fun
         "#;
 
-        let (func, tycheck_result) = parse_and_typecheck(db, source);
+        let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
         let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));

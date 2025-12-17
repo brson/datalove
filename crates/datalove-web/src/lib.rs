@@ -35,10 +35,10 @@ impl WebReplApp {
     /// Submit input text for processing.
     ///
     /// Returns UiAction as JsValue.
-    pub fn submit_input(&mut self, input_text: String) -> JsValue {
+    pub fn submit_input(&mut self, _input_text: String) -> JsValue {
         #[cfg(target_arch = "wasm32")]
         {
-            let action = self.inner.submit_input(input_text);
+            let action = self.inner.submit_input(_input_text);
             serde_wasm_bindgen::to_value(&action).unwrap()
         }
         #[cfg(not(target_arch = "wasm32"))]
