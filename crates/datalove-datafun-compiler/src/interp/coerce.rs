@@ -113,23 +113,6 @@ pub(super) fn coerce_value_to_dest<'db>(
         }
     }
 
-    // Coerce T → Data (wrap any value in Data)
-    if dest_tag == TyTag::Data {
-        // Write Data struct with value's tydesc and pointer.
-        unsafe {
-            std::ptr::write(
-                dest.ptr as *mut datalove_rt::rtdt::Data,
-                datalove_rt::rtdt::Data::from_pointers(value.tydesc, value.ptr)
-            );
-        }
-
-        // Data now owns the pointer to value's allocation.
-        // Don't destroy_value - Data::from_pointers stores value.ptr directly.
-        // If value was TempOwned, ownership transfers to Data.
-
-        return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
-    }
-
     // Coerce data → Option<data> (wrap Data value in Some)
     if value_tag == TyTag::Data && dest_tag == TyTag::Option {
         let dest_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };

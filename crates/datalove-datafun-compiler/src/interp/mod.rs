@@ -388,15 +388,10 @@ fn execute_let_statement<'db>(
         )
     };
 
-    // Check if we need to coerce T → Option<T>, T → Result<T>, or T → data.
+    // Check if we need to coerce T → Option<T> or T → Result<T>.
     let final_value = if let Some(type_hint_and_heap) = let_stmt.type_hint(ctx.db) {
         let type_hint = type_hint_and_heap.type_hint(ctx.db);
         match type_hint {
-            TypeHint::Data => {
-                // Coerce any value to Data.
-                let value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?;
-                alloc::allocate_data_from_value(ctx, value)?
-            }
             TypeHint::Option(_) | TypeHint::Result(_) => {
                 // Get expected destination type.
                 let dest_tydesc = type_hint_to_tydesc(ctx, type_hint_and_heap);

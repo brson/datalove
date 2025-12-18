@@ -6,7 +6,6 @@ Located in `crates/datalove-datafun-compiler/src/interp/coerce.rs`:
 
 1. **T -> Option\<T\>** - Wraps value in `Some` (line 44)
 2. **T -> Result\<T\>** - Wraps value in `Ok` (line 80)
-3. **T -> Data** - Wraps any value in existential `Data` container (line 116)
 4. **Data -> Option\<Data\>** - Wraps Data in `Some` (line 133)
 5. **Data -> Result\<Data\>** - Wraps Data in `Ok` (line 164)
 

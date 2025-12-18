@@ -11,11 +11,18 @@
                         type_hint: Data,
                     )),
                     value: ExprFun(
-                        expr: ExprString(
-                            kind: "String",
+                        expr: ExprData(
+                            kind: "Data",
                             heap: Local,
                             type_hint: None,
-                            value: "\"hello\"",
+                            value: ExprFun(
+                                expr: ExprString(
+                                    kind: "String",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "\"hello\"",
+                                ),
+                            ),
                         ),
                     ),
                 ),

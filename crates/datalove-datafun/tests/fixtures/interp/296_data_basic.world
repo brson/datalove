@@ -2,4 +2,4 @@
 script
 ----------
 
-let output: data = @42
+let output: data = @data @42

@@ -11,11 +11,18 @@
                         type_hint: Data,
                     )),
                     value: ExprFun(
-                        expr: ExprInt(
-                            kind: "Int",
+                        expr: ExprData(
+                            kind: "Data",
                             heap: Local,
                             type_hint: None,
-                            value: "42",
+                            value: ExprFun(
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "42",
+                                ),
+                            ),
                         ),
                     ),
                 ),

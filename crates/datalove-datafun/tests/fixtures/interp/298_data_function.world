@@ -1,9 +1,0 @@
-----------
-script
-----------
-
-fun wrap(x: @u32): data
-  ret x
-end fun
-
-let output: data = wrap(@42)
