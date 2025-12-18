@@ -1,8 +1,7 @@
 use rmx::prelude::*;
 use bct::text::{InternedText, Text};
-use std::collections::HashMap;
 use crate::ast::*;
-use crate::resolve::{ResolvedExpr, Resolution};
+use crate::resolve::ResolvedExpr;
 use datalove_diagnostic::{ByteSpan, DiagnosticBuilder};
 
 /// Type representation (synthesized types, mirrors TypeHint but without parse errors).
@@ -143,32 +142,20 @@ pub struct TypecheckResult<'db> {
 struct TypeContext<'db> {
     db: &'db dyn crate::Db,
     source: bct::input::Source,
-    resolutions: HashMap<InternedText<'db>, Resolution<'db>>,
     errors: Vec<TypeError>,
 }
 
 impl<'db> TypeContext<'db> {
     fn new(db: &'db dyn crate::Db, resolved: ResolvedExpr<'db>) -> Self {
-        let resolutions = resolved
-            .resolutions(db)
-            .iter()
-            .map(|entry| (entry.name(db), entry.resolution(db)))
-            .collect();
-
         TypeContext {
             db,
             source: resolved.source(db),
-            resolutions,
             errors: Vec::new(),
         }
     }
 
     fn add_error(&mut self, error: TypeError) {
         self.errors.push(error);
-    }
-
-    fn lookup_resolution(&self, name: InternedText<'db>) -> Option<Resolution<'db>> {
-        self.resolutions.get(&name).copied()
     }
 
     /// Look up the source location for an expression (on-demand).
