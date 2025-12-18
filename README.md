@@ -5,13 +5,13 @@ for efficient data modeling and transformation,
 with a batteries included standard library.
 
 ```datalove
-let ada = struct {
+let ada = {
   name = "Ada",
   born = 1815,
 }
 
 fun age(
-  player: struct {
+  player: {
     name: string,
     born: u32,
   },
@@ -62,11 +62,11 @@ Datalit is a serialization format:
   born = 1815,
   interests = ["mathematics", "poetry", "music"],
   address_book = set {
-    struct AddressEntry {
+    {
       kind = enum Friend,
       name = "Charles",
     },
-    struct AddressEntry {
+    {
       kind = enum Family,
       name = "George",
     },
@@ -85,7 +85,7 @@ You'll probably get used to it.
   name: string,
   born: u32,
   interests: [string],
-  address_book: set<struct AddressEntry {
+  address_book: set <{
     kind: enum { Friend, Family },
     name: string,
   }>,
@@ -96,11 +96,11 @@ You'll probably get used to it.
     "mathematics", "poetry", "music",
   ],
   address_book = set {
-    struct AddressEntry {
+    {
       kind = enum Friend,
       name = : string / "Charles",    // And another!
     },
-    struct AddressEntry {
+    {
       kind = enum Family,
       name = "George",
     },
