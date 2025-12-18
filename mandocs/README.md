@@ -8,8 +8,8 @@ with a monumental standard library.
 
 Datalove is built around a simple idea:
 first let us define a very simple but complete language
-for writing, typing, and transforming a comprehensive
-set of modern pure data types.
+for writing, typing, serializing, and transforming a variety
+of modern pure data types.
 Let's do that really well.
 Then we'll add I/O to it &mdash; carefully.
 
