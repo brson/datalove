@@ -1,8 +1,4 @@
-// # Datalove Expressions example
-
-// this is an example of the data language.
-// there is also a code language.
-// values need to have specified binary runtime representation
+// # Datalove Literals example
 
 // This whole file is a single expression.
 // This is opening a tuple.
@@ -12,45 +8,39 @@
   // A basic example.
   //
   // The part between `: ... /` is on optional type hint,
-  // with the `:` token generally for naming types.
+  // with `:` always followed by a type in Datalove.
   //
   // fixme better example
   : [
-    (@u32, @bool),
+    (u32, bool),
   ] / [
-    (1 , @true),
-    (2 , @true),
+    (1 , true),
+    (2 , true),
   ],
 
-// fixme below is not strictly valid .dlt syntax
-// since it contains multiple expressions.
-// Imagine them in the above tuple.
+  // The type hint is optional.
+  [
+    (1 , true),
+    (2 , true),
+  ],
 
 
 
 
 
 
-// ## Basic scalars
+  // ## Basic scalars
 
-: @bool / @true
-: @bool / @false
+  : bool / true
+  : bool / false
 
-// With no heap sigils - infered and defaulted.
-// Local heap sigils will probably be totally ellidable,
-// but mandatory heap sigils allow us to avoid reserving lots of keywords in type
-// and expression namespaces, or avoid ugly disambiguation problems.
-: bool / true
-: bool / false
+  : u32 / 1
+  : f32 / 1.0
 
-: @u32 / 1
-: @f32 / 1.0
-
-// Float bitpattern coercion from hex literals (not dec literals).
-// Must have correct number of digits.
-// When you want to preserve floats exactly.
-// Sneaky!
-: @f32 / 0xABABABAB
+  // Float bitpattern coercion from hex literals (not dec literals).
+  // Must have correct number of digits.
+  // When you want to preserve floats exactly.
+  : f32 / 0xABABABAB
 
 
 // ## Heap sigils
