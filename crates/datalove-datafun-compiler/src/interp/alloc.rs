@@ -387,12 +387,21 @@ pub(super) fn widen_fixed_int_to_int<'db>(
 /// Wrap an existing value in Data, consuming the inner value.
 ///
 /// The Data struct takes ownership of the inner value's pointer.
-/// The inner value's memory is NOT freed - Data now owns it.
+/// If the inner value is borrowed, it is cloned first.
 pub(super) fn allocate_data_from_value<'db>(
     ctx: &mut InterpContext<'db>,
     inner_value: Value,
 ) -> Result<Value, InterpError> {
     use datalove_rt::rtdt;
+    use super::memory::clone_value;
+
+    // If the inner value is borrowed, we need to clone it since Data will take ownership.
+    let owned_inner = if inner_value.location == ValueLocation::TempOwned {
+        inner_value
+    } else {
+        // Clone borrowed/slot-owned values so Data can own them.
+        clone_value(ctx, inner_value)
+    };
 
     let data_tydesc = ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::Data);
     let rt_handle = ctx.runtime.handle();
@@ -400,21 +409,19 @@ pub(super) fn allocate_data_from_value<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, data_tydesc, 1)
     };
     if ptr.is_null() {
-        destroy_value(ctx, inner_value);
+        destroy_value(ctx, owned_inner);
         return Err(InterpError::RuntimeError("Failed to allocate Data".to_string()));
     }
 
     unsafe {
         std::ptr::write(
             ptr as *mut rtdt::Data,
-            rtdt::Data::from_pointers(inner_value.tydesc, inner_value.ptr)
+            rtdt::Data::from_pointers(owned_inner.tydesc, owned_inner.ptr)
         );
     }
 
     // Data now owns the pointer to inner value's allocation.
-    // Don't free inner_value - Data::from_pointers stores inner_value.ptr directly.
-    // If inner was TempOwned, the ownership transfers to Data.
-    // If inner was Borrowed, the caller still owns it (but Data now has a pointer to it).
+    // Don't free owned_inner - Data::from_pointers stores owned_inner.ptr directly.
 
     Ok(Value { ptr, tydesc: data_tydesc, location: ValueLocation::TempOwned })
 }

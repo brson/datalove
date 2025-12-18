@@ -1176,7 +1176,8 @@ impl<'db> Parser<'db> {
             }
             Some("data") => {
                 self.eat_word(tokens, "data");
-                let value = self.parse_lit_expr_full(tokens);
+                // Parse any datafun expression (superset of datalit).
+                let value = self.parse_expr_primary(tokens);
                 return ast::ExprFunKind::Data(ast::ExprData::new(self.db, heap, type_hint, value));
             }
             Some("error") => {
