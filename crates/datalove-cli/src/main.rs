@@ -4,8 +4,6 @@ use rmx::prelude::*;
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
-mod docs;
-
 /// Context for rendering diagnostics with source location information.
 ///
 /// Simplified version for single-file CLI use case.
@@ -93,8 +91,6 @@ enum Command {
     LitOp(LitOpCommand),
     /// Start an interactive REPL.
     Repl(ReplCommand),
-    /// Documentation tools.
-    Docs(docs::DocsCommand),
     /// Execute a datafun script.
     Script(ScriptCommand),
     /// Typecheck the sys/std library and report errors.
@@ -161,7 +157,6 @@ impl Cli {
             Command::LitPretty(cmd) => cmd.run(&self.args),
             Command::LitOp(cmd) => cmd.run(&self.args),
             Command::Repl(cmd) => cmd.run(&self.args),
-            Command::Docs(cmd) => cmd.run(),
             Command::Script(cmd) => cmd.run(&self.args),
             Command::TypecheckStd(cmd) => cmd.run(&self.args),
         }

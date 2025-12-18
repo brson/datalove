@@ -99,7 +99,3 @@ serve-wasm-repl2:
 
 run-egui-repl:
     cargo run -p datalove-repl-egui
-
-docs:
-    cargo run -- docs build
-
