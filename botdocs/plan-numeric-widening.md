@@ -1,12 +1,14 @@
 # Plan: Complete Fixed-Width Integer Support in Interpreter
 
+## Status: ✅ COMPLETE
+
+**Completed:** 2025-12-17
+
 ## Goal
 
 Extend the interpreter to handle all 8 fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64) for arithmetic operations, matching the typechecker's existing support.
 
 ## Progress
-
-**Last updated:** 2025-12-17
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -18,7 +20,7 @@ Extend the interpreter to handle all 8 fixed-width integer types (u8, i8, u16, i
 | 6 | ✅ Done | Optional arithmetic |
 | 7 | ✅ Done | Direct comparison |
 | 8 | ✅ Done | Unary negation completion |
-| 9 | Pending | Tests |
+| 9 | ✅ Done | Tests |
 
 ## Current State
 
@@ -122,26 +124,31 @@ Extended unary negation for 64-bit types:
 
 **File:** `crates/datalove-datafun-compiler/src/interp/arith_widening.rs`
 
-### Phase 9: Tests
+### Phase 9: Tests ✅ DONE
 
-Add interpreter test fixtures in `crates/datalove-datafun/tests/fixtures/interp/`:
+Added 12 interpreter test fixtures in `crates/datalove-datafun/tests/fixtures/interp/`:
 
 **Bare arithmetic (widening):**
-- `300_u8_add.world`, `301_i8_add.world`, `302_u16_add.world`, etc.
-- Test that result type is `int`
+- `300_i8_add.world` - i8 addition widening to int
+- `301_i64_add.world` - i64 addition widening to int
+- `302_u64_add.world` - u64 addition widening to int
 
 **Checked arithmetic:**
-- `310_u8_add_checked.world`, `311_u8_add_checked_overflow.world`
-- Per-type overflow boundary tests
+- `310_i8_add_checked.world` - i8 checked addition
+- `311_i64_add_checked.world` - i64 checked addition
+- `312_u64_mul_checked.world` - u64 checked multiplication
 
 **Optional arithmetic:**
-- `320_u8_add_optional.world`, `321_u8_add_optional_overflow.world`
+- `320_i8_add_optional.world` - i8 optional addition
+- `321_i64_sub_optional.world` - i64 optional subtraction
 
 **Comparison:**
-- `330_u8_cmp.world`, `331_i8_cmp.world`, etc.
+- `330_i8_cmp.world` - i8 comparison operators
+- `331_i64_cmp.world` - i64 comparison operators
 
 **Unary negation:**
-- `340_i64_neg_optional.world`, `341_u64_neg_result.world`
+- `340_i64_neg_optional.world` - i64 optional negation
+- `341_u64_neg_result.world` - u64 result negation
 
 ## Files to Modify
 

@@ -1,0 +1,8 @@
+----------
+script
+----------
+
+// Test i64 bare addition (widens to int).
+let a: i64 = @1000000000000_i64
+let b: i64 = @2000000000000_i64
+let output = a + b

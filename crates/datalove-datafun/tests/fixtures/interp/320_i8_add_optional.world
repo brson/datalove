@@ -1,0 +1,10 @@
+----------
+script
+----------
+
+// Test i8 optional addition (+?) with successful result.
+fun test_add_optional(a: i8, b: i8): ?i8
+    ret a +? b
+end fun
+
+let output = test_add_optional(@10_i8, @20_i8)

@@ -1,0 +1,8 @@
+----------
+script
+----------
+
+// Test u64 bare addition (widens to int).
+let a: u64 = @5000000000_u64
+let b: u64 = @3000000000_u64
+let output = a + b

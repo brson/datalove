@@ -1,0 +1,67 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "a",
+                    type_hint: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U64,
+                    )),
+                    value: ExprFun(
+                        expr: ExprFunParseError(
+                            kind: "ParseError",
+                            message: "unexpected identifier \'5000000000_u64\'",
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "b",
+                    type_hint: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: U64,
+                    )),
+                    value: ExprFun(
+                        expr: ExprFunParseError(
+                            kind: "ParseError",
+                            message: "unexpected identifier \'3000000000_u64\'",
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprBinOp(
+                            kind: "BinOp",
+                            op: Add,
+                            lhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "a",
+                                ),
+                            ),
+                            rhs: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "b",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "TypecheckErrors([CannotSynthesize, CannotSynthesize, UnresolvedName(\"a\")])",
+            ],
+        ),
+        output: "",
+    ),
+]

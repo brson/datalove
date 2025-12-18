@@ -1,0 +1,10 @@
+----------
+script
+----------
+
+// Test u64 result negation (-!) with zero (only case that succeeds).
+fun test_neg_result(a: u64): !u64
+    ret -!a
+end fun
+
+let output = test_neg_result(@0_u64)

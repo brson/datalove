@@ -1,0 +1,53 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "test_lt",
+                    params: [
+                        FunParam(
+                            name: "a",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: I8,
+                            ),
+                        ),
+                        FunParam(
+                            name: "b",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: I8,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Bool,
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "a",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "TypecheckErrors([TypeMismatch { expected: \"bool\", actual: \"i8\" }])",
+            ],
+        ),
+        output: "",
+    ),
+]

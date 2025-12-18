@@ -1,0 +1,16 @@
+----------
+script
+----------
+
+// Test i8 comparison operators.
+fun test_lt(a: i8, b: i8): bool
+    ret a < b
+end fun
+
+fun test_eq(a: i8, b: i8): bool
+    ret a == b
+end fun
+
+let lt_result = test_lt(@5_i8, @10_i8)
+let eq_result = test_eq(@5_i8, @5_i8)
+let output = (lt_result, eq_result)

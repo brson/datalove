@@ -1,0 +1,10 @@
+----------
+script
+----------
+
+// Test u64 checked multiplication (*!) with successful result.
+fun test_mul_checked(a: u64, b: u64): !u64
+    ret a *! b
+end fun
+
+let output = test_mul_checked(@1000_u64, @2000_u64)

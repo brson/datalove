@@ -1,0 +1,75 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "test_neg_result",
+                    params: [
+                        FunParam(
+                            name: "a",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U64,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Result(TypeHintResult(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U64,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprUnaryOp(
+                                    kind: "UnaryOp",
+                                    op: NegResult,
+                                    operand: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "test_neg_result",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected identifier \'0_u64\'",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "TypecheckErrors([CannotSynthesize])",
+            ],
+        ),
+        output: "",
+    ),
+]

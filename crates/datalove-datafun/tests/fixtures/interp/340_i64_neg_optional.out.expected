@@ -1,0 +1,75 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "test_neg_optional",
+                    params: [
+                        FunParam(
+                            name: "a",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: I64,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Option(TypeHintOption(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: I64,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprUnaryOp(
+                                    kind: "UnaryOp",
+                                    op: NegOptional,
+                                    operand: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "test_neg_optional",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected identifier \'42_i64\'",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "TypecheckErrors([CannotSynthesize])",
+            ],
+        ),
+        output: "",
+    ),
+]

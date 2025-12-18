@@ -1,0 +1,8 @@
+----------
+script
+----------
+
+// Test i8 bare addition (widens to int).
+let a: i8 = @10_i8
+let b: i8 = @20_i8
+let output = a + b

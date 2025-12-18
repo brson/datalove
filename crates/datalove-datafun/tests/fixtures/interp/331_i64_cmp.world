@@ -1,0 +1,10 @@
+----------
+script
+----------
+
+// Test i64 comparison operators.
+fun test_gt(a: i64, b: i64): bool
+    ret a > b
+end fun
+
+let output = test_gt(@100_i64, @50_i64)

@@ -1,0 +1,78 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "test_gt",
+                    params: [
+                        FunParam(
+                            name: "a",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: I64,
+                            ),
+                        ),
+                        FunParam(
+                            name: "b",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: I64,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Bool,
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprFunKind(
+                                    kind: "Name",
+                                    name: "a",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "test_gt",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected identifier \'100_i64\'",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected identifier \'50_i64\'",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "TypecheckErrors([TypeMismatch { expected: \"bool\", actual: \"i64\" }, CannotSynthesize])",
+            ],
+        ),
+        output: "",
+    ),
+]
