@@ -18,20 +18,19 @@ let c: !u32 = ...
 let d: ![u32] = ...
 ```
 
-Option and result construction:
+Option and result construction
+is done with the `some`, `none`, `ok` and `er` keywords.
+Note the awkward `er error` construction which
+constructs an `er` `result` varriant out of an `error` value.
 
 ```
-// "some" values are automatically coerced
-let a: ?u32 = 3
-let b: ?u32 = u32.min_value()
-// "none" checks to any option type
+let a: ?u32 = some 3
+let b: ?u32 = some u32.min_value()
 let c: ?u32 = none
 
-// "ok" values are automatically coerced
-let a: !u32 = 3
-let b: !u32 = u32.min_value()
-// "error" checks to any result type
-let c: ?u32 = error "oops"
+let a: !u32 = ok 3
+let b: !u32 = ok u32.min_value()
+let c: ?u32 = er error "oops"
 ```
 
 Destructuring option and result is like zig:
