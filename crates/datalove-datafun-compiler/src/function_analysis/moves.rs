@@ -539,6 +539,15 @@ fn collect_moves_from_expr<'db>(
                 collect_moves_from_expr(db, payload, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
         }
+        ExprFunKind::Some(s) => {
+            collect_moves_from_expr(db, s.payload(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Ok(o) => {
+            collect_moves_from_expr(db, o.payload(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Er(e) => {
+            collect_moves_from_expr(db, e.payload(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
         ExprFunKind::Data(d) => {
             collect_moves_from_expr(db, d.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
@@ -644,6 +653,15 @@ fn collect_moves_from_expr_borrow_context<'db>(
             if let Some(payload) = e.payload(db) {
                 collect_moves_from_expr_borrow_context(db, payload, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
+        }
+        ExprFunKind::Some(s) => {
+            collect_moves_from_expr_borrow_context(db, s.payload(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Ok(o) => {
+            collect_moves_from_expr_borrow_context(db, o.payload(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Er(e) => {
+            collect_moves_from_expr_borrow_context(db, e.payload(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Data(d) => {
             collect_moves_from_expr_borrow_context(db, d.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
@@ -772,6 +790,15 @@ fn collect_moves_from_expr_for_return<'db>(
             if let Some(payload) = e.payload(db) {
                 collect_moves_from_expr_for_return(db, payload, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
             }
+        }
+        ExprFunKind::Some(s) => {
+            collect_moves_from_expr_for_return(db, s.payload(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Ok(o) => {
+            collect_moves_from_expr_for_return(db, o.payload(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+        }
+        ExprFunKind::Er(e) => {
+            collect_moves_from_expr_for_return(db, e.payload(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Data(d) => {
             collect_moves_from_expr_for_return(db, d.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
@@ -955,6 +982,15 @@ fn collect_reads_from_expr<'db>(
             if let Some(payload) = e.payload(db) {
                 collect_reads_from_expr(db, payload, stmt_id, slots, reads, expr_counter);
             }
+        }
+        ExprFunKind::Some(s) => {
+            collect_reads_from_expr(db, s.payload(db), stmt_id, slots, reads, expr_counter);
+        }
+        ExprFunKind::Ok(o) => {
+            collect_reads_from_expr(db, o.payload(db), stmt_id, slots, reads, expr_counter);
+        }
+        ExprFunKind::Er(e) => {
+            collect_reads_from_expr(db, e.payload(db), stmt_id, slots, reads, expr_counter);
         }
         ExprFunKind::Data(d) => {
             collect_reads_from_expr(db, d.value(db), stmt_id, slots, reads, expr_counter);

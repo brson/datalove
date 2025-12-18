@@ -391,6 +391,18 @@ fn pretty_expr<'db>(
         Expr::True => out.push_str("true"),
         Expr::False => out.push_str("false"),
         Expr::None => out.push_str("none"),
+        Expr::Some(s) => {
+            out.push_str("some ");
+            pretty_expr_full(db, s.payload(db), out, indent);
+        }
+        Expr::Ok(o) => {
+            out.push_str("ok ");
+            pretty_expr_full(db, o.payload(db), out, indent);
+        }
+        Expr::Er(e) => {
+            out.push_str("er ");
+            pretty_expr_full(db, e.payload(db), out, indent);
+        }
 
         Expr::Int(i) => {
             out.push_str(i.value(db).as_str(db));

@@ -147,6 +147,9 @@ pub enum ExprFunKind {
     AnonEnum(ExprAnonEnum),
 
     // Wrapper expressions.
+    Some(ExprSome),
+    Ok(ExprOk),
+    Er(ExprEr),
     Data(ExprData),
     Err(ExprErr),
 
@@ -318,6 +321,27 @@ pub struct ExprAnonEnum {
     pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
     pub variant_name: String,
     pub payload: Option<Box<ExprFun>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprSome {
+    pub heap: crate::datalit::ast_serde::Heap,
+    pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
+    pub payload: Box<ExprFun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprOk {
+    pub heap: crate::datalit::ast_serde::Heap,
+    pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
+    pub payload: Box<ExprFun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprEr {
+    pub heap: crate::datalit::ast_serde::Heap,
+    pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
+    pub payload: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -510,6 +534,9 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::AnonEnum(e) => ExprFunKind::AnonEnum(ExprAnonEnum::from_ast(db, e)),
 
             // Wrapper expressions.
+            crate::ast::ExprFunKind::Some(e) => ExprFunKind::Some(ExprSome::from_ast(db, e)),
+            crate::ast::ExprFunKind::Ok(e) => ExprFunKind::Ok(ExprOk::from_ast(db, e)),
+            crate::ast::ExprFunKind::Er(e) => ExprFunKind::Er(ExprEr::from_ast(db, e)),
             crate::ast::ExprFunKind::Data(e) => ExprFunKind::Data(ExprData::from_ast(db, e)),
             crate::ast::ExprFunKind::Err(e) => ExprFunKind::Err(ExprErr::from_ast(db, e)),
 
@@ -761,6 +788,36 @@ impl ExprAnonEnum {
             type_hint: type_hint_from_ast(db, ast.type_hint(db)),
             variant_name: ast.variant_name(db).as_str(db).to_string(),
             payload: ast.payload(db).map(|p| Box::new(ExprFun::from_ast(db, p))),
+        }
+    }
+}
+
+impl ExprSome {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSome<'db>) -> Self {
+        ExprSome {
+            heap: heap_from_ast(ast.heap(db)),
+            type_hint: type_hint_from_ast(db, ast.type_hint(db)),
+            payload: Box::new(ExprFun::from_ast(db, ast.payload(db))),
+        }
+    }
+}
+
+impl ExprOk {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprOk<'db>) -> Self {
+        ExprOk {
+            heap: heap_from_ast(ast.heap(db)),
+            type_hint: type_hint_from_ast(db, ast.type_hint(db)),
+            payload: Box::new(ExprFun::from_ast(db, ast.payload(db))),
+        }
+    }
+}
+
+impl ExprEr {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprEr<'db>) -> Self {
+        ExprEr {
+            heap: heap_from_ast(ast.heap(db)),
+            type_hint: type_hint_from_ast(db, ast.type_hint(db)),
+            payload: Box::new(ExprFun::from_ast(db, ast.payload(db))),
         }
     }
 }

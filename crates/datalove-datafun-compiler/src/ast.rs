@@ -181,6 +181,9 @@ pub enum ExprFunKind<'db> {
     AnonEnum(ExprAnonEnum<'db>),
 
     // Wrapper expressions.
+    Some(ExprSome<'db>),
+    Ok(ExprOk<'db>),
+    Er(ExprEr<'db>),
     Data(ExprData<'db>),
     Err(ExprErr<'db>),
 
@@ -365,6 +368,27 @@ pub struct ExprAnonEnum<'db> {
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     pub variant_name: InternedText<'db>,
     pub payload: Option<ExprFun<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprSome<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub payload: ExprFun<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprOk<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub payload: ExprFun<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprEr<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub payload: ExprFun<'db>,
 }
 
 #[salsa::tracked]

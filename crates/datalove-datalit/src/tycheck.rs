@@ -521,6 +521,20 @@ fn synthesize<'db>(
             Type::Map(TypeMap::new(db, first_key_type, first_value_type))
         }
 
+        // Rule: Syn-Some - synthesize Option type by synthesizing inner.
+        Expr::Some(s) => {
+            let payload = s.payload(db);
+            let inner_type = synthesize(ctx, payload)?;
+            Type::Option(TypeOption::new(db, inner_type))
+        }
+
+        // Rule: Syn-Ok - synthesize Result type by synthesizing inner.
+        Expr::Ok(o) => {
+            let payload = o.payload(db);
+            let inner_type = synthesize(ctx, payload)?;
+            Type::Result(TypeResult::new(db, inner_type))
+        }
+
         // Rule: Syn-Data - data values synthesize as Type::Data.
         Expr::Data(_) => Type::Data,
 
@@ -529,11 +543,13 @@ fn synthesize<'db>(
 
         // Cannot synthesize for these - need type context.
         Expr::AnonEnum(_)
-        | Expr::None => {
-            // T016: Cannot synthesize type for anonymous enum or None.
+        | Expr::None
+        | Expr::Er(_) => {
+            // T016: Cannot synthesize type for anonymous enum, None, or Er.
             if let Some((text, span)) = ctx.get_span(expr) {
                 let msg = match expr_and_heap.expr(db) {
                     Expr::None => "cannot infer type for None value",
+                    Expr::Er(_) => "cannot infer type for Er value",
                     _ => "cannot infer type for anonymous enum",
                 };
                 DiagnosticBuilder::error(db, msg)
@@ -623,6 +639,9 @@ fn check<'db>(
     // All heaps in a type must match - datalove does not allow intermixed heaps.
     let expected_heap = match (&expr_inner, expected_type) {
         (Expr::None, Type::Option(_)) => expected.heap(db),
+        (Expr::Some(_), Type::Option(_)) => expected.heap(db),
+        (Expr::Ok(_), Type::Result(_)) => expected.heap(db),
+        (Expr::Er(_), Type::Result(_)) => expected.heap(db),
         (Expr::Err(_), Type::Result(_)) => expected.heap(db),
         (_, Type::Option(opt)) => opt.inner_type(db).heap(db),
         (_, Type::Result(res)) => res.inner_type(db).heap(db),
@@ -650,11 +669,48 @@ fn check<'db>(
         // Rule: Check-None
         (Expr::None, Type::Option(_)) => Ok(()),
 
+        // Rule: Check-Some - explicit some constructor
+        (Expr::Some(s), Type::Option(opt)) => {
+            let payload = s.payload(db);
+            check(ctx, payload, opt.inner_type(db))
+        }
+
         // Rule: Check-Option (implicit wrapping)
         // IMPORTANT: This must come before Check-Subsume to allow string literals to coerce to Option<string>
         (_, Type::Option(opt)) => {
             // Try to check against inner type (implicit Some wrapping).
             check(ctx, expr, opt.inner_type(db))
+        }
+
+        // Rule: Check-Ok - explicit ok constructor
+        (Expr::Ok(o), Type::Result(res)) => {
+            let payload = o.payload(db);
+            check(ctx, payload, res.inner_type(db))
+        }
+
+        // Rule: Check-Er - explicit er constructor
+        (Expr::Er(e), Type::Result(_)) => {
+            // Check that the payload is a valid error expression.
+            let payload = e.payload(db);
+            let payload_expr = payload.expr(db);
+            match payload_expr.expr(db) {
+                Expr::Err(_) => Ok(()),
+                Expr::Data(_) => Ok(()), // data can be used as error payload
+                _ => {
+                    // T040: Er payload must be an error expression.
+                    if let Some((text, span)) = ctx.get_span(payload) {
+                        DiagnosticBuilder::error(db, "er payload must be an error expression")
+                            .code("T040")
+                            .primary_label(text, span, "expected error expression")
+                            .note("use `er error \"message\"` to construct a result error")
+                            .emit_type();
+                    }
+                    Err(TypeError::TypeMismatch {
+                        expected: "error".to_string(),
+                        actual: "non-error".to_string(),
+                    })
+                }
+            }
         }
 
         // Rule: Check-ResultErr (implicit Err wrapping)

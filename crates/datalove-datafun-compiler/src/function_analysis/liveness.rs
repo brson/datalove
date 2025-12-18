@@ -521,6 +521,15 @@ fn collect_reads<'db>(
                 collect_reads(db, payload, stmt_id, slots, last_use_points);
             }
         }
+        ExprFunKind::Some(s) => {
+            collect_reads(db, s.payload(db), stmt_id, slots, last_use_points);
+        }
+        ExprFunKind::Ok(o) => {
+            collect_reads(db, o.payload(db), stmt_id, slots, last_use_points);
+        }
+        ExprFunKind::Er(e) => {
+            collect_reads(db, e.payload(db), stmt_id, slots, last_use_points);
+        }
         ExprFunKind::Data(d) => {
             collect_reads(db, d.value(db), stmt_id, slots, last_use_points);
         }

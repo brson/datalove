@@ -260,6 +260,15 @@ fn collect_reads_from_expr<'db>(
                 collect_reads_from_expr(db, payload, stmt_id, slots, reads);
             }
         }
+        ExprFunKind::Some(s) => {
+            collect_reads_from_expr(db, s.payload(db), stmt_id, slots, reads);
+        }
+        ExprFunKind::Ok(o) => {
+            collect_reads_from_expr(db, o.payload(db), stmt_id, slots, reads);
+        }
+        ExprFunKind::Er(e) => {
+            collect_reads_from_expr(db, e.payload(db), stmt_id, slots, reads);
+        }
         ExprFunKind::Data(d) => {
             collect_reads_from_expr(db, d.value(db), stmt_id, slots, reads);
         }
@@ -651,6 +660,15 @@ fn map_expr_ids<'db>(
             if let Some(payload) = e.payload(db) {
                 map_expr_ids(db, payload, stmt_id, map, expr_counter);
             }
+        }
+        ExprFunKind::Some(s) => {
+            map_expr_ids(db, s.payload(db), stmt_id, map, expr_counter);
+        }
+        ExprFunKind::Ok(o) => {
+            map_expr_ids(db, o.payload(db), stmt_id, map, expr_counter);
+        }
+        ExprFunKind::Er(e) => {
+            map_expr_ids(db, e.payload(db), stmt_id, map, expr_counter);
         }
         ExprFunKind::Data(d) => {
             map_expr_ids(db, d.value(db), stmt_id, map, expr_counter);

@@ -657,6 +657,21 @@ fn eval_expression_in_script_scope<'db>(
         ast::ExprFunKind::AnonEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
+        ast::ExprFunKind::Some(some_expr) => {
+            // Evaluate payload and wrap in Some.
+            let payload = eval_expression_in_script_scope(ctx, some_expr.payload(ctx.db), None)?;
+            literals::write_option_some_from_value(ctx, payload, dest)
+        }
+        ast::ExprFunKind::Ok(ok_expr) => {
+            // Evaluate payload and wrap in Ok.
+            let payload = eval_expression_in_script_scope(ctx, ok_expr.payload(ctx.db), None)?;
+            literals::write_result_ok_from_value(ctx, payload, dest)
+        }
+        ast::ExprFunKind::Er(er_expr) => {
+            // Evaluate error payload and wrap in Er.
+            let payload = eval_expression_in_script_scope(ctx, er_expr.payload(ctx.db), None)?;
+            literals::write_result_er_from_value(ctx, payload, dest)
+        }
         ast::ExprFunKind::Data(data_expr) => {
             // Evaluate inner expression.
             let inner_value = eval_expression_in_script_scope(ctx, data_expr.value(ctx.db), None)?;
@@ -2289,6 +2304,21 @@ fn eval_expression_frame<'db>(
         }
         ast::ExprFunKind::AnonEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
+        }
+        ast::ExprFunKind::Some(some_expr) => {
+            // Evaluate payload and wrap in Some.
+            let payload = eval_expression_frame(ctx, some_expr.payload(ctx.db), None)?;
+            literals::write_option_some_from_value(ctx, payload, dest)
+        }
+        ast::ExprFunKind::Ok(ok_expr) => {
+            // Evaluate payload and wrap in Ok.
+            let payload = eval_expression_frame(ctx, ok_expr.payload(ctx.db), None)?;
+            literals::write_result_ok_from_value(ctx, payload, dest)
+        }
+        ast::ExprFunKind::Er(er_expr) => {
+            // Evaluate error payload and wrap in Er.
+            let payload = eval_expression_frame(ctx, er_expr.payload(ctx.db), None)?;
+            literals::write_result_er_from_value(ctx, payload, dest)
         }
         ast::ExprFunKind::Data(data_expr) => {
             // Evaluate inner expression.

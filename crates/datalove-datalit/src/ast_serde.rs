@@ -134,6 +134,9 @@ pub enum Expr {
     Set(ExprSet),
     Tensor(ExprTensor),
     None,
+    Some(ExprSome),
+    Ok(ExprOk),
+    Er(ExprEr),
     Data(ExprData),
     Err(ExprErr),
     ParseError(ExprParseError),
@@ -206,6 +209,21 @@ pub struct ExprSet {
 pub struct ExprTensor {
     pub shape: Vec<u32>,
     pub elements: Vec<ExprFull>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprSome {
+    pub payload: Box<ExprFull>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprOk {
+    pub payload: Box<ExprFull>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprEr {
+    pub payload: Box<ExprFull>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -407,6 +425,9 @@ impl Expr {
             crate::ast::Expr::Set(e) => Expr::Set(ExprSet::from_ast(db, e)),
             crate::ast::Expr::Tensor(e) => Expr::Tensor(ExprTensor::from_ast(db, e)),
             crate::ast::Expr::None => Expr::None,
+            crate::ast::Expr::Some(e) => Expr::Some(ExprSome::from_ast(db, e)),
+            crate::ast::Expr::Ok(e) => Expr::Ok(ExprOk::from_ast(db, e)),
+            crate::ast::Expr::Er(e) => Expr::Er(ExprEr::from_ast(db, e)),
             crate::ast::Expr::Data(e) => Expr::Data(ExprData::from_ast(db, e)),
             crate::ast::Expr::Err(e) => Expr::Err(ExprErr::from_ast(db, e)),
             crate::ast::Expr::ParseError(e) => Expr::ParseError(ExprParseError::from_ast(db, e)),
@@ -518,6 +539,30 @@ impl ExprTensor {
         ExprTensor {
             shape: ast.shape(db),
             elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+        }
+    }
+}
+
+impl ExprSome {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSome<'db>) -> Self {
+        ExprSome {
+            payload: Box::new(ExprFull::from_ast(db, ast.payload(db))),
+        }
+    }
+}
+
+impl ExprOk {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprOk<'db>) -> Self {
+        ExprOk {
+            payload: Box::new(ExprFull::from_ast(db, ast.payload(db))),
+        }
+    }
+}
+
+impl ExprEr {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprEr<'db>) -> Self {
+        ExprEr {
+            payload: Box::new(ExprFull::from_ast(db, ast.payload(db))),
         }
     }
 }

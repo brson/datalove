@@ -188,6 +188,36 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 }),
             )
         }
+        ast::ExprFunKind::Some(e) => {
+            let payload = datafun_expr_to_datalit_serde(db, e.payload(db))?;
+            (
+                e.heap(db),
+                e.type_hint(db),
+                datalit::ast_serde::Expr::Some(datalit::ast_serde::ExprSome {
+                    payload: Box::new(payload),
+                }),
+            )
+        }
+        ast::ExprFunKind::Ok(e) => {
+            let payload = datafun_expr_to_datalit_serde(db, e.payload(db))?;
+            (
+                e.heap(db),
+                e.type_hint(db),
+                datalit::ast_serde::Expr::Ok(datalit::ast_serde::ExprOk {
+                    payload: Box::new(payload),
+                }),
+            )
+        }
+        ast::ExprFunKind::Er(e) => {
+            let payload = datafun_expr_to_datalit_serde(db, e.payload(db))?;
+            (
+                e.heap(db),
+                e.type_hint(db),
+                datalit::ast_serde::Expr::Er(datalit::ast_serde::ExprEr {
+                    payload: Box::new(payload),
+                }),
+            )
+        }
         ast::ExprFunKind::Data(e) => {
             let value = datafun_expr_to_datalit_serde(db, e.value(db))?;
             (

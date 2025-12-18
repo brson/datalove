@@ -340,6 +340,27 @@ impl<'db> SlotAllocationBuilder<'db> {
                     self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
                 }
             }
+            ExprFunKind::Some(s) => {
+                // Payload writes to option payload if parent has dest.
+                self.analyze_expr_with_destruction(db, s.payload(db), ctx, destruction);
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
+                }
+            }
+            ExprFunKind::Ok(o) => {
+                // Payload writes to result payload if parent has dest.
+                self.analyze_expr_with_destruction(db, o.payload(db), ctx, destruction);
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
+                }
+            }
+            ExprFunKind::Er(e) => {
+                // Payload writes to result error payload if parent has dest.
+                self.analyze_expr_with_destruction(db, e.payload(db), ctx, destruction);
+                if ctx == ExprContext::NeedsDest {
+                    self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
+                }
+            }
             ExprFunKind::Data(d) => {
                 // Inner value writes to data payload if parent has dest.
                 self.analyze_expr_with_destruction(db, d.value(db), ctx, destruction);

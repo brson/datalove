@@ -159,6 +159,9 @@ pub enum Expr<'db> {
     Set(ExprSet<'db>),
     Tensor(ExprTensor<'db>),
     None,
+    Some(ExprSome<'db>),
+    Ok(ExprOk<'db>),
+    Er(ExprEr<'db>),
     Data(ExprData<'db>),
     Err(ExprErr<'db>),
     ParseError(ExprParseError<'db>),
@@ -231,6 +234,21 @@ pub struct ExprSet<'db> {
 pub struct ExprTensor<'db> {
     pub shape: Vec<u32>,
     pub elements: Vec<ExprFull<'db>>,
+}
+
+#[salsa::tracked]
+pub struct ExprSome<'db> {
+    pub payload: ExprFull<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprOk<'db> {
+    pub payload: ExprFull<'db>,
+}
+
+#[salsa::tracked]
+pub struct ExprEr<'db> {
+    pub payload: ExprFull<'db>,
 }
 
 #[salsa::tracked]

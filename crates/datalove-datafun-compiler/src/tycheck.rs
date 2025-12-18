@@ -1181,6 +1181,41 @@ fn synthesize_expr<'db>(
         }
 
         // Wrapper types.
+        ExprFunKind::Some(some_expr) => {
+            if let Some(type_hint) = some_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
+            // Synthesize inner type and wrap in Option.
+            let payload = some_expr.payload(db);
+            let inner_ty = ctx.synthesize_expr(payload)?;
+            let heap = some_expr.heap(db);
+            let inner_datalit = to_datalit_type_and_heap(db, inner_ty)?;
+            let option_ty = datalit::tycheck::Type::Option(
+                datalit::tycheck::TypeOption::new(db, inner_datalit)
+            );
+            Ok(TypeAndHeap::new(db, heap, Type::Datalit(option_ty)))
+        }
+        ExprFunKind::Ok(ok_expr) => {
+            if let Some(type_hint) = ok_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
+            // Synthesize inner type and wrap in Result.
+            let payload = ok_expr.payload(db);
+            let inner_ty = ctx.synthesize_expr(payload)?;
+            let heap = ok_expr.heap(db);
+            let inner_datalit = to_datalit_type_and_heap(db, inner_ty)?;
+            let result_ty = datalit::tycheck::Type::Result(
+                datalit::tycheck::TypeResult::new(db, inner_datalit)
+            );
+            Ok(TypeAndHeap::new(db, heap, Type::Datalit(result_ty)))
+        }
+        ExprFunKind::Er(er_expr) => {
+            // Er requires type hint to determine the Ok type of the Result.
+            if let Some(type_hint) = er_expr.type_hint(db) {
+                return convert_type_hint(db, type_hint);
+            }
+            Err(ctx.error_cannot_synthesize(expr, "cannot infer type for Er value"))
+        }
         ExprFunKind::Data(data_expr) => {
             if let Some(type_hint) = data_expr.type_hint(db) {
                 return convert_type_hint(db, type_hint);
@@ -1745,6 +1780,65 @@ fn check_expr<'db>(
             }
         }
 
+        // Handle Some expressions - check against Option type.
+        ExprFunKind::Some(some_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
+                    // Check payload against inner type.
+                    let inner_ty = opt.inner_type(db);
+                    let expected_inner = TypeAndHeap::new(
+                        db,
+                        inner_ty.heap(db),
+                        Type::Datalit(inner_ty.ty(db).clone())
+                    );
+                    check_expr(ctx, some_expr.payload(db), expected_inner)?;
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "some", "some requires Option type"))
+                }
+            }
+        }
+
+        // Handle Ok expressions - check against Result type.
+        ExprFunKind::Ok(ok_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Result(res)) => {
+                    // Check payload against inner type.
+                    let inner_ty = res.inner_type(db);
+                    let expected_inner = TypeAndHeap::new(
+                        db,
+                        inner_ty.heap(db),
+                        Type::Datalit(inner_ty.ty(db).clone())
+                    );
+                    check_expr(ctx, ok_expr.payload(db), expected_inner)?;
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "ok", "ok requires Result type"))
+                }
+            }
+        }
+
+        // Handle Er expressions - check against Result type.
+        ExprFunKind::Er(_er_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Result(_)) => {
+                    // Er can check against any Result type.
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "er", "er requires Result type"))
+                }
+            }
+        }
+
         // Handle integer literals specially - they can coerce to expected integer types.
         ExprFunKind::Int(_int_expr) => {
             match expected.ty(db) {
@@ -2064,6 +2158,9 @@ fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit::as
         ExprFunKind::AnonTuple(e) => e.heap(db),
         ExprFunKind::AnonStruct(e) => e.heap(db),
         ExprFunKind::AnonEnum(e) => e.heap(db),
+        ExprFunKind::Some(e) => e.heap(db),
+        ExprFunKind::Ok(e) => e.heap(db),
+        ExprFunKind::Er(e) => e.heap(db),
         ExprFunKind::Data(e) => e.heap(db),
         ExprFunKind::Err(e) => e.heap(db),
         // Non-literal expressions don't have an outer heap.

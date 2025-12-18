@@ -678,7 +678,7 @@ impl<'db> DynParser<'db> {
                                 if Self::is_numeric_literal(word) {
                                     // Bare number literal (decimal or hex) - use Omitted heap.
                                     ast::Heap::Omitted
-                                } else if matches!(word, "data" | "error" | "tensor" | "tuple" | "struct" | "enum" | "map" | "set" | "true" | "false" | "none") {
+                                } else if matches!(word, "data" | "error" | "tensor" | "tuple" | "struct" | "enum" | "map" | "set" | "true" | "false" | "none" | "some" | "ok" | "er") {
                                     // Keywords are allowed without heap sigils.
                                     ast::Heap::Omitted
                                 } else {
@@ -815,6 +815,21 @@ impl<'db> DynParser<'db> {
             Some("none") => {
                 self.eat_word("none");
                 return ast::Expr::None;
+            }
+            Some("some") => {
+                self.eat_word("some");
+                let payload = self.parse_expr_full();
+                return ast::Expr::Some(ast::ExprSome::new(self.db, payload));
+            }
+            Some("ok") => {
+                self.eat_word("ok");
+                let payload = self.parse_expr_full();
+                return ast::Expr::Ok(ast::ExprOk::new(self.db, payload));
+            }
+            Some("er") => {
+                self.eat_word("er");
+                let payload = self.parse_expr_full();
+                return ast::Expr::Er(ast::ExprEr::new(self.db, payload));
             }
             Some("data") => {
                 self.eat_word("data");
