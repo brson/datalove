@@ -3,11 +3,6 @@
 use datalove_rt::rtdt::TyTag;
 use super::Value;
 
-/// Check if a value is a u32 type.
-pub(super) fn is_u32_value(value: Value) -> bool {
-    unsafe { (*value.tydesc).type_tag == TyTag::U32 }
-}
-
 /// Check if a value is an int (bigint) type.
 pub(super) fn is_int_value(value: Value) -> bool {
     unsafe { (*value.tydesc).type_tag == TyTag::Int }
@@ -29,18 +24,6 @@ pub(super) fn is_fixed_int_value(value: Value) -> bool {
             TyTag::U16 | TyTag::I16 |
             TyTag::U32 | TyTag::I32 |
             TyTag::U64 | TyTag::I64
-        )
-    }
-}
-
-/// Check if a value is a signed fixed-width integer type.
-///
-/// Includes: i8, i16, i32, i64.
-pub(super) fn is_signed_fixed_int_value(value: Value) -> bool {
-    unsafe {
-        matches!(
-            (*value.tydesc).type_tag,
-            TyTag::I8 | TyTag::I16 | TyTag::I32 | TyTag::I64
         )
     }
 }

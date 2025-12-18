@@ -621,6 +621,15 @@ pub(super) fn eval_neg_optional<'db>(
     let type_tag = unsafe { (*operand.tydesc).type_tag };
     let operand_tydesc = operand.tydesc;
 
+    // Handle 64-bit type separately.
+    if type_tag == TyTag::I64 {
+        let val = unsafe { *(operand.ptr as *const i64) };
+        return match val.checked_neg() {
+            Some(r) => write_typed_int_result_64(ctx, r as u64, operand_tydesc, dest),
+            None => Err(InterpError::OptionNone),
+        };
+    }
+
     let raw_value = unsafe { *(operand.ptr as *const u32) };
 
     let negated_result: Option<u32> = match type_tag {
@@ -663,6 +672,37 @@ pub(super) fn eval_neg_result<'db>(
 
     let type_tag = unsafe { (*operand.tydesc).type_tag };
     let operand_tydesc = operand.tydesc;
+
+    // Handle 64-bit types separately.
+    match type_tag {
+        TyTag::I64 => {
+            let val = unsafe { *(operand.ptr as *const i64) };
+            return match val.checked_neg() {
+                Some(r) => write_typed_int_result_64(ctx, r as u64, operand_tydesc, dest),
+                None => {
+                    let err_string = allocate_error_string(ctx, "overflow")?;
+                    Err(InterpError::ResultErr {
+                        tydesc: err_string.tydesc,
+                        ptr: err_string.ptr,
+                    })
+                }
+            };
+        }
+        TyTag::U64 => {
+            let val = unsafe { *(operand.ptr as *const u64) };
+            return match val.checked_neg() {
+                Some(r) => write_typed_int_result_64(ctx, r, operand_tydesc, dest),
+                None => {
+                    let err_string = allocate_error_string(ctx, "overflow")?;
+                    Err(InterpError::ResultErr {
+                        tydesc: err_string.tydesc,
+                        ptr: err_string.ptr,
+                    })
+                }
+            };
+        }
+        _ => {}
+    }
 
     let raw_value = unsafe { *(operand.ptr as *const u32) };
 
@@ -731,6 +771,30 @@ fn write_typed_int_result(
         }
 
         unsafe { *(ptr as *mut u32) = value; }
+        Ok(Value { ptr, tydesc, location: ValueLocation::TempOwned })
+    }
+}
+
+/// Write a 64-bit typed integer result to destination or allocate new value.
+fn write_typed_int_result_64(
+    ctx: &mut InterpContext<'_>,
+    value: u64,
+    tydesc: *const datalove_rt::rtdt::TyDesc,
+    dest: Option<Destination>,
+) -> Result<Value, InterpError> {
+    if let Some(d) = dest {
+        unsafe { *(d.ptr as *mut u64) = value; }
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        let ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_local(ctx.runtime.handle(), tydesc, 1)
+        };
+
+        if ptr.is_null() {
+            return Err(InterpError::RuntimeError("Failed to allocate integer".to_string()));
+        }
+
+        unsafe { *(ptr as *mut u64) = value; }
         Ok(Value { ptr, tydesc, location: ValueLocation::TempOwned })
     }
 }

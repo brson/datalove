@@ -13,11 +13,11 @@ Extend the interpreter to handle all 8 fixed-width integer types (u8, i8, u16, i
 | 1 | ✅ Done | Type helpers in types.rs |
 | 2 | ✅ Done | Widening function in alloc.rs |
 | 3 | ✅ Done | Bare arithmetic widening |
-| 4 | Pending | Result writers |
-| 5 | Pending | Checked arithmetic |
-| 6 | Pending | Optional arithmetic |
-| 7 | Pending | Direct comparison |
-| 8 | Pending | Unary negation completion |
+| 4 | ✅ Done | Result writers |
+| 5 | ✅ Done | Checked arithmetic |
+| 6 | ✅ Done | Optional arithmetic |
+| 7 | ✅ Done | Direct comparison |
+| 8 | ✅ Done | Unary negation completion |
 | 9 | Pending | Tests |
 
 ## Current State
@@ -26,11 +26,11 @@ Extend the interpreter to handle all 8 fixed-width integer types (u8, i8, u16, i
 |---------|-----|-----|------------------------|
 | Literal storage | ✓ | ✓ | ✓ |
 | Bare arithmetic (`+ - *`) widening to int | ✓ | ✓ | ✓ |
-| Checked arithmetic (`+! -! *! /!`) | ✓ | ✗ | ✗ |
-| Optional arithmetic (`+? -? *? /?`) | ✓ | ✗ | ✗ |
-| Direct comparison | ✓ | via runtime | via runtime |
-| Unary `-?` | ✗ | ✓ | i8/i16 only |
-| Unary `-!` | ✓ | ✓ | ✗ |
+| Checked arithmetic (`+! -! *! /!`) | ✓ | ✓ | ✓ |
+| Optional arithmetic (`+? -? *? /?`) | ✓ | ✓ | ✓ |
+| Direct comparison | ✓ | ✓ | ✓ |
+| Unary `-?` | n/a | ✓ | i8/i16/i64 |
+| Unary `-!` | ✓ | ✓ | ✓ |
 
 ## Design Decisions
 
@@ -79,85 +79,46 @@ Updated `eval_add`, `eval_sub`, `eval_mul`, `eval_div` to handle all fixed-int t
 
 **File:** `crates/datalove-datafun-compiler/src/interp/arith_widening.rs`
 
-### Phase 4: Result Writers (`arith.rs`)
+### Phase 4: Result Writers (`arith.rs`) ✅ DONE
 
-Add typed result writers that preserve the operand type:
-
-```rust
-fn write_fixed_int_result(
-    ctx: &mut InterpContext<'_>,
-    value: i64,  // wide enough for all types
-    tydesc: *const TyDesc,
-    dest: Option<Destination>
-) -> Result<Value, InterpError>
-```
+Added typed result writers for all fixed-width types:
+- `write_u8_result`, `write_i8_result`, `write_u16_result`, `write_i16_result`
+- `write_i32_result`, `write_u64_result`, `write_i64_result`
+- Generic `write_option_fixed_int_result` for Option wrappers
 
 **File:** `crates/datalove-datafun-compiler/src/interp/arith.rs`
 
-### Phase 5: Checked Arithmetic (`arith.rs`)
+### Phase 5: Checked Arithmetic (`arith.rs`) ✅ DONE
 
-Extend `eval_add_checked`, `eval_sub_checked`, `eval_mul_checked`, `eval_div_checked`:
-
-```rust
-pub(super) fn eval_add_checked<'db>(...) -> Result<Value, InterpError> {
-    let lhs_tag = get_type_tag(*lhs);
-    let rhs_tag = get_type_tag(*rhs);
-
-    if lhs_tag != rhs_tag {
-        return Err(InterpError::InvalidExpression("Type mismatch"));
-    }
-
-    match lhs_tag {
-        TyTag::U8 => {
-            let a = unsafe { *(lhs.ptr as *const u8) };
-            let b = unsafe { *(rhs.ptr as *const u8) };
-            match a.checked_add(b) {
-                Some(r) => write_fixed_int_result(ctx, r as i64, lhs.tydesc, dest),
-                None => Err(InterpError::Overflow),
-            }
-        }
-        TyTag::I8 => { /* similar */ }
-        // ... all 8 fixed types
-        TyTag::Int => { /* existing bigint path */ }
-        _ => Err(InterpError::InvalidExpression(...)),
-    }
-}
-```
+Extended all checked arithmetic functions to handle all 8 fixed-width types:
+- `eval_add_checked`, `eval_sub_checked`, `eval_mul_checked`, `eval_div_checked`
+- Same-type requirement enforced with clear error messages
+- Uses Rust's checked arithmetic for overflow detection
 
 **File:** `crates/datalove-datafun-compiler/src/interp/arith.rs`
 
-### Phase 6: Optional Arithmetic (`arith.rs`)
+### Phase 6: Optional Arithmetic (`arith.rs`) ✅ DONE
 
-Similar to Phase 5, extend `eval_add_optional`, etc. to handle all fixed-int types with `Option<T>` wrapping.
-
-**File:** `crates/datalove-datafun-compiler/src/interp/arith.rs`
-
-### Phase 7: Direct Comparison (`arith.rs`)
-
-Add fast paths for all fixed-int types in `eval_comparison`:
-
-```rust
-match (lhs_tag, rhs_tag) {
-    (TyTag::U8, TyTag::U8) => {
-        let a = unsafe { *(lhs.ptr as *const u8) };
-        let b = unsafe { *(rhs.ptr as *const u8) };
-        // direct comparison
-    }
-    // ... all matching pairs
-    _ => {
-        // fallback to runtime dtlv_rti_cmp_total_local
-    }
-}
-```
+Extended all optional arithmetic functions to handle all 8 fixed-width types:
+- `eval_add_optional`, `eval_sub_optional`, `eval_mul_optional`, `eval_div_optional`
+- Returns `Option<T>` wrapped in runtime Option type
 
 **File:** `crates/datalove-datafun-compiler/src/interp/arith.rs`
 
-### Phase 8: Unary Negation (`arith_widening.rs`)
+### Phase 7: Direct Comparison (`arith.rs`) ✅ DONE
 
-Extend `eval_neg_optional` and `eval_neg_result`:
+Added fast paths for all fixed-int types in `eval_comparison`:
+- Direct comparison for same-type operands (u8, i8, u16, i16, u32, i32, u64, i64)
+- Falls back to runtime `dtlv_rti_cmp_total_local` for mixed types
 
-- `-?` already handles i8, i16, i32 - add i64
-- `-!` already handles i8, i16, i32, u8, u16, u32 - add u64, i64
+**File:** `crates/datalove-datafun-compiler/src/interp/arith.rs`
+
+### Phase 8: Unary Negation (`arith_widening.rs`) ✅ DONE
+
+Extended unary negation for 64-bit types:
+- `eval_neg_optional`: Added i64 support
+- `eval_neg_result`: Added i64 and u64 support
+- Added `write_typed_int_result_64` helper for 64-bit results
 
 **File:** `crates/datalove-datafun-compiler/src/interp/arith_widening.rs`
 
