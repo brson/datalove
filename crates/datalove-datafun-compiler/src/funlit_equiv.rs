@@ -342,8 +342,8 @@ pub enum TypeSerde {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TypeErrorSerde {
     TypeMismatch { expected: String, actual: String },
-    CannotSynthesize,
     UnresolvedName(String),
+    CannotSynthesize,
     ArityMismatch { expected: usize, actual: usize },
     /// Catch-all for other error types.
     Other(String),
@@ -495,7 +495,6 @@ fn datalit_error_to_serde(err: &datalit::tycheck::TypeError) -> TypeErrorSerde {
             }
         }
         TypeError::CannotSynthesize => TypeErrorSerde::CannotSynthesize,
-        TypeError::UnresolvedName(name) => TypeErrorSerde::UnresolvedName(name.clone()),
         TypeError::ArityMismatch { expected, actual } => {
             TypeErrorSerde::ArityMismatch { expected: *expected, actual: *actual }
         }

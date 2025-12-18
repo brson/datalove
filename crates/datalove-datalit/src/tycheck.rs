@@ -105,7 +105,6 @@ pub enum TypeError {
     TypeMismatch { expected: String, actual: String },
     HeapMismatch { expected_heap: String, actual_heap: String },
     CannotSynthesize,
-    UnresolvedName(String),
     MissingField(String),
     ExtraField(String),
     FieldOrderMismatch,
@@ -186,12 +185,6 @@ pub fn type_check_with_expected<'db>(
     expected: Option<TypeAndHeap<'db>>,
 ) -> TypecheckResult<'db> {
     let mut ctx = TypeContext::new(db, resolved);
-
-    // Check for resolution errors first.
-    for error_entry in resolved.errors(db) {
-        let name = error_entry.name(db).as_str(db).to_string();
-        ctx.add_error(TypeError::UnresolvedName(name));
-    }
 
     let root_type = if let Some(expected_ty) = expected {
         // Use checking mode when expected type is provided.

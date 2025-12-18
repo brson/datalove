@@ -68,7 +68,6 @@ impl From<datalit::tycheck::TypeError> for TypeError {
                 TypeError::HeapMismatch { expected_heap, actual_heap }
             }
             datalit::tycheck::TypeError::CannotSynthesize => TypeError::CannotSynthesize,
-            datalit::tycheck::TypeError::UnresolvedName(name) => TypeError::UnresolvedName(name),
             datalit::tycheck::TypeError::MissingField(name) => TypeError::MissingField(name),
             datalit::tycheck::TypeError::ExtraField(name) => TypeError::ExtraField(name),
             datalit::tycheck::TypeError::FieldOrderMismatch => TypeError::FieldOrderMismatch,
