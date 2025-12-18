@@ -14,177 +14,173 @@
   : [
     (u32, bool),
   ] / [
-    (1 , true),
-    (2 , true),
+    (1, true),
+    (2, true),
   ],
 
   // The type hint is optional.
   [
-    (1 , true),
-    (2 , true),
+    (1, true),
+    (2, true),
   ],
 
-
+  // Type hints can go before any expression.
+  [
+    (1, : bool / true),
+    (: u32 / 2, true),
+  ],
+  
 
 
 
 
   // ## Basic scalars
 
-  : bool / true
-  : bool / false
+  : bool / true,
+  : bool / false,
 
-  : u32 / 1
-  : f32 / 1.0
+  : u32 / 1,
+  : f32 / 1.0,
+
+  // Also all these in this tuple.
+  : (
+    u8, u16, u32, u64,
+    i8, i16, i32, i64,
+  ) / (
+    1, 2, 3, 4,
+    -1, -2, -3, -4,
+  ),
 
   // Float bitpattern coercion from hex literals (not dec literals).
   // Must have correct number of digits.
-  // When you want to preserve floats exactly.
-  : f32 / 0xABABABAB
-
-
-// ## Heap sigils
-
-// Every type has an associated heap - local, global, inferred,
-// indicated by a sigil: @-, #-, or none for inferred.
-// having sigil-less types and expressions will introduce lots
-// of keywords. At the moment all types require sigils and most literal expressions.
-
-: @u32 / @1
-: #u32 / #1
-: #u32 / 1
-: u32 / 1
-
-// ## Bigints
-
-// unbounded signed, the default int type
-: @int / 1
+  // For when you want to preserve floats exactly.
+  : f32 / 0xABABABAB,
 
 
 
 
-// ## Tuples, structs, and enums
+  // ## Bigints
 
-// anonymous tuple
-: (@bool, @u32) / (@true, 1)
-: (@u32 ) / (1)
-: () / ()
-
-// named tuple
-: @tuple Bar (
-  @bool, @u32,
-) / @tuple Bar (@true, 1)
-
-// anonymous struct
-: {
-  field1: @bool,
-  field2: @u32,
-  field3: @u32,
-} / {
-  // asignment without type hint
-  field1 = @true,
-  // type hint in expression
-  field3 = : @u32 / 2,
-}
-
-// named struct
-: @struct Foo {
-  field1 : @bool,
-} / @struct Foo {
-  field1 = @true,
-}
-
-// anonymous enum
-//
-// enums either have a single-value/type payload or no payload.
-// if you want multiple values the payload should be a tuple.
-: @enum {
-  Foo,
-  Bar(@u32),
-  Baz(@(@bool, @u32)),
-} / @enum Foo
-
-// potential lightweight syntax for anonymous enum types
-//
-// this relies on coercion by looking at the variant payload types
-// : @u32 | @bool / @true
-// spelling the enum ctors
-// : @u32 | @bool / @enum bool(@true)
-
-
-: @enum {
-  Bar(@u32),
-} / @enum Bar(2)
-
-: @enum {
-  Bar(@u32),
-} / @enum Bar(: @u32 / 2) // with type hint in expression
-
-: @enum {
-  Baz(@(@bool, @u32)),
-} / @enum Baz(@(@true, 1))
-
-// named enum
-: @enum Quux {
-  Bar(@u32),
-} / @enum Quux.Bar(1) // fully-qualified variant
-
-// named enum
-: @enum Quux {
-  Bar(@(@u32, @bool)),
-} / @enum Quux.Bar(@(1, @true))
-
-// this is actually a coercion from anonymous enum (no dot)
-: @enum Quux {
-  Bar(@u32),
-} / @enum Bar(1)
+  // Unbounded signed.
+  // Fixed-sized integer math widens to `int`,
+  // and simple script computation is encouraged to use `int`.
+  : @int / 1,
 
 
 
 
-// ## Collection types
+  // ## Tuples, structs, and enums
 
-// list
-: [@u32] / [1, 2, 3]
+  // Anonymous tuples.
+  : (bool, u32) / (true, 1),
+  : (u32 ) / (1),
+  : () / (),
 
-// string
-: @string / "abc"
+  // Anonymous struct.
+  : {
+    field1: bool,
+    field2: u32,
+    field3: u32,
+  } / {
+    // Assignment without type hint
+    field1 = true,
+    // Type hint in expression.
+    field2 = : u32 / 1,
+    // Type hint in field name.
+    field3: u32 = 1,
+  },
 
-// map
-: @map <@u32, @u32>) / @map {
-  0 = 5,
-  2 = 2,
-  // type hint in the expression
-  3 = : @u32 / 2,
-}
+  // Anonymous enum.
+  //
+  // Enums either have a single-value/type payload or no payload.
+  // if you want multiple values the payload should be a tuple.
+  : enum {
+    Foo,
+    Bar(u32),
+    Baz((bool, u32)),
+  } / enum Foo,
 
-// set
-: @set <@u32> / @set { 1, 2, 3 }
+  : enum {
+    Bar(u32),
+  } / enum Bar(2),
 
+  : enum {
+    Bar(u32),
+  } / enum Bar(: u32 / 2), // with type hint in expression
 
-
-
-// ## Special generic containers
-
-// option - some of these heap sigils will be inferred eventually
-: @?@u32 / 4
-: @?@u32 / @none
-
-// result - hm...
-: @!@u32 / 4
-: @!@u32 / @error "oops"
+  : enum {
+    Baz((bool, u32)),
+  } / enum Baz((true, 1)),
 
 
 
 
-// ## Existential types
+  // ## Collection types
 
-// any pure data type
-: @data / @data 1
-// with type hint
-: @data / @data : int / 1
+  // list
+  : [u32] / [1, 2, 3]
+  : [u32] / []
 
-// error type for representing failures
-: @error / @error "oops"
-// with type hint
-: @error / @error : int / 1
+  // string
+  : string / "abc"
+
+  // map
+  : map <u32, u32>) / map {
+    0 = 5,
+    2 = 2,
+    // Type hint in the expression.
+    3 = : u32 / 2,
+  }
+
+  // set
+  : set <u32> / set { 1, 2, 3 }
+
+
+
+
+  // ## Special generic containers
+
+  // Option
+  : ?u32 / some 4
+  : ?u32 / none
+
+  // Result
+  : !u32 / ok 4
+  // `er` is like Rust`s `Result::Err`, `error` is the error constructor itself.
+  : !u32 / er error "oops"
+
+
+
+
+  // ## Existential types
+
+  // `data` constructor accepts any datalit value.
+  : data / data 1
+  // With type hint.
+  : data / data : int / 1
+
+  // Error type for representing failures.
+  : error / error "oops"
+  // With type hint.
+  : error / error : int / 1
+
+
+
+  // ## Heap sigils
+
+  // Every type has an associated heap - local, global, inferred,
+  // indicated by a sigil: @-, #-, or none for inferred.
+  // Heaps cannot be intermixed within a single type.
+
+  // For more heap sigil examples see demo-datalit-heap.dlt.
+
+  : @u32 / @1,
+  : #u32 / #1,
+  : #u32 / 1,
+  : u32 / 1,
+
+  : @enum {
+    Baz(@(@bool, @u32)),
+  } / @enum Baz(@(@true, @1)),
+
+) // end of tuple
