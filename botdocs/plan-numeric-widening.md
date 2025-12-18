@@ -4,12 +4,28 @@
 
 Extend the interpreter to handle all 8 fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64) for arithmetic operations, matching the typechecker's existing support.
 
+## Progress
+
+**Last updated:** 2025-12-17
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 1 | ✅ Done | Type helpers in types.rs |
+| 2 | ✅ Done | Widening function in alloc.rs |
+| 3 | ✅ Done | Bare arithmetic widening |
+| 4 | Pending | Result writers |
+| 5 | Pending | Checked arithmetic |
+| 6 | Pending | Optional arithmetic |
+| 7 | Pending | Direct comparison |
+| 8 | Pending | Unary negation completion |
+| 9 | Pending | Tests |
+
 ## Current State
 
 | Feature | u32 | i32 | u8/i8/u16/i16/u64/i64 |
 |---------|-----|-----|------------------------|
 | Literal storage | ✓ | ✓ | ✓ |
-| Bare arithmetic (`+ - *`) widening to int | ✓ | ✗ | ✗ |
+| Bare arithmetic (`+ - *`) widening to int | ✓ | ✓ | ✓ |
 | Checked arithmetic (`+! -! *! /!`) | ✓ | ✗ | ✗ |
 | Optional arithmetic (`+? -? *? /?`) | ✓ | ✗ | ✗ |
 | Direct comparison | ✓ | via runtime | via runtime |
@@ -30,9 +46,9 @@ Per botspec section 2.3:
 
 ## Implementation Plan
 
-### Phase 1: Type Helpers (`types.rs`)
+### Phase 1: Type Helpers (`types.rs`) ✅ DONE
 
-Add predicates for fixed-width integer classification:
+Added predicates for fixed-width integer classification:
 
 ```rust
 pub(super) fn is_fixed_int_value(value: Value) -> bool
@@ -42,60 +58,24 @@ pub(super) fn get_type_tag(value: Value) -> TyTag
 
 **File:** `crates/datalove-datafun-compiler/src/interp/types.rs`
 
-### Phase 2: Widening Functions (`alloc.rs`)
+### Phase 2: Widening Functions (`alloc.rs`) ✅ DONE
 
-Add generic widening function for all fixed-width types to bigint:
+Added `widen_fixed_int_to_int()`:
+- Handles all 8 fixed-width types (u8/i8/u16/i16/u32/i32/u64/i64)
+- Proper sign handling for signed types (extracts magnitude, tracks sign)
+- Special case for i64::MIN (cannot be negated without overflow)
+- Uses 1 limb for values ≤ u32::MAX, 2 limbs for larger 64-bit values
 
-```rust
-pub(super) fn widen_fixed_int_to_int<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: Value
-) -> Result<Value, InterpError>
-```
-
-This function will:
-1. Read the value based on TyTag (u8/i8/u16/i16/u32/i32/u64/i64)
-2. Handle sign extension for signed types
-3. Create a bigint with appropriate limbs (1 limb for ≤32-bit, 2 limbs for 64-bit)
+Removed old `widen_u32_to_int()` (superseded).
 
 **File:** `crates/datalove-datafun-compiler/src/interp/alloc.rs`
 
-### Phase 3: Bare Arithmetic Widening (`arith_widening.rs`)
+### Phase 3: Bare Arithmetic Widening (`arith_widening.rs`) ✅ DONE
 
-Extend `eval_add`, `eval_sub`, `eval_mul`, `eval_div` to handle all fixed-int types.
-
-Current pattern (u32 only):
-```rust
-if is_u32_value(*lhs) && is_u32_value(*rhs) {
-    let lhs_int = widen_u32_to_int(ctx, *lhs)?;
-    // ...
-}
-```
-
-New pattern (all fixed ints, same type required):
-```rust
-let lhs_tag = get_type_tag(*lhs);
-let rhs_tag = get_type_tag(*rhs);
-
-// Both fixed ints of same type: widen both
-if is_fixed_int_value(*lhs) && is_fixed_int_value(*rhs) {
-    if lhs_tag != rhs_tag {
-        return Err(InterpError::InvalidExpression("Type mismatch"));
-    }
-    let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
-    let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
-    // bigint operation
-}
-// Mixed fixed_int + int: widen fixed side (existing pattern)
-else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
-    let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
-    // bigint operation
-}
-else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
-    let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
-    // bigint operation
-}
-```
+Updated `eval_add`, `eval_sub`, `eval_mul`, `eval_div` to handle all fixed-int types:
+- Same-type requirement enforced with clear error messages
+- Mixed fixed-int + int widening works (widens the fixed-int side)
+- All 162 existing tests pass
 
 **File:** `crates/datalove-datafun-compiler/src/interp/arith_widening.rs`
 

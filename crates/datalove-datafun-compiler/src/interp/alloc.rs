@@ -201,29 +201,85 @@ pub(super) fn allocate_result_err<'db>(
     Ok(Value { ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned })
 }
 
-/// Widen a u32 value to an Int (bigint) value.
-pub(super) fn widen_u32_to_int<'db>(
+/// Widen any fixed-width integer to an Int (bigint) value.
+///
+/// Handles: u8, i8, u16, i16, u32, i32, u64, i64.
+/// For signed types, preserves the sign in the bigint representation.
+pub(super) fn widen_fixed_int_to_int<'db>(
     ctx: &mut InterpContext<'db>,
-    u32_value: Value,
+    value: Value,
 ) -> Result<Value, InterpError> {
-    let value_u32 = unsafe { *(u32_value.ptr as *const u32) };
+    use datalove_rt::rtdt::TyTag;
+
+    let type_tag = unsafe { (*value.tydesc).type_tag };
+
+    // Extract magnitude and sign from the fixed-width integer.
+    let (magnitude, is_negative): (u64, bool) = unsafe {
+        match type_tag {
+            TyTag::U8 => (*(value.ptr as *const u8) as u64, false),
+            TyTag::U16 => (*(value.ptr as *const u16) as u64, false),
+            TyTag::U32 => (*(value.ptr as *const u32) as u64, false),
+            TyTag::U64 => (*(value.ptr as *const u64), false),
+            TyTag::I8 => {
+                let v = *(value.ptr as *const i8);
+                if v < 0 { ((-(v as i64)) as u64, true) } else { (v as u64, false) }
+            }
+            TyTag::I16 => {
+                let v = *(value.ptr as *const i16);
+                if v < 0 { ((-(v as i64)) as u64, true) } else { (v as u64, false) }
+            }
+            TyTag::I32 => {
+                let v = *(value.ptr as *const i32);
+                if v < 0 { ((-(v as i64)) as u64, true) } else { (v as u64, false) }
+            }
+            TyTag::I64 => {
+                let v = *(value.ptr as *const i64);
+                if v == i64::MIN {
+                    // Special case: i64::MIN cannot be negated without overflow.
+                    // Its magnitude is 2^63 = 0x8000_0000_0000_0000.
+                    (0x8000_0000_0000_0000u64, true)
+                } else if v < 0 {
+                    ((-v) as u64, true)
+                } else {
+                    (v as u64, false)
+                }
+            }
+            _ => return Err(InterpError::InvalidExpression(
+                format!("Cannot widen type {:?} to int", type_tag)
+            )),
+        }
+    };
+
     let int_val = allocate_bigint(ctx)?;
     let int_ptr = int_val.ptr as *mut datalove_rt::rtdt::Int;
 
     unsafe {
-        if value_u32 == 0 {
+        if magnitude == 0 {
             (*int_ptr).data = std::ptr::null();
             (*int_ptr).size_and_sign = 0;
             (*int_ptr).capacity = 0;
-        } else {
+        } else if magnitude <= u32::MAX as u64 {
+            // Fits in one limb.
             let rt_handle = ctx.runtime.handle();
             let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
                 rt_handle, 4, 4, 1
             ) as *mut u32;
-            *limb_ptr = value_u32;
+            *limb_ptr = magnitude as u32;
             (*int_ptr).data = limb_ptr;
-            (*int_ptr).size_and_sign = 1;
+            (*int_ptr).size_and_sign = if is_negative { -1 } else { 1 };
             (*int_ptr).capacity = 1;
+        } else {
+            // Needs two limbs (for u64/i64 values > u32::MAX).
+            let rt_handle = ctx.runtime.handle();
+            let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                rt_handle, 4, 4, 2
+            ) as *mut u32;
+            // Low limb first (little-endian limb order).
+            *limb_ptr = magnitude as u32;
+            *limb_ptr.add(1) = (magnitude >> 32) as u32;
+            (*int_ptr).data = limb_ptr;
+            (*int_ptr).size_and_sign = if is_negative { -2 } else { 2 };
+            (*int_ptr).capacity = 2;
         }
     }
 

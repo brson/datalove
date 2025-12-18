@@ -1,7 +1,7 @@
 //! Widening arithmetic operations.
 //!
 //! Handles arithmetic operations with automatic type widening:
-//! - u32 operands are widened to Int (bigint) for add/sub/mul/div
+//! - Fixed-width integer operands are widened to Int (bigint) for add/sub/mul/div
 //! - f32 operands use native float operations
 //! - Int operands use runtime bigint operations
 //!
@@ -12,8 +12,8 @@ use crate::ast::{BinOp, UnaryOp};
 
 use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
 use super::memory::destroy_value;
-use super::types::{is_u32_value, is_int_value, is_f32_value};
-use super::alloc::{allocate_bigint, widen_u32_to_int};
+use super::types::{is_int_value, is_f32_value, is_fixed_int_value, get_type_tag};
+use super::alloc::{allocate_bigint, widen_fixed_int_to_int};
 use super::arith::{
     write_f32_result,
     eval_add_checked, eval_sub_checked, eval_mul_checked, eval_div_checked,
@@ -37,10 +37,18 @@ pub(super) fn eval_add<'db>(
         return write_f32_result(ctx, a + b, dest);
     }
 
-    // Both u32: widen to Int and add.
-    if is_u32_value(*lhs) && is_u32_value(*rhs) {
-        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
-        let rhs_int = match widen_u32_to_int(ctx, *rhs) {
+    // Both fixed-width ints of same type: widen to Int and add.
+    if is_fixed_int_value(*lhs) && is_fixed_int_value(*rhs) {
+        let lhs_tag = get_type_tag(*lhs);
+        let rhs_tag = get_type_tag(*rhs);
+        if lhs_tag != rhs_tag {
+            return Err(InterpError::InvalidExpression(
+                format!("Type mismatch in addition: {:?} vs {:?}", lhs_tag, rhs_tag)
+            ));
+        }
+
+        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
+        let rhs_int = match widen_fixed_int_to_int(ctx, *rhs) {
             Ok(v) => v,
             Err(e) => {
                 destroy_value(ctx, lhs_int);
@@ -120,9 +128,9 @@ pub(super) fn eval_add<'db>(
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
-    // Mixed u32 and Int: widen u32 side.
-    else if is_u32_value(*lhs) && is_int_value(*rhs) {
-        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
+    // Mixed fixed-int and Int: widen fixed-int side.
+    else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
+        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
 
         let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
             (d.ptr, d.tydesc, true)
@@ -156,8 +164,8 @@ pub(super) fn eval_add<'db>(
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
-    else if is_int_value(*lhs) && is_u32_value(*rhs) {
-        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
+    else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
+        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
 
         let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
             (d.ptr, d.tydesc, true)
@@ -223,10 +231,18 @@ pub(super) fn eval_sub<'db>(
         }
     };
 
-    // Both u32: widen to Int and subtract.
-    if is_u32_value(*lhs) && is_u32_value(*rhs) {
-        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
-        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
+    // Both fixed-width ints of same type: widen to Int and subtract.
+    if is_fixed_int_value(*lhs) && is_fixed_int_value(*rhs) {
+        let lhs_tag = get_type_tag(*lhs);
+        let rhs_tag = get_type_tag(*rhs);
+        if lhs_tag != rhs_tag {
+            return Err(InterpError::InvalidExpression(
+                format!("Type mismatch in subtraction: {:?} vs {:?}", lhs_tag, rhs_tag)
+            ));
+        }
+
+        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
+        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
 
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
@@ -268,8 +284,8 @@ pub(super) fn eval_sub<'db>(
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
-    else if is_u32_value(*lhs) && is_int_value(*rhs) {
-        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
+    else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
+        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe {
@@ -290,8 +306,8 @@ pub(super) fn eval_sub<'db>(
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
-    else if is_int_value(*lhs) && is_u32_value(*rhs) {
-        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
+    else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
+        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe {
@@ -337,9 +353,18 @@ pub(super) fn eval_mul<'db>(
         if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
     };
 
-    if is_u32_value(*lhs) && is_u32_value(*rhs) {
-        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
-        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
+    // Both fixed-width ints of same type: widen to Int and multiply.
+    if is_fixed_int_value(*lhs) && is_fixed_int_value(*rhs) {
+        let lhs_tag = get_type_tag(*lhs);
+        let rhs_tag = get_type_tag(*rhs);
+        if lhs_tag != rhs_tag {
+            return Err(InterpError::InvalidExpression(
+                format!("Type mismatch in multiplication: {:?} vs {:?}", lhs_tag, rhs_tag)
+            ));
+        }
+
+        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
+        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
@@ -364,8 +389,8 @@ pub(super) fn eval_mul<'db>(
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
-    else if is_u32_value(*lhs) && is_int_value(*rhs) {
-        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
+    else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
+        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
         destroy_value(ctx, lhs_int);
@@ -377,8 +402,8 @@ pub(super) fn eval_mul<'db>(
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
-    else if is_int_value(*lhs) && is_u32_value(*rhs) {
-        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
+    else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
+        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
         destroy_value(ctx, rhs_int);
@@ -415,9 +440,18 @@ pub(super) fn eval_div<'db>(
         if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
     };
 
-    if is_u32_value(*lhs) && is_u32_value(*rhs) {
-        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
-        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
+    // Both fixed-width ints of same type: widen to Int and divide.
+    if is_fixed_int_value(*lhs) && is_fixed_int_value(*rhs) {
+        let lhs_tag = get_type_tag(*lhs);
+        let rhs_tag = get_type_tag(*rhs);
+        if lhs_tag != rhs_tag {
+            return Err(InterpError::InvalidExpression(
+                format!("Type mismatch in division: {:?} vs {:?}", lhs_tag, rhs_tag)
+            ));
+        }
+
+        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
+        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
@@ -442,8 +476,8 @@ pub(super) fn eval_div<'db>(
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
-    else if is_u32_value(*lhs) && is_int_value(*rhs) {
-        let lhs_int = widen_u32_to_int(ctx, *lhs)?;
+    else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
+        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
         destroy_value(ctx, lhs_int);
@@ -455,8 +489,8 @@ pub(super) fn eval_div<'db>(
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
-    else if is_int_value(*lhs) && is_u32_value(*rhs) {
-        let rhs_int = widen_u32_to_int(ctx, *rhs)?;
+    else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
+        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
         let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
         let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
         destroy_value(ctx, rhs_int);

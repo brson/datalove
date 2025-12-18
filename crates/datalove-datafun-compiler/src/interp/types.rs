@@ -18,6 +18,38 @@ pub(super) fn is_f32_value(value: Value) -> bool {
     unsafe { (*value.tydesc).type_tag == TyTag::F32 }
 }
 
+/// Check if a value is any fixed-width integer type.
+///
+/// Includes: u8, i8, u16, i16, u32, i32, u64, i64.
+pub(super) fn is_fixed_int_value(value: Value) -> bool {
+    unsafe {
+        matches!(
+            (*value.tydesc).type_tag,
+            TyTag::U8 | TyTag::I8 |
+            TyTag::U16 | TyTag::I16 |
+            TyTag::U32 | TyTag::I32 |
+            TyTag::U64 | TyTag::I64
+        )
+    }
+}
+
+/// Check if a value is a signed fixed-width integer type.
+///
+/// Includes: i8, i16, i32, i64.
+pub(super) fn is_signed_fixed_int_value(value: Value) -> bool {
+    unsafe {
+        matches!(
+            (*value.tydesc).type_tag,
+            TyTag::I8 | TyTag::I16 | TyTag::I32 | TyTag::I64
+        )
+    }
+}
+
+/// Get the type tag from a value.
+pub(super) fn get_type_tag(value: Value) -> TyTag {
+    unsafe { (*value.tydesc).type_tag }
+}
+
 /// Check if a value is a copy type.
 ///
 /// Copy types (u32, bool, f32, fixed-width ints) can be implicitly cloned.
