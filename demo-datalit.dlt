@@ -64,7 +64,7 @@
   // Unbounded signed.
   // Fixed-sized integer math widens to `int`,
   // and simple script computation is encouraged to use `int`.
-  : @int / 1,
+  : int / 1,
 
 
 
@@ -131,6 +131,8 @@
     // Type hint in the expression.
     3 = : u32 / 2,
   }
+
+  : map <u32, u32> / map { }
 
   // set
   : set <u32> / set { 1, 2, 3 }
