@@ -6,8 +6,7 @@
 //! - Checked: return error on overflow/division-by-zero
 //! - Optional: return None on overflow/division-by-zero
 
-use datalove_rt::rtdt::{OptionTag, TyDescRef, TyTag};
-use datalove_rt::rtdt::layout::compute_option_layout;
+use datalove_rt::rtdt::TyTag;
 
 use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
 use super::memory::destroy_value;
@@ -120,41 +119,6 @@ fn write_i64_result(ctx: &mut InterpContext<'_>, value: i64, dest: Option<Destin
     } else {
         allocate_i64(ctx, value)
     }
-}
-
-/// Write Option result for any fixed-width integer type.
-///
-/// Writes the tag and payload based on the inner tydesc.
-fn write_option_fixed_int_result(
-    ctx: &mut InterpContext<'_>,
-    has_value: bool,
-    payload_ptr: *const u8,
-    inner_tydesc: *const datalove_rt::rtdt::TyDesc,
-) -> Result<Value, InterpError> {
-    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_tydesc);
-    let option_ref = unsafe { TyDescRef::from_ptr(option_tydesc) };
-    let layout = compute_option_layout(option_ref);
-
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
-    };
-    if ptr.is_null() {
-        return Err(InterpError::RuntimeError("Failed to allocate Option".to_string()));
-    }
-
-    unsafe {
-        if has_value {
-            *ptr = OptionTag::Some as u8;
-            let dest_payload_ptr = ptr.add(layout.payload_offset as usize);
-            let inner_size = (*inner_tydesc).size as usize;
-            std::ptr::copy_nonoverlapping(payload_ptr, dest_payload_ptr, inner_size);
-        } else {
-            *ptr = OptionTag::None as u8;
-        }
-    }
-
-    Ok(Value { ptr, tydesc: option_tydesc, location: ValueLocation::TempOwned })
 }
 
 // ============================================================================
@@ -573,15 +537,16 @@ pub(super) fn eval_div_checked<'db>(
 // Optional Arithmetic
 // ============================================================================
 
-/// Evaluate optional addition (returns None on overflow).
+/// Evaluate optional addition.
 ///
+/// Returns the raw result on success, or early-returns OptionNone on overflow.
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
 pub(super) fn eval_add_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    _dest: Option<Destination>,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     if !is_fixed_int_value(*lhs) || !is_fixed_int_value(*rhs) {
         return Err(InterpError::InvalidExpression(
@@ -602,90 +567,66 @@ pub(super) fn eval_add_optional<'db>(
             TyTag::U8 => {
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
-                let result = a.checked_add(b);
-                let mut val: u8 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u8) }
-                    None => (false, &val as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_add(b) {
+                    Some(r) => write_u8_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I8 => {
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
-                let result = a.checked_add(b);
-                let mut val: i8 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i8 as *const u8) }
-                    None => (false, &val as *const i8 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_add(b) {
+                    Some(r) => write_i8_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U16 => {
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
-                let result = a.checked_add(b);
-                let mut val: u16 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u16 as *const u8) }
-                    None => (false, &val as *const u16 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_add(b) {
+                    Some(r) => write_u16_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I16 => {
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
-                let result = a.checked_add(b);
-                let mut val: i16 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i16 as *const u8) }
-                    None => (false, &val as *const i16 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_add(b) {
+                    Some(r) => write_i16_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U32 => {
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
-                let result = a.checked_add(b);
-                let mut val: u32 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u32 as *const u8) }
-                    None => (false, &val as *const u32 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_add(b) {
+                    Some(r) => write_u32_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I32 => {
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
-                let result = a.checked_add(b);
-                let mut val: i32 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i32 as *const u8) }
-                    None => (false, &val as *const i32 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_add(b) {
+                    Some(r) => write_i32_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U64 => {
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
-                let result = a.checked_add(b);
-                let mut val: u64 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u64 as *const u8) }
-                    None => (false, &val as *const u64 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_add(b) {
+                    Some(r) => write_u64_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I64 => {
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
-                let result = a.checked_add(b);
-                let mut val: i64 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i64 as *const u8) }
-                    None => (false, &val as *const i64 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_add(b) {
+                    Some(r) => write_i64_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             _ => Err(InterpError::InvalidExpression(
                 format!("Unsupported type for optional addition: {:?}", lhs_tag)
@@ -694,15 +635,16 @@ pub(super) fn eval_add_optional<'db>(
     }
 }
 
-/// Evaluate optional subtraction (returns None on overflow).
+/// Evaluate optional subtraction.
 ///
+/// Returns the raw result on success, or early-returns OptionNone on underflow.
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
 pub(super) fn eval_sub_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    _dest: Option<Destination>,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     if !is_fixed_int_value(*lhs) || !is_fixed_int_value(*rhs) {
         return Err(InterpError::InvalidExpression(
@@ -723,90 +665,66 @@ pub(super) fn eval_sub_optional<'db>(
             TyTag::U8 => {
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
-                let result = a.checked_sub(b);
-                let mut val: u8 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u8) }
-                    None => (false, &val as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_sub(b) {
+                    Some(r) => write_u8_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I8 => {
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
-                let result = a.checked_sub(b);
-                let mut val: i8 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i8 as *const u8) }
-                    None => (false, &val as *const i8 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_sub(b) {
+                    Some(r) => write_i8_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U16 => {
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
-                let result = a.checked_sub(b);
-                let mut val: u16 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u16 as *const u8) }
-                    None => (false, &val as *const u16 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_sub(b) {
+                    Some(r) => write_u16_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I16 => {
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
-                let result = a.checked_sub(b);
-                let mut val: i16 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i16 as *const u8) }
-                    None => (false, &val as *const i16 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_sub(b) {
+                    Some(r) => write_i16_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U32 => {
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
-                let result = a.checked_sub(b);
-                let mut val: u32 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u32 as *const u8) }
-                    None => (false, &val as *const u32 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_sub(b) {
+                    Some(r) => write_u32_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I32 => {
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
-                let result = a.checked_sub(b);
-                let mut val: i32 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i32 as *const u8) }
-                    None => (false, &val as *const i32 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_sub(b) {
+                    Some(r) => write_i32_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U64 => {
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
-                let result = a.checked_sub(b);
-                let mut val: u64 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u64 as *const u8) }
-                    None => (false, &val as *const u64 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_sub(b) {
+                    Some(r) => write_u64_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I64 => {
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
-                let result = a.checked_sub(b);
-                let mut val: i64 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i64 as *const u8) }
-                    None => (false, &val as *const i64 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_sub(b) {
+                    Some(r) => write_i64_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             _ => Err(InterpError::InvalidExpression(
                 format!("Unsupported type for optional subtraction: {:?}", lhs_tag)
@@ -815,15 +733,16 @@ pub(super) fn eval_sub_optional<'db>(
     }
 }
 
-/// Evaluate optional multiplication (returns None on overflow).
+/// Evaluate optional multiplication.
 ///
+/// Returns the raw result on success, or early-returns OptionNone on overflow.
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
 pub(super) fn eval_mul_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    _dest: Option<Destination>,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     if !is_fixed_int_value(*lhs) || !is_fixed_int_value(*rhs) {
         return Err(InterpError::InvalidExpression(
@@ -844,90 +763,66 @@ pub(super) fn eval_mul_optional<'db>(
             TyTag::U8 => {
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
-                let result = a.checked_mul(b);
-                let mut val: u8 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u8) }
-                    None => (false, &val as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_mul(b) {
+                    Some(r) => write_u8_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I8 => {
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
-                let result = a.checked_mul(b);
-                let mut val: i8 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i8 as *const u8) }
-                    None => (false, &val as *const i8 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_mul(b) {
+                    Some(r) => write_i8_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U16 => {
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
-                let result = a.checked_mul(b);
-                let mut val: u16 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u16 as *const u8) }
-                    None => (false, &val as *const u16 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_mul(b) {
+                    Some(r) => write_u16_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I16 => {
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
-                let result = a.checked_mul(b);
-                let mut val: i16 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i16 as *const u8) }
-                    None => (false, &val as *const i16 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_mul(b) {
+                    Some(r) => write_i16_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U32 => {
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
-                let result = a.checked_mul(b);
-                let mut val: u32 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u32 as *const u8) }
-                    None => (false, &val as *const u32 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_mul(b) {
+                    Some(r) => write_u32_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I32 => {
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
-                let result = a.checked_mul(b);
-                let mut val: i32 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i32 as *const u8) }
-                    None => (false, &val as *const i32 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_mul(b) {
+                    Some(r) => write_i32_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U64 => {
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
-                let result = a.checked_mul(b);
-                let mut val: u64 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u64 as *const u8) }
-                    None => (false, &val as *const u64 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_mul(b) {
+                    Some(r) => write_u64_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I64 => {
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
-                let result = a.checked_mul(b);
-                let mut val: i64 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i64 as *const u8) }
-                    None => (false, &val as *const i64 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_mul(b) {
+                    Some(r) => write_i64_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             _ => Err(InterpError::InvalidExpression(
                 format!("Unsupported type for optional multiplication: {:?}", lhs_tag)
@@ -936,15 +831,16 @@ pub(super) fn eval_mul_optional<'db>(
     }
 }
 
-/// Evaluate optional division (returns None on division by zero).
+/// Evaluate optional division.
 ///
+/// Returns the raw result on success, or early-returns OptionNone on division by zero.
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64) and int.
 pub(super) fn eval_div_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    _dest: Option<Destination>,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     // Both int: use runtime optional division.
     if is_int_value(*lhs) && is_int_value(*rhs) {
@@ -986,90 +882,66 @@ pub(super) fn eval_div_optional<'db>(
             TyTag::U8 => {
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
-                let result = a.checked_div(b);
-                let mut val: u8 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u8) }
-                    None => (false, &val as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_div(b) {
+                    Some(r) => write_u8_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I8 => {
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
-                let result = a.checked_div(b);
-                let mut val: i8 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i8 as *const u8) }
-                    None => (false, &val as *const i8 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_div(b) {
+                    Some(r) => write_i8_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U16 => {
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
-                let result = a.checked_div(b);
-                let mut val: u16 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u16 as *const u8) }
-                    None => (false, &val as *const u16 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_div(b) {
+                    Some(r) => write_u16_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I16 => {
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
-                let result = a.checked_div(b);
-                let mut val: i16 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i16 as *const u8) }
-                    None => (false, &val as *const i16 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_div(b) {
+                    Some(r) => write_i16_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U32 => {
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
-                let result = a.checked_div(b);
-                let mut val: u32 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u32 as *const u8) }
-                    None => (false, &val as *const u32 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_div(b) {
+                    Some(r) => write_u32_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I32 => {
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
-                let result = a.checked_div(b);
-                let mut val: i32 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i32 as *const u8) }
-                    None => (false, &val as *const i32 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_div(b) {
+                    Some(r) => write_i32_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::U64 => {
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
-                let result = a.checked_div(b);
-                let mut val: u64 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const u64 as *const u8) }
-                    None => (false, &val as *const u64 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_div(b) {
+                    Some(r) => write_u64_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             TyTag::I64 => {
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
-                let result = a.checked_div(b);
-                let mut val: i64 = 0;
-                let (has_value, payload_ptr) = match result {
-                    Some(r) => { val = r; (true, &val as *const i64 as *const u8) }
-                    None => (false, &val as *const i64 as *const u8)
-                };
-                write_option_fixed_int_result(ctx, has_value, payload_ptr, lhs.tydesc)
+                match a.checked_div(b) {
+                    Some(r) => write_i64_result(ctx, r, dest),
+                    None => Err(InterpError::OptionNone),
+                }
             }
             _ => Err(InterpError::InvalidExpression(
                 format!("Unsupported type for optional division: {:?}", lhs_tag)

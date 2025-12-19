@@ -150,6 +150,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "@32514",
+        output: "@42",
     ),
 ]

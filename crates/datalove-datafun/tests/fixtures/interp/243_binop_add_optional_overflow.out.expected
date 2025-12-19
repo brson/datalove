@@ -98,6 +98,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "some @32513",
+        output: "@none",
     ),
 ]

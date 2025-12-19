@@ -2438,7 +2438,20 @@ fn eval_return_expression_frame<'db>(
 
             let dest = Destination { ptr: ret_ptr, tydesc: ret_tydesc };
             // Evaluate expression with the typed destination.
-            let value = eval_expression_frame(ctx, expr, Some(dest))?;
+            let result = eval_expression_frame(ctx, expr, Some(dest));
+            if let Err(e) = result {
+                // Free the allocated buffer on error to avoid leaks.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_mem_free_local(
+                        ctx.runtime.handle(),
+                        ret_tydesc,
+                        1,
+                        ret_ptr
+                    );
+                }
+                return Err(e);
+            }
+            let value = result.unwrap();
 
             // Convert Borrowed to TempOwned since this escapes the frame.
             if value.location == ValueLocation::Borrowed && value.ptr == ret_ptr {
