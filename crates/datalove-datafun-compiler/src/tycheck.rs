@@ -1851,6 +1851,29 @@ fn check_expr<'db>(
             }
         }
 
+        // Handle list expressions - check elements against expected element type.
+        ExprFunKind::List(list_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::List(_)) => {
+                    // Check elements against expected element type (with coercion).
+                    check_list_elements(ctx, list_expr.elements(db), expected)?;
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to Data.
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
         // Handle integer literals specially - they can coerce to expected integer types.
         ExprFunKind::Int(_int_expr) => {
             match expected.ty(db) {
@@ -2603,6 +2626,7 @@ impl From<CoercionError> for TypeError {
 ///
 /// Coercion rules:
 /// - T matches T (exact match)
+/// - Numeric widening (u8 -> int, i16 -> int, etc.)
 /// - T matches data (any type coerces to data)
 fn check_type_coercion<'db>(
     db: &'db dyn crate::Db,
@@ -2613,6 +2637,11 @@ fn check_type_coercion<'db>(
 
     // Check exact match.
     if datalit::tycheck::types_equivalent(db, actual, expected_ty) {
+        return Ok(());
+    }
+
+    // Check numeric widening (u8 -> int, i16 -> i32, etc.).
+    if datalit::tycheck::can_widen_to(actual, expected_ty) {
         return Ok(());
     }
 

@@ -1,0 +1,17 @@
+----------
+module sys/test/listcoerce_u32
+----------
+
+// Module function returning list with elements coerced to u32.
+fun make_u32_list(): @[@u32]
+    ret @[: u8 / @100, : u16 / @200]
+end fun
+
+----------
+script
+----------
+
+require module sys/test/listcoerce_u32
+import listcoerce_u32.make_u32_list
+
+let output = make_u32_list()

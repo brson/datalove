@@ -6,6 +6,7 @@
 use crate::ast;
 
 use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
+use super::alloc::write_bigint_to_ptr;
 
 /// Allocate an inline integer literal (from datafun AST).
 pub(super) fn allocate_inline_int_literal<'db>(
@@ -86,6 +87,12 @@ pub(super) fn write_inline_int_to_dest<'db>(
             let value: i64 = value_str.parse()
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse i64: {}", e)))?;
             unsafe { *(dest.ptr as *mut i64) = value; }
+        }
+        datalove_rt::rtdt::TyTag::Int => {
+            let value: i128 = value_str.parse()
+                .map_err(|e| InterpError::RuntimeError(format!("Failed to parse int: {}", e)))?;
+            let int_ptr = dest.ptr as *mut datalove_rt::rtdt::Int;
+            write_bigint_to_ptr(ctx.runtime.handle(), int_ptr, value);
         }
         _ => {
             return Err(InterpError::RuntimeError(

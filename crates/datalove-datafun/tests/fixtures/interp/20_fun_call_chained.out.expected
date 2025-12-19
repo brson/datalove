@@ -103,11 +103,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "RuntimeError(\"Cannot write integer to destination type Int\")",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@10",
     ),
 ]

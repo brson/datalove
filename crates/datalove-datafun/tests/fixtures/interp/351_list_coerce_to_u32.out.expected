@@ -1,0 +1,57 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: Some(TypeHintAndHeap(
+                        heap: Local,
+                        type_hint: List(TypeHintList(
+                            element_type: TypeHintAndHeap(
+                                heap: Local,
+                                type_hint: U32,
+                            ),
+                        )),
+                    )),
+                    value: ExprFun(
+                        expr: ExprList(
+                            kind: "List",
+                            heap: Local,
+                            type_hint: None,
+                            elements: [
+                                ExprFun(
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: Some(TypeHintAndHeap(
+                                            heap: Omitted,
+                                            type_hint: U8,
+                                        )),
+                                        value: "1",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: Some(TypeHintAndHeap(
+                                            heap: Omitted,
+                                            type_hint: U16,
+                                        )),
+                                        value: "2",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@[@1, @2]",
+    ),
+]

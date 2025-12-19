@@ -1,0 +1,110 @@
+[
+    ModuleAnalysis(
+        type: "Module",
+        path: "sys/test/listcoerce_int",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "make_int_list",
+                    params: [],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Local,
+                        type_hint: List(TypeHintList(
+                            element_type: TypeHintAndHeap(
+                                heap: Local,
+                                type_hint: Int,
+                            ),
+                        )),
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprList(
+                                    kind: "List",
+                                    heap: Local,
+                                    type_hint: None,
+                                    elements: [
+                                        ExprFun(
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: Some(TypeHintAndHeap(
+                                                    heap: Omitted,
+                                                    type_hint: U8,
+                                                )),
+                                                value: "10",
+                                            ),
+                                        ),
+                                        ExprFun(
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: Some(TypeHintAndHeap(
+                                                    heap: Omitted,
+                                                    type_hint: I16,
+                                                )),
+                                                value: "20",
+                                            ),
+                                        ),
+                                        ExprFun(
+                                            expr: ExprInt(
+                                                kind: "Int",
+                                                heap: Local,
+                                                type_hint: Some(TypeHintAndHeap(
+                                                    heap: Omitted,
+                                                    type_hint: I32,
+                                                )),
+                                                value: "30",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        exports: [],
+    ),
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtRequireModule(
+                    kind: "Require",
+                    variant: "Module",
+                    import_space: "sys",
+                    package_alias: "test",
+                    module_alias: "listcoerce_int",
+                ),
+                StmtImport(
+                    kind: "Import",
+                    module_name: "listcoerce_int",
+                    item_name: "make_int_list",
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "make_int_list",
+                            args: [],
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Success",
+        ),
+        output: "@[@10, @20, @30]",
+    ),
+]

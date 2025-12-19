@@ -384,6 +384,64 @@ pub(super) fn widen_fixed_int_to_int<'db>(
     Ok(int_val)
 }
 
+/// Initialize a bigint (Int) at the given pointer from an i128 value.
+///
+/// This writes directly to the destination without allocating the Int struct itself.
+/// The limbs are allocated via the runtime allocator.
+pub(super) fn write_bigint_to_ptr(
+    rt_handle: *mut u8,
+    int_ptr: *mut datalove_rt::rtdt::Int,
+    value: i128,
+) {
+    let (magnitude, is_negative) = if value < 0 {
+        ((-value) as u128, true)
+    } else {
+        (value as u128, false)
+    };
+
+    unsafe {
+        if magnitude == 0 {
+            (*int_ptr).data = std::ptr::null();
+            (*int_ptr).size_and_sign = 0;
+            (*int_ptr).capacity = 0;
+        } else if magnitude <= u32::MAX as u128 {
+            // Fits in one limb.
+            let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                rt_handle, 4, 4, 1
+            ) as *mut u32;
+            *limb_ptr = magnitude as u32;
+            (*int_ptr).data = limb_ptr;
+            (*int_ptr).size_and_sign = if is_negative { -1 } else { 1 };
+            (*int_ptr).capacity = 1;
+        } else if magnitude <= u64::MAX as u128 {
+            // Fits in two limbs.
+            let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                rt_handle, 4, 4, 2
+            ) as *mut u32;
+            *limb_ptr = magnitude as u32;
+            *limb_ptr.add(1) = (magnitude >> 32) as u32;
+            (*int_ptr).data = limb_ptr;
+            (*int_ptr).size_and_sign = if is_negative { -2 } else { 2 };
+            (*int_ptr).capacity = 2;
+        } else {
+            // Fits in three or four limbs.
+            let num_limbs = if magnitude <= (1u128 << 96) - 1 { 3 } else { 4 };
+            let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                rt_handle, 4, 4, num_limbs
+            ) as *mut u32;
+            *limb_ptr = magnitude as u32;
+            *limb_ptr.add(1) = (magnitude >> 32) as u32;
+            *limb_ptr.add(2) = (magnitude >> 64) as u32;
+            if num_limbs == 4 {
+                *limb_ptr.add(3) = (magnitude >> 96) as u32;
+            }
+            (*int_ptr).data = limb_ptr;
+            (*int_ptr).size_and_sign = if is_negative { -(num_limbs as i32) } else { num_limbs as i32 };
+            (*int_ptr).capacity = num_limbs as u32;
+        }
+    }
+}
+
 /// Wrap an existing value in Data, consuming the inner value.
 ///
 /// The Data struct takes ownership of the inner value's pointer.
