@@ -878,46 +878,6 @@ fn destroy_slot_contents<'db>(
     destroy_value_contents_only(ctx, value);
 }
 
-/// Execute a statement within a function body using frame-based execution.
-fn _execute_function_statement_frame<'db>(
-    ctx: &mut InterpContext<'db>,
-    stmt: &ast::Statement<'db>,
-) -> Result<(), InterpError> {
-    match stmt {
-        ast::Statement::Let(let_stmt) => {
-            // Evaluate expression and store in frame slot.
-            execute_let_statement_frame(ctx, *let_stmt)
-        }
-        ast::Statement::Ret(ret_stmt) => {
-            // Evaluate the return expression (no dest - value escapes frame).
-            let value = eval_expression_frame(ctx, ret_stmt.value(ctx.db), None)?;
-            Err(InterpError::FunctionReturn(value))
-        }
-        ast::Statement::If(_) => {
-            Err(InterpError::InvalidExpression("If statements in functions not yet implemented".to_string()))
-        }
-        ast::Statement::Loop(_) => {
-            Err(InterpError::InvalidExpression("Loop statements in functions not yet implemented".to_string()))
-        }
-        ast::Statement::Break(_) => {
-            Err(InterpError::InvalidExpression("Break statements in functions not yet implemented".to_string()))
-        }
-        ast::Statement::Continue(_) => {
-            Err(InterpError::InvalidExpression("Continue statements in functions not yet implemented".to_string()))
-        }
-        ast::Statement::Fun(_) => {
-            Err(InterpError::InvalidExpression("Nested functions not yet implemented".to_string()))
-        }
-        ast::Statement::Require(_) | ast::Statement::Import(_) => {
-            // These are handled at the module level.
-            Ok(())
-        }
-        ast::Statement::ParseError(_) => {
-            Err(InterpError::InvalidExpression("Parse error in function".to_string()))
-        }
-    }
-}
-
 // ============================================================================
 // Frame-based execution helpers
 // ============================================================================
