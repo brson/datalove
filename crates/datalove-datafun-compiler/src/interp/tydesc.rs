@@ -94,7 +94,7 @@ pub(super) fn type_hint_to_tydesc<'db>(
         TypeHint::Error => ctx.tydesc_table.get_or_create(&Type::Error),
         // Tensor, AnonEnum, ParseError not yet supported - fall back to U32.
         _ => {
-            ctx.tydesc_table.get_or_create(&Type::U32)
+            todo!()
         }
     }
 }
