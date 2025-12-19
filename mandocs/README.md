@@ -17,16 +17,14 @@ Then we'll add I/O to it &mdash; carefully.
 
 
 
-## The Datatypes of Datalove
 
-Datalove's datatypes, their representation, and semantics are focused on correctness and completeness,
-particularly with regard to tricky corner cases related to subjects like overflow, NaNs, etc;
-and we take some difficult positions.
-
-
-
-
-
+- [Features](features.md)
+- [Design Notes](design-notes.md)
+- [Novelties](novelties.md)
+- [Datalit Types](datalit-types.md)
+- [Datalit Runtime Types](datalit-runtime-types.md)
+- [Testing Tower](testing-tower.md)
+- [Influences](influences.md)
 
 
 
