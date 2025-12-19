@@ -111,7 +111,7 @@ use types::is_copy_type;
 use alloc::{
     allocate_bool, allocate_f32, allocate_u32_raw,
     allocate_option_none, allocate_option_some_from_value,
-    allocate_result_ok_from_value, allocate_result_err,
+    allocate_result_ok_from_value, allocate_result_err, write_result_err_to_dest,
 };
 use collections::{
     allocate_tuple_from_values, allocate_struct_from_values,
@@ -583,8 +583,14 @@ pub(super) fn execute_function_body<'db>(
             // Early return via ? operator - create Option::None.
             if let Some(ret_type) = return_type {
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Option(_)) {
-                    let inner_tydesc = value_tydesc_for_option(ctx, ret_type);
-                    return allocate_option_none(ctx, inner_tydesc);
+                    if let Some(dest) = return_dest {
+                        // DPS: write None to caller's destination.
+                        return write_option_none_to_dest(dest);
+                    } else {
+                        // Heap fallback.
+                        let inner_tydesc = value_tydesc_for_option(ctx, ret_type);
+                        return allocate_option_none(ctx, inner_tydesc);
+                    }
                 }
             }
         }
@@ -592,8 +598,14 @@ pub(super) fn execute_function_body<'db>(
             // Early return via ! operator - create Result::Err.
             if let Some(ret_type) = return_type {
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Result(_)) {
-                    let ok_tydesc = value_tydesc_for_result(ctx, ret_type);
-                    return allocate_result_err(ctx, ok_tydesc, *tydesc, *ptr);
+                    if let Some(dest) = return_dest {
+                        // DPS: write Err to caller's destination.
+                        return write_result_err_to_dest(dest, *tydesc, *ptr);
+                    } else {
+                        // Heap fallback.
+                        let ok_tydesc = value_tydesc_for_result(ctx, ret_type);
+                        return allocate_result_err(ctx, ok_tydesc, *tydesc, *ptr);
+                    }
                 }
             }
         }
@@ -1579,7 +1591,22 @@ fn eval_return_expression_frame<'db>(
 
             if needs_typed_context {
                 // Evaluate WITH destination - constructors need type context.
-                eval_expression_frame(ctx, expr, Some(return_dest))?;
+                let value = eval_expression_frame(ctx, expr, Some(return_dest))?;
+
+                // Handle case where expression didn't use dest.
+                if value.ptr != return_dest.ptr {
+                    let size = unsafe { (*value.tydesc).size as usize };
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            value.ptr,
+                            return_dest.ptr,
+                            size,
+                        );
+                    }
+                    if value.location == ValueLocation::TempOwned {
+                        free_value_structure(ctx, value);
+                    }
+                }
             } else {
                 // Evaluate WITHOUT destination first to check if coercion is needed.
                 let value = eval_expression_frame(ctx, expr, None)?;
@@ -1610,7 +1637,24 @@ fn eval_return_expression_frame<'db>(
             }
         } else {
             // No coercion possible - evaluate directly into dest via DPS.
-            eval_expression_frame(ctx, expr, Some(return_dest))?;
+            let value = eval_expression_frame(ctx, expr, Some(return_dest))?;
+
+            // Handle case where expression didn't use dest.
+            if value.ptr != return_dest.ptr {
+                // Value is not at the destination - copy/move it there.
+                let size = unsafe { (*value.tydesc).size as usize };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        value.ptr,
+                        return_dest.ptr,
+                        size,
+                    );
+                }
+                // Free structure if TempOwned (borrowed values have structure owned elsewhere).
+                if value.location == ValueLocation::TempOwned {
+                    free_value_structure(ctx, value);
+                }
+            }
         }
 
         // Return as Borrowed - caller owns the destination memory.

@@ -1023,6 +1023,61 @@ pub(super) fn eval_function_call_in_script_scope<'db>(
 
     // Execute the function body with arguments.
     // Set current_module if this is a module function.
-    // Script scope doesn't have a return destination - use heap fallback.
-    execute_function_body(ctx, func, func_module, arg_values, None)
+
+    // Get return type to allocate destination buffer.
+    let return_type = func.return_type(ctx.db);
+
+    // Allocate return destination if function has a return type.
+    let (return_dest, return_ptr, return_tydesc) = if let Some(ret_type) = return_type {
+        let ret_tydesc = type_hint_to_tydesc(ctx, ret_type);
+        let ret_ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_local(
+                ctx.runtime.handle(),
+                ret_tydesc,
+                1
+            )
+        };
+        if ret_ptr.is_null() {
+            for val in arg_values { destroy_value(ctx, val); }
+            return Err(InterpError::RuntimeError("Failed to allocate return buffer".to_string()));
+        }
+        let dest = Destination { ptr: ret_ptr, tydesc: ret_tydesc };
+        (Some(dest), ret_ptr, ret_tydesc)
+    } else {
+        (None, std::ptr::null_mut(), std::ptr::null())
+    };
+
+    // Execute with return destination.
+    let result = execute_function_body(ctx, func, func_module, arg_values, return_dest);
+
+    // Handle result - convert to TempOwned if we provided a destination.
+    match result {
+        Ok(_value) if return_dest.is_some() => {
+            // Return value was written to our buffer via DPS.
+            // Return as TempOwned since script scope owns this memory.
+            Ok(Value {
+                ptr: return_ptr,
+                tydesc: return_tydesc,
+                location: ValueLocation::TempOwned,
+            })
+        }
+        Ok(value) => {
+            // No return type (void function) - return value as-is.
+            Ok(value)
+        }
+        Err(e) => {
+            // Error - free return buffer if allocated.
+            if return_dest.is_some() {
+                unsafe {
+                    datalove_rt::c::dtlv_rti_mem_free_local(
+                        ctx.runtime.handle(),
+                        return_tydesc,
+                        1,
+                        return_ptr,
+                    );
+                }
+            }
+            Err(e)
+        }
+    }
 }

@@ -4,7 +4,7 @@
 //! compound structures like Option, Result, tuples, and collections.
 
 use crate::datalit::tycheck::Type;
-use super::{InterpContext, InterpError, Value, ValueLocation};
+use super::{InterpContext, InterpError, Value, ValueLocation, Destination};
 use super::memory::destroy_value;
 
 /// Allocate a boolean value.
@@ -297,6 +297,37 @@ pub(super) fn allocate_result_err<'db>(
     }
 
     Ok(Value { ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned })
+}
+
+/// Write Result::Err to a destination (DPS).
+///
+/// The destination must be a Result type. Writes the Err tag and copies the error payload.
+pub(super) fn write_result_err_to_dest(
+    dest: Destination,
+    err_tydesc: *const datalove_rt::rtdt::TyDesc,
+    err_ptr: *mut u8,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{self, TyDescRef, TyTag};
+
+    let dest_tydesc_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+
+    if dest_tydesc_ref.type_tag() != TyTag::Result {
+        return Err(InterpError::RuntimeError(
+            format!("write_result_err_to_dest requires Result destination, got {:?}",
+                    dest_tydesc_ref.type_tag())
+        ));
+    }
+
+    let layout = rtdt::layout::compute_result_layout(dest_tydesc_ref);
+
+    unsafe {
+        *dest.ptr = rtdt::ResultTag::Err as u8;
+        let err_payload_ptr = dest.ptr.add(layout.payload_offset as usize);
+        let err_size = (*err_tydesc).size as usize;
+        std::ptr::copy_nonoverlapping(err_ptr, err_payload_ptr, err_size);
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
 }
 
 /// Widen any fixed-width integer to an Int (bigint) value.
