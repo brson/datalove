@@ -302,6 +302,9 @@ impl<'db> Engine<'db> {
                     .collect();
                 return Eval::Error(format!("type error(s): {}", errors.join(", ")));
             }
+
+            // Store expression types for DPS.
+            self.interp_ctx.merge_expr_types(script_typecheck);
         }
 
         // Update context with new script.
@@ -380,6 +383,9 @@ impl<'db> Engine<'db> {
                 .collect();
             return Eval::Error(format!("type error(s): {}", errors.join(", ")));
         }
+
+        // Store expression types for DPS.
+        self.interp_ctx.merge_expr_types(script_typecheck);
 
         // Update context with new script.
         self.interp_ctx.set_script(new_script);

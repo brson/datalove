@@ -150,84 +150,6 @@ pub(super) fn allocate_struct_from_values<'db>(
     })
 }
 
-/// Allocate a list from a vector of evaluated values.
-///
-/// Takes ownership of all element values, copying their data into the list
-/// and freeing their original containers. All elements must have the same type.
-pub(super) fn allocate_list_from_values<'db>(
-    ctx: &mut InterpContext<'db>,
-    values: Vec<Value>,
-) -> Result<Value, InterpError> {
-    
-
-    if values.is_empty() {
-        return Err(InterpError::RuntimeError("Cannot create empty list".to_string()));
-    }
-
-    // All elements must have same type - use first element's tydesc.
-    let element_tydesc = values[0].tydesc;
-    let element_size = unsafe { (*element_tydesc).size as usize };
-
-    // Create list tydesc.
-    let list_tydesc = ctx.tydesc_table.create_list_from_element_tydesc(element_tydesc);
-
-    // Build contiguous buffer of element data.
-    let mut buffer = Vec::with_capacity(values.len() * element_size);
-    for value in &values {
-        unsafe {
-            let slice = std::slice::from_raw_parts(value.ptr, element_size);
-            buffer.extend_from_slice(slice);
-        }
-    }
-
-    // Allocate list value.
-    let rt_handle = ctx.runtime.handle();
-    let list_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, list_tydesc, 1)
-    };
-
-    if list_ptr.is_null() {
-        for value in values {
-            destroy_value(ctx, value);
-        }
-        return Err(InterpError::RuntimeError("Failed to allocate list".to_string()));
-    }
-
-    // Create list from slice.
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_list_create_from_slice_local(
-            rt_handle,
-            buffer.as_ptr(),
-            values.len() as u32,
-            element_tydesc,
-            list_ptr,
-            list_tydesc,
-        )
-    };
-
-    if status != datalove_rt::c::RtStatus::Ok {
-        // Free allocated memory and element values.
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, list_tydesc, 1, list_ptr);
-        }
-        for value in values {
-            destroy_value(ctx, value);
-        }
-        return Err(InterpError::RuntimeError("Failed to create list".to_string()));
-    }
-
-    // Destroy original elements (list cloned them).
-    for value in values {
-        destroy_value(ctx, value);
-    }
-
-    Ok(Value {
-        ptr: list_ptr,
-        tydesc: list_tydesc,
-        location: ValueLocation::TempOwned,
-    })
-}
-
 /// Allocate a map from a vector of key-value pairs.
 ///
 /// Takes ownership of all key and value values. Keys and values are moved into the
@@ -237,7 +159,6 @@ pub(super) fn allocate_map_from_values<'db>(
     ctx: &mut InterpContext<'db>,
     entries: Vec<(Value, Value)>,
 ) -> Result<Value, InterpError> {
-    
 
     if entries.is_empty() {
         return Err(InterpError::RuntimeError("Cannot create empty map".to_string()));
@@ -369,7 +290,6 @@ pub(super) fn allocate_set_from_values<'db>(
     ctx: &mut InterpContext<'db>,
     values: Vec<Value>,
 ) -> Result<Value, InterpError> {
-    
 
     if values.is_empty() {
         return Err(InterpError::RuntimeError("Cannot create empty set".to_string()));

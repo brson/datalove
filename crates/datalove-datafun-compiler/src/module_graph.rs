@@ -61,6 +61,13 @@ pub struct ModuleGraphTypecheckResult<'db> {
     /// Function analysis results for all functions in all modules.
     #[returns(ref)]
     pub function_analyses: Vec<(crate::ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>)>,
+
+    /// Expression types from all modules, combined.
+    ///
+    /// Indexed by ExprFun salsa ID, contains types for all expressions
+    /// across all modules in the graph.
+    #[returns(ref)]
+    pub expr_types: Vec<Option<crate::tycheck::TypeAndHeap<'db>>>,
 }
 
 impl<'db> ModuleGraphTypecheckResult<'db> {

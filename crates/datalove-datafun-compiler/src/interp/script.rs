@@ -83,6 +83,9 @@ pub fn execute_script_with_module_graph<'db>(
             return Err(InterpError::TypecheckErrors(type_errors));
         }
 
+        // Store expression types for interpreter access.
+        ctx.merge_expr_types(unit_typecheck);
+
         // Analyze each function in the unit.
         for statement in parsed_unit.statements(db) {
             if let crate::ast::Statement::Fun(func_stmt) = statement {
@@ -415,6 +418,9 @@ fn execute_fun_statement<'db>(
                         crate::tycheck::type_check(ctx.db, unit_source, parsed_unit)
                     };
 
+                    // Store expression types for interpreter access.
+                    ctx.merge_expr_types(unit_typecheck);
+
                     let analysis = crate::function_analysis::analyze_function(
                         ctx.db,
                         fun_stmt,
@@ -548,7 +554,7 @@ pub(super) fn eval_expression_in_script_scope<'db>(
             allocate_inline_string(ctx, &string_expr)
         }
         ast::ExprFunKind::List(list_expr) => {
-            eval_inline_list(ctx, EvalContext::ScriptScope, &list_expr, dest)
+            eval_inline_list(ctx, EvalContext::ScriptScope, expr, &list_expr, dest)
         }
         ast::ExprFunKind::Set(set_expr) => {
             eval_inline_set(ctx, EvalContext::ScriptScope, &set_expr, dest)

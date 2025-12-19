@@ -35,6 +35,8 @@ pub struct InterpContext<'db> {
     pub(super) current_module_id: Option<ModuleId>,
     /// Typecheck result for the module graph.
     pub(super) module_graph_typecheck: Option<ModuleGraphTypecheckResult<'db>>,
+    /// Expression types from typechecking, indexed by ExprFun salsa ID.
+    pub(super) expr_types: Vec<Option<crate::tycheck::TypeAndHeap<'db>>>,
 }
 
 /// Script-level scope for REPL incremental execution.
@@ -97,11 +99,11 @@ impl Drop for ScriptResult<'_> {
     }
 }
 
-impl InterpContext<'_> {
+impl<'db> InterpContext<'db> {
     /// Create a new interpreter context with ModuleGraph typecheck result.
     ///
     /// The caller must provide a valid ModuleGraphTypecheckResult with no errors.
-    pub fn new_with_module_graph<'db>(
+    pub fn new_with_module_graph(
         db: &'db dyn crate::Db,
         typecheck_result: ModuleGraphTypecheckResult<'db>,
     ) -> Result<InterpContext<'db>, InterpError> {
@@ -113,6 +115,9 @@ impl InterpContext<'_> {
 
         let graph = typecheck_result.graph(db);
         let module_functions_graph = ModuleFunctionTableGraph::build_from_graph(db, graph);
+
+        // Initialize expr_types from module graph typecheck.
+        let expr_types = typecheck_result.expr_types(db).clone();
 
         Ok(InterpContext {
             db,
@@ -128,6 +133,7 @@ impl InterpContext<'_> {
             module_functions_graph,
             current_module_id: None,
             module_graph_typecheck: Some(typecheck_result),
+            expr_types,
         })
     }
 
@@ -139,6 +145,33 @@ impl InterpContext<'_> {
     /// Check if this context has a typecheck result.
     pub fn is_typechecked(&self) -> bool {
         self.module_graph_typecheck.is_some()
+    }
+
+    /// Merge expression types from a typecheck result.
+    ///
+    /// This extends the expr_types vector with types from the given TypecheckResult.
+    /// Should be called after typechecking each script unit.
+    pub fn merge_expr_types(&mut self, typecheck_result: crate::tycheck::TypecheckResult<'db>) {
+        let new_types = typecheck_result.expr_types(self.db);
+        // Extend our vector if needed and copy types.
+        if new_types.len() > self.expr_types.len() {
+            self.expr_types.resize(new_types.len(), None);
+        }
+        for (i, ty) in new_types.iter().enumerate() {
+            if ty.is_some() {
+                self.expr_types[i] = *ty;
+            }
+        }
+    }
+
+    /// Look up the type of an expression.
+    ///
+    /// Returns the type if it was recorded during typechecking.
+    pub fn get_expr_type(&self, expr: ast::ExprFun<'db>) -> Option<crate::tycheck::TypeAndHeap<'db>> {
+        use salsa::plumbing::AsId;
+        let id = expr.as_id();
+        let index = id.index() as usize;
+        self.expr_types.get(index).copied().flatten()
     }
 
     /// Populate script-level imports using ModuleGraph.

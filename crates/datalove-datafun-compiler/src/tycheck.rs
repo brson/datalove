@@ -511,6 +511,7 @@ pub fn typecheck_module_graph<'db>(
     let mut module_exports_map: BTreeMap<ModuleId, MgModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<ModuleId, MgModuleImports<'db>> = BTreeMap::new();
     let mut function_analyses: Vec<(crate::ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>)> = Vec::new();
+    let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
 
     // Build a map from module path to ModuleId for quick lookup.
     let mut path_to_id: HashMap<String, ModuleId> = HashMap::new();
@@ -605,7 +606,18 @@ pub fn typecheck_module_graph<'db>(
             .iter()
             .map(|e| TypeErrorEntry::new(db, e.clone()))
             .collect();
-        let module_typecheck_result = TypecheckResult::new(db, script, errors, ctx.expr_types);
+        let module_typecheck_result = TypecheckResult::new(db, script, errors, ctx.expr_types.clone());
+
+        // Merge this module's expr_types into combined.
+        let new_types = &ctx.expr_types;
+        if new_types.len() > combined_expr_types.len() {
+            combined_expr_types.resize(new_types.len(), None);
+        }
+        for (i, ty) in new_types.iter().enumerate() {
+            if ty.is_some() {
+                combined_expr_types[i] = *ty;
+            }
+        }
 
         for statement in script.statements(db) {
             if let Statement::Fun(func_stmt) = statement {
@@ -615,7 +627,7 @@ pub fn typecheck_module_graph<'db>(
         }
     }
 
-    ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, function_analyses)
+    ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, function_analyses, combined_expr_types)
 }
 
 /// Collect function signature without checking body (first pass).

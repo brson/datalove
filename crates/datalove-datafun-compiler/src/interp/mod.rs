@@ -115,7 +115,7 @@ use alloc::{
 };
 use collections::{
     allocate_tuple_from_values, allocate_struct_from_values,
-    allocate_list_from_values, allocate_map_from_values, allocate_set_from_values,
+    allocate_map_from_values, allocate_set_from_values,
 };
 use literals::{
     allocate_inline_int_literal, write_inline_int_to_dest, write_option_none_to_dest,
@@ -1433,7 +1433,7 @@ fn eval_expression_frame<'db>(
             allocate_inline_string(ctx, &string_expr)
         }
         ast::ExprFunKind::List(list_expr) => {
-            eval_inline_list(ctx, EvalContext::Frame, &list_expr, dest)
+            eval_inline_list(ctx, EvalContext::Frame, expr, &list_expr, dest)
         }
         ast::ExprFunKind::Set(set_expr) => {
             eval_inline_set(ctx, EvalContext::Frame, &set_expr, dest)
@@ -1882,28 +1882,131 @@ fn eval_expression<'db>(
 }
 
 /// Evaluate inline list expression in the given context.
+///
+/// Uses type information when available to get element tydesc upfront,
+/// enabling DPS optimization for element evaluation.
 pub(super) fn eval_inline_list<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
+    expr: ast::ExprFun<'db>,
     list_expr: &ast::ExprList<'db>,
     _dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
-    let elements = list_expr.elements(ctx.db);
-    let mut values = Vec::with_capacity(elements.len());
+    use crate::tycheck::Type;
+    use crate::datalit::tycheck::Type as DatalitType;
 
-    for elem in elements {
-        match eval_expression(ctx, eval_ctx, *elem, None) {
-            Ok(v) => values.push(v),
+    let elements = list_expr.elements(ctx.db);
+
+    // Get element type from typechecker.
+    let type_and_heap = ctx.get_expr_type(expr).ok_or_else(|| {
+        InterpError::RuntimeError("List type not found in typechecker (compiler bug)".to_string())
+    })?;
+
+    let Type::Datalit(DatalitType::List(list_type)) = type_and_heap.ty(ctx.db) else {
+        return Err(InterpError::RuntimeError(
+            "Expected List type (compiler bug)".to_string()
+        ));
+    };
+
+    let elem_ty = list_type.element_type(ctx.db);
+    let elem_tydesc = ctx.tydesc_table.get_or_create(elem_ty.ty(ctx.db));
+
+    eval_list_with_element_tydesc(ctx, eval_ctx, elements, elem_tydesc)
+}
+
+/// Evaluate list elements with known element tydesc, using DPS.
+fn eval_list_with_element_tydesc<'db>(
+    ctx: &mut InterpContext<'db>,
+    eval_ctx: EvalContext,
+    elements: &[ast::ExprFun<'db>],
+    element_tydesc: *const datalove_rt::rtdt::TyDesc,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::List;
+    use datalove_rt::c::RtStatus;
+
+    let list_tydesc = ctx.tydesc_table.create_list_from_element_tydesc(element_tydesc);
+    let rt_handle = ctx.runtime.handle();
+
+    // Allocate list struct.
+    let list_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, list_tydesc, 1)
+    };
+    if list_ptr.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate list".to_string()));
+    }
+
+    // Initialize empty list.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(rt_handle, list_ptr, list_tydesc)
+    };
+    if status != RtStatus::Ok {
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, list_tydesc, 1, list_ptr);
+        }
+        return Err(InterpError::RuntimeError("Failed to create list".to_string()));
+    }
+
+    if elements.is_empty() {
+        return Ok(Value {
+            ptr: list_ptr,
+            tydesc: list_tydesc,
+            location: ValueLocation::TempOwned,
+        });
+    }
+
+    // Reserve capacity for all elements (allocates data buffer via runtime allocator).
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_reserve_local(rt_handle, list_ptr, list_tydesc, elements.len() as u32)
+    };
+    if status != RtStatus::Ok {
+        unsafe {
+            datalove_rt::c::dtlv_rti_list_destroy_local(rt_handle, list_ptr, list_tydesc);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, list_tydesc, 1, list_ptr);
+        }
+        return Err(InterpError::RuntimeError("Failed to reserve list capacity".to_string()));
+    }
+
+    let element_size = unsafe { (*element_tydesc).size as usize };
+
+    // Evaluate each element with DPS into the list buffer.
+    for (i, elem) in elements.iter().enumerate() {
+        // Get pointer to element slot in list's data buffer.
+        let data_ptr = unsafe { (*(list_ptr as *const List)).data as *mut u8 };
+        let elem_dest_ptr = unsafe { data_ptr.add(i * element_size) };
+        let elem_dest = Destination { ptr: elem_dest_ptr, tydesc: element_tydesc };
+
+        match eval_expression(ctx, eval_ctx, *elem, Some(elem_dest)) {
+            Ok(value) => {
+                if value.location == ValueLocation::TempOwned {
+                    // Expression didn't use dest - copy result and free.
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(value.ptr, elem_dest_ptr, element_size);
+                    }
+                    free_value_structure(ctx, value);
+                }
+                // Update list size.
+                unsafe {
+                    let list = list_ptr as *mut List;
+                    (*list).size = (i + 1) as u32;
+                }
+            }
             Err(e) => {
-                for v in values {
-                    destroy_value(ctx, v);
+                // Destroy already-written elements and the list.
+                // The list's destroy will clean up all elements and the data buffer.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_list_destroy_local(rt_handle, list_ptr, list_tydesc);
+                    datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, list_tydesc, 1, list_ptr);
                 }
                 return Err(e);
             }
         }
     }
 
-    allocate_list_from_values(ctx, values)
+    Ok(Value {
+        ptr: list_ptr,
+        tydesc: list_tydesc,
+        location: ValueLocation::TempOwned,
+    })
 }
 
 /// Evaluate inline set expression in the given context.
