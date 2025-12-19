@@ -53,9 +53,16 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Name",
-                                    name: "x",
+                                expr: ExprOk(
+                                    kind: "Ok",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    payload: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "x",
+                                        ),
+                                    ),
                                 ),
                             ),
                         ),
@@ -74,11 +81,18 @@
                         )),
                     )),
                     value: ExprFun(
-                        expr: ExprInt(
-                            kind: "Int",
-                            heap: Local,
+                        expr: ExprOk(
+                            kind: "Ok",
+                            heap: Omitted,
                             type_hint: None,
-                            value: "42",
+                            payload: ExprFun(
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "42",
+                                ),
+                            ),
                         ),
                     ),
                 ),
@@ -104,11 +118,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "TypecheckErrors([TypeMismatch { expected: \"@!u32\", actual: \"u32\" }, UnresolvedName(\"input\")])",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "ok @42",
     ),
 ]

@@ -165,9 +165,9 @@ fn instantiate_expr_into<'db>(
             instantiate_option(db, rt, false, None, opt.inner_type(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
-        (_, Type::Option(opt)) => {
+        (Expr::Some(some_expr), Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, rt, true, Some(expr), opt.inner_type(db), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_option(db, rt, true, Some(some_expr.payload(db)), opt.inner_type(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Err(err_expr), Type::Result(res)) => {
@@ -175,9 +175,14 @@ fn instantiate_expr_into<'db>(
             instantiate_result(db, rt, false, None, Some(err_expr.value(db)), res.inner_type(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
-        (_, Type::Result(res)) => {
+        (Expr::Er(er_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, true, Some(expr), None, res.inner_type(db), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, false, None, Some(er_expr.payload(db)), res.inner_type(db), tydesc_table, tydesc, dest_ptr, resolved)
+        }
+
+        (Expr::Ok(ok_expr), Type::Result(res)) => {
+            let tydesc = tydesc_table.get_or_create(ty);
+            instantiate_result(db, rt, true, Some(ok_expr.payload(db)), None, res.inner_type(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Data(data_expr), Type::Data) => {
@@ -1635,7 +1640,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_some_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@u32 / @42")?;
+        let typechecked = compile_str(&db, ": @?@u32 / some @42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1694,7 +1699,7 @@ mod tests {
     #[test]
     fn test_instantiate_nested_option_some_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@?@u32 / @42")?;
+        let typechecked = compile_str(&db, ": @?@?@u32 / some some @42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1908,7 +1913,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_tuple_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@(@u32, @u32) / @(@10, @20)")?;
+        let typechecked = compile_str(&db, ": @?@(@u32, @u32) / some @(@10, @20)")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1968,7 +1973,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_struct_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@{x: @u32, y: @u32} / @{x = @100, y = @200}")?;
+        let typechecked = compile_str(&db, ": @?@{x: @u32, y: @u32} / some @{x = @100, y = @200}")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2026,7 +2031,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_list_some_empty() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@[@u32] / @[]")?;
+        let typechecked = compile_str(&db, ": @?@[@u32] / some @[]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2055,7 +2060,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_list_some_nonempty() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@[@u32] / @[@1, @2, @3]")?;
+        let typechecked = compile_str(&db, ": @?@[@u32] / some @[@1, @2, @3]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2136,7 +2141,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_enum_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@enum { Ok, Error(@string) } / @enum Error(@\"failed\")")?;
+        let typechecked = compile_str(&db, ": @?@enum { Ok, Error(@string) } / some @enum Error(@\"failed\")")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2222,7 +2227,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_option_of_tuple() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@?@(@u32, @bool) / @(@5, @true)")?;
+        let typechecked = compile_str(&db, ": @?@?@(@u32, @bool) / some some @(@5, @true)")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2265,7 +2270,7 @@ mod tests {
     #[test]
     fn test_instantiate_result_ok_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @!@u32 / @42")?;
+        let typechecked = compile_str(&db, ": @!@u32 / ok @42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2553,7 +2558,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_tensor() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": ?tensor<u32, 2> / @tensor [2, 2] [1 2, 3 4]")?;
+        let typechecked = compile_str(&db, ": ?tensor<u32, 2> / some @tensor [2, 2] [1 2, 3 4]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);

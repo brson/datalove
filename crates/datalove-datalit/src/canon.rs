@@ -130,6 +130,21 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
 
         (None, None) => Ordering::Equal,
 
+        // Some: compare payloads.
+        (Some(a_some), Some(b_some)) => {
+            cmp_expr(db, a_some.payload(db), b_some.payload(db))
+        }
+
+        // Ok: compare payloads.
+        (Ok(a_ok), Ok(b_ok)) => {
+            cmp_expr(db, a_ok.payload(db), b_ok.payload(db))
+        }
+
+        // Er: compare payloads.
+        (Er(a_er), Er(b_er)) => {
+            cmp_expr(db, a_er.payload(db), b_er.payload(db))
+        }
+
         // Data and Error: compare their wrapped values.
         (Data(a_data), Data(b_data)) => {
             cmp_expr(db, a_data.value(db), b_data.value(db))

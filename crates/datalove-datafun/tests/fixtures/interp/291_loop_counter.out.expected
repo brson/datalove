@@ -95,9 +95,16 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Name",
-                                    name: "n",
+                                expr: ExprOk(
+                                    kind: "Ok",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    payload: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "n",
+                                        ),
+                                    ),
                                 ),
                             ),
                         ),
@@ -120,6 +127,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "@3",
+        output: "ok @3",
     ),
 ]

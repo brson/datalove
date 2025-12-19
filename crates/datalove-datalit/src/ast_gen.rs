@@ -690,8 +690,9 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 // None uses the outer heap.
                 (Expr::None, heap)
             } else {
-                // Some case: use the inner heap for the value.
-                gen_expr_matching_type(db, rng, inner_type, inner_heap, config, depth + 1)
+                // Some case: wrap payload in Expr::Some.
+                let payload = gen_expr_full_with_heap(db, rng, inner_type, inner_heap, config, depth + 1);
+                (Expr::Some(ExprSome::new(db, payload)), heap)
             }
         }
         TypeHint::Result(th) => {
@@ -699,8 +700,9 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let inner_type = inner_type_and_heap.type_hint(db);
             let inner_heap = inner_type_and_heap.heap(db);
             if rng.gen_bool(0.5) {
-                // Success case: use the inner heap for the value.
-                gen_expr_matching_type(db, rng, inner_type, inner_heap, config, depth + 1)
+                // Success case: wrap payload in Expr::Ok.
+                let payload = gen_expr_full_with_heap(db, rng, inner_type, inner_heap, config, depth + 1);
+                (Expr::Ok(ExprOk::new(db, payload)), heap)
             } else {
                 // Error case: generate error with an arbitrary value.
                 // Use fixed heap to ensure all heaps match throughout.

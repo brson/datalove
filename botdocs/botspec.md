@@ -289,10 +289,16 @@ i8 -> i16 -> i32 -> i64 -> int
 
 ### 3.3 Coercions
 
-- Values implicitly wrap to `Some`/`Ok` when checking against Option/Result
 - Any type coerces to `data` (T → data)
 - Data values coerce to `?data` and `!data` (data → Option<data>, data → Result<data>)
 - Empty collections check against any element type
+
+**Explicit constructors for Option/Result:**
+- `some expr` - wrap in Some variant
+- `ok expr` - wrap in Ok variant
+- `er expr` - wrap error in Err variant
+- `@none` - None variant (requires type context)
+- `@error expr` - error literal (requires type context in Result)
 
 ### 3.4 Copy vs Linear Types
 

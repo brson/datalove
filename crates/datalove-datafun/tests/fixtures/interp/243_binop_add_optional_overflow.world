@@ -4,7 +4,7 @@ script
 
 // Test optional addition (+?) with overflow.
 fun test_add_optional_overflow(a: u32, b: u32): ?u32
-    ret a +? b
+    ret some (a +? b)
 end fun
 
 let output = test_add_optional_overflow(@4294967295, @1)

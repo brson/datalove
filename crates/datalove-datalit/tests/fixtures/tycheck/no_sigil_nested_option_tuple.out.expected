@@ -2,31 +2,41 @@
   "ast": {
     "expr": {
       "expr": {
-        "AnonTuple": {
-          "elements": [
-            {
+        "Some": {
+          "payload": {
+            "expr": {
               "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "42"
-                  }
-                },
-                "heap": "Local"
+                "AnonTuple": {
+                  "elements": [
+                    {
+                      "expr": {
+                        "expr": {
+                          "Int": {
+                            "value": "42"
+                          }
+                        },
+                        "heap": "Local"
+                      },
+                      "type_hint": null
+                    },
+                    {
+                      "expr": {
+                        "expr": {
+                          "String": {
+                            "value": "\"hello\""
+                          }
+                        },
+                        "heap": "Local"
+                      },
+                      "type_hint": null
+                    }
+                  ]
+                }
               },
-              "type_hint": null
+              "heap": "Omitted"
             },
-            {
-              "expr": {
-                "expr": {
-                  "String": {
-                    "value": "\"hello\""
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
-            }
-          ]
+            "type_hint": null
+          }
         }
       },
       "heap": "Omitted"

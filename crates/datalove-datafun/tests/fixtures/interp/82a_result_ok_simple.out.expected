@@ -37,19 +37,26 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprBinOp(
-                                    kind: "BinOp",
-                                    op: AddChecked,
-                                    lhs: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Name",
-                                            name: "x",
-                                        ),
-                                    ),
-                                    rhs: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Name",
-                                            name: "y",
+                                expr: ExprOk(
+                                    kind: "Ok",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    payload: ExprFun(
+                                        expr: ExprBinOp(
+                                            kind: "BinOp",
+                                            op: AddChecked,
+                                            lhs: ExprFun(
+                                                expr: ExprFunKind(
+                                                    kind: "Name",
+                                                    name: "x",
+                                                ),
+                                            ),
+                                            rhs: ExprFun(
+                                                expr: ExprFunKind(
+                                                    kind: "Name",
+                                                    name: "y",
+                                                ),
+                                            ),
                                         ),
                                     ),
                                 ),
@@ -91,6 +98,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "@42",
+        output: "ok @42",
     ),
 ]

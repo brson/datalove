@@ -11,4 +11,5 @@ fun test(a: @?u8): @u8
     end if
 end fun
 
-let output = test(@255)
+let val: @?u8 = some @255
+let output = test(val)

@@ -2,11 +2,31 @@
   "ast": {
     "expr": {
       "expr": {
-        "Int": {
-          "value": "42"
+        "Ok": {
+          "payload": {
+            "expr": {
+              "expr": {
+                "Some": {
+                  "payload": {
+                    "expr": {
+                      "expr": {
+                        "Int": {
+                          "value": "42"
+                        }
+                      },
+                      "heap": "Local"
+                    },
+                    "type_hint": null
+                  }
+                }
+              },
+              "heap": "Omitted"
+            },
+            "type_hint": null
+          }
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Local",

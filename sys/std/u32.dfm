@@ -144,9 +144,9 @@ end fun
 
 fun neg_checked(self: u32): ?u32
   if self == 0
-    ret 0
+    ret some 0
   else
-    ret @none // fixme @
+    ret @none
   end if
 end fun
 
@@ -273,10 +273,11 @@ fun clamp(self: u32, min_val: u32, max_val: u32): u32
 end fun
 
 // Absolute difference between two values.
-fun abs_diff(self: u32, other: u32): !u32
+// Since we check the condition first, subtraction cannot overflow.
+fun abs_diff(self: u32, other: u32): u32
   if self >= other
-    ret self -! other
+    ret sub_wrapping(self, other)
   else
-    ret other -! self
+    ret sub_wrapping(other, self)
   end if
 end fun

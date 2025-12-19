@@ -2,11 +2,21 @@
   "ast": {
     "expr": {
       "expr": {
-        "String": {
-          "value": "\"wrong type\""
+        "Ok": {
+          "payload": {
+            "expr": {
+              "expr": {
+                "String": {
+                  "value": "\"wrong type\""
+                }
+              },
+              "heap": "Local"
+            },
+            "type_hint": null
+          }
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Local",

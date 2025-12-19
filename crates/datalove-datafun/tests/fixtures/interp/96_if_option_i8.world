@@ -11,4 +11,5 @@ fun test(a: @?i8): @i8
     end if
 end fun
 
-let output = test(@42)
+let val: @?i8 = some @42
+let output = test(val)

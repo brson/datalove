@@ -3,7 +3,7 @@ script
 ----------
 
 fun divide(x: int, y: int): !int
-    ret x /! y
+    ret ok (x /! y)
 end fun
 
 let a = @2000000000 + @4000000000

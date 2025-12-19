@@ -380,11 +380,12 @@ fn execute_let_statement<'db>(
 ) -> Result<(), InterpError> {
     use crate::datalit::ast::TypeHint;
 
-    // Helper to check if expression is @none or @error.
-    let is_none_or_error = |expr: ast::ExprFun<'db>, db: &'db dyn crate::Db| -> bool {
+    // Helper to check if expression needs type context (some/ok/er/none/error).
+    let needs_type_context = |expr: ast::ExprFun<'db>, db: &'db dyn crate::Db| -> bool {
         matches!(
             expr.expr(db),
-            ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_)
+            ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) |
+            ast::ExprFunKind::Some(_) | ast::ExprFunKind::Ok(_) | ast::ExprFunKind::Er(_)
         )
     };
 
@@ -396,8 +397,8 @@ fn execute_let_statement<'db>(
                 // Get expected destination type.
                 let dest_tydesc = type_hint_to_tydesc(ctx, type_hint_and_heap);
 
-                // Check if expression is @none or @error - these need the destination type for context.
-                if is_none_or_error(let_stmt.value(ctx.db), ctx.db) {
+                // Check if expression needs type context (some/ok/er/none/error).
+                if needs_type_context(let_stmt.value(ctx.db), ctx.db) {
                     // Allocate destination and evaluate with type context.
                     let dest_ptr = unsafe {
                         datalove_rt::c::dtlv_rti_mem_alloc_local(
@@ -408,12 +409,12 @@ fn execute_let_statement<'db>(
                     };
                     if dest_ptr.is_null() {
                         return Err(InterpError::RuntimeError(
-                            "Failed to allocate destination for @none/@error".to_string()
+                            "Failed to allocate destination for Option/Result constructor".to_string()
                         ));
                     }
                     let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
 
-                    // Evaluate with destination - @none/@error will use the type context.
+                    // Evaluate with destination - constructors will use the type context.
                     let mut value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), Some(dest))?;
                     // We allocated the destination, so we own it - mark as TempOwned.
                     value.location = ValueLocation::TempOwned;
@@ -2357,30 +2358,42 @@ fn eval_return_expression_frame<'db>(
         let needs_coercion_check = matches!(dest_tag, TyTag::Option | TyTag::Result | TyTag::Data);
 
         if needs_coercion_check {
-            // Evaluate WITHOUT destination first to check if coercion is needed.
-            let value = eval_expression_frame(ctx, expr, None)?;
+            // Check if expression needs typed context (some/ok/er/none/error).
+            let needs_typed_context = matches!(
+                expr.expr(ctx.db),
+                ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) |
+                ast::ExprFunKind::Some(_) | ast::ExprFunKind::Ok(_) | ast::ExprFunKind::Er(_)
+            );
 
-            // Check if coercion is needed (value type doesn't match dest type).
-            let value_tag = unsafe { (*value.tydesc).type_tag };
-            if value.tydesc != return_dest.tydesc && value_tag != dest_tag {
-                // Need to coerce T → Option<T> or T → Result<T>.
-                coerce_value_to_dest(ctx, value, return_dest)?;
+            if needs_typed_context {
+                // Evaluate WITH destination - constructors need type context.
+                eval_expression_frame(ctx, expr, Some(return_dest))?;
             } else {
-                // No coercion needed - write value to dest.
-                if value.location == ValueLocation::TempOwned {
-                    // Copy contents and free structure.
-                    let size = unsafe { (*value.tydesc).size as usize };
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(
-                            value.ptr,
-                            return_dest.ptr,
-                            size,
-                        );
-                    }
-                    free_value_structure(ctx, value);
+                // Evaluate WITHOUT destination first to check if coercion is needed.
+                let value = eval_expression_frame(ctx, expr, None)?;
+
+                // Check if coercion is needed (value type doesn't match dest type).
+                let value_tag = unsafe { (*value.tydesc).type_tag };
+                if value.tydesc != return_dest.tydesc && value_tag != dest_tag {
+                    // Need to coerce T → Option<T> or T → Result<T>.
+                    coerce_value_to_dest(ctx, value, return_dest)?;
                 } else {
-                    // Value is Borrowed - clone to dest.
-                    clone_value_to_dest(ctx, value, return_dest);
+                    // No coercion needed - write value to dest.
+                    if value.location == ValueLocation::TempOwned {
+                        // Copy contents and free structure.
+                        let size = unsafe { (*value.tydesc).size as usize };
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(
+                                value.ptr,
+                                return_dest.ptr,
+                                size,
+                            );
+                        }
+                        free_value_structure(ctx, value);
+                    } else {
+                        // Value is Borrowed - clone to dest.
+                        clone_value_to_dest(ctx, value, return_dest);
+                    }
                 }
             }
         } else {
@@ -2401,10 +2414,11 @@ fn eval_return_expression_frame<'db>(
     let func = ctx.call_stack[frame_index].func;
     let return_type = func.return_type(ctx.db);
 
-    // Check if this is a @none or @error literal that needs typed context.
+    // Check if expression needs typed context (some/ok/er/none/error).
     let needs_typed_dest = matches!(
         expr.expr(ctx.db),
-        ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_)
+        ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) |
+        ast::ExprFunKind::Some(_) | ast::ExprFunKind::Ok(_) | ast::ExprFunKind::Er(_)
     );
 
     if needs_typed_dest {

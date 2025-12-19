@@ -3,7 +3,7 @@ script
 ----------
 
 fun divide(a: u32, b: u32): !u32
-    ret a /! b
+    ret ok (a /! b)
 end fun
 
 let output = divide(@84, @2)

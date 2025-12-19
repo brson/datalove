@@ -87,7 +87,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors([CannotSynthesize])",
+                "TypecheckErrors([TypeMismatch { expected: \"@!i8\", actual: \"i8\" }, CannotSynthesize])",
             ],
         ),
         output: "",

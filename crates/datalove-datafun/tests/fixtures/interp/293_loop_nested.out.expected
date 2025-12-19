@@ -236,7 +236,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "RuntimeError(\"Cannot write integer to destination type Bool\")",
+                "TypecheckErrors([TypeMismatch { expected: \"@!u32\", actual: \"u32\" }])",
             ],
         ),
         output: "",

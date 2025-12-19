@@ -95,7 +95,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors([TypeMismatch { expected: \"@!u32\", actual: \"error\" }])",
+                "TypecheckErrors([TypeMismatch { expected: \"@!u32\", actual: \"error\" }, TypeMismatch { expected: \"@!u32\", actual: \"u32\" }])",
             ],
         ),
         output: "",

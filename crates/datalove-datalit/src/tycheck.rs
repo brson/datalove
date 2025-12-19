@@ -675,13 +675,6 @@ fn check<'db>(
             check(ctx, payload, opt.inner_type(db))
         }
 
-        // Rule: Check-Option (implicit wrapping)
-        // IMPORTANT: This must come before Check-Subsume to allow string literals to coerce to Option<string>
-        (_, Type::Option(opt)) => {
-            // Try to check against inner type (implicit Some wrapping).
-            check(ctx, expr, opt.inner_type(db))
-        }
-
         // Rule: Check-Ok - explicit ok constructor
         (Expr::Ok(o), Type::Result(res)) => {
             let payload = o.payload(db);
@@ -717,13 +710,6 @@ fn check<'db>(
         (Expr::Err(_), Type::Result(_)) => {
             // Error expressions can check against any Result type (implicit Err wrapping).
             Ok(())
-        }
-
-        // Rule: Check-Result (implicit Ok wrapping)
-        // IMPORTANT: This must come before Check-Subsume to allow string literals to coerce to Result<string>
-        (_, Type::Result(res)) => {
-            // Try to check against inner type (implicit Ok wrapping).
-            check(ctx, expr, res.inner_type(db))
         }
 
         // Rule: Check-TypedInt - respect type hints on integer literals.

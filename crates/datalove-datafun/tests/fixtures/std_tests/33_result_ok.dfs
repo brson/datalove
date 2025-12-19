@@ -1,10 +1,10 @@
 require module sys/std/result
 
-import result.ok
+import result.to_option
 
 let val: @u32 = @42
-let ok_val: !u32 = val
+let ok_val: !u32 = ok val
 
 // Note: @error literal to !u32 coercion doesn't work in scripts.
 // Testing only Ok path for now.
-let output = ok(ok_val)
+let output = to_option(ok_val)

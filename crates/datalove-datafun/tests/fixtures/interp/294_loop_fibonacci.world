@@ -13,7 +13,7 @@ fun sum_to_three(): !u32
             break
         end if
     end loop
-    ret sum
+    ret ok sum
 end fun
 
 let output = sum_to_three()

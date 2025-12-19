@@ -3,7 +3,7 @@ script
 ----------
 
 fun div_int(a: int, b: int): !int
-    ret a /! b
+    ret ok (a /! b)
 end fun
 
 let x = @1000 + @0

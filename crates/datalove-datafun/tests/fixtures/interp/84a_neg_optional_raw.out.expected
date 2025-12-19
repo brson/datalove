@@ -29,13 +29,20 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprUnaryOp(
-                                    kind: "UnaryOp",
-                                    op: NegOptional,
-                                    operand: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Name",
-                                            name: "x",
+                                expr: ExprSome(
+                                    kind: "Some",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    payload: ExprFun(
+                                        expr: ExprUnaryOp(
+                                            kind: "UnaryOp",
+                                            op: NegOptional,
+                                            operand: ExprFun(
+                                                expr: ExprFunKind(
+                                                    kind: "Name",
+                                                    name: "x",
+                                                ),
+                                            ),
                                         ),
                                     ),
                                 ),
@@ -69,6 +76,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "@-42",
+        output: "some @-42",
     ),
 ]

@@ -1366,8 +1366,8 @@ fn test_eq_option_none_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_option_some_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @?@u32 / @42")?;
-    let typechecked_b = compile_str(&db, ": @?@u32 / @42")?;
+    let typechecked_a = compile_str(&db, ": @?@u32 / some @42")?;
+    let typechecked_b = compile_str(&db, ": @?@u32 / some @42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1423,7 +1423,7 @@ fn test_eq_option_some_equals() -> AnyResult<()> {
 fn test_eq_option_none_vs_some() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, ": @?@u32 / @none")?;
-    let typechecked_b = compile_str(&db, ": @?@u32 / @42")?;
+    let typechecked_b = compile_str(&db, ": @?@u32 / some @42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1478,8 +1478,8 @@ fn test_eq_option_none_vs_some() -> AnyResult<()> {
 #[test]
 fn test_eq_option_some_not_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @?@u32 / @42")?;
-    let typechecked_b = compile_str(&db, ": @?@u32 / @99")?;
+    let typechecked_a = compile_str(&db, ": @?@u32 / some @42")?;
+    let typechecked_b = compile_str(&db, ": @?@u32 / some @99")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1534,8 +1534,8 @@ fn test_eq_option_some_not_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_result_ok_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @!@u32 / @42")?;
-    let typechecked_b = compile_str(&db, ": @!@u32 / @42")?;
+    let typechecked_a = compile_str(&db, ": @!@u32 / ok @42")?;
+    let typechecked_b = compile_str(&db, ": @!@u32 / ok @42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1590,8 +1590,8 @@ fn test_eq_result_ok_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_result_ok_not_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @!@u32 / @42")?;
-    let typechecked_b = compile_str(&db, ": @!@u32 / @99")?;
+    let typechecked_a = compile_str(&db, ": @!@u32 / ok @42")?;
+    let typechecked_b = compile_str(&db, ": @!@u32 / ok @99")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1758,7 +1758,7 @@ fn test_eq_result_err_not_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_result_ok_vs_err() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": @!@u32 / @42")?;
+    let typechecked_a = compile_str(&db, ": @!@u32 / ok @42")?;
     let typechecked_b = compile_str(&db, r#": @!@u32 / @error "err5""#)?;
 
     let rt = Runtime::new();

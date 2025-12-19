@@ -20,23 +20,30 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprBinOp(
-                                    kind: "BinOp",
-                                    op: AddOptional,
-                                    lhs: ExprFun(
-                                        expr: ExprInt(
-                                            kind: "Int",
-                                            heap: Local,
-                                            type_hint: None,
-                                            value: "4294967295",
-                                        ),
-                                    ),
-                                    rhs: ExprFun(
-                                        expr: ExprInt(
-                                            kind: "Int",
-                                            heap: Local,
-                                            type_hint: None,
-                                            value: "1",
+                                expr: ExprSome(
+                                    kind: "Some",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    payload: ExprFun(
+                                        expr: ExprBinOp(
+                                            kind: "BinOp",
+                                            op: AddOptional,
+                                            lhs: ExprFun(
+                                                expr: ExprInt(
+                                                    kind: "Int",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                    value: "4294967295",
+                                                ),
+                                            ),
+                                            rhs: ExprFun(
+                                                expr: ExprInt(
+                                                    kind: "Int",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                    value: "1",
+                                                ),
+                                            ),
                                         ),
                                     ),
                                 ),
@@ -127,6 +134,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "@999",
+        output: "@32513",
     ),
 ]

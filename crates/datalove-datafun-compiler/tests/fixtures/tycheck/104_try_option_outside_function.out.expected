@@ -1,15 +1,14 @@
 {
   "errors": [
     {
+      "actual": "u32",
+      "expected": "@?u32",
+      "kind": "TypeMismatch"
+    },
+    {
       "kind": "TryOutsideFunction",
       "operator": "?"
     }
   ],
-  "judgements": [
-    {
-      "kind": "variable",
-      "name": "a",
-      "type": "@?u32"
-    }
-  ]
+  "judgements": []
 }

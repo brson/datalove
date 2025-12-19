@@ -165,7 +165,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors([TypeMismatch { expected: \"@!u32\", actual: \"u32\" }, TypeMismatch { expected: \"@!u32\", actual: \"u32\" }, UnresolvedName(\"input1\")])",
+                "TypecheckErrors([TypeMismatch { expected: \"@!u32\", actual: \"u32\" }, TypeMismatch { expected: \"@!u32\", actual: \"u32\" }, TypeMismatch { expected: \"@!u32\", actual: \"u32\" }, UnresolvedName(\"input1\")])",
             ],
         ),
         output: "",

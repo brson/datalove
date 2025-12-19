@@ -10,7 +10,7 @@ fun count_to_three(): !u32
             break
         end if
     end loop
-    ret n
+    ret ok n
 end fun
 
 let output = count_to_three()

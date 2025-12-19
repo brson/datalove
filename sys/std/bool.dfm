@@ -54,7 +54,7 @@ end fun
 // Returns Some(value) if self is true, else None.
 fun then_some(self: bool, value: u32): ?u32
   if self
-    ret value
+    ret some value
   else
     ret @none
   end if

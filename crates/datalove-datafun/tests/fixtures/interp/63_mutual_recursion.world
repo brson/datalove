@@ -4,7 +4,7 @@ script
 
 fun is_even(n: u32): !bool
     if n == @0
-        ret true
+        ret ok @true
     else
         ret is_odd(n -! @1)
     end if
@@ -12,7 +12,7 @@ end fun
 
 fun is_odd(n: u32): !bool
     if n == @0
-        ret false
+        ret ok @false
     else
         ret is_even(n -! @1)
     end if

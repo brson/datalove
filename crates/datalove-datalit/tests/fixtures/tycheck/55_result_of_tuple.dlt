@@ -1,1 +1,1 @@
-: @!@(@u32, @string) / @(@42, @"hello")
+: @!@(@u32, @string) / ok @(@42, @"hello")

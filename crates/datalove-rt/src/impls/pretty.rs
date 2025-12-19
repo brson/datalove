@@ -497,6 +497,7 @@ unsafe fn pretty_option(
                 push_str(rt, string_mut, string_tydesc, b"@none")
             }
             rtdt::OptionTag::Some => {
+                push_str(rt, string_mut, string_tydesc, b"some ")?;
                 let inner_ty = tydesc.option_inner_ty();
                 let payload_offset = rtdt::layout::option_payload_offset(inner_ty.align());
                 let payload_value = value_ref.add(payload_offset as usize);
@@ -524,6 +525,7 @@ unsafe fn pretty_result(
 
         match result.tag {
             rtdt::ResultTag::Ok => {
+                push_str(rt, string_mut, string_tydesc, b"ok ")?;
                 pretty_value(rt, payload_value, ok_ty, string_mut, string_tydesc)
             }
             rtdt::ResultTag::Err => {

@@ -1,5 +1,16 @@
 {
-  "errors": [],
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "@?u32",
+      "kind": "TypeMismatch"
+    },
+    {
+      "actual": "u32",
+      "expected": "@?u32",
+      "kind": "TypeMismatch"
+    }
+  ],
   "judgements": [
     {
       "kind": "function",

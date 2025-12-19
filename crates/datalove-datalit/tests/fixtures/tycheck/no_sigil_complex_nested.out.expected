@@ -24,40 +24,50 @@
                         {
                           "expr": {
                             "expr": {
-                              "AnonStruct": {
-                                "fields": [
-                                  {
-                                    "name": "x",
-                                    "value": {
-                                      "expr": {
-                                        "expr": {
-                                          "Int": {
-                                            "value": "1"
+                              "Some": {
+                                "payload": {
+                                  "expr": {
+                                    "expr": {
+                                      "AnonStruct": {
+                                        "fields": [
+                                          {
+                                            "name": "x",
+                                            "value": {
+                                              "expr": {
+                                                "expr": {
+                                                  "Int": {
+                                                    "value": "1"
+                                                  }
+                                                },
+                                                "heap": "Local"
+                                              },
+                                              "type_hint": null
+                                            }
+                                          },
+                                          {
+                                            "name": "y",
+                                            "value": {
+                                              "expr": {
+                                                "expr": {
+                                                  "String": {
+                                                    "value": "\"a\""
+                                                  }
+                                                },
+                                                "heap": "Local"
+                                              },
+                                              "type_hint": null
+                                            }
                                           }
-                                        },
-                                        "heap": "Local"
-                                      },
-                                      "type_hint": null
-                                    }
+                                        ]
+                                      }
+                                    },
+                                    "heap": "Local"
                                   },
-                                  {
-                                    "name": "y",
-                                    "value": {
-                                      "expr": {
-                                        "expr": {
-                                          "String": {
-                                            "value": "\"a\""
-                                          }
-                                        },
-                                        "heap": "Local"
-                                      },
-                                      "type_hint": null
-                                    }
-                                  }
-                                ]
+                                  "type_hint": null
+                                }
                               }
                             },
-                            "heap": "Local"
+                            "heap": "Omitted"
                           },
                           "type_hint": null
                         },

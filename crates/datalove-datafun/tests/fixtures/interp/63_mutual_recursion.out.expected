@@ -52,10 +52,17 @@
                                 StmtRet(
                                     kind: "Ret",
                                     value: ExprFun(
-                                        expr: ExprLit(
-                                            kind: "True",
+                                        expr: ExprOk(
+                                            kind: "Ok",
                                             heap: Omitted,
                                             type_hint: None,
+                                            payload: ExprFun(
+                                                expr: ExprLit(
+                                                    kind: "True",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                ),
+                                            ),
                                         ),
                                     ),
                                 ),
@@ -145,10 +152,17 @@
                                 StmtRet(
                                     kind: "Ret",
                                     value: ExprFun(
-                                        expr: ExprLit(
-                                            kind: "False",
+                                        expr: ExprOk(
+                                            kind: "Ok",
                                             heap: Omitted,
                                             type_hint: None,
+                                            payload: ExprFun(
+                                                expr: ExprLit(
+                                                    kind: "False",
+                                                    heap: Local,
+                                                    type_hint: None,
+                                                ),
+                                            ),
                                         ),
                                     ),
                                 ),
@@ -215,6 +229,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "@true",
+        output: "ok @true",
     ),
 ]

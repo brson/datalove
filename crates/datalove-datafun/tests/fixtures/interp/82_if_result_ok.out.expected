@@ -157,7 +157,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors([ResultRequiresErrorBinding])",
+                "TypecheckErrors([TypeMismatch { expected: \"@!u32\", actual: \"u32\" }, ResultRequiresErrorBinding])",
             ],
         ),
         output: "",

@@ -63,6 +63,34 @@
                 ),
                 StmtLet(
                     kind: "Let",
+                    name: "val",
+                    type_hint: Some(TypeHintAndHeap(
+                        heap: Local,
+                        type_hint: Option(TypeHintOption(
+                            inner_type: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: U16,
+                            ),
+                        )),
+                    )),
+                    value: ExprFun(
+                        expr: ExprSome(
+                            kind: "Some",
+                            heap: Omitted,
+                            type_hint: None,
+                            payload: ExprFun(
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "65535",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
                     name: "output",
                     type_hint: None,
                     value: ExprFun(
@@ -71,11 +99,9 @@
                             name: "test",
                             args: [
                                 ExprFun(
-                                    expr: ExprInt(
-                                        kind: "Int",
-                                        heap: Local,
-                                        type_hint: None,
-                                        value: "65535",
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "val",
                                     ),
                                 ),
                             ],

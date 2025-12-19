@@ -50,8 +50,10 @@
                                 ),
                             ),
                         ),
-                        StmtRet(
-                            kind: "Ret",
+                        StmtLet(
+                            kind: "Let",
+                            name: "res",
+                            type_hint: None,
                             value: ExprFun(
                                 expr: ExprBinOp(
                                     kind: "BinOp",
@@ -68,6 +70,22 @@
                                             heap: Omitted,
                                             type_hint: None,
                                             value: "10",
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        StmtRet(
+                            kind: "Ret",
+                            value: ExprFun(
+                                expr: ExprSome(
+                                    kind: "Some",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    payload: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "res",
                                         ),
                                     ),
                                 ),

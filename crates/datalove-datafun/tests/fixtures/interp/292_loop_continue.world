@@ -16,7 +16,7 @@ fun skip_iteration(): !u32
         end if
         let sum = sum +! i
     end loop
-    ret sum
+    ret ok sum
 end fun
 
 let output = skip_iteration()

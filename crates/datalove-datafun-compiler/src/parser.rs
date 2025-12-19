@@ -951,41 +951,18 @@ impl<'db> Parser<'db> {
                                     let expr_kind = self.parse_lit_expr(tokens, datalit::ast::Heap::Omitted, None);
                                     ast::ExprFun::new(self.db, expr_kind)
                                 }
-                                // some/ok/er are keywords UNLESS followed by '(' which indicates a function call.
+                                // some/ok/er are always keywords - they require a payload expression.
                                 "some" | "ok" | "er" => {
-                                    // Consume the word token to peek at what follows.
-                                    let (text, start_span) = self.peek_text_span(tokens);
-                                    tokens.next();
-                                    // Check if followed by '('.
-                                    if let Some(TreeToken::Branch(Sigil::ParenOpen, _)) = tokens.peek() {
-                                        // It's a function call.
-                                        let name = InternedText::new(self.db, word.S());
-                                        let args_iter = match tokens.next() {
-                                            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
-                                            _ => unreachable!(),
-                                        };
-                                        let args = self.parse_function_call_args(args_iter);
-                                        self.create_expr(
-                                            ast::ExprFunKind::FunctionCall(
-                                                ast::ExprFunctionCall::new(self.db, name, args)
-                                            ),
-                                            text,
-                                            start_span
-                                        )
-                                    } else {
-                                        // It's a keyword - parse as literal expression.
-                                        // Need to put the word back in some way, or parse inline.
-                                        // Since we already consumed the word, parse the payload directly.
-                                        let payload = self.parse_expr_primary(tokens);
-                                        let heap = datalit::ast::Heap::Omitted;
-                                        let expr_kind = match word {
-                                            "some" => ast::ExprFunKind::Some(ast::ExprSome::new(self.db, heap, None, payload)),
-                                            "ok" => ast::ExprFunKind::Ok(ast::ExprOk::new(self.db, heap, None, payload)),
-                                            "er" => ast::ExprFunKind::Er(ast::ExprEr::new(self.db, heap, None, payload)),
-                                            _ => unreachable!(),
-                                        };
-                                        ast::ExprFun::new(self.db, expr_kind)
-                                    }
+                                    tokens.next(); // consume the keyword
+                                    let payload = self.parse_expr_primary(tokens);
+                                    let heap = datalit::ast::Heap::Omitted;
+                                    let expr_kind = match word {
+                                        "some" => ast::ExprFunKind::Some(ast::ExprSome::new(self.db, heap, None, payload)),
+                                        "ok" => ast::ExprFunKind::Ok(ast::ExprOk::new(self.db, heap, None, payload)),
+                                        "er" => ast::ExprFunKind::Er(ast::ExprEr::new(self.db, heap, None, payload)),
+                                        _ => unreachable!(),
+                                    };
+                                    ast::ExprFun::new(self.db, expr_kind)
                                 }
                                 num if num.chars().all(|c| char::is_ascii_digit(&c)) => {
                                     let expr_kind = self.parse_lit_expr(tokens, datalit::ast::Heap::Omitted, None);
@@ -1919,10 +1896,15 @@ impl<'db> Parser<'db> {
             }
         }
 
-        ast::ExprFun::new(
-            self.db,
-            ast::ExprFunKind::Tuple(ast::ExprTuple::new(self.db, elements))
-        )
+        // If there's exactly one element and no trailing comma, treat as grouping (not tuple).
+        if elements.len() == 1 {
+            elements.into_iter().next().unwrap()
+        } else {
+            ast::ExprFun::new(
+                self.db,
+                ast::ExprFunKind::Tuple(ast::ExprTuple::new(self.db, elements))
+            )
+        }
     }
 
     // Token manipulation helpers

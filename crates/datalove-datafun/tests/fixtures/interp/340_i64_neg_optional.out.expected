@@ -67,7 +67,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors([CannotSynthesize])",
+                "TypecheckErrors([TypeMismatch { expected: \"@?i64\", actual: \"i64\" }, CannotSynthesize])",
             ],
         ),
         output: "",

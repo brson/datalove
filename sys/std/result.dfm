@@ -41,9 +41,9 @@ end fun
 // as UseAfterMove when using parameters across if branches.
 
 // Convert to option, discarding error.
-fun ok(self: !u32): ?u32
+fun to_option(self: !u32): ?u32
   if self |value|
-    ret value
+    ret some value
   else |error|
     ret @none
   end if

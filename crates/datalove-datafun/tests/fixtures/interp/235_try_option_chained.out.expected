@@ -85,9 +85,16 @@
                         StmtRet(
                             kind: "Ret",
                             value: ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Name",
-                                    name: "a",
+                                expr: ExprSome(
+                                    kind: "Some",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    payload: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
                                 ),
                             ),
                         ),
@@ -106,11 +113,18 @@
                         )),
                     )),
                     value: ExprFun(
-                        expr: ExprInt(
-                            kind: "Int",
-                            heap: Local,
+                        expr: ExprSome(
+                            kind: "Some",
+                            heap: Omitted,
                             type_hint: None,
-                            value: "10",
+                            payload: ExprFun(
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "10",
+                                ),
+                            ),
                         ),
                     ),
                 ),
@@ -127,11 +141,18 @@
                         )),
                     )),
                     value: ExprFun(
-                        expr: ExprInt(
-                            kind: "Int",
-                            heap: Local,
+                        expr: ExprSome(
+                            kind: "Some",
+                            heap: Omitted,
                             type_hint: None,
-                            value: "20",
+                            payload: ExprFun(
+                                expr: ExprInt(
+                                    kind: "Int",
+                                    heap: Local,
+                                    type_hint: None,
+                                    value: "20",
+                                ),
+                            ),
                         ),
                     ),
                 ),
@@ -165,6 +186,6 @@
         typecheck: TypecheckResult(
             status: "Success",
         ),
-        output: "@10",
+        output: "some @10",
     ),
 ]

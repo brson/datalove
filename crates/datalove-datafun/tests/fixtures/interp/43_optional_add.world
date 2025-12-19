@@ -3,7 +3,7 @@ script
 ----------
 
 fun add_optional(x: u32, y: u32): ?u32
-    ret x +? y
+    ret some (x +? y)
 end fun
 
 let success = add_optional(@100, @50)

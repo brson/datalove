@@ -4,7 +4,7 @@ script
 
 // Test optional subtraction (-?) with successful result.
 fun test_sub_optional(a: u32, b: u32): ?u32
-    ret a -? b
+    ret some (a -? b)
 end fun
 
 let output = test_sub_optional(@10, @3)

@@ -11,4 +11,5 @@ fun test(a: @?u16): @u16
     end if
 end fun
 
-let output = test(@65535)
+let val: @?u16 = some @65535
+let output = test(val)
