@@ -133,8 +133,41 @@ use crate::function_analysis::{Terminator, BlockId};
 use script::eval_expression_in_script_scope;
 
 // ============================================================================
-// DPS Helpers for Wrapper Payloads
+// DPS Helpers for Wrapper Payloads and Compound Types
 // ============================================================================
+
+/// Get a destination for a specific tuple field from the tuple destination.
+///
+/// Returns the field destination with proper offset and tydesc.
+pub(crate) fn get_tuple_field_dest(dest: Destination, field_index: usize) -> Option<Destination> {
+    use datalove_rt::rtdt::{TyDescRef, TyDesc};
+
+    let tuple_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+    let tuple_info = tuple_ref.tuple_info();
+
+    tuple_info.field(field_index).map(|field| {
+        let field_ptr = unsafe { dest.ptr.add(field.offset() as usize) };
+        let field_tydesc = field.tydesc().as_ptr() as *mut TyDesc;
+        Destination { ptr: field_ptr, tydesc: field_tydesc }
+    })
+}
+
+/// Get a destination for a specific struct field from the struct destination.
+///
+/// Returns the field destination with proper offset and tydesc.
+/// Fields are accessed by index (assumes canonical sorted order).
+pub(crate) fn get_struct_field_dest(dest: Destination, field_index: usize) -> Option<Destination> {
+    use datalove_rt::rtdt::{TyDescRef, TyDesc};
+
+    let struct_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+    let struct_info = struct_ref.struct_info();
+
+    struct_info.field(field_index).map(|field| {
+        let field_ptr = unsafe { dest.ptr.add(field.offset() as usize) };
+        let field_tydesc = field.tydesc().as_ptr() as *mut TyDesc;
+        Destination { ptr: field_ptr, tydesc: field_tydesc }
+    })
+}
 
 /// Create a destination for an Option's payload from the Option destination.
 pub(crate) fn get_payload_dest_for_option(dest: Destination) -> Destination {
@@ -1938,9 +1971,67 @@ pub(super) fn eval_inline_anon_tuple<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
     tuple_expr: &ast::ExprAnonTuple<'db>,
-    _dest: Option<Destination>,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag};
+
     let elements = tuple_expr.elements(ctx.db);
+
+    // DPS path: if dest is a tuple with matching field count, write directly.
+    if let Some(dest) = dest {
+        let dest_tag = unsafe { (*dest.tydesc).type_tag };
+        if dest_tag == TyTag::Tuple {
+            let tuple_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+            let tuple_info = tuple_ref.tuple_info();
+
+            if tuple_info.num_fields() as usize == elements.len() {
+                // DPS: evaluate each element directly into its field slot.
+                for (i, elem) in elements.iter().enumerate() {
+                    let field_dest = get_tuple_field_dest(dest, i)
+                        .expect("field index should be valid");
+
+                    match eval_expression(ctx, eval_ctx, *elem, Some(field_dest)) {
+                        Ok(field_value) => {
+                            // Handle case where operation didn't use dest.
+                            if field_value.location == ValueLocation::TempOwned {
+                                let size = unsafe { (*field_value.tydesc).size as usize };
+                                unsafe {
+                                    std::ptr::copy_nonoverlapping(
+                                        field_value.ptr,
+                                        field_dest.ptr,
+                                        size,
+                                    );
+                                }
+                                free_value_structure(ctx, field_value);
+                            }
+                        }
+                        Err(e) => {
+                            // Clean up already-written fields.
+                            for j in 0..i {
+                                let written_field = get_tuple_field_dest(dest, j)
+                                    .expect("field index should be valid");
+                                let field_value = Value {
+                                    ptr: written_field.ptr,
+                                    tydesc: written_field.tydesc,
+                                    location: ValueLocation::Borrowed,
+                                };
+                                destroy_value(ctx, field_value);
+                            }
+                            return Err(e);
+                        }
+                    }
+                }
+
+                return Ok(Value {
+                    ptr: dest.ptr,
+                    tydesc: dest.tydesc,
+                    location: ValueLocation::Borrowed,
+                });
+            }
+        }
+    }
+
+    // Fallback: no dest or type mismatch - allocate new tuple.
     let mut values = Vec::with_capacity(elements.len());
 
     for elem in elements {
@@ -1963,14 +2054,72 @@ pub(super) fn eval_inline_anon_struct<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
     struct_expr: &ast::ExprAnonStruct<'db>,
-    _dest: Option<Destination>,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag};
+
     let expr_fields = struct_expr.fields(ctx.db);
     let mut sorted_fields: Vec<_> = expr_fields.iter()
         .map(|f| (f.name(ctx.db), f.value(ctx.db)))
         .collect();
     sorted_fields.sort_by_key(|(name, _)| name.as_str(ctx.db));
 
+    // DPS path: if dest is a struct with matching field count, write directly.
+    // Both expression fields and dest fields are in canonical sorted order.
+    if let Some(dest) = dest {
+        let dest_tag = unsafe { (*dest.tydesc).type_tag };
+        if dest_tag == TyTag::Struct {
+            let struct_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+            let struct_info = struct_ref.struct_info();
+
+            if struct_info.num_fields() as usize == sorted_fields.len() {
+                // DPS: evaluate each field directly into its slot.
+                for (i, (_name, value_expr)) in sorted_fields.iter().enumerate() {
+                    let field_dest = get_struct_field_dest(dest, i)
+                        .expect("field index should be valid");
+
+                    match eval_expression(ctx, eval_ctx, *value_expr, Some(field_dest)) {
+                        Ok(field_value) => {
+                            // Handle case where operation didn't use dest.
+                            if field_value.location == ValueLocation::TempOwned {
+                                let size = unsafe { (*field_value.tydesc).size as usize };
+                                unsafe {
+                                    std::ptr::copy_nonoverlapping(
+                                        field_value.ptr,
+                                        field_dest.ptr,
+                                        size,
+                                    );
+                                }
+                                free_value_structure(ctx, field_value);
+                            }
+                        }
+                        Err(e) => {
+                            // Clean up already-written fields.
+                            for j in 0..i {
+                                let written_field = get_struct_field_dest(dest, j)
+                                    .expect("field index should be valid");
+                                let field_value = Value {
+                                    ptr: written_field.ptr,
+                                    tydesc: written_field.tydesc,
+                                    location: ValueLocation::Borrowed,
+                                };
+                                destroy_value(ctx, field_value);
+                            }
+                            return Err(e);
+                        }
+                    }
+                }
+
+                return Ok(Value {
+                    ptr: dest.ptr,
+                    tydesc: dest.tydesc,
+                    location: ValueLocation::Borrowed,
+                });
+            }
+        }
+    }
+
+    // Fallback: no dest or type mismatch - allocate new struct.
     let mut field_values = Vec::with_capacity(sorted_fields.len());
 
     for (name, value_expr) in sorted_fields {
