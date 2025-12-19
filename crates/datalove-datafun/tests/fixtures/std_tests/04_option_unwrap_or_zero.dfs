@@ -2,7 +2,7 @@ require module sys/std/option
 
 import option.unwrap_or_zero
 
-let some_val: @?u32 = @55
+let some_val: @?u32 = some @55
 let none_val: @?u32 = @none
 
 let test1: @u32 = unwrap_or_zero(some_val)

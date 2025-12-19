@@ -1,15 +1,15 @@
 //! Type coercion and narrowing operations.
 //!
 //! Handles automatic coercion between compatible types:
-//! - T → Option<T> (wrap in Some)
-//! - T → Result<T> (wrap in Ok)
+//! - data → Option<data> (wrap in Some)
+//! - data → Result<data> (wrap in Ok)
 
 use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
 use super::memory::destroy_value;
 
 /// Coerce a value to a destination type.
 ///
-/// Handles T → Option<T> (wrap in Some) and T → Result<T> (wrap in Ok).
+/// Handles data → Option<data> (wrap in Some) and data → Result<data> (wrap in Ok).
 /// If the types are compatible, copies the value to the destination.
 pub(super) fn coerce_value_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
@@ -39,78 +39,6 @@ pub(super) fn coerce_value_to_dest<'db>(
         }
         destroy_value(ctx, value);
         return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
-    }
-
-    // Coerce T → Option<T>
-    if dest_tag == TyTag::Option {
-        let dest_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
-        let inner_tydesc = dest_ref.option_inner_ty();
-
-        // Check if value type matches inner type.
-        if value.tydesc == inner_tydesc.as_ptr() {
-            // Wrap value in Some.
-            let layout = compute_option_layout(dest_ref);
-
-            // Write Some tag.
-            unsafe { *(dest.ptr as *mut u8) = OptionTag::Some as u8; }
-
-            // Clone payload (not shallow copy - types may have internal pointers).
-            let payload_ptr = unsafe { dest.ptr.add(layout.payload_offset as usize) };
-            let clone_status = unsafe {
-                datalove_rt::c::dtlv_rti_clone_local(
-                    ctx.runtime.handle(),
-                    value.ptr,
-                    value.tydesc,
-                    payload_ptr,
-                    inner_tydesc.as_ptr(),
-                )
-            };
-            if clone_status != datalove_rt::c::RtStatus::Ok {
-                destroy_value(ctx, value);
-                return Err(InterpError::RuntimeError("Failed to clone value in Option coercion".to_string()));
-            }
-
-            // Clean up the original value (we cloned it).
-            destroy_value(ctx, value);
-
-            return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
-        }
-    }
-
-    // Coerce T → Result<T>
-    if dest_tag == TyTag::Result {
-        let dest_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
-        let inner_tydesc = dest_ref.result_ok_ty();
-
-        // Check if value type matches inner type.
-        if value.tydesc == inner_tydesc.as_ptr() {
-            // Wrap value in Ok.
-            let layout = compute_result_layout(dest_ref);
-
-            // Write Ok tag.
-            unsafe { *(dest.ptr as *mut u8) = ResultTag::Ok as u8; }
-
-            // Clone payload (not shallow copy - types may have internal pointers).
-            let payload_ptr = unsafe { dest.ptr.add(layout.payload_offset as usize) };
-            let clone_status = unsafe {
-                datalove_rt::c::dtlv_rti_clone_local(
-                    ctx.runtime.handle(),
-                    value.ptr,
-                    value.tydesc,
-                    payload_ptr,
-                    inner_tydesc.as_ptr(),
-                )
-            };
-            if clone_status != datalove_rt::c::RtStatus::Ok {
-                destroy_value(ctx, value);
-                return Err(InterpError::RuntimeError("Failed to clone value in Result coercion".to_string()));
-            }
-
-            // Clean up the original value (we cloned it).
-            destroy_value(ctx, value);
-
-            return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
-        }
     }
 
     // Coerce data → Option<data> (wrap Data value in Some)

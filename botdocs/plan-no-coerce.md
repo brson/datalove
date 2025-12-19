@@ -7,7 +7,7 @@ Remove automatic T → Option<T> and T → Result<T> coercion, and implement exp
 ## Progress
 
 - [x] Phase 1: Add explicit constructors (`some`, `ok`, `er`)
-- [ ] Phase 2: Remove coercion
+- [x] Phase 2: Remove coercion
 
 ---
 
@@ -56,7 +56,7 @@ Remove automatic T → Option<T> and T → Result<T> coercion, and implement exp
 
 ---
 
-## Phase 2: Remove Coercion (PENDING)
+## Phase 2: Remove Coercion (COMPLETED)
 
 ### 2.1 Remove Type-Level Coercion
 

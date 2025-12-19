@@ -2,7 +2,7 @@ require module sys/std/option
 
 import option.unwrap_or
 
-let some_val: @?u32 = @100
+let some_val: @?u32 = some @100
 let none_val: @?u32 = @none
 let default_val: @u32 = @999
 
