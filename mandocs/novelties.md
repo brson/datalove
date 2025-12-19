@@ -19,6 +19,15 @@ Whole-world compilation, all modules and other inputs must be known upfront.
 Incremental script execution.
 Interpreter, JIT and AOT.
 
+Optional type-hint prefixes for all expressions:
+
+```
+let foo = {
+  a = : u8 / 100,
+  b = [: int / 200, 300],
+}
+```
+
 - brace-tree and newline-sensitivity
 - reactive repl
 - linear types with explicit destructors
