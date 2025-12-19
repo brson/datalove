@@ -13,7 +13,6 @@ pub(super) fn coerce_value_to_dest<'db>(
     value: Value,
     dest: Destination,
 ) -> Result<Value, InterpError> {
-    use datalove_rt::rtdt::TyTag;
 
     let value_tag = unsafe { (*value.tydesc).type_tag };
     let dest_tag = unsafe { (*dest.tydesc).type_tag };
