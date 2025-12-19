@@ -962,10 +962,46 @@ pub(super) fn eval_function_call_in_script_scope<'db>(
                 }
             }
         } else {
-            // Non-Option/Result parameter - use original simple evaluation.
-            let value = match eval_expression_in_script_scope(ctx, *arg_expr, None) {
-                Ok(v) => v,
+            // Non-Option/Result parameter - use DPS with parameter type destination.
+            let param_ptr = unsafe {
+                datalove_rt::c::dtlv_rti_mem_alloc_local(
+                    ctx.runtime.handle(),
+                    param_tydesc,
+                    1
+                )
+            };
+            if param_ptr.is_null() {
+                for val in arg_values { destroy_value(ctx, val); }
+                return Err(InterpError::RuntimeError("Failed to allocate argument buffer".to_string()));
+            }
+            let param_dest = Destination { ptr: param_ptr, tydesc: param_tydesc };
+            let value = match eval_expression_in_script_scope(ctx, *arg_expr, Some(param_dest)) {
+                Ok(v) => {
+                    if v.location == ValueLocation::Borrowed && v.ptr == param_ptr {
+                        // Expression wrote to destination and returned borrowed ref.
+                        Value { ptr: param_ptr, tydesc: param_tydesc, location: ValueLocation::TempOwned }
+                    } else {
+                        // Expression didn't use dest - free unused param buffer and use returned value.
+                        unsafe {
+                            datalove_rt::c::dtlv_rti_mem_free_local(
+                                ctx.runtime.handle(),
+                                param_tydesc,
+                                1,
+                                param_ptr,
+                            );
+                        }
+                        v
+                    }
+                }
                 Err(e) => {
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_mem_free_local(
+                            ctx.runtime.handle(),
+                            param_tydesc,
+                            1,
+                            param_ptr,
+                        );
+                    }
                     for val in arg_values { destroy_value(ctx, val); }
                     return Err(e);
                 }

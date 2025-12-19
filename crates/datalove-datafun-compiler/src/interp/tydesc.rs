@@ -63,6 +63,36 @@ pub(super) fn type_hint_to_tydesc<'db>(
             let inner_tydesc = type_hint_to_tydesc(ctx, res.inner_type(ctx.db));
             ctx.tydesc_table.create_result_from_inner_tydesc(inner_tydesc)
         }
+        TypeHint::List(list) => {
+            let element_tydesc = type_hint_to_tydesc(ctx, list.element_type(ctx.db));
+            ctx.tydesc_table.create_list_from_element_tydesc(element_tydesc)
+        }
+        TypeHint::Map(map) => {
+            let key_tydesc = type_hint_to_tydesc(ctx, map.key_type(ctx.db));
+            let value_tydesc = type_hint_to_tydesc(ctx, map.value_type(ctx.db));
+            ctx.tydesc_table.create_map_from_key_value_tydescs(key_tydesc, value_tydesc)
+        }
+        TypeHint::Set(set) => {
+            let element_tydesc = type_hint_to_tydesc(ctx, set.element_type(ctx.db));
+            ctx.tydesc_table.create_set_from_element_tydesc(element_tydesc)
+        }
+        TypeHint::AnonTuple(tuple) => {
+            let field_tydescs: Vec<_> = tuple.fields(ctx.db)
+                .iter()
+                .map(|f| type_hint_to_tydesc(ctx, *f))
+                .collect();
+            ctx.tydesc_table.get_or_create_tuple(&field_tydescs)
+        }
+        TypeHint::AnonStruct(struct_hint) => {
+            let field_names_and_tydescs: Vec<_> = struct_hint.fields(ctx.db)
+                .iter()
+                .map(|f| (f.name(ctx.db), type_hint_to_tydesc(ctx, f.type_hint(ctx.db))))
+                .collect();
+            ctx.tydesc_table.get_or_create_struct(&field_names_and_tydescs)
+        }
+        TypeHint::Data => ctx.tydesc_table.get_or_create(&Type::Data),
+        TypeHint::Error => ctx.tydesc_table.get_or_create(&Type::Error),
+        // Tensor, AnonEnum, ParseError not yet supported - fall back to U32.
         _ => {
             ctx.tydesc_table.get_or_create(&Type::U32)
         }
