@@ -72,9 +72,11 @@ Remove automatic T → Option<T> and T → Result<T> coercion, and implement exp
 ### 2.2 Remove Runtime Coercion
 
 **File: `crates/datalove-datafun-compiler/src/interp/coerce.rs`**
-- Lines 44-78: Remove T → Option<T> wrapping
-- Lines 80-114: Remove T → Result<T> wrapping
-- Keep: Data coercion, type matching
+- Removed T → Option<T> wrapping
+- Removed T → Result<T> wrapping
+- Removed data → Option<data> wrapping (was dead code)
+- Removed data → Result<data> wrapping (was dead code)
+- Keep: exact type matching only
 
 ### 2.3 Update Tests
 

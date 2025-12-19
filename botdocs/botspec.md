@@ -290,7 +290,6 @@ i8 -> i16 -> i32 -> i64 -> int
 ### 3.3 Coercions
 
 - Any type coerces to `data` (T → data)
-- Data values coerce to `?data` and `!data` (data → Option<data>, data → Result<data>)
 - Empty collections check against any element type
 
 **Explicit constructors for Option/Result:**
