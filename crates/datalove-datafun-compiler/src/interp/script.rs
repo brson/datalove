@@ -598,9 +598,9 @@ pub(super) fn eval_expression_in_script_scope<'db>(
 
                 Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
             } else {
-                // No dest: evaluate payload and use existing function (will error).
-                let payload = eval_expression_in_script_scope(ctx, some_expr.payload(ctx.db), None)?;
-                literals::write_option_some_from_value(ctx, payload, None)
+                return Err(InterpError::RuntimeError(
+                    "some expression requires type context (use type hint)".to_string()
+                ));
             }
         }
         ast::ExprFunKind::Ok(ok_expr) => {
@@ -633,15 +633,20 @@ pub(super) fn eval_expression_in_script_scope<'db>(
 
                 Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
             } else {
-                // No dest: evaluate payload and use existing function (will error).
-                let payload = eval_expression_in_script_scope(ctx, ok_expr.payload(ctx.db), None)?;
-                literals::write_result_ok_from_value(ctx, payload, None)
+                return Err(InterpError::RuntimeError(
+                    "ok expression requires type context (use type hint)".to_string()
+                ));
             }
         }
         ast::ExprFunKind::Er(er_expr) => {
-            // Evaluate error payload and wrap in Er.
-            let payload = eval_expression_in_script_scope(ctx, er_expr.payload(ctx.db), None)?;
-            literals::write_result_er_from_value(ctx, payload, dest)
+            if dest.is_some() {
+                let payload = eval_expression_in_script_scope(ctx, er_expr.payload(ctx.db), None)?;
+                literals::write_result_er_from_value(ctx, payload, dest)
+            } else {
+                return Err(InterpError::RuntimeError(
+                    "er expression requires type context (use type hint)".to_string()
+                ));
+            }
         }
         ast::ExprFunKind::Data(data_expr) => {
             // Evaluate inner expression.
