@@ -14,7 +14,7 @@ use crate::ast::{self, StmtFun};
 
 use super::value::{Value, Destination, ValueLocation, EvalContext};
 use super::error::InterpError;
-use super::memory::{destroy_value, clone_value};
+use super::memory::{destroy_value, clone_value, free_value_structure};
 use super::types::is_copy_type;
 use super::alloc::{
     allocate_bool, allocate_f32, allocate_u32_raw,
@@ -569,14 +569,74 @@ pub(super) fn eval_expression_in_script_scope<'db>(
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
         ast::ExprFunKind::Some(some_expr) => {
-            // Evaluate payload and wrap in Some.
-            let payload = eval_expression_in_script_scope(ctx, some_expr.payload(ctx.db), None)?;
-            literals::write_option_some_from_value(ctx, payload, dest)
+            use datalove_rt::rtdt::{TyTag, OptionTag};
+
+            if let Some(dest) = dest {
+                // DPS: write payload directly into Option structure.
+                let dest_tag = unsafe { (*dest.tydesc).type_tag };
+                if dest_tag != TyTag::Option {
+                    return Err(InterpError::RuntimeError(
+                        format!("some requires Option destination, got {:?}", dest_tag)
+                    ));
+                }
+
+                // Write Some tag.
+                unsafe { *(dest.ptr as *mut u8) = OptionTag::Some as u8; }
+
+                // Create payload destination and evaluate directly.
+                let payload_dest = super::get_payload_dest_for_option(dest);
+                let payload_value = eval_expression_in_script_scope(ctx, some_expr.payload(ctx.db), Some(payload_dest))?;
+
+                // Handle case where operation didn't use dest (e.g., bigint ops).
+                if payload_value.location == ValueLocation::TempOwned {
+                    let size = unsafe { (*payload_value.tydesc).size as usize };
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
+                    }
+                    free_value_structure(ctx, payload_value);
+                }
+
+                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+            } else {
+                // No dest: evaluate payload and use existing function (will error).
+                let payload = eval_expression_in_script_scope(ctx, some_expr.payload(ctx.db), None)?;
+                literals::write_option_some_from_value(ctx, payload, None)
+            }
         }
         ast::ExprFunKind::Ok(ok_expr) => {
-            // Evaluate payload and wrap in Ok.
-            let payload = eval_expression_in_script_scope(ctx, ok_expr.payload(ctx.db), None)?;
-            literals::write_result_ok_from_value(ctx, payload, dest)
+            use datalove_rt::rtdt::{TyTag, ResultTag};
+
+            if let Some(dest) = dest {
+                // DPS: write payload directly into Result structure.
+                let dest_tag = unsafe { (*dest.tydesc).type_tag };
+                if dest_tag != TyTag::Result {
+                    return Err(InterpError::RuntimeError(
+                        format!("ok requires Result destination, got {:?}", dest_tag)
+                    ));
+                }
+
+                // Write Ok tag.
+                unsafe { *(dest.ptr as *mut u8) = ResultTag::Ok as u8; }
+
+                // Create payload destination and evaluate directly.
+                let payload_dest = super::get_ok_payload_dest_for_result(dest);
+                let payload_value = eval_expression_in_script_scope(ctx, ok_expr.payload(ctx.db), Some(payload_dest))?;
+
+                // Handle case where operation didn't use dest (e.g., bigint ops).
+                if payload_value.location == ValueLocation::TempOwned {
+                    let size = unsafe { (*payload_value.tydesc).size as usize };
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
+                    }
+                    free_value_structure(ctx, payload_value);
+                }
+
+                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+            } else {
+                // No dest: evaluate payload and use existing function (will error).
+                let payload = eval_expression_in_script_scope(ctx, ok_expr.payload(ctx.db), None)?;
+                literals::write_result_ok_from_value(ctx, payload, None)
+            }
         }
         ast::ExprFunKind::Er(er_expr) => {
             // Evaluate error payload and wrap in Er.
