@@ -28,12 +28,14 @@
 //!
 //! # Value Ownership Model
 //!
-//! `ValueLocation` tracks memory ownership:
+//! The interpreter separates two ownership concepts:
+//!
+//! **Structural ownership** (`ValueOwnership`): Who frees the memory structure.
 //! - `Borrowed`: Points into frame buffer or caller's data. Never freed by holder.
 //! - `TempOwned`: Heap allocation that must be freed after use.
 //!
-//! When a function returns a `Borrowed` value (pointing to frame memory), the
-//! interpreter clones it to the heap before destroying the frame.
+//! **Semantic ownership** (move vs copy): Determined by type (`is_copy_type`) and
+//! `SlotState` tracking. Copy types clone transparently; linear types are moved.
 //!
 //! # Linear Type Semantics
 //!
@@ -94,7 +96,7 @@ mod control;
 mod tydesc;
 mod script;
 
-pub use value::{Value, Destination, ValueLocation, EvalContext};
+pub use value::{Value, Destination, ValueOwnership, EvalContext};
 pub use error::InterpError;
 pub use frame::{SlotState, StackFrame};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
@@ -290,7 +292,7 @@ fn eval_function_call_frame<'db>(
         };
         let value = match eval_expression_frame(ctx, *arg_expr, Some(arg_dest)) {
             Ok(v) => {
-                if v.location == ValueLocation::Borrowed {
+                if v.ownership == ValueOwnership::Borrowed {
                     mark_temp_slot_available(ctx, *arg_expr);
                 }
                 v
@@ -352,7 +354,7 @@ pub(super) fn execute_function_body<'db>(
                     if slot_states[slot_id.0 as usize] != SlotState::Moved {
                         // Slot was never read/moved, so destroy the argument.
                         destroy_value(ctx, arg_value);
-                    } else if arg_value.location == ValueLocation::TempOwned {
+                    } else if arg_value.ownership == ValueOwnership::TempOwned {
                         // Slot was moved: contents were consumed by function.
                         // Free the structure since it's TempOwned (caller allocated it).
                         free_value_structure(ctx, arg_value);
@@ -498,7 +500,7 @@ pub(super) fn execute_function_body<'db>(
             // No cloning needed - just return the value as-is.
             Ok(value)
         }
-        Ok(value) if value.location == ValueLocation::Borrowed => {
+        Ok(value) if value.ownership == ValueOwnership::Borrowed => {
             // No return_dest and result is Borrowed (pointing to frame memory).
             // This path should be unreachable now that all function calls provide DPS destinations.
             panic!(
@@ -785,7 +787,7 @@ fn process_block_exit_drops<'db>(
         let value = Value {
             ptr: slot_ptr,
             tydesc,
-            location: ValueLocation::Borrowed,
+            ownership: ValueOwnership::Borrowed,
         };
         destroy_value_contents_only(ctx, value);
 
@@ -895,7 +897,7 @@ fn destroy_slot_contents<'db>(
     let value = Value {
         ptr: slot_ptr,
         tydesc,
-        location: ValueLocation::Borrowed,
+        ownership: ValueOwnership::Borrowed,
     };
     destroy_value_contents_only(ctx, value);
 }
@@ -993,7 +995,7 @@ fn _read_value_from_slot<'db>(
     Ok(Value {
         ptr: frame_ptr,
         tydesc,
-        location: ValueLocation::Borrowed,
+        ownership: ValueOwnership::Borrowed,
     })
 }
 
@@ -1059,7 +1061,7 @@ fn execute_let_statement_frame<'db>(
 
     // If DPS was used (Borrowed), the value was written directly to slot.
     // If not (TempOwned), we need to write and free.
-    if value.location == ValueLocation::TempOwned {
+    if value.ownership == ValueOwnership::TempOwned {
         // Write value to slot.
         if let Err(e) = write_value_to_slot(&mut ctx.call_stack[frame_index], slot_info, value, ctx.db) {
             destroy_value(ctx, value);
@@ -1121,7 +1123,7 @@ fn eval_expression_frame<'db>(
 
                 if is_copy {
                     // Copy: clone to dest.
-                    let borrowed = Value { ptr, tydesc, location: ValueLocation::Borrowed };
+                    let borrowed = Value { ptr, tydesc, ownership: ValueOwnership::Borrowed };
                     let result_dest = match dest {
                         Some(d) => d,
                         None => get_destination_for_expr(ctx, expr)?,
@@ -1136,7 +1138,7 @@ fn eval_expression_frame<'db>(
                     // Return as Borrowed because caller owns the structure memory.
                     // Contents will be destroyed by consumer, structure freed by caller cleanup.
                     ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
-                    Ok(Value { ptr, tydesc, location: ValueLocation::Borrowed })
+                    Ok(Value { ptr, tydesc, ownership: ValueOwnership::Borrowed })
                 }
             } else {
                 // Local/Temporary slot.
@@ -1151,7 +1153,7 @@ fn eval_expression_frame<'db>(
                     };
                     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-                    let source_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::Borrowed };
+                    let source_value = Value { ptr: frame_ptr, tydesc, ownership: ValueOwnership::Borrowed };
                     let result_dest = match dest {
                         Some(d) => d,
                         None => get_destination_for_expr(ctx, expr)?,
@@ -1173,7 +1175,7 @@ fn eval_expression_frame<'db>(
                     };
                     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-                    let source_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::Borrowed };
+                    let source_value = Value { ptr: frame_ptr, tydesc, ownership: ValueOwnership::Borrowed };
 
                     if let Some(d) = dest {
                         // Move to destination (shallow copy), mark source as Moved.
@@ -1219,16 +1221,16 @@ fn eval_expression_frame<'db>(
 
             // Clean up temporary operand values and mark their slots as Moved.
             destroy_value(ctx, lhs);
-            if lhs.location == ValueLocation::Borrowed {
+            if lhs.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_moved(ctx, lhs_expr);
             }
             destroy_value(ctx, rhs);
-            if rhs.location == ValueLocation::Borrowed {
+            if rhs.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_moved(ctx, rhs_expr);
             }
 
             // If result went to our temp slot (not caller's dest), mark Available for cleanup.
-            if dest.is_none() && result.location == ValueLocation::Borrowed {
+            if dest.is_none() && result.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_available(ctx, expr);
             }
 
@@ -1264,12 +1266,12 @@ fn eval_expression_frame<'db>(
 
             // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
-            if operand.location == ValueLocation::Borrowed {
+            if operand.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_moved(ctx, operand_expr);
             }
 
             // If result went to our temp slot, mark Available for cleanup.
-            if dest.is_none() && result.location == ValueLocation::Borrowed {
+            if dest.is_none() && result.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_available(ctx, expr);
             }
 
@@ -1296,7 +1298,7 @@ fn eval_expression_frame<'db>(
 
                 // If element used its own temp slot, it's been written to our field now.
                 // The element's temp slot is no longer needed.
-                if elem_value.location == ValueLocation::Borrowed {
+                if elem_value.ownership == ValueOwnership::Borrowed {
                     mark_temp_slot_available(ctx, *elem_expr);
                 }
             }
@@ -1306,7 +1308,7 @@ fn eval_expression_frame<'db>(
                 mark_temp_slot_available(ctx, expr);
             }
 
-            Ok(Value { ptr: result_dest.ptr, tydesc: result_dest.tydesc, location: ValueLocation::Borrowed })
+            Ok(Value { ptr: result_dest.ptr, tydesc: result_dest.tydesc, ownership: ValueOwnership::Borrowed })
         }
 
         ast::ExprFunKind::TryOption(try_op) => {
@@ -1423,7 +1425,7 @@ fn eval_expression_frame<'db>(
                 let payload_value = eval_expression_frame(ctx, some_expr.payload(ctx.db), Some(payload_dest))?;
 
                 // Handle case where operation didn't use dest (e.g., bigint ops).
-                if payload_value.location == ValueLocation::TempOwned {
+                if payload_value.ownership == ValueOwnership::TempOwned {
                     let size = unsafe { (*payload_value.tydesc).size as usize };
                     unsafe {
                         std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
@@ -1431,7 +1433,7 @@ fn eval_expression_frame<'db>(
                     free_value_structure(ctx, payload_value);
                 }
 
-                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
             } else {
                 return Err(InterpError::RuntimeError(
                     "some expression requires type context (use type hint)".to_string()
@@ -1458,7 +1460,7 @@ fn eval_expression_frame<'db>(
                 let payload_value = eval_expression_frame(ctx, ok_expr.payload(ctx.db), Some(payload_dest))?;
 
                 // Handle case where operation didn't use dest (e.g., bigint ops).
-                if payload_value.location == ValueLocation::TempOwned {
+                if payload_value.ownership == ValueOwnership::TempOwned {
                     let size = unsafe { (*payload_value.tydesc).size as usize };
                     unsafe {
                         std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
@@ -1466,7 +1468,7 @@ fn eval_expression_frame<'db>(
                     free_value_structure(ctx, payload_value);
                 }
 
-                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
             } else {
                 return Err(InterpError::RuntimeError(
                     "ok expression requires type context (use type hint)".to_string()
@@ -1527,7 +1529,7 @@ fn eval_return_expression_frame<'db>(
                     size,
                 );
             }
-            if value.location == ValueLocation::TempOwned {
+            if value.ownership == ValueOwnership::TempOwned {
                 free_value_structure(ctx, value);
             }
         }
@@ -1536,7 +1538,7 @@ fn eval_return_expression_frame<'db>(
         return Ok(Value {
             ptr: return_dest.ptr,
             tydesc: return_dest.tydesc,
-            location: ValueLocation::Borrowed,
+            ownership: ValueOwnership::Borrowed,
         });
     }
 
@@ -1585,8 +1587,8 @@ fn eval_return_expression_frame<'db>(
             let value = result.unwrap();
 
             // Convert Borrowed to TempOwned since this escapes the frame.
-            if value.location == ValueLocation::Borrowed && value.ptr == ret_ptr {
-                return Ok(Value { ptr: ret_ptr, tydesc: ret_tydesc, location: ValueLocation::TempOwned });
+            if value.ownership == ValueOwnership::Borrowed && value.ptr == ret_ptr {
+                return Ok(Value { ptr: ret_ptr, tydesc: ret_tydesc, ownership: ValueOwnership::TempOwned });
             } else {
                 return Ok(value);
             }
@@ -1669,7 +1671,7 @@ fn eval_expression_frame_borrow<'db>(
             if kind == crate::function_analysis::SlotKind::Reference {
                 // Reference slot: read pointer to caller's value.
                 let ptr = read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db);
-                let borrowed = Value { ptr, tydesc, location: ValueLocation::Borrowed };
+                let borrowed = Value { ptr, tydesc, ownership: ValueOwnership::Borrowed };
 
                 let result_dest = match dest {
                     Some(d) => d,
@@ -1685,7 +1687,7 @@ fn eval_expression_frame_borrow<'db>(
                 // Local/Temporary slot - clone to destination.
                 let offset = slot_info.offset(ctx.db) as usize;
                 let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
-                let source_value = Value { ptr: frame_ptr, tydesc, location: ValueLocation::Borrowed };
+                let source_value = Value { ptr: frame_ptr, tydesc, ownership: ValueOwnership::Borrowed };
 
                 let result_dest = match dest {
                     Some(d) => d,
@@ -1727,15 +1729,15 @@ fn eval_expression_frame_borrow<'db>(
 
             // Clean up temporary operand values and mark slots as Moved.
             destroy_value(ctx, lhs);
-            if lhs.location == ValueLocation::Borrowed {
+            if lhs.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_moved(ctx, lhs_expr);
             }
             destroy_value(ctx, rhs);
-            if rhs.location == ValueLocation::Borrowed {
+            if rhs.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_moved(ctx, rhs_expr);
             }
 
-            if dest.is_none() && result.location == ValueLocation::Borrowed {
+            if dest.is_none() && result.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_available(ctx, expr);
             }
             Ok(result)
@@ -1757,11 +1759,11 @@ fn eval_expression_frame_borrow<'db>(
 
             // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
-            if operand.location == ValueLocation::Borrowed {
+            if operand.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_moved(ctx, operand_expr);
             }
 
-            if dest.is_none() && result.location == ValueLocation::Borrowed {
+            if dest.is_none() && result.ownership == ValueOwnership::Borrowed {
                 mark_temp_slot_available(ctx, expr);
             }
             Ok(result)
@@ -1874,7 +1876,7 @@ fn eval_list_with_element_tydesc<'db>(
         return Ok(Value {
             ptr: list_ptr,
             tydesc: list_tydesc,
-            location: ValueLocation::TempOwned,
+            ownership: ValueOwnership::TempOwned,
         });
     }
 
@@ -1901,7 +1903,7 @@ fn eval_list_with_element_tydesc<'db>(
 
         match eval_expression(ctx, eval_ctx, *elem, Some(elem_dest)) {
             Ok(value) => {
-                if value.location == ValueLocation::TempOwned {
+                if value.ownership == ValueOwnership::TempOwned {
                     // Expression didn't use dest - copy result and free.
                     unsafe {
                         std::ptr::copy_nonoverlapping(value.ptr, elem_dest_ptr, element_size);
@@ -1929,7 +1931,7 @@ fn eval_list_with_element_tydesc<'db>(
     Ok(Value {
         ptr: list_ptr,
         tydesc: list_tydesc,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }
 
@@ -1962,7 +1964,7 @@ pub(super) fn eval_inline_set<'db>(
         let size = unsafe { (*set_value.tydesc).size as usize };
         unsafe { std::ptr::copy_nonoverlapping(set_value.ptr, d.ptr, size); }
         free_value_structure(ctx, set_value);
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         Ok(set_value)
     }
@@ -2012,7 +2014,7 @@ pub(super) fn eval_inline_map<'db>(
         let size = unsafe { (*map_value.tydesc).size as usize };
         unsafe { std::ptr::copy_nonoverlapping(map_value.ptr, d.ptr, size); }
         free_value_structure(ctx, map_value);
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         Ok(map_value)
     }
@@ -2045,7 +2047,7 @@ pub(super) fn eval_inline_anon_tuple<'db>(
                     match eval_expression(ctx, eval_ctx, *elem, Some(field_dest)) {
                         Ok(field_value) => {
                             // Handle case where operation didn't use dest.
-                            if field_value.location == ValueLocation::TempOwned {
+                            if field_value.ownership == ValueOwnership::TempOwned {
                                 let size = unsafe { (*field_value.tydesc).size as usize };
                                 unsafe {
                                     std::ptr::copy_nonoverlapping(
@@ -2065,7 +2067,7 @@ pub(super) fn eval_inline_anon_tuple<'db>(
                                 let field_value = Value {
                                     ptr: written_field.ptr,
                                     tydesc: written_field.tydesc,
-                                    location: ValueLocation::Borrowed,
+                                    ownership: ValueOwnership::Borrowed,
                                 };
                                 destroy_value(ctx, field_value);
                             }
@@ -2077,7 +2079,7 @@ pub(super) fn eval_inline_anon_tuple<'db>(
                 return Ok(Value {
                     ptr: dest.ptr,
                     tydesc: dest.tydesc,
-                    location: ValueLocation::Borrowed,
+                    ownership: ValueOwnership::Borrowed,
                 });
             }
         }
@@ -2133,7 +2135,7 @@ pub(super) fn eval_inline_anon_struct<'db>(
                     match eval_expression(ctx, eval_ctx, *value_expr, Some(field_dest)) {
                         Ok(field_value) => {
                             // Handle case where operation didn't use dest.
-                            if field_value.location == ValueLocation::TempOwned {
+                            if field_value.ownership == ValueOwnership::TempOwned {
                                 let size = unsafe { (*field_value.tydesc).size as usize };
                                 unsafe {
                                     std::ptr::copy_nonoverlapping(
@@ -2153,7 +2155,7 @@ pub(super) fn eval_inline_anon_struct<'db>(
                                 let field_value = Value {
                                     ptr: written_field.ptr,
                                     tydesc: written_field.tydesc,
-                                    location: ValueLocation::Borrowed,
+                                    ownership: ValueOwnership::Borrowed,
                                 };
                                 destroy_value(ctx, field_value);
                             }
@@ -2165,7 +2167,7 @@ pub(super) fn eval_inline_anon_struct<'db>(
                 return Ok(Value {
                     ptr: dest.ptr,
                     tydesc: dest.tydesc,
-                    location: ValueLocation::Borrowed,
+                    ownership: ValueOwnership::Borrowed,
                 });
             }
         }

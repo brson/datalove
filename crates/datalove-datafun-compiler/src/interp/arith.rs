@@ -8,7 +8,7 @@
 
 use datalove_rt::rtdt::TyTag;
 
-use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
+use super::{InterpContext, InterpError, Value, Destination, ValueOwnership};
 use super::memory::destroy_value;
 use super::types::{is_int_value, is_fixed_int_value, get_type_tag};
 use super::alloc::{
@@ -25,7 +25,7 @@ use super::alloc::{
 pub(super) fn write_u32_result(ctx: &mut InterpContext<'_>, value: u32, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut u32) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_u32_raw(ctx, value)
     }
@@ -35,7 +35,7 @@ pub(super) fn write_u32_result(ctx: &mut InterpContext<'_>, value: u32, dest: Op
 pub(super) fn write_f32_result(ctx: &mut InterpContext<'_>, value: f32, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut f32) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_f32(ctx, value)
     }
@@ -45,7 +45,7 @@ pub(super) fn write_f32_result(ctx: &mut InterpContext<'_>, value: f32, dest: Op
 pub(super) fn write_bool_result(ctx: &mut InterpContext<'_>, value: bool, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut u8) = if value { 1 } else { 0 }; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_bool(ctx, value)
     }
@@ -55,7 +55,7 @@ pub(super) fn write_bool_result(ctx: &mut InterpContext<'_>, value: bool, dest: 
 fn write_u8_result(ctx: &mut InterpContext<'_>, value: u8, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *d.ptr = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_u8(ctx, value)
     }
@@ -65,7 +65,7 @@ fn write_u8_result(ctx: &mut InterpContext<'_>, value: u8, dest: Option<Destinat
 fn write_i8_result(ctx: &mut InterpContext<'_>, value: i8, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut i8) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_i8(ctx, value)
     }
@@ -75,7 +75,7 @@ fn write_i8_result(ctx: &mut InterpContext<'_>, value: i8, dest: Option<Destinat
 fn write_u16_result(ctx: &mut InterpContext<'_>, value: u16, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut u16) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_u16(ctx, value)
     }
@@ -85,7 +85,7 @@ fn write_u16_result(ctx: &mut InterpContext<'_>, value: u16, dest: Option<Destin
 fn write_i16_result(ctx: &mut InterpContext<'_>, value: i16, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut i16) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_i16(ctx, value)
     }
@@ -95,7 +95,7 @@ fn write_i16_result(ctx: &mut InterpContext<'_>, value: i16, dest: Option<Destin
 fn write_i32_result(ctx: &mut InterpContext<'_>, value: i32, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut i32) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_i32(ctx, value)
     }
@@ -105,7 +105,7 @@ fn write_i32_result(ctx: &mut InterpContext<'_>, value: i32, dest: Option<Destin
 fn write_u64_result(ctx: &mut InterpContext<'_>, value: u64, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut u64) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_u64(ctx, value)
     }
@@ -115,7 +115,7 @@ fn write_u64_result(ctx: &mut InterpContext<'_>, value: u64, dest: Option<Destin
 fn write_i64_result(ctx: &mut InterpContext<'_>, value: i64, dest: Option<Destination>) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut i64) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         allocate_i64(ctx, value)
     }

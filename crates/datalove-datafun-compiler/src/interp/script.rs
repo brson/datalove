@@ -12,7 +12,7 @@ use bct::text::InternedText;
 
 use crate::ast::{self, StmtFun};
 
-use super::value::{Value, Destination, ValueLocation, EvalContext};
+use super::value::{Value, Destination, ValueOwnership, EvalContext};
 use super::error::InterpError;
 use super::memory::{destroy_value, clone_value, free_value_structure};
 use super::types::is_copy_type;
@@ -318,7 +318,7 @@ fn execute_let_statement<'db>(
                 // Evaluate with destination.
                 let mut value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), Some(dest))?;
                 // We allocated the destination, so we own it.
-                value.location = ValueLocation::TempOwned;
+                value.ownership = ValueOwnership::TempOwned;
                 value
             }
             _ => {
@@ -584,7 +584,7 @@ pub(super) fn eval_expression_in_script_scope<'db>(
                 let payload_value = eval_expression_in_script_scope(ctx, some_expr.payload(ctx.db), Some(payload_dest))?;
 
                 // Handle case where operation didn't use dest (e.g., bigint ops).
-                if payload_value.location == ValueLocation::TempOwned {
+                if payload_value.ownership == ValueOwnership::TempOwned {
                     let size = unsafe { (*payload_value.tydesc).size as usize };
                     unsafe {
                         std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
@@ -592,7 +592,7 @@ pub(super) fn eval_expression_in_script_scope<'db>(
                     free_value_structure(ctx, payload_value);
                 }
 
-                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
             } else {
                 return Err(InterpError::RuntimeError(
                     "some expression requires type context (use type hint)".to_string()
@@ -619,7 +619,7 @@ pub(super) fn eval_expression_in_script_scope<'db>(
                 let payload_value = eval_expression_in_script_scope(ctx, ok_expr.payload(ctx.db), Some(payload_dest))?;
 
                 // Handle case where operation didn't use dest (e.g., bigint ops).
-                if payload_value.location == ValueLocation::TempOwned {
+                if payload_value.ownership == ValueOwnership::TempOwned {
                     let size = unsafe { (*payload_value.tydesc).size as usize };
                     unsafe {
                         std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
@@ -627,7 +627,7 @@ pub(super) fn eval_expression_in_script_scope<'db>(
                     free_value_structure(ctx, payload_value);
                 }
 
-                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
             } else {
                 return Err(InterpError::RuntimeError(
                     "ok expression requires type context (use type hint)".to_string()
@@ -688,7 +688,7 @@ fn read_script_variable<'db>(
         Ok(Value {
             ptr: value.ptr,
             tydesc: value.tydesc,
-            location: ValueLocation::TempOwned,
+            ownership: ValueOwnership::TempOwned,
         })
     }
 }
@@ -820,9 +820,9 @@ pub(super) fn eval_function_call_in_script_scope<'db>(
                 let param_dest = Destination { ptr: param_ptr, tydesc: param_tydesc };
                 let value = match eval_expression_in_script_scope(ctx, *arg_expr, Some(param_dest)) {
                     Ok(v) => {
-                        if v.location == ValueLocation::Borrowed && v.ptr == param_ptr {
+                        if v.ownership == ValueOwnership::Borrowed && v.ptr == param_ptr {
                             // Expression wrote to destination and returned borrowed ref.
-                            Value { ptr: param_ptr, tydesc: param_tydesc, location: ValueLocation::TempOwned }
+                            Value { ptr: param_ptr, tydesc: param_tydesc, ownership: ValueOwnership::TempOwned }
                         } else {
                             // Expression returned a different value - free param buffer and use value.
                             unsafe {
@@ -880,8 +880,8 @@ pub(super) fn eval_function_call_in_script_scope<'db>(
             // Try to evaluate to inner type.
             let inner_value = match eval_expression_in_script_scope(ctx, *arg_expr, Some(inner_dest)) {
                 Ok(v) => {
-                    if v.location == ValueLocation::Borrowed && v.ptr == inner_ptr {
-                        Value { ptr: inner_ptr, tydesc: inner_tydesc, location: ValueLocation::TempOwned }
+                    if v.ownership == ValueOwnership::Borrowed && v.ptr == inner_ptr {
+                        Value { ptr: inner_ptr, tydesc: inner_tydesc, ownership: ValueOwnership::TempOwned }
                     } else {
                         // Expression returned a different value - free inner buffer and use value directly.
                         unsafe {
@@ -978,9 +978,9 @@ pub(super) fn eval_function_call_in_script_scope<'db>(
             let param_dest = Destination { ptr: param_ptr, tydesc: param_tydesc };
             let value = match eval_expression_in_script_scope(ctx, *arg_expr, Some(param_dest)) {
                 Ok(v) => {
-                    if v.location == ValueLocation::Borrowed && v.ptr == param_ptr {
+                    if v.ownership == ValueOwnership::Borrowed && v.ptr == param_ptr {
                         // Expression wrote to destination and returned borrowed ref.
-                        Value { ptr: param_ptr, tydesc: param_tydesc, location: ValueLocation::TempOwned }
+                        Value { ptr: param_ptr, tydesc: param_tydesc, ownership: ValueOwnership::TempOwned }
                     } else {
                         // Expression didn't use dest - free unused param buffer and use returned value.
                         unsafe {
@@ -1048,7 +1048,7 @@ pub(super) fn eval_function_call_in_script_scope<'db>(
             Ok(Value {
                 ptr: return_ptr,
                 tydesc: return_tydesc,
-                location: ValueLocation::TempOwned,
+                ownership: ValueOwnership::TempOwned,
             })
         }
         Ok(value) => {

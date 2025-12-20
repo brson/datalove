@@ -2,7 +2,7 @@
 //!
 //! Copies values to destinations when types match exactly.
 
-use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
+use super::{InterpContext, InterpError, Value, Destination, ValueOwnership};
 use super::memory::destroy_value;
 
 /// Coerce a value to a destination type.
@@ -33,7 +33,7 @@ pub(super) fn coerce_value_to_dest<'db>(
             return Err(InterpError::RuntimeError("Failed to clone value in coercion".to_string()));
         }
         destroy_value(ctx, value);
-        return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::TempOwned });
+        return Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::TempOwned });
     }
 
     // No coercion available - type mismatch.

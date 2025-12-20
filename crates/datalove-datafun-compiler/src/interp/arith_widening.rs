@@ -10,7 +10,7 @@
 
 use crate::ast::{BinOp, UnaryOp};
 
-use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
+use super::{InterpContext, InterpError, Value, Destination, ValueOwnership};
 use super::memory::destroy_value;
 use super::types::{is_int_value, is_f32_value, is_fixed_int_value, get_type_tag};
 use super::alloc::{allocate_bigint, widen_fixed_int_to_int};
@@ -86,11 +86,11 @@ pub(super) fn eval_add<'db>(
             Ok(Value {
                 ptr: result_ptr,
                 tydesc: result_tydesc,
-                location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+                ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
             })
         } else {
             if !is_borrowed {
-                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
                 destroy_value(ctx, result_val);
             }
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
@@ -118,11 +118,11 @@ pub(super) fn eval_add<'db>(
             Ok(Value {
                 ptr: result_ptr,
                 tydesc: result_tydesc,
-                location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+                ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
             })
         } else {
             if !is_borrowed {
-                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
                 destroy_value(ctx, result_val);
             }
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
@@ -154,11 +154,11 @@ pub(super) fn eval_add<'db>(
             Ok(Value {
                 ptr: result_ptr,
                 tydesc: result_tydesc,
-                location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+                ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
             })
         } else {
             if !is_borrowed {
-                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
                 destroy_value(ctx, result_val);
             }
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
@@ -189,11 +189,11 @@ pub(super) fn eval_add<'db>(
             Ok(Value {
                 ptr: result_ptr,
                 tydesc: result_tydesc,
-                location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+                ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
             })
         } else {
             if !is_borrowed {
-                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
                 destroy_value(ctx, result_val);
             }
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
@@ -259,9 +259,9 @@ pub(super) fn eval_sub<'db>(
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
@@ -278,9 +278,9 @@ pub(super) fn eval_sub<'db>(
         };
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
@@ -300,9 +300,9 @@ pub(super) fn eval_sub<'db>(
         destroy_value(ctx, lhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
@@ -322,9 +322,9 @@ pub(super) fn eval_sub<'db>(
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
@@ -372,9 +372,9 @@ pub(super) fn eval_mul<'db>(
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
@@ -383,9 +383,9 @@ pub(super) fn eval_mul<'db>(
         let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
@@ -396,9 +396,9 @@ pub(super) fn eval_mul<'db>(
         destroy_value(ctx, lhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
@@ -409,9 +409,9 @@ pub(super) fn eval_mul<'db>(
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
@@ -459,9 +459,9 @@ pub(super) fn eval_div<'db>(
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
@@ -470,9 +470,9 @@ pub(super) fn eval_div<'db>(
         let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
@@ -483,9 +483,9 @@ pub(super) fn eval_div<'db>(
         destroy_value(ctx, lhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
@@ -496,9 +496,9 @@ pub(super) fn eval_div<'db>(
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned } })
+            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned }); }
+            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
@@ -595,11 +595,11 @@ pub(super) fn eval_neg<'db>(
         Ok(Value {
             ptr: result_ptr,
             tydesc: result_tydesc,
-            location: if is_borrowed { ValueLocation::Borrowed } else { ValueLocation::TempOwned },
+            ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
         })
     } else {
         if !is_borrowed {
-            let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned };
+            let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
             destroy_value(ctx, result_val);
         }
         Err(InterpError::RuntimeError("Int negation failed".to_string()))
@@ -760,7 +760,7 @@ fn write_typed_int_result(
 ) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut u32) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         let ptr = unsafe {
             datalove_rt::c::dtlv_rti_mem_alloc_local(ctx.runtime.handle(), tydesc, 1)
@@ -771,7 +771,7 @@ fn write_typed_int_result(
         }
 
         unsafe { *(ptr as *mut u32) = value; }
-        Ok(Value { ptr, tydesc, location: ValueLocation::TempOwned })
+        Ok(Value { ptr, tydesc, ownership: ValueOwnership::TempOwned })
     }
 }
 
@@ -784,7 +784,7 @@ fn write_typed_int_result_64(
 ) -> Result<Value, InterpError> {
     if let Some(d) = dest {
         unsafe { *(d.ptr as *mut u64) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
     } else {
         let ptr = unsafe {
             datalove_rt::c::dtlv_rti_mem_alloc_local(ctx.runtime.handle(), tydesc, 1)
@@ -795,7 +795,7 @@ fn write_typed_int_result_64(
         }
 
         unsafe { *(ptr as *mut u64) = value; }
-        Ok(Value { ptr, tydesc, location: ValueLocation::TempOwned })
+        Ok(Value { ptr, tydesc, ownership: ValueOwnership::TempOwned })
     }
 }
 
@@ -848,6 +848,6 @@ fn allocate_error_string<'db>(
     Ok(Value {
         ptr: string_ptr,
         tydesc: tydesc_ptr,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }

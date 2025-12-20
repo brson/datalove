@@ -11,7 +11,7 @@ Complete destination-passing style and fix Value semantic confusion.
 - [x] Phase 5: Data/Er wrappers (verified, deferred - type erasure requires current approach)
 - [x] Phase 6: Frame scope DPS for function calls
 - [x] Phase 7: Delete fallback code paths (7.4)
-- [ ] Phase 8: Simplify Value semantics
+- [x] Phase 8: Simplify Value semantics (minimal cleanup: renamed ValueLocation → ValueOwnership)
 
 ---
 
@@ -105,32 +105,27 @@ Removed dead code:
 
 ---
 
-## Phase 8: Simplify Value Semantics
+## Phase 8: Simplify Value Semantics [DONE]
 
-**Current confusion:** `ValueLocation` tracks structure memory but gets conflated with semantic ownership.
+**Analysis:**
 
-**Proposal:** Since all paths use DPS:
+The "confusion" described in the original proposal was resolved during phases 1-7. The two ownership concepts are properly separated:
+- Structural ownership (`ValueOwnership`): Who frees the memory structure
+- Semantic ownership (`is_copy_type` + `SlotState`): Move vs copy semantics
 
-1. Expression eval returns `Result<(), InterpError>` when dest provided
-   - Caller knows data is at dest
-   - No Value returned, no location confusion
+**Changes made (option B - minimal cleanup):**
 
-2. Keep `Value` only for:
-   - Reading from slots (returns ptr to slot)
-   - Intermediate values during collection building
+1. Renamed `ValueLocation` → `ValueOwnership` for clarity
+2. Renamed field `Value.location` → `Value.ownership`
+3. Added documentation to `value.rs` explaining the two ownership concepts
+4. Updated module doc in `mod.rs` to clarify the ownership model
 
-3. Replace `ValueLocation` with simpler enum:
-   ```rust
-   enum ValueSource {
-       Slot,      // Points to frame slot - don't free
-       HeapTemp,  // Heap-allocated temp - free structure after use
-   }
-   ```
-
-4. Semantic ownership (move vs copy) determined by:
-   - Static analysis `is_copy_type()`
-   - SlotState tracking (Moved/Available)
-   - NOT by ValueLocation
+Files modified:
+- `interp/value.rs` - renamed enum and field, added documentation
+- `interp/mod.rs` - updated exports and doc comment
+- `interp/alloc.rs`, `interp/arith.rs`, `interp/arith_widening.rs` - updated references
+- `interp/collections.rs`, `interp/control.rs`, `interp/coerce.rs` - updated references
+- `interp/literals.rs`, `interp/memory.rs`, `interp/script.rs` - updated references
 
 ---
 

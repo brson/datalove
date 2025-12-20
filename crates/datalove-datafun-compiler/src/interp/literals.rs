@@ -5,7 +5,7 @@
 
 use crate::ast;
 
-use super::{InterpContext, InterpError, Value, Destination, ValueLocation};
+use super::{InterpContext, InterpError, Value, Destination, ValueOwnership};
 use super::alloc::write_bigint_to_ptr;
 
 /// Allocate an inline integer literal (from datafun AST).
@@ -33,7 +33,7 @@ pub(super) fn allocate_inline_int_literal<'db>(
     Ok(Value {
         ptr,
         tydesc: tydesc_ptr,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }
 
@@ -101,7 +101,7 @@ pub(super) fn write_inline_int_to_dest<'db>(
         }
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Write Option::None to a destination.
@@ -122,7 +122,7 @@ pub(super) fn write_option_none_to_dest(dest: Destination) -> Result<Value, Inte
         *(dest.ptr as *mut u8) = OptionTag::None as u8;
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Allocate an inline string literal (from datafun AST).
@@ -180,26 +180,26 @@ pub(super) fn allocate_inline_string<'db>(
     Ok(Value {
         ptr: string_ptr,
         tydesc: tydesc_ptr,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }
 
 /// Write a boolean value to destination.
 pub(super) fn write_bool_to_dest(dest: Destination, value: bool) -> Result<Value, InterpError> {
     unsafe { *dest.ptr = if value { 1 } else { 0 }; }
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Write an f32 value to destination.
 pub(super) fn write_f32_to_dest(dest: Destination, value: f32) -> Result<Value, InterpError> {
     unsafe { *(dest.ptr as *mut f32) = value; }
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Write a u32 value to destination (for hex literals).
 pub(super) fn write_u32_to_dest(dest: Destination, value: u32) -> Result<Value, InterpError> {
     unsafe { *(dest.ptr as *mut u32) = value; }
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Write an inline string literal to destination.
@@ -247,7 +247,7 @@ pub(super) fn write_string_to_dest<'db>(
         }
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Write Result::Er from an error payload value.
@@ -315,5 +315,5 @@ pub(super) fn write_result_er_from_value<'db>(
         return Err(InterpError::RuntimeError("Failed to clone error for Er".to_string()));
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: result_tydesc, location: ValueLocation::Borrowed })
+    Ok(Value { ptr: dest.ptr, tydesc: result_tydesc, ownership: ValueOwnership::Borrowed })
 }

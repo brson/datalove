@@ -4,7 +4,7 @@
 //! compound structures like Option, Result, tuples, and collections.
 
 use crate::datalit::tycheck::Type;
-use super::{InterpContext, InterpError, Value, ValueLocation, Destination};
+use super::{InterpContext, InterpError, Value, ValueOwnership, Destination};
 use super::memory::destroy_value;
 
 /// Allocate a boolean value.
@@ -18,7 +18,7 @@ pub(super) fn allocate_bool<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *ptr = if value { 1 } else { 0 }; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate an f32 value.
@@ -32,7 +32,7 @@ pub(super) fn allocate_f32<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *(ptr as *mut f32) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate a u8 value.
@@ -46,7 +46,7 @@ pub(super) fn allocate_u8<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *ptr = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate an i8 value.
@@ -60,7 +60,7 @@ pub(super) fn allocate_i8<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *(ptr as *mut i8) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate a u16 value.
@@ -74,7 +74,7 @@ pub(super) fn allocate_u16<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *(ptr as *mut u16) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate an i16 value.
@@ -88,7 +88,7 @@ pub(super) fn allocate_i16<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *(ptr as *mut i16) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate a u32 value.
@@ -102,7 +102,7 @@ pub(super) fn allocate_u32_raw<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *(ptr as *mut u32) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate an i32 value.
@@ -116,7 +116,7 @@ pub(super) fn allocate_i32<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *(ptr as *mut i32) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate a u64 value.
@@ -130,7 +130,7 @@ pub(super) fn allocate_u64<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *(ptr as *mut u64) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate an i64 value.
@@ -144,7 +144,7 @@ pub(super) fn allocate_i64<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *(ptr as *mut i64) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Allocate a bigint (Int) value initialized to zero.
@@ -162,7 +162,7 @@ pub(super) fn allocate_bigint<'db>(
         (*int_ptr).size_and_sign = 0;
         (*int_ptr).capacity = 0;
     }
-    Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
 /// Wrap an existing value in Some, consuming the inner value.
@@ -193,7 +193,7 @@ pub(super) fn allocate_option_some_from_value<'db>(
     }
 
     // Free the inner value's container (data has been copied to Option).
-    if inner_value.location == ValueLocation::TempOwned {
+    if inner_value.ownership == ValueOwnership::TempOwned {
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_local(
                 ctx.runtime.handle(),
@@ -204,7 +204,7 @@ pub(super) fn allocate_option_some_from_value<'db>(
         }
     }
 
-    Ok(Value { ptr, tydesc: option_tydesc, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: option_tydesc, ownership: ValueOwnership::TempOwned })
 }
 
 /// Wrap an existing value in Ok, consuming the inner value.
@@ -235,7 +235,7 @@ pub(super) fn allocate_result_ok_from_value<'db>(
     }
 
     // Free the inner value's container.
-    if inner_value.location == ValueLocation::TempOwned {
+    if inner_value.ownership == ValueOwnership::TempOwned {
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_local(
                 ctx.runtime.handle(),
@@ -246,7 +246,7 @@ pub(super) fn allocate_result_ok_from_value<'db>(
         }
     }
 
-    Ok(Value { ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned })
 }
 
 /// Write Result::Err to a destination (DPS).
@@ -277,7 +277,7 @@ pub(super) fn write_result_err_to_dest(
         std::ptr::copy_nonoverlapping(err_ptr, err_payload_ptr, err_size);
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Widen any fixed-width integer to an Int (bigint) value.
@@ -435,7 +435,7 @@ pub(super) fn allocate_data_from_value<'db>(
     use super::memory::clone_value;
 
     // If the inner value is borrowed, we need to clone it since Data will take ownership.
-    let owned_inner = if inner_value.location == ValueLocation::TempOwned {
+    let owned_inner = if inner_value.ownership == ValueOwnership::TempOwned {
         inner_value
     } else {
         // Clone borrowed/slot-owned values so Data can own them.
@@ -462,5 +462,5 @@ pub(super) fn allocate_data_from_value<'db>(
     // Data now owns the pointer to inner value's allocation.
     // Don't free owned_inner - Data::from_pointers stores owned_inner.ptr directly.
 
-    Ok(Value { ptr, tydesc: data_tydesc, location: ValueLocation::TempOwned })
+    Ok(Value { ptr, tydesc: data_tydesc, ownership: ValueOwnership::TempOwned })
 }

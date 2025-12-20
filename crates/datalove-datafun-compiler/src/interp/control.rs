@@ -7,7 +7,7 @@
 
 use bct::text::InternedText;
 
-use super::{InterpContext, InterpError, Value, ValueLocation, SlotState};
+use super::{InterpContext, InterpError, Value, ValueOwnership, SlotState};
 use super::memory::destroy_value;
 
 /// Find a slot by variable name in the frame layout.
@@ -80,7 +80,7 @@ pub(super) fn evaluate_branch_condition<'db>(
                 }
             }
 
-            if value.location == ValueLocation::TempOwned {
+            if value.ownership == ValueOwnership::TempOwned {
                 unsafe {
                     datalove_rt::c::dtlv_rti_mem_free_local(
                         ctx.runtime.handle(),
@@ -154,7 +154,7 @@ pub(super) fn evaluate_branch_condition<'db>(
 
             // Only free structure if TempOwned (like Option handling).
             // Borrowed values are owned by caller and cleaned up via cleanup_args_after_frame.
-            if value.location == ValueLocation::TempOwned {
+            if value.ownership == ValueOwnership::TempOwned {
                 unsafe {
                     datalove_rt::c::dtlv_rti_mem_free_local(
                         ctx.runtime.handle(),
@@ -222,7 +222,7 @@ pub(super) fn eval_try_option<'db>(
         std::ptr::copy_nonoverlapping(payload_ptr, result_ptr, inner_size);
     }
 
-    if operand_value.location == ValueLocation::TempOwned {
+    if operand_value.ownership == ValueOwnership::TempOwned {
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_local(
                 ctx.runtime.handle(),
@@ -236,7 +236,7 @@ pub(super) fn eval_try_option<'db>(
     Ok(Value {
         ptr: result_ptr,
         tydesc: inner_tydesc,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }
 
@@ -292,7 +292,7 @@ pub(super) fn eval_try_result<'db>(
             );
         }
 
-        if operand_value.location == ValueLocation::TempOwned {
+        if operand_value.ownership == ValueOwnership::TempOwned {
             unsafe {
                 datalove_rt::c::dtlv_rti_mem_free_local(
                     ctx.runtime.handle(),
@@ -326,7 +326,7 @@ pub(super) fn eval_try_result<'db>(
         std::ptr::copy_nonoverlapping(payload_ptr, result_ptr, ok_size);
     }
 
-    if operand_value.location == ValueLocation::TempOwned {
+    if operand_value.ownership == ValueOwnership::TempOwned {
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_local(
                 ctx.runtime.handle(),
@@ -340,6 +340,6 @@ pub(super) fn eval_try_result<'db>(
     Ok(Value {
         ptr: result_ptr,
         tydesc: ok_tydesc,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }

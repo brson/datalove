@@ -1,9 +1,9 @@
 //! Memory management for interpreter values.
 //!
 //! Functions for destroying, freeing, and cloning values while respecting
-//! ownership semantics tracked by `ValueLocation`.
+//! ownership semantics tracked by `ValueOwnership`.
 
-use super::{InterpContext, Value, Destination, ValueLocation};
+use super::{InterpContext, Value, Destination, ValueOwnership};
 
 /// Clone a value (for copy types or explicit cloning).
 pub(super) fn clone_value<'db>(
@@ -33,7 +33,7 @@ pub(super) fn clone_value<'db>(
     Value {
         ptr: cloned_ptr,
         tydesc: value.tydesc,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     }
 }
 
@@ -71,7 +71,7 @@ pub(super) fn clone_value_to_dest<'db>(
     Value {
         ptr: dest.ptr,
         tydesc: dest.tydesc,
-        location: ValueLocation::Borrowed,
+        ownership: ValueOwnership::Borrowed,
     }
 }
 
@@ -104,7 +104,7 @@ pub(super) fn move_value_to_dest(
     Value {
         ptr: dest.ptr,
         tydesc: dest.tydesc,
-        location: ValueLocation::Borrowed,
+        ownership: ValueOwnership::Borrowed,
     }
 }
 
@@ -143,7 +143,7 @@ pub fn destroy_value<'db>(
             value.tydesc,
         );
 
-        if value.location == ValueLocation::TempOwned {
+        if value.ownership == ValueOwnership::TempOwned {
             datalove_rt::c::dtlv_rti_mem_free_local(
                 rt_handle,
                 value.tydesc,
@@ -163,7 +163,7 @@ pub fn free_value_structure<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
 ) {
-    if value.location != ValueLocation::TempOwned {
+    if value.ownership != ValueOwnership::TempOwned {
         return;
     }
 

@@ -6,7 +6,7 @@
 
 use bct::text::InternedText;
 
-use super::{InterpContext, InterpError, Value, ValueLocation};
+use super::{InterpContext, InterpError, Value, ValueOwnership};
 use super::memory::{destroy_value, free_value_structure};
 
 /// Allocate a tuple from a vector of evaluated values.
@@ -60,7 +60,7 @@ pub(super) fn allocate_tuple_from_values<'db>(
         }
 
         // Free the element's container (data has been copied to tuple).
-        if value.location == ValueLocation::TempOwned {
+        if value.ownership == ValueOwnership::TempOwned {
             unsafe {
                 datalove_rt::c::dtlv_rti_mem_free_local(
                     ctx.runtime.handle(),
@@ -75,7 +75,7 @@ pub(super) fn allocate_tuple_from_values<'db>(
     Ok(Value {
         ptr,
         tydesc: tuple_tydesc,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }
 
@@ -131,7 +131,7 @@ pub(super) fn allocate_struct_from_values<'db>(
         }
 
         // Free the field's container (data has been copied to struct).
-        if value.location == ValueLocation::TempOwned {
+        if value.ownership == ValueOwnership::TempOwned {
             unsafe {
                 datalove_rt::c::dtlv_rti_mem_free_local(
                     ctx.runtime.handle(),
@@ -146,7 +146,7 @@ pub(super) fn allocate_struct_from_values<'db>(
     Ok(Value {
         ptr,
         tydesc: struct_tydesc,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }
 
@@ -278,7 +278,7 @@ pub(super) fn allocate_map_from_values<'db>(
     Ok(Value {
         ptr: map_ptr,
         tydesc: map_tydesc,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }
 
@@ -379,6 +379,6 @@ pub(super) fn allocate_set_from_values<'db>(
     Ok(Value {
         ptr: set_ptr,
         tydesc: set_tydesc,
-        location: ValueLocation::TempOwned,
+        ownership: ValueOwnership::TempOwned,
     })
 }
