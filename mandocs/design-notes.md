@@ -13,23 +13,23 @@ and allow `ret` statements without values.
 fun foo() {
 }
 
-fun choose(a: u32) {
+fun choose(a: u32)
   if a < 10
     ret
   end if
-}
+end fun
 ```
 
 Functions with return types allow `ret` with value.
 
 ```
-fun choose(a: u32): bool {
+fun choose(a: u32): bool
   if a < 10
     ret true
   else
     ret false
   end if
-}
+end fun
 ```
 
 
@@ -95,12 +95,12 @@ Early return with postfix `?` and `!`:
 fun transform_option(val: ?u32): ?u32
   let val = val? // early none return
   ret val +? 1   // early none return on overflow
-end
+end fun
 
 fun transform_result(val: !u32): !u32
   let val = val! // early error return
   ret val +! 1   // early error return on overflow
-end
+end fun
 ```
 
 
