@@ -6,21 +6,7 @@ Datalove on various language design topics.
 
 ### Function return types
 
-Functions can have void return types
-and allow `ret` statements without values.
-
-```
-fun foo()
-end fun
-
-fun choose(a: u32)
-  if a < 10
-    ret
-  end if
-end fun
-```
-
-Functions with return types allow `ret` with value.
+Functions with return types require `ret` with value.
 
 ```
 fun choose(a: u32): bool
@@ -31,6 +17,22 @@ fun choose(a: u32): bool
   end if
 end fun
 ```
+
+Functions can have void return types
+and allow `ret` statements without values.
+
+```
+fun foo()
+  // no ret required
+end fun
+
+fun choose(a: u32)
+  if a < 10
+    ret
+  end if
+end fun
+```
+
 
 
 
