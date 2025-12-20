@@ -1969,7 +1969,12 @@ pub(super) fn eval_inline_set<'db>(
     let mut values = Vec::with_capacity(elements.len());
 
     for elem in elements {
-        match eval_expression(ctx, eval_ctx, *elem, None) {
+        // In frame context, use temp slots for elements.
+        let elem_dest = match eval_ctx {
+            EvalContext::Frame => Some(get_destination_for_expr(ctx, *elem)?),
+            EvalContext::ScriptScope => None,
+        };
+        match eval_expression(ctx, eval_ctx, *elem, elem_dest) {
             Ok(v) => values.push(v),
             Err(e) => {
                 for v in values {
@@ -2004,7 +2009,13 @@ pub(super) fn eval_inline_map<'db>(
     let mut kv_pairs = Vec::with_capacity(entries.len());
 
     for entry in entries {
-        let key = match eval_expression(ctx, eval_ctx, entry.key(ctx.db), None) {
+        let key_expr = entry.key(ctx.db);
+        // In frame context, use temp slots for keys.
+        let key_dest = match eval_ctx {
+            EvalContext::Frame => Some(get_destination_for_expr(ctx, key_expr)?),
+            EvalContext::ScriptScope => None,
+        };
+        let key = match eval_expression(ctx, eval_ctx, key_expr, key_dest) {
             Ok(v) => v,
             Err(e) => {
                 for (k, v) in kv_pairs {
@@ -2015,7 +2026,13 @@ pub(super) fn eval_inline_map<'db>(
             }
         };
 
-        let value = match eval_expression(ctx, eval_ctx, entry.value(ctx.db), None) {
+        let value_expr = entry.value(ctx.db);
+        // In frame context, use temp slots for values.
+        let value_dest = match eval_ctx {
+            EvalContext::Frame => Some(get_destination_for_expr(ctx, value_expr)?),
+            EvalContext::ScriptScope => None,
+        };
+        let value = match eval_expression(ctx, eval_ctx, value_expr, value_dest) {
             Ok(v) => v,
             Err(e) => {
                 destroy_value(ctx, key);
@@ -2112,7 +2129,12 @@ pub(super) fn eval_inline_anon_tuple<'db>(
     let mut values = Vec::with_capacity(elements.len());
 
     for elem in elements {
-        match eval_expression(ctx, eval_ctx, *elem, None) {
+        // In frame context, use temp slots for elements.
+        let elem_dest = match eval_ctx {
+            EvalContext::Frame => Some(get_destination_for_expr(ctx, *elem)?),
+            EvalContext::ScriptScope => None,
+        };
+        match eval_expression(ctx, eval_ctx, *elem, elem_dest) {
             Ok(v) => values.push(v),
             Err(e) => {
                 for v in values {
@@ -2200,7 +2222,12 @@ pub(super) fn eval_inline_anon_struct<'db>(
     let mut field_values = Vec::with_capacity(sorted_fields.len());
 
     for (name, value_expr) in sorted_fields {
-        match eval_expression(ctx, eval_ctx, value_expr, None) {
+        // In frame context, use temp slots for field values.
+        let value_dest = match eval_ctx {
+            EvalContext::Frame => Some(get_destination_for_expr(ctx, value_expr)?),
+            EvalContext::ScriptScope => None,
+        };
+        match eval_expression(ctx, eval_ctx, value_expr, value_dest) {
             Ok(v) => field_values.push((name, v)),
             Err(e) => {
                 for (_, v) in field_values {

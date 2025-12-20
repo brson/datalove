@@ -293,17 +293,19 @@ impl<'db> SlotAllocationBuilder<'db> {
                 }
             }
             ExprFunKind::Set(set) => {
+                // Set elements need their own temp slots (can't DPS into set structure).
                 for elem in set.elements(db) {
-                    self.analyze_expr_with_destruction(db, *elem, ctx, destruction);
+                    self.analyze_expr_with_destruction(db, *elem, ExprContext::NeedsDest, destruction);
                 }
                 if ctx == ExprContext::NeedsDest {
                     self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
                 }
             }
             ExprFunKind::Map(map) => {
+                // Map keys/values need their own temp slots (can't DPS into map structure).
                 for entry in map.entries(db) {
-                    self.analyze_expr_with_destruction(db, entry.key(db), ctx, destruction);
-                    self.analyze_expr_with_destruction(db, entry.value(db), ctx, destruction);
+                    self.analyze_expr_with_destruction(db, entry.key(db), ExprContext::NeedsDest, destruction);
+                    self.analyze_expr_with_destruction(db, entry.value(db), ExprContext::NeedsDest, destruction);
                 }
                 if ctx == ExprContext::NeedsDest {
                     self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
