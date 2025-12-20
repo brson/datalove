@@ -111,7 +111,6 @@ use frame::CfgControl;
 use memory::{clone_value_to_dest, move_value_to_dest};
 use types::is_copy_type;
 use alloc::{
-    allocate_bool, allocate_f32, allocate_u32_raw,
     allocate_option_some_from_value,
     allocate_result_ok_from_value, write_result_err_to_dest,
 };
@@ -120,8 +119,8 @@ use collections::{
     allocate_map_from_values, allocate_set_from_values,
 };
 use literals::{
-    allocate_inline_int_literal, write_inline_int_to_dest, write_option_none_to_dest,
-    allocate_inline_string, write_bool_to_dest, write_f32_to_dest, write_u32_to_dest,
+    write_inline_int_to_dest, write_option_none_to_dest,
+    write_bool_to_dest, write_f32_to_dest, write_u32_to_dest,
     write_string_to_dest,
 };
 use arith_widening::{execute_binop, execute_unop};
@@ -252,7 +251,7 @@ pub(crate) fn eval_wrapper_payload_dps<'db>(
 
     // Evaluate payload with DPS based on context.
     let payload_value = match eval_ctx {
-        EvalContext::Frame => eval_expression_frame(ctx, payload_expr, Some(payload_dest))?,
+        EvalContext::Frame => eval_expression_frame(ctx, payload_expr, payload_dest)?,
         EvalContext::ScriptScope => {
             script::eval_expression_in_script_scope(ctx, payload_expr, Some(payload_dest))?
         }
@@ -366,7 +365,7 @@ fn eval_function_call_frame<'db>(
                 return Err(e);
             }
         };
-        let value = match eval_expression_frame(ctx, *arg_expr, Some(arg_dest)) {
+        let value = match eval_expression_frame(ctx, *arg_expr, arg_dest) {
             Ok(v) => {
                 if v.ownership == ValueOwnership::Borrowed {
                     mark_temp_slot_available(ctx, *arg_expr);
@@ -708,7 +707,7 @@ fn execute_function_body_with_frame<'db>(
                         // If-statement: evaluate condition and branch based on result.
                         let condition_expr = if_s.condition(ctx.db);
                         let condition_dest = get_destination_for_expr(ctx, condition_expr)?;
-                        let condition_value = eval_expression_frame(ctx, condition_expr, Some(condition_dest))?;
+                        let condition_value = eval_expression_frame(ctx, condition_expr, condition_dest)?;
 
                         // Handle condition based on type (bool, Option, or Result).
                         let is_true = evaluate_branch_condition(
@@ -1125,7 +1124,7 @@ fn execute_let_statement_frame<'db>(
 
     // Evaluate expression with DPS into slot.
     let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
-    let value = eval_expression_frame(ctx, let_stmt.value(ctx.db), Some(dest))?;
+    let value = eval_expression_frame(ctx, let_stmt.value(ctx.db), dest)?;
 
     // If DPS was used (Borrowed), the value was written directly to slot.
     // If not (TempOwned), we need to write and free.
@@ -1147,12 +1146,11 @@ fn execute_let_statement_frame<'db>(
 
 /// Evaluate an expression in frame-based mode.
 ///
-/// If `dest` is provided, the result is written directly to that location
-/// and a Borrowed value is returned. Otherwise, a temp is allocated.
+/// The result is written directly to `dest` and a Borrowed value is returned.
 fn eval_expression_frame<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
-    dest: Option<Destination>,
+    dest: Destination,
 ) -> Result<Value, InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
 
@@ -1192,14 +1190,7 @@ fn eval_expression_frame<'db>(
                 if is_copy {
                     // Copy: clone to dest.
                     let borrowed = Value { ptr, tydesc, ownership: ValueOwnership::Borrowed };
-                    let result_dest = match dest {
-                        Some(d) => d,
-                        None => get_destination_for_expr(ctx, expr)?,
-                    };
-                    let result = clone_value_to_dest(ctx, borrowed, result_dest);
-                    if dest.is_none() {
-                        mark_temp_slot_available(ctx, expr);
-                    }
+                    let result = clone_value_to_dest(ctx, borrowed, dest);
                     Ok(result)
                 } else {
                     // Move: take ownership of the reference.
@@ -1222,17 +1213,10 @@ fn eval_expression_frame<'db>(
                     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
                     let source_value = Value { ptr: frame_ptr, tydesc, ownership: ValueOwnership::Borrowed };
-                    let result_dest = match dest {
-                        Some(d) => d,
-                        None => get_destination_for_expr(ctx, expr)?,
-                    };
-                    let result = clone_value_to_dest(ctx, source_value, result_dest);
-                    if dest.is_none() {
-                        mark_temp_slot_available(ctx, expr);
-                    }
+                    let result = clone_value_to_dest(ctx, source_value, dest);
                     Ok(result)
                 } else {
-                    // For Move types, move to dest if provided, then mark source as moved.
+                    // For Move types, move to dest, then mark source as moved.
                     // The move does a shallow copy (memcpy), transferring heap ownership.
                     let offset = slot_info.offset(ctx.db) as usize;
                     let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
@@ -1245,16 +1229,10 @@ fn eval_expression_frame<'db>(
 
                     let source_value = Value { ptr: frame_ptr, tydesc, ownership: ValueOwnership::Borrowed };
 
-                    if let Some(d) = dest {
-                        // Move to destination (shallow copy), mark source as Moved.
-                        let result = move_value_to_dest(source_value, d);
-                        ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
-                        Ok(result)
-                    } else {
-                        // No dest: return borrowed pointer to source, mark as Moved.
-                        ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
-                        Ok(source_value)
-                    }
+                    // Move to destination (shallow copy), mark source as Moved.
+                    let result = move_value_to_dest(source_value, dest);
+                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
+                    Ok(result)
                 }
             }
         }
@@ -1278,14 +1256,8 @@ fn eval_expression_frame<'db>(
                 }
             };
 
-            // Use provided dest or own temp slot.
-            let result_dest = match dest {
-                Some(d) => d,
-                None => get_destination_for_expr(ctx, expr)?,
-            };
-
             // Execute binop with borrowed operands.
-            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(result_dest))?;
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(dest))?;
 
             // Clean up temporary operand values and mark their slots as Moved.
             destroy_value(ctx, lhs);
@@ -1297,23 +1269,12 @@ fn eval_expression_frame<'db>(
                 mark_temp_slot_moved(ctx, rhs_expr);
             }
 
-            // If result went to our temp slot (not caller's dest), mark Available for cleanup.
-            if dest.is_none() && result.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_available(ctx, expr);
-            }
-
             Ok(result)
         }
 
         ast::ExprFunKind::FunctionCall(call_expr) => {
-            // Evaluate function call with arguments in frame context.
-            // Use caller's dest or expression's temp slot for DPS.
-            let return_dest = match dest {
-                Some(d) => d,
-                None => get_destination_for_expr(ctx, expr)?,
-            };
             // Void functions can't be used in expression context (typechecker ensures this).
-            eval_function_call_frame(ctx, call_expr, return_dest)?
+            eval_function_call_frame(ctx, call_expr, dest)?
                 .ok_or_else(|| InterpError::RuntimeError(
                     format!("Void function '{}' cannot be used in expression context",
                             call_expr.name(ctx.db).text(ctx.db))
@@ -1328,14 +1289,8 @@ fn eval_expression_frame<'db>(
             // Evaluate operand in borrow context (unary ops don't consume operands).
             let operand = eval_expression_frame_borrow(ctx, operand_expr, operand_dest)?;
 
-            // Use provided dest or own temp slot.
-            let result_dest = match dest {
-                Some(d) => d,
-                None => get_destination_for_expr(ctx, expr)?,
-            };
-
             // Execute unop with borrowed operand.
-            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(result_dest))?;
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(dest))?;
 
             // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
@@ -1343,31 +1298,20 @@ fn eval_expression_frame<'db>(
                 mark_temp_slot_moved(ctx, operand_expr);
             }
 
-            // If result went to our temp slot, mark Available for cleanup.
-            if dest.is_none() && result.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_available(ctx, expr);
-            }
-
             Ok(result)
         }
 
         ast::ExprFunKind::Tuple(tuple_expr) => {
-            // Get result destination (from caller or own temp slot).
-            let result_dest = match dest {
-                Some(d) => d,
-                None => get_destination_for_expr(ctx, expr)?,
-            };
-
-            let dest_tydesc = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(result_dest.tydesc) };
+            let dest_tydesc = unsafe { datalove_rt::rtdt::TyDescRef::from_ptr(dest.tydesc) };
             let elements = tuple_expr.elements(ctx.db);
 
             // Evaluate each element directly to its field offset in the tuple.
             for (elem_expr, field) in elements.iter().zip(dest_tydesc.iter_tuple_fields()) {
-                let field_ptr = unsafe { result_dest.ptr.add(field.offset() as usize) };
+                let field_ptr = unsafe { dest.ptr.add(field.offset() as usize) };
                 let field_dest = Destination { ptr: field_ptr, tydesc: field.tydesc().as_ptr() };
 
                 // Evaluate element directly to field destination.
-                let elem_value = eval_expression_frame(ctx, *elem_expr, Some(field_dest))?;
+                let elem_value = eval_expression_frame(ctx, *elem_expr, field_dest)?;
 
                 // If element used its own temp slot, it's been written to our field now.
                 // The element's temp slot is no longer needed.
@@ -1376,19 +1320,14 @@ fn eval_expression_frame<'db>(
                 }
             }
 
-            // If using own temp slot, mark Available for cleanup.
-            if dest.is_none() {
-                mark_temp_slot_available(ctx, expr);
-            }
-
-            Ok(Value { ptr: result_dest.ptr, tydesc: result_dest.tydesc, ownership: ValueOwnership::Borrowed })
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
         }
 
         ast::ExprFunKind::TryOption(try_op) => {
             // Evaluate operand to its temp slot.
             let operand_expr = try_op.operand(ctx.db);
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
-            let operand = eval_expression_frame(ctx, operand_expr, Some(operand_dest))?;
+            let operand = eval_expression_frame(ctx, operand_expr, operand_dest)?;
             // Apply try-option operator.
             eval_try_option(ctx, operand)
         }
@@ -1397,114 +1336,68 @@ fn eval_expression_frame<'db>(
             // Evaluate operand to its temp slot.
             let operand_expr = try_op.operand(ctx.db);
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
-            let operand = eval_expression_frame(ctx, operand_expr, Some(operand_dest))?;
+            let operand = eval_expression_frame(ctx, operand_expr, operand_dest)?;
             // Apply try-result operator.
             eval_try_result(ctx, operand)
         }
 
-        // Inline literal variants.
-        ast::ExprFunKind::True(_) => {
-            if let Some(d) = dest {
-                write_bool_to_dest(d, true)
-            } else {
-                allocate_bool(ctx, true)
-            }
-        }
-        ast::ExprFunKind::False(_) => {
-            if let Some(d) = dest {
-                write_bool_to_dest(d, false)
-            } else {
-                allocate_bool(ctx, false)
-            }
-        }
-        ast::ExprFunKind::None(_) => {
-            if let Some(d) = dest {
-                write_option_none_to_dest(d)
-            } else {
-                Err(InterpError::InvalidExpression(
-                    "@none literal requires type context".to_string()
-                ))
-            }
-        }
-        ast::ExprFunKind::Int(int_expr) => {
-            if let Some(d) = dest {
-                write_inline_int_to_dest(ctx, &int_expr, d)
-            } else {
-                allocate_inline_int_literal(ctx, &int_expr)
-            }
-        }
+        // Inline literal variants - always write to dest.
+        ast::ExprFunKind::True(_) => write_bool_to_dest(dest, true),
+        ast::ExprFunKind::False(_) => write_bool_to_dest(dest, false),
+        ast::ExprFunKind::None(_) => write_option_none_to_dest(dest),
+        ast::ExprFunKind::Int(int_expr) => write_inline_int_to_dest(ctx, &int_expr, dest),
         ast::ExprFunKind::Float(float_expr) => {
             let value_str = float_expr.value(ctx.db).as_str(ctx.db);
             let value: f32 = value_str.parse()
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
-            if let Some(d) = dest {
-                write_f32_to_dest(d, value)
-            } else {
-                allocate_f32(ctx, value)
-            }
+            write_f32_to_dest(dest, value)
         }
         ast::ExprFunKind::Hex(hex_expr) => {
             let value_str = hex_expr.value(ctx.db).as_str(ctx.db);
             let hex_digits = value_str.trim_start_matches("0x").trim_start_matches("0X");
             let value: u32 = u32::from_str_radix(hex_digits, 16)
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse hex: {}", e)))?;
-            if let Some(d) = dest {
-                write_u32_to_dest(d, value)
-            } else {
-                allocate_u32_raw(ctx, value)
-            }
+            write_u32_to_dest(dest, value)
         }
-        ast::ExprFunKind::String(string_expr) => {
-            if let Some(d) = dest {
-                write_string_to_dest(ctx, &string_expr, d)
-            } else {
-                allocate_inline_string(ctx, &string_expr)
-            }
-        }
+        ast::ExprFunKind::String(string_expr) => write_string_to_dest(ctx, &string_expr, dest),
         ast::ExprFunKind::List(list_expr) => {
-            eval_inline_list(ctx, EvalContext::Frame, expr, &list_expr, dest)
+            eval_inline_list(ctx, EvalContext::Frame, expr, &list_expr, Some(dest))
         }
         ast::ExprFunKind::Set(set_expr) => {
-            eval_inline_set(ctx, EvalContext::Frame, &set_expr, dest)
+            eval_inline_set(ctx, EvalContext::Frame, &set_expr, Some(dest))
         }
         ast::ExprFunKind::Map(map_expr) => {
-            eval_inline_map(ctx, EvalContext::Frame, &map_expr, dest)
+            eval_inline_map(ctx, EvalContext::Frame, &map_expr, Some(dest))
         }
         ast::ExprFunKind::Tensor(_) => {
             Err(InterpError::InvalidExpression("Tensor not yet implemented".to_string()))
         }
         ast::ExprFunKind::AnonTuple(tuple_expr) => {
-            eval_inline_anon_tuple(ctx, EvalContext::Frame, &tuple_expr, dest)
+            eval_inline_anon_tuple(ctx, EvalContext::Frame, &tuple_expr, Some(dest))
         }
         ast::ExprFunKind::AnonStruct(struct_expr) => {
-            eval_inline_anon_struct(ctx, EvalContext::Frame, &struct_expr, dest)
+            eval_inline_anon_struct(ctx, EvalContext::Frame, &struct_expr, Some(dest))
         }
         ast::ExprFunKind::AnonEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
         ast::ExprFunKind::Some(some_expr) => {
-            eval_wrapper_payload_dps(ctx, EvalContext::Frame, WrapperKind::Some, dest, some_expr.payload(ctx.db))
+            eval_wrapper_payload_dps(ctx, EvalContext::Frame, WrapperKind::Some, Some(dest), some_expr.payload(ctx.db))
         }
         ast::ExprFunKind::Ok(ok_expr) => {
-            eval_wrapper_payload_dps(ctx, EvalContext::Frame, WrapperKind::Ok, dest, ok_expr.payload(ctx.db))
+            eval_wrapper_payload_dps(ctx, EvalContext::Frame, WrapperKind::Ok, Some(dest), ok_expr.payload(ctx.db))
         }
         ast::ExprFunKind::Er(er_expr) => {
-            if let Some(d) = dest {
-                let payload_expr = er_expr.payload(ctx.db);
-                let payload_dest = get_destination_for_expr(ctx, payload_expr)?;
-                let payload = eval_expression_frame(ctx, payload_expr, Some(payload_dest))?;
-                literals::write_result_er_from_value(ctx, payload, d)
-            } else {
-                return Err(InterpError::RuntimeError(
-                    "er expression requires type context (use type hint)".to_string()
-                ));
-            }
+            let payload_expr = er_expr.payload(ctx.db);
+            let payload_dest = get_destination_for_expr(ctx, payload_expr)?;
+            let payload = eval_expression_frame(ctx, payload_expr, payload_dest)?;
+            literals::write_result_er_from_value(ctx, payload, dest)
         }
         ast::ExprFunKind::Data(data_expr) => {
             // Evaluate inner expression to its temp slot.
             let inner_expr = data_expr.value(ctx.db);
             let inner_dest = get_destination_for_expr(ctx, inner_expr)?;
-            let inner_value = eval_expression_frame(ctx, inner_expr, Some(inner_dest))?;
+            let inner_value = eval_expression_frame(ctx, inner_expr, inner_dest)?;
             // Wrap in Data.
             alloc::allocate_data_from_value(ctx, inner_value)
         }
@@ -1534,7 +1427,7 @@ fn eval_return_expression_frame<'db>(
     // Check if we have a return destination from caller.
     if let Some(return_dest) = ctx.call_stack[frame_index].return_dest {
         // Evaluate expression with DPS into return destination.
-        let value = eval_expression_frame(ctx, expr, Some(return_dest))?;
+        let value = eval_expression_frame(ctx, expr, return_dest)?;
 
         // Handle case where expression didn't use dest (e.g., Name returning borrowed value).
         if value.ptr != return_dest.ptr {
@@ -1588,7 +1481,7 @@ fn eval_return_expression_frame<'db>(
 
             let dest = Destination { ptr: ret_ptr, tydesc: ret_tydesc };
             // Evaluate expression with the typed destination.
-            let result = eval_expression_frame(ctx, expr, Some(dest));
+            let result = eval_expression_frame(ctx, expr, dest);
             if let Err(e) = result {
                 // Free the allocated buffer on error to avoid leaks.
                 unsafe {
@@ -1614,7 +1507,7 @@ fn eval_return_expression_frame<'db>(
 
     // Evaluate expression to its temp slot.
     let expr_dest = get_destination_for_expr(ctx, expr)?;
-    let value = eval_expression_frame(ctx, expr, Some(expr_dest))?;
+    let value = eval_expression_frame(ctx, expr, expr_dest)?;
 
     // Check if we need to wrap the value in Option/Result for return type coercion.
     // This handles the case where return_dest is None (e.g., nested function calls).
@@ -1770,7 +1663,7 @@ fn eval_expression_frame_borrow<'db>(
 
         // For other expressions (literals, etc.), delegate to normal evaluation.
         // These don't involve variable access so borrow vs move doesn't matter.
-        _ => eval_expression_frame(ctx, expr, Some(dest)),
+        _ => eval_expression_frame(ctx, expr, dest),
     }
 }
 
@@ -1791,7 +1684,11 @@ fn eval_expression<'db>(
 ) -> Result<Value, InterpError> {
     match eval_ctx {
         EvalContext::ScriptScope => eval_expression_in_script_scope(ctx, expr, dest),
-        EvalContext::Frame => eval_expression_frame(ctx, expr, dest),
+        EvalContext::Frame => {
+            // Frame context always has destinations (temp slots allocated at analysis time).
+            let dest = dest.expect("Frame context requires destination");
+            eval_expression_frame(ctx, expr, dest)
+        }
     }
 }
 
