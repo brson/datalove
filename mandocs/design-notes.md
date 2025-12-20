@@ -10,8 +10,8 @@ Functions can have void return types
 and allow `ret` statements without values.
 
 ```
-fun foo() {
-}
+fun foo()
+end fun
 
 fun choose(a: u32)
   if a < 10
