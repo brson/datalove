@@ -51,7 +51,7 @@
                         ),
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprBinOp(
                                     kind: "BinOp",
                                     op: Mul,
@@ -68,7 +68,7 @@
                                         ),
                                     ),
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),
@@ -130,12 +130,12 @@
                         ),
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprFunKind(
                                     kind: "Name",
                                     name: "b",
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),
@@ -224,7 +224,7 @@
                         ),
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprBinOp(
                                     kind: "BinOp",
                                     op: Add,
@@ -241,7 +241,7 @@
                                         ),
                                     ),
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),
@@ -330,7 +330,7 @@
                         ),
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprBinOp(
                                     kind: "BinOp",
                                     op: Add,
@@ -347,7 +347,7 @@
                                         ),
                                     ),
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),

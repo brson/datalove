@@ -40,7 +40,11 @@ pub fn extract_expr_from_script<'db>(
         ));
     }
     match &statements[0] {
-        ast::Statement::Ret(ret) => Ok(ret.value(db)),
+        ast::Statement::Ret(ret) => {
+            ret.value(db).ok_or_else(|| ConversionError::InvalidScriptStructure(
+                "bare ret statement has no value".to_string()
+            ))
+        }
         other => Err(ConversionError::InvalidScriptStructure(
             format!("expected Ret statement, got {:?}", std::mem::discriminant(other))
         )),

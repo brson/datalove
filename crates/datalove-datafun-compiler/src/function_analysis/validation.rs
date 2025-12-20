@@ -137,8 +137,10 @@ fn walk_statements_for_reads<'db>(
                 collect_reads_from_expr(db, let_stmt.value(db), stmt_id, slots, reads);
             }
             Statement::Ret(ret_stmt) => {
-                // Reads from return expression.
-                collect_reads_from_expr(db, ret_stmt.value(db), stmt_id, slots, reads);
+                // Reads from return expression (if present).
+                if let Some(value) = ret_stmt.value(db) {
+                    collect_reads_from_expr(db, value, stmt_id, slots, reads);
+                }
             }
             Statement::If(if_stmt) => {
                 // Reads from condition.
@@ -553,7 +555,9 @@ fn walk_for_expr_mapping<'db>(
                 map_expr_ids(db, let_stmt.value(db), stmt_id, map, expr_counter);
             }
             Statement::Ret(ret_stmt) => {
-                map_expr_ids(db, ret_stmt.value(db), stmt_id, map, expr_counter);
+                if let Some(value) = ret_stmt.value(db) {
+                    map_expr_ids(db, value, stmt_id, map, expr_counter);
+                }
             }
             Statement::If(if_stmt) => {
                 map_expr_ids(db, if_stmt.condition(db), stmt_id, map, expr_counter);

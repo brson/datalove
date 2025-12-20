@@ -51,7 +51,7 @@
                             then_body: [
                                 StmtRet(
                                     kind: "Ret",
-                                    value: ExprFun(
+                                    value: Some(ExprFun(
                                         expr: ExprOk(
                                             kind: "Ok",
                                             heap: Omitted,
@@ -64,13 +64,13 @@
                                                 ),
                                             ),
                                         ),
-                                    ),
+                                    )),
                                 ),
                             ],
                             else_body: Some([
                                 StmtRet(
                                     kind: "Ret",
-                                    value: ExprFun(
+                                    value: Some(ExprFun(
                                         expr: ExprFunctionCall(
                                             kind: "FunctionCall",
                                             name: "is_odd",
@@ -97,7 +97,7 @@
                                                 ),
                                             ],
                                         ),
-                                    ),
+                                    )),
                                 ),
                             ]),
                         ),
@@ -151,7 +151,7 @@
                             then_body: [
                                 StmtRet(
                                     kind: "Ret",
-                                    value: ExprFun(
+                                    value: Some(ExprFun(
                                         expr: ExprOk(
                                             kind: "Ok",
                                             heap: Omitted,
@@ -164,13 +164,13 @@
                                                 ),
                                             ),
                                         ),
-                                    ),
+                                    )),
                                 ),
                             ],
                             else_body: Some([
                                 StmtRet(
                                     kind: "Ret",
-                                    value: ExprFun(
+                                    value: Some(ExprFun(
                                         expr: ExprFunctionCall(
                                             kind: "FunctionCall",
                                             name: "is_even",
@@ -197,7 +197,7 @@
                                                 ),
                                             ],
                                         ),
-                                    ),
+                                    )),
                                 ),
                             ]),
                         ),

@@ -346,8 +346,10 @@ pub fn compute_live_ranges<'db>(
                     collect_reads(db, let_stmt.value(db), stmt_id, slots, &mut last_use_points);
                 }
                 Statement::Ret(ret_stmt) => {
-                    // Return reads from slots.
-                    collect_reads(db, ret_stmt.value(db), stmt_id, slots, &mut last_use_points);
+                    // Return reads from slots (if value present).
+                    if let Some(value) = ret_stmt.value(db) {
+                        collect_reads(db, value, stmt_id, slots, &mut last_use_points);
+                    }
                 }
                 Statement::If(if_stmt) => {
                     // Condition reads from slots.

@@ -351,33 +351,34 @@ fn walk_statements<'db>(
                 }
             }
             Statement::Ret(ret_stmt) => {
-                // Return statement: returned value is moved to caller.
-                let value_expr = ret_stmt.value(db);
-                let expr_id = ExprId(*expr_counter);
-                *expr_counter += 1;
+                // Return statement: returned value is moved to caller (if present).
+                if let Some(value_expr) = ret_stmt.value(db) {
+                    let expr_id = ExprId(*expr_counter);
+                    *expr_counter += 1;
 
-                // Collect moves from the return expression.
-                collect_moves_from_expr_for_return(
-                    db,
-                    value_expr,
-                    expr_id,
-                    stmt_id,
-                    registry,
-                    slots,
-                    moves,
-                    expr_counter,
-                    tycheck_result,
-                    func,
-                );
-                // Also collect reads from the return expression.
-                collect_reads_from_expr(
-                    db,
-                    value_expr,
-                    stmt_id,
-                    slots,
-                    reads,
-                    expr_counter,
-                );
+                    // Collect moves from the return expression.
+                    collect_moves_from_expr_for_return(
+                        db,
+                        value_expr,
+                        expr_id,
+                        stmt_id,
+                        registry,
+                        slots,
+                        moves,
+                        expr_counter,
+                        tycheck_result,
+                        func,
+                    );
+                    // Also collect reads from the return expression.
+                    collect_reads_from_expr(
+                        db,
+                        value_expr,
+                        stmt_id,
+                        slots,
+                        reads,
+                        expr_counter,
+                    );
+                }
             }
             Statement::If(if_stmt) => {
                 // Collect reads from the condition.

@@ -31,7 +31,7 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprAnonStruct(
                                     kind: "AnonStruct",
                                     heap: Local,
@@ -61,7 +61,7 @@
                                         ),
                                     ],
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),

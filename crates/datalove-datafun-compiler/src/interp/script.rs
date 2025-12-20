@@ -419,7 +419,12 @@ pub(super) fn eval_expression_in_script_scope<'db>(
         }
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Evaluate function call in script scope.
-            eval_function_call_in_script_scope(ctx, call_expr)
+            // Void functions can't be used in expression context (typechecker ensures this).
+            eval_function_call_in_script_scope(ctx, call_expr)?
+                .ok_or_else(|| InterpError::RuntimeError(
+                    format!("Void function '{}' cannot be used in expression context",
+                            call_expr.name(ctx.db).text(ctx.db))
+                ))
         }
         ast::ExprFunKind::BinOp(binop_expr) => {
             // Evaluate operands (borrow context - we just read, don't consume variables).
@@ -692,7 +697,12 @@ fn eval_expression_in_script_scope_borrow<'db>(
         }
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Function calls use normal semantics (arguments may be moved).
-            eval_function_call_in_script_scope(ctx, call_expr)
+            // Void functions can't be used in expression context (typechecker ensures this).
+            eval_function_call_in_script_scope(ctx, call_expr)?
+                .ok_or_else(|| InterpError::RuntimeError(
+                    format!("Void function '{}' cannot be used in expression context",
+                            call_expr.name(ctx.db).text(ctx.db))
+                ))
         }
         // For other expressions, delegate to normal evaluation.
         _ => eval_expression_in_script_scope(ctx, expr, None),
@@ -704,10 +714,11 @@ fn eval_expression_in_script_scope_borrow<'db>(
 // ============================================================================
 
 /// Evaluate a function call from script scope.
+/// Returns `None` for void functions.
 pub(super) fn eval_function_call_in_script_scope<'db>(
     ctx: &mut InterpContext<'db>,
     call_expr: ast::ExprFunctionCall<'db>,
-) -> Result<Value, InterpError> {
+) -> Result<Option<Value>, InterpError> {
     let name = call_expr.name(ctx.db);
     let arg_exprs = call_expr.args(ctx.db);
 
@@ -982,18 +993,22 @@ pub(super) fn eval_function_call_in_script_scope<'db>(
 
     // Handle result - convert to TempOwned if we provided a destination.
     match result {
-        Ok(_value) if return_dest.is_some() => {
+        Ok(Some(_value)) if return_dest.is_some() => {
             // Return value was written to our buffer via DPS.
             // Return as TempOwned since script scope owns this memory.
-            Ok(Value {
+            Ok(Some(Value {
                 ptr: return_ptr,
                 tydesc: return_tydesc,
                 ownership: ValueOwnership::TempOwned,
-            })
+            }))
         }
-        Ok(value) => {
-            // No return type (void function) - return value as-is.
-            Ok(value)
+        Ok(Some(value)) => {
+            // Function returned a value without DPS - return as-is.
+            Ok(Some(value))
+        }
+        Ok(None) => {
+            // Void function - no return value.
+            Ok(None)
         }
         Err(e) => {
             // Error - free return buffer if allocated.

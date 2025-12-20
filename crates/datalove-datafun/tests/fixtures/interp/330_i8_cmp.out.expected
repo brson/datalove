@@ -31,12 +31,12 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprFunKind(
                                     kind: "Name",
                                     name: "a",
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),

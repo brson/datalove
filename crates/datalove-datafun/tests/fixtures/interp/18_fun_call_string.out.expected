@@ -14,14 +14,14 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprString(
                                     kind: "String",
                                     heap: Omitted,
                                     type_hint: None,
                                     value: "\"hello\"",
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),

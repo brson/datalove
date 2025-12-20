@@ -28,7 +28,7 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprSome(
                                     kind: "Some",
                                     heap: Omitted,
@@ -46,7 +46,7 @@
                                         ),
                                     ),
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),
@@ -84,25 +84,25 @@
                             then_body: [
                                 StmtRet(
                                     kind: "Ret",
-                                    value: ExprFun(
+                                    value: Some(ExprFun(
                                         expr: ExprFunKind(
                                             kind: "Name",
                                             name: "value",
                                         ),
-                                    ),
+                                    )),
                                 ),
                             ],
                             else_body: Some([
                                 StmtRet(
                                     kind: "Ret",
-                                    value: ExprFun(
+                                    value: Some(ExprFun(
                                         expr: ExprInt(
                                             kind: "Int",
                                             heap: Local,
                                             type_hint: None,
                                             value: "0",
                                         ),
-                                    ),
+                                    )),
                                 ),
                             ]),
                         ),

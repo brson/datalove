@@ -28,7 +28,7 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprSome(
                                     kind: "Some",
                                     heap: Omitted,
@@ -46,7 +46,7 @@
                                         ),
                                     ),
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),

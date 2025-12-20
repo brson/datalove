@@ -331,11 +331,12 @@ pub(super) fn lookup_function<'db>(
 /// Evaluate a function call from frame-based execution.
 ///
 /// If `return_dest` is provided, the return value is written directly to that location.
+/// Returns `None` for void functions.
 fn eval_function_call_frame<'db>(
     ctx: &mut InterpContext<'db>,
     call_expr: ast::ExprFunctionCall<'db>,
     return_dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+) -> Result<Option<Value>, InterpError> {
     let name = call_expr.name(ctx.db);
     let arg_exprs = call_expr.args(ctx.db);
 
@@ -391,13 +392,14 @@ fn eval_function_call_frame<'db>(
 ///
 /// This uses frame-based execution with analysis-driven slot allocation.
 /// If `return_dest` is provided, return expressions write directly to caller's memory.
+/// Returns `None` for void functions.
 pub(super) fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
     func_module: Option<ModuleId>,
     arg_values: Vec<Value>,
     return_dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+) -> Result<Option<Value>, InterpError> {
     // Helper to clean up arguments on early error (before frame execution).
     // All arguments must be destroyed since they were never used.
     fn cleanup_args_on_error(ctx: &mut InterpContext<'_>, arg_values: Vec<Value>) {
@@ -570,18 +572,22 @@ pub(super) fn execute_function_body<'db>(
 
     // Handle return value based on whether we have a return_dest.
     let result = match result {
-        Ok(value) if return_dest.is_some() => {
+        Ok(Some(value)) if return_dest.is_some() => {
             // Return value was written directly to caller's memory via DPS.
             // No cloning needed - just return the value as-is.
-            Ok(value)
+            Ok(Some(value))
         }
-        Ok(value) if value.ownership == ValueOwnership::Borrowed => {
+        Ok(Some(value)) if value.ownership == ValueOwnership::Borrowed => {
             // No return_dest and result is Borrowed (pointing to frame memory).
             // This path should be unreachable now that all function calls provide DPS destinations.
             panic!(
                 "Unreachable: Borrowed return value without DPS destination in function '{}'",
                 func.name(ctx.db).text(ctx.db)
             );
+        }
+        Ok(None) => {
+            // Void function returned without value.
+            Ok(None)
         }
         other => other,
     };
@@ -607,7 +613,7 @@ pub(super) fn execute_function_body<'db>(
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Option(_)) {
                     if let Some(dest) = return_dest {
                         // DPS: write None to caller's destination.
-                        return write_option_none_to_dest(dest);
+                        return write_option_none_to_dest(dest).map(Some);
                     } else {
                         // This path should be unreachable now that all function calls provide DPS destinations.
                         panic!(
@@ -624,7 +630,7 @@ pub(super) fn execute_function_body<'db>(
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Result(_)) {
                     if let Some(dest) = return_dest {
                         // DPS: write Err to caller's destination.
-                        return write_result_err_to_dest(dest, *tydesc, *ptr);
+                        return write_result_err_to_dest(dest, *tydesc, *ptr).map(Some);
                     } else {
                         // This path should be unreachable now that all function calls provide DPS destinations.
                         panic!(
@@ -645,7 +651,7 @@ pub(super) fn execute_function_body<'db>(
 /// Execute function body with CFG-based execution.
 fn execute_function_body_with_frame<'db>(
     ctx: &mut InterpContext<'db>,
-) -> Result<Value, InterpError> {
+) -> Result<Option<Value>, InterpError> {
     // Get the current frame (top of stack).
     let frame_index = ctx.call_stack.len() - 1;
 
@@ -672,16 +678,21 @@ fn execute_function_body_with_frame<'db>(
             // Execute statement.
             match execute_cfg_statement(ctx, stmt)? {
                 CfgControl::Continue => continue,
-                CfgControl::Return(value) => return Ok(value),
+                CfgControl::Return(value) => return Ok(Some(value)),
+                CfgControl::ReturnVoid => return Ok(None),
             }
         }
 
         // Handle terminator.
         match &block.terminator {
             Terminator::Return => {
-                // Should have returned via CfgControl::Return above.
+                // For void functions, implicit return at end of function is OK.
+                if func.return_type(ctx.db).is_none() {
+                    return Ok(None);
+                }
+                // Non-void function reached end without ret - error.
                 return Err(InterpError::RuntimeError(
-                    format!("Function '{}' reached Return terminator without ret statement",
+                    format!("Function '{}' reached end without ret statement",
                             func.name(ctx.db).text(ctx.db))
                 ));
             }
@@ -760,10 +771,19 @@ fn execute_cfg_statement<'db>(
             Ok(CfgControl::Continue)
         }
         ast::Statement::Ret(ret_stmt) => {
-            // Evaluate the return expression (no dest - value escapes frame).
-            // Note: @none/@error in return position require typed context from function return type.
-            let value = eval_return_expression_frame(ctx, ret_stmt.value(ctx.db))?;
-            Ok(CfgControl::Return(value))
+            // Handle bare ret (void function) vs ret with value.
+            match ret_stmt.value(ctx.db) {
+                Some(expr) => {
+                    // Evaluate the return expression (no dest - value escapes frame).
+                    // Note: @none/@error in return position require typed context from function return type.
+                    let value = eval_return_expression_frame(ctx, expr)?;
+                    Ok(CfgControl::Return(value))
+                }
+                None => {
+                    // Bare ret in void function.
+                    Ok(CfgControl::ReturnVoid)
+                }
+            }
         }
         ast::Statement::If(_) => {
             // In CFG mode, if-statements are handled by the Branch terminator.
@@ -1290,7 +1310,12 @@ fn eval_expression_frame<'db>(
                 Some(d) => Some(d),
                 None => get_destination_for_expr(ctx, expr).ok(),
             };
-            eval_function_call_frame(ctx, call_expr, return_dest)
+            // Void functions can't be used in expression context (typechecker ensures this).
+            eval_function_call_frame(ctx, call_expr, return_dest)?
+                .ok_or_else(|| InterpError::RuntimeError(
+                    format!("Void function '{}' cannot be used in expression context",
+                            call_expr.name(ctx.db).text(ctx.db))
+                ))
         }
 
         ast::ExprFunKind::UnaryOp(unary_expr) => {
@@ -1759,7 +1784,12 @@ fn eval_expression_frame_borrow<'db>(
                 Some(d) => Some(d),
                 None => get_destination_for_expr(ctx, expr).ok(),
             };
-            eval_function_call_frame(ctx, call_expr, return_dest)
+            // Void functions can't be used in expression context (typechecker ensures this).
+            eval_function_call_frame(ctx, call_expr, return_dest)?
+                .ok_or_else(|| InterpError::RuntimeError(
+                    format!("Void function '{}' cannot be used in expression context",
+                            call_expr.name(ctx.db).text(ctx.db))
+                ))
         }
 
         // For other expressions (literals, etc.), delegate to normal evaluation.

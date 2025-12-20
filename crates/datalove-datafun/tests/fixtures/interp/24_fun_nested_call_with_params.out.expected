@@ -31,7 +31,7 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprBinOp(
                                     kind: "BinOp",
                                     op: Add,
@@ -48,7 +48,7 @@
                                         ),
                                     ),
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),
@@ -72,7 +72,7 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprFunctionCall(
                                     kind: "FunctionCall",
                                     name: "add",
@@ -93,7 +93,7 @@
                                         ),
                                     ],
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),

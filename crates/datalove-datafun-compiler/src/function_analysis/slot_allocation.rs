@@ -132,7 +132,9 @@ impl<'db> SlotAllocationBuilder<'db> {
             }
             Statement::Ret(ret_stmt) => {
                 // Return expression needs its own temp (value escapes frame).
-                self.analyze_expr(db, ret_stmt.value(db), ExprContext::NeedsDest);
+                if let Some(value) = ret_stmt.value(db) {
+                    self.analyze_expr(db, value, ExprContext::NeedsDest);
+                }
             }
             Statement::If(if_stmt) => {
                 // Condition needs its own temp for branching.

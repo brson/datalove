@@ -133,7 +133,7 @@
                         ),
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprOk(
                                     kind: "Ok",
                                     heap: Omitted,
@@ -145,7 +145,7 @@
                                         ),
                                     ),
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),

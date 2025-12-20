@@ -67,9 +67,10 @@ pub enum ParamMode {
     Mut,  // by-mut-ref
 }
 
+/// Return statement. Value is None for bare `ret` in void functions.
 #[salsa::tracked]
 pub struct StmtRet<'db> {
-    pub value: ExprFun<'db>,
+    pub value: Option<ExprFun<'db>>,
 }
 
 #[derive(Clone, Hash)]

@@ -28,6 +28,8 @@ pub(super) enum CfgControl {
     Continue,
     /// Return from the function with a value.
     Return(Value),
+    /// Return from void function (no value).
+    ReturnVoid,
 }
 
 /// Stack frame for function execution.

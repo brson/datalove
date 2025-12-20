@@ -52,24 +52,24 @@
                             then_body: [
                                 StmtRet(
                                     kind: "Ret",
-                                    value: ExprFun(
+                                    value: Some(ExprFun(
                                         expr: ExprFunKind(
                                             kind: "Name",
                                             name: "max",
                                         ),
-                                    ),
+                                    )),
                                 ),
                             ],
                             else_body: None,
                         ),
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprFunKind(
                                     kind: "Name",
                                     name: "x",
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),

@@ -11,12 +11,12 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprFunParseError(
                                     kind: "ParseError",
                                     message: "unexpected identifier \'list\'",
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),
@@ -37,7 +37,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors([CannotSynthesize])",
+                "TypecheckErrors([DatalitError(\"void function cannot return a value\")])",
             ],
         ),
         output: "",

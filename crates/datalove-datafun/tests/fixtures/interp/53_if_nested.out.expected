@@ -46,14 +46,14 @@
                             then_body: [
                                 StmtRet(
                                     kind: "Ret",
-                                    value: ExprFun(
+                                    value: Some(ExprFun(
                                         expr: ExprInt(
                                             kind: "Int",
                                             heap: Local,
                                             type_hint: None,
                                             value: "1",
                                         ),
-                                    ),
+                                    )),
                                 ),
                             ],
                             else_body: Some([
@@ -82,27 +82,27 @@
                                     then_body: [
                                         StmtRet(
                                             kind: "Ret",
-                                            value: ExprFun(
+                                            value: Some(ExprFun(
                                                 expr: ExprInt(
                                                     kind: "Int",
                                                     heap: Local,
                                                     type_hint: None,
                                                     value: "2",
                                                 ),
-                                            ),
+                                            )),
                                         ),
                                     ],
                                     else_body: Some([
                                         StmtRet(
                                             kind: "Ret",
-                                            value: ExprFun(
+                                            value: Some(ExprFun(
                                                 expr: ExprInt(
                                                     kind: "Int",
                                                     heap: Local,
                                                     type_hint: None,
                                                     value: "3",
                                                 ),
-                                            ),
+                                            )),
                                         ),
                                     ]),
                                 ),

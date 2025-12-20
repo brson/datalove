@@ -1,0 +1,16 @@
+{
+  "errors": [
+    {
+      "kind": "DatalitError",
+      "message": "void function cannot return a value"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "bad_void",
+      "params": [],
+      "return_type": "?"
+    }
+  ]
+}

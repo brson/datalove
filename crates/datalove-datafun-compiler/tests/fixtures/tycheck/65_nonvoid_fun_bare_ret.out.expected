@@ -1,0 +1,16 @@
+{
+  "errors": [
+    {
+      "kind": "DatalitError",
+      "message": "function requires return value"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "bad_nonvoid",
+      "params": [],
+      "return_type": "@u32"
+    }
+  ]
+}

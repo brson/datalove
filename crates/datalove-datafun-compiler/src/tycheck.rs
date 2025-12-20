@@ -770,16 +770,41 @@ fn check_statement<'db>(
         }
 
         Statement::Ret(stmt) => {
-            let value = stmt.value(db);
+            let ret_value = stmt.value(db);
+            let expected_ty = ctx.expected_return_type;
 
-            // Check return value against expected return type.
-            if let Some(expected_ret_ty) = ctx.expected_return_type {
-                if let Err(e) = check_expr(ctx, value, expected_ret_ty) {
-                    ctx.add_error(e);
+            match (ret_value, expected_ty) {
+                (Some(value), Some(expected_ret_ty)) => {
+                    // Has value - check if void.
+                    if matches!(expected_ret_ty.ty(db), Type::Void) {
+                        // Void function with value - ERROR.
+                        ctx.add_error(TypeError::DatalitError(
+                            "void function cannot return a value".to_string()
+                        ));
+                    } else {
+                        // Non-void function with value - check type.
+                        if let Err(e) = check_expr(ctx, value, expected_ret_ty) {
+                            ctx.add_error(e);
+                        }
+                    }
                 }
-            } else {
-                // F011: Cannot synthesize return type.
-                ctx.add_error(ctx.error_cannot_synthesize(value, "cannot infer return type"));
+                (None, Some(expected_ret_ty)) => {
+                    // Bare ret - check if void.
+                    if !matches!(expected_ret_ty.ty(db), Type::Void) {
+                        // Non-void function with bare ret - ERROR.
+                        ctx.add_error(TypeError::DatalitError(
+                            "function requires return value".to_string()
+                        ));
+                    }
+                    // Void function with bare ret - OK.
+                }
+                (Some(value), None) => {
+                    // F011: Cannot synthesize return type.
+                    ctx.add_error(ctx.error_cannot_synthesize(value, "cannot infer return type"));
+                }
+                (None, None) => {
+                    // Bare ret outside function - already an error from earlier checks.
+                }
             }
         }
 

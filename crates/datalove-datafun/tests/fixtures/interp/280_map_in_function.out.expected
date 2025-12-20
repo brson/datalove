@@ -11,7 +11,7 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprMap(
                                     kind: "Map",
                                     heap: Local,
@@ -55,7 +55,7 @@
                                         ),
                                     ],
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),
@@ -76,7 +76,7 @@
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors([TypeMismatch { expected: \"void\", actual: \"@map<@u32, @u32>\" }])",
+                "TypecheckErrors([DatalitError(\"void function cannot return a value\")])",
             ],
         ),
         output: "",

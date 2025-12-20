@@ -1,0 +1,35 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtFun(
+                    kind: "Fun",
+                    name: "do_nothing",
+                    params: [],
+                    return_type: None,
+                    body: [],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "result",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprLit(
+                            kind: "True",
+                            heap: Local,
+                            type_hint: None,
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "NoOutputVariable",
+            ],
+        ),
+        output: "",
+    ),
+]

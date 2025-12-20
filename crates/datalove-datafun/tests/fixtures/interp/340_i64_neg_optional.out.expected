@@ -28,7 +28,7 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprUnaryOp(
                                     kind: "UnaryOp",
                                     op: NegOptional,
@@ -39,7 +39,7 @@
                                         ),
                                     ),
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),

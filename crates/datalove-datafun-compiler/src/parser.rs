@@ -402,7 +402,12 @@ impl<'db> Parser<'db> {
     ) -> ast::Statement<'db> {
         self.eat_word(tokens, "ret");
 
-        let value = self.parse_expr_full(tokens);
+        // Bare `ret` for void functions has no expression.
+        let value = if tokens.peek().is_some() {
+            Some(self.parse_expr_full(tokens))
+        } else {
+            None
+        };
 
         ast::Statement::Ret(ast::StmtRet::new(self.db, value))
     }
@@ -2461,7 +2466,8 @@ mod tests {
                 // Check the body has a ret statement with binop
                 match &stmt.body(db)[0] {
                     ast::Statement::Ret(ret) => {
-                        match ret.value(db).expr(db) {
+                        let value = ret.value(db).expect("expected ret with value");
+                        match value.expr(db) {
                             ast::ExprFunKind::BinOp(binop) => {
                                 assert_eq!(binop.op(db), ast::BinOp::AddChecked);
                             }

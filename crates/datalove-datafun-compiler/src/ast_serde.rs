@@ -58,7 +58,7 @@ pub enum ParamMode {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtRet {
-    pub value: ExprFun,
+    pub value: Option<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -430,7 +430,7 @@ impl ParamMode {
 impl StmtRet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::StmtRet<'db>) -> Self {
         StmtRet {
-            value: ExprFun::from_ast(db, ast.value(db)),
+            value: ast.value(db).map(|v| ExprFun::from_ast(db, v)),
         }
     }
 }

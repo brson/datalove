@@ -1,8 +1,1 @@
-Parse errors:
-error[P008]: expected expression
- --> 21_expected_expression.dfs:1:1
-  |
-1 | ret
-  | ^ expected expression
-
-Error: 1 parse error(s)
+Error: Execution error: ReturnOutsideFunction

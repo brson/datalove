@@ -20,7 +20,7 @@
                     body: [
                         StmtRet(
                             kind: "Ret",
-                            value: ExprFun(
+                            value: Some(ExprFun(
                                 expr: ExprSet(
                                     kind: "Set",
                                     heap: Local,
@@ -52,7 +52,7 @@
                                         ),
                                     ],
                                 ),
-                            ),
+                            )),
                         ),
                     ],
                 ),
