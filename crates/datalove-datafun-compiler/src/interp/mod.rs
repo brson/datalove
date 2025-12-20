@@ -195,6 +195,81 @@ pub(crate) fn get_ok_payload_dest_for_result(dest: Destination) -> Destination {
     Destination { ptr: payload_ptr, tydesc: payload_tydesc }
 }
 
+/// Wrapper kind for DPS evaluation of Some/Ok expressions.
+#[derive(Copy, Clone)]
+pub(crate) enum WrapperKind {
+    Some,
+    Ok,
+}
+
+/// Evaluate a Some or Ok expression with DPS.
+///
+/// Common logic for evaluating wrapper payloads directly into destination memory.
+/// Used by both frame and script scope evaluation.
+pub(crate) fn eval_wrapper_payload_dps<'db>(
+    ctx: &mut InterpContext<'db>,
+    eval_ctx: EvalContext,
+    kind: WrapperKind,
+    dest: Option<Destination>,
+    payload_expr: ast::ExprFun<'db>,
+) -> Result<Value, InterpError> {
+    use datalove_rt::rtdt::{TyTag, OptionTag, ResultTag};
+
+    let Some(dest) = dest else {
+        let name = match kind {
+            WrapperKind::Some => "some",
+            WrapperKind::Ok => "ok",
+        };
+        return Err(InterpError::RuntimeError(
+            format!("{} expression requires type context (use type hint)", name)
+        ));
+    };
+
+    // Verify destination type and get payload setup.
+    let dest_tag = unsafe { (*dest.tydesc).type_tag };
+    let (expected_tag, tag_value, payload_dest) = match kind {
+        WrapperKind::Some => {
+            if dest_tag != TyTag::Option {
+                return Err(InterpError::RuntimeError(
+                    format!("some requires Option destination, got {:?}", dest_tag)
+                ));
+            }
+            (TyTag::Option, OptionTag::Some as u8, get_payload_dest_for_option(dest))
+        }
+        WrapperKind::Ok => {
+            if dest_tag != TyTag::Result {
+                return Err(InterpError::RuntimeError(
+                    format!("ok requires Result destination, got {:?}", dest_tag)
+                ));
+            }
+            (TyTag::Result, ResultTag::Ok as u8, get_ok_payload_dest_for_result(dest))
+        }
+    };
+    let _ = expected_tag; // Used for error check above.
+
+    // Write variant tag.
+    unsafe { *(dest.ptr as *mut u8) = tag_value; }
+
+    // Evaluate payload with DPS based on context.
+    let payload_value = match eval_ctx {
+        EvalContext::Frame => eval_expression_frame(ctx, payload_expr, Some(payload_dest))?,
+        EvalContext::ScriptScope => {
+            script::eval_expression_in_script_scope(ctx, payload_expr, Some(payload_dest))?
+        }
+    };
+
+    // Handle case where operation didn't use dest (e.g., bigint ops).
+    if payload_value.ownership == ValueOwnership::TempOwned {
+        let size = unsafe { (*payload_value.tydesc).size as usize };
+        unsafe {
+            std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
+        }
+        memory::free_value_structure(ctx, payload_value);
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+}
+
 // ============================================================================
 // Function Calls and Execution
 // ============================================================================
@@ -970,35 +1045,6 @@ fn read_reference_slot<'db>(
     ptr_value as *mut u8
 }
 
-/// Read a value from a Local or Temporary slot (zero-copy move).
-///
-/// Returns a Value pointing directly into the frame buffer.
-/// The slot should be marked as Moved after this call.
-fn _read_value_from_slot<'db>(
-    ctx: &mut InterpContext<'db>,
-    frame_index: usize,
-    slot_info: crate::function_analysis::SlotInfo<'db>,
-) -> Result<Value, InterpError> {
-    let offset = slot_info.offset(ctx.db) as usize;
-    let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
-
-    // Get the type descriptor from the slot's type.
-    let ty = slot_info.ty(ctx.db);
-    let datalit_ty = match ty.ty(ctx.db) {
-        crate::tycheck::Type::Datalit(dt) => dt.clone(),
-        _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
-    };
-    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-
-    // Return a Value pointing directly into the frame (zero-copy).
-    // The caller must mark this slot as Moved to prevent double-use.
-    Ok(Value {
-        ptr: frame_ptr,
-        tydesc,
-        ownership: ValueOwnership::Borrowed,
-    })
-}
-
 /// Write a value to a Local or Temporary slot.
 fn write_value_to_slot<'db>(
     frame: &mut StackFrame<'db>,
@@ -1406,74 +1452,10 @@ fn eval_expression_frame<'db>(
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
         ast::ExprFunKind::Some(some_expr) => {
-            use datalove_rt::rtdt::{TyTag, OptionTag};
-
-            if let Some(dest) = dest {
-                // DPS: write payload directly into Option structure.
-                let dest_tag = unsafe { (*dest.tydesc).type_tag };
-                if dest_tag != TyTag::Option {
-                    return Err(InterpError::RuntimeError(
-                        format!("some requires Option destination, got {:?}", dest_tag)
-                    ));
-                }
-
-                // Write Some tag.
-                unsafe { *(dest.ptr as *mut u8) = OptionTag::Some as u8; }
-
-                // Create payload destination and evaluate directly.
-                let payload_dest = get_payload_dest_for_option(dest);
-                let payload_value = eval_expression_frame(ctx, some_expr.payload(ctx.db), Some(payload_dest))?;
-
-                // Handle case where operation didn't use dest (e.g., bigint ops).
-                if payload_value.ownership == ValueOwnership::TempOwned {
-                    let size = unsafe { (*payload_value.tydesc).size as usize };
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
-                    }
-                    free_value_structure(ctx, payload_value);
-                }
-
-                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
-            } else {
-                return Err(InterpError::RuntimeError(
-                    "some expression requires type context (use type hint)".to_string()
-                ));
-            }
+            eval_wrapper_payload_dps(ctx, EvalContext::Frame, WrapperKind::Some, dest, some_expr.payload(ctx.db))
         }
         ast::ExprFunKind::Ok(ok_expr) => {
-            use datalove_rt::rtdt::{TyTag, ResultTag};
-
-            if let Some(dest) = dest {
-                // DPS: write payload directly into Result structure.
-                let dest_tag = unsafe { (*dest.tydesc).type_tag };
-                if dest_tag != TyTag::Result {
-                    return Err(InterpError::RuntimeError(
-                        format!("ok requires Result destination, got {:?}", dest_tag)
-                    ));
-                }
-
-                // Write Ok tag.
-                unsafe { *(dest.ptr as *mut u8) = ResultTag::Ok as u8; }
-
-                // Create payload destination and evaluate directly.
-                let payload_dest = get_ok_payload_dest_for_result(dest);
-                let payload_value = eval_expression_frame(ctx, ok_expr.payload(ctx.db), Some(payload_dest))?;
-
-                // Handle case where operation didn't use dest (e.g., bigint ops).
-                if payload_value.ownership == ValueOwnership::TempOwned {
-                    let size = unsafe { (*payload_value.tydesc).size as usize };
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
-                    }
-                    free_value_structure(ctx, payload_value);
-                }
-
-                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
-            } else {
-                return Err(InterpError::RuntimeError(
-                    "ok expression requires type context (use type hint)".to_string()
-                ));
-            }
+            eval_wrapper_payload_dps(ctx, EvalContext::Frame, WrapperKind::Ok, dest, ok_expr.payload(ctx.db))
         }
         ast::ExprFunKind::Er(er_expr) => {
             if dest.is_some() {
