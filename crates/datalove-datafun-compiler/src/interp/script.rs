@@ -580,9 +580,9 @@ pub(super) fn eval_expression_in_script_scope<'db>(
             )
         }
         ast::ExprFunKind::Er(er_expr) => {
-            if dest.is_some() {
+            if let Some(d) = dest {
                 let payload = eval_expression_in_script_scope(ctx, er_expr.payload(ctx.db), None)?;
-                literals::write_result_er_from_value(ctx, payload, dest)
+                literals::write_result_er_from_value(ctx, payload, d)
             } else {
                 return Err(InterpError::RuntimeError(
                     "er expression requires type context (use type hint)".to_string()

@@ -257,7 +257,7 @@ pub(super) fn write_string_to_dest<'db>(
 pub(super) fn write_result_er_from_value<'db>(
     ctx: &mut InterpContext<'db>,
     payload: Value,
-    dest: Option<Destination>,
+    dest: Destination,
 ) -> Result<Value, InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag, ResultTag};
     use datalove_rt::rtdt::layout::compute_result_layout;
@@ -271,14 +271,6 @@ pub(super) fn write_result_er_from_value<'db>(
             format!("Er payload must be error type, got {:?}", payload_tag)
         ));
     }
-
-    // We need a destination to know the Result type.
-    let Some(dest) = dest else {
-        destroy_value(ctx, payload);
-        return Err(InterpError::RuntimeError(
-            "er expression requires type context (use type hint)".to_string()
-        ));
-    };
 
     // Verify destination is Result type.
     let dest_tag = unsafe { (*dest.tydesc).type_tag };

@@ -330,12 +330,12 @@ pub(super) fn lookup_function<'db>(
 
 /// Evaluate a function call from frame-based execution.
 ///
-/// If `return_dest` is provided, the return value is written directly to that location.
+/// The return value is written directly to `return_dest`.
 /// Returns `None` for void functions.
 fn eval_function_call_frame<'db>(
     ctx: &mut InterpContext<'db>,
     call_expr: ast::ExprFunctionCall<'db>,
-    return_dest: Option<Destination>,
+    return_dest: Destination,
 ) -> Result<Option<Value>, InterpError> {
     let name = call_expr.name(ctx.db);
     let arg_exprs = call_expr.args(ctx.db);
@@ -385,7 +385,7 @@ fn eval_function_call_frame<'db>(
     }
 
     // Execute the function body with arguments and return destination.
-    execute_function_body(ctx, func, func_module, arg_values, return_dest)
+    execute_function_body(ctx, func, func_module, arg_values, Some(return_dest))
 }
 
 /// Execute a function body and return its result.
@@ -1313,7 +1313,7 @@ fn eval_expression_frame<'db>(
                 None => get_destination_for_expr(ctx, expr)?,
             };
             // Void functions can't be used in expression context (typechecker ensures this).
-            eval_function_call_frame(ctx, call_expr, Some(return_dest))?
+            eval_function_call_frame(ctx, call_expr, return_dest)?
                 .ok_or_else(|| InterpError::RuntimeError(
                     format!("Void function '{}' cannot be used in expression context",
                             call_expr.name(ctx.db).text(ctx.db))
@@ -1489,11 +1489,11 @@ fn eval_expression_frame<'db>(
             eval_wrapper_payload_dps(ctx, EvalContext::Frame, WrapperKind::Ok, dest, ok_expr.payload(ctx.db))
         }
         ast::ExprFunKind::Er(er_expr) => {
-            if dest.is_some() {
+            if let Some(d) = dest {
                 let payload_expr = er_expr.payload(ctx.db);
                 let payload_dest = get_destination_for_expr(ctx, payload_expr)?;
                 let payload = eval_expression_frame(ctx, payload_expr, Some(payload_dest))?;
-                literals::write_result_er_from_value(ctx, payload, dest)
+                literals::write_result_er_from_value(ctx, payload, d)
             } else {
                 return Err(InterpError::RuntimeError(
                     "er expression requires type context (use type hint)".to_string()
@@ -1796,7 +1796,7 @@ fn eval_expression_frame_borrow<'db>(
                 None => get_destination_for_expr(ctx, expr)?,
             };
             // Void functions can't be used in expression context (typechecker ensures this).
-            eval_function_call_frame(ctx, call_expr, Some(return_dest))?
+            eval_function_call_frame(ctx, call_expr, return_dest)?
                 .ok_or_else(|| InterpError::RuntimeError(
                     format!("Void function '{}' cannot be used in expression context",
                             call_expr.name(ctx.db).text(ctx.db))
