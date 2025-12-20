@@ -1309,11 +1309,11 @@ fn eval_expression_frame<'db>(
             // Evaluate function call with arguments in frame context.
             // Use caller's dest or expression's temp slot for DPS.
             let return_dest = match dest {
-                Some(d) => Some(d),
-                None => get_destination_for_expr(ctx, expr).ok(),
+                Some(d) => d,
+                None => get_destination_for_expr(ctx, expr)?,
             };
             // Void functions can't be used in expression context (typechecker ensures this).
-            eval_function_call_frame(ctx, call_expr, return_dest)?
+            eval_function_call_frame(ctx, call_expr, Some(return_dest))?
                 .ok_or_else(|| InterpError::RuntimeError(
                     format!("Void function '{}' cannot be used in expression context",
                             call_expr.name(ctx.db).text(ctx.db))
@@ -1490,7 +1490,9 @@ fn eval_expression_frame<'db>(
         }
         ast::ExprFunKind::Er(er_expr) => {
             if dest.is_some() {
-                let payload = eval_expression_frame(ctx, er_expr.payload(ctx.db), None)?;
+                let payload_expr = er_expr.payload(ctx.db);
+                let payload_dest = get_destination_for_expr(ctx, payload_expr)?;
+                let payload = eval_expression_frame(ctx, payload_expr, Some(payload_dest))?;
                 literals::write_result_er_from_value(ctx, payload, dest)
             } else {
                 return Err(InterpError::RuntimeError(
@@ -1499,8 +1501,10 @@ fn eval_expression_frame<'db>(
             }
         }
         ast::ExprFunKind::Data(data_expr) => {
-            // Evaluate inner expression.
-            let inner_value = eval_expression_frame(ctx, data_expr.value(ctx.db), None)?;
+            // Evaluate inner expression to its temp slot.
+            let inner_expr = data_expr.value(ctx.db);
+            let inner_dest = get_destination_for_expr(ctx, inner_expr)?;
+            let inner_value = eval_expression_frame(ctx, inner_expr, Some(inner_dest))?;
             // Wrap in Data.
             alloc::allocate_data_from_value(ctx, inner_value)
         }
@@ -1788,11 +1792,11 @@ fn eval_expression_frame_borrow<'db>(
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Use caller's dest or expression's temp slot for DPS.
             let return_dest = match dest {
-                Some(d) => Some(d),
-                None => get_destination_for_expr(ctx, expr).ok(),
+                Some(d) => d,
+                None => get_destination_for_expr(ctx, expr)?,
             };
             // Void functions can't be used in expression context (typechecker ensures this).
-            eval_function_call_frame(ctx, call_expr, return_dest)?
+            eval_function_call_frame(ctx, call_expr, Some(return_dest))?
                 .ok_or_else(|| InterpError::RuntimeError(
                     format!("Void function '{}' cannot be used in expression context",
                             call_expr.name(ctx.db).text(ctx.db))

@@ -357,15 +357,15 @@ impl<'db> SlotAllocationBuilder<'db> {
                 }
             }
             ExprFunKind::Er(e) => {
-                // Payload writes to result error payload if parent has dest.
-                self.analyze_expr_with_destruction(db, e.payload(db), ctx, destruction);
+                // Payload needs its own temp slot.
+                self.analyze_expr_with_destruction(db, e.payload(db), ExprContext::NeedsDest, destruction);
                 if ctx == ExprContext::NeedsDest {
                     self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
                 }
             }
             ExprFunKind::Data(d) => {
-                // Inner value writes to data payload if parent has dest.
-                self.analyze_expr_with_destruction(db, d.value(db), ctx, destruction);
+                // Inner value needs its own temp slot.
+                self.analyze_expr_with_destruction(db, d.value(db), ExprContext::NeedsDest, destruction);
                 if ctx == ExprContext::NeedsDest {
                     self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
                 }
