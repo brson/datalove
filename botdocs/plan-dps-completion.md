@@ -7,10 +7,10 @@ Complete destination-passing style and fix Value semantic confusion.
 - [x] Phase 1: Add DPS to remaining literals
 - [x] Phase 2: Add DPS to Set/Map
 - [x] Phase 3: Fix coercion check paths (7.2)
-- [ ] Phase 4: Verify operand handling (likely already correct)
-- [ ] Phase 5: Fix Data/Er wrappers (may defer)
-- [ ] Phase 6: Make return_dest non-optional (7.3)
-- [ ] Phase 7: Delete fallback code paths (7.4)
+- [x] Phase 4: Verify operand handling (verified correct)
+- [x] Phase 5: Data/Er wrappers (verified, deferred - type erasure requires current approach)
+- [x] Phase 6: Frame scope DPS for function calls
+- [x] Phase 7: Delete fallback code paths (7.4)
 - [ ] Phase 8: Simplify Value semantics
 
 ---
@@ -52,9 +52,9 @@ Used option B: Keep collect-then-allocate, copy final result to dest.
 
 ---
 
-## Phase 4: Verify Operand Handling
+## Phase 4: Verify Operand Handling [DONE]
 
-**Status:** Likely already correct.
+**Status:** Verified correct.
 
 BinOp, UnaryOp, TryOption, TryResult evaluate operands with `None` because operands go to temp slots from static analysis. The *result* uses caller's dest.
 
@@ -62,34 +62,46 @@ BinOp, UnaryOp, TryOption, TryResult evaluate operands with `None` because opera
 
 ---
 
-## Phase 5: Fix Data/Er Wrappers
+## Phase 5: Data/Er Wrappers [DONE - Deferred]
 
-**Problem:** `Data` and `Er` expressions evaluate inner value with `None` then wrap.
+**Status:** Verified current approach is correct.
 
-These may need to stay as-is due to type erasure in Data.
-
----
-
-## Phase 6: Make return_dest Non-Optional (7.3)
-
-**Files:** `interp/mod.rs`, `interp/script.rs`, `interp/frame.rs`
-
-1. Change `StackFrame.return_dest: Option<Destination>` to `Destination`
-2. Change `execute_function_body(... return_dest: Option<Destination>)` to `Destination`
-3. All callers must provide destination:
-   - Script scope: allocate before call (done in 7.1)
-   - Frame scope: pass caller's dest through
+`Data` and `Er` expressions evaluate inner value with `None` then wrap. This is correct because:
+- Data is type-erased (fat pointer), inner value must be allocated first
+- Er already uses dest when provided for the Result wrapper
 
 ---
 
-## Phase 7: Delete Fallback Code (7.4)
+## Phase 6: Frame Scope DPS for Function Calls [DONE]
 
-Remove these patterns:
-- `if dest.is_some() { ... } else { allocate_*() }`
-- Heap clone for Borrowed returns when no dest
-- `allocate_option_none`, `allocate_result_err` fallbacks in execute_function_body
+**Files:** `interp/mod.rs`
 
-After Phase 6, these paths are unreachable.
+Changed approach from plan: Instead of making return_dest non-optional (which would require dummy destinations for void functions), updated frame scope function call handling to always provide a destination when possible:
+
+```rust
+let return_dest = match dest {
+    Some(d) => Some(d),
+    None => get_destination_for_expr(ctx, expr).ok(),
+};
+```
+
+This ensures typed function calls always have a destination (caller's dest or temp slot), while void functions can use None.
+
+---
+
+## Phase 7: Delete Fallback Code [DONE]
+
+Replaced fallback code paths with panics to verify they're unreachable:
+- Heap clone for Borrowed returns when no dest → panic
+- `allocate_option_none` fallback for try-operator → panic
+- `allocate_result_err` fallback for try-operator → panic
+
+Removed dead code:
+- `allocate_option_none` function
+- `allocate_result_err` function
+- `value_tydesc_for_option` function
+- `value_tydesc_for_result` function
+- Unused imports
 
 ---
 

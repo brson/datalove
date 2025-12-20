@@ -165,25 +165,6 @@ pub(super) fn allocate_bigint<'db>(
     Ok(Value { ptr, tydesc: tydesc_ptr, location: ValueLocation::TempOwned })
 }
 
-/// Allocate an Option<T> with None value.
-pub(super) fn allocate_option_none<'db>(
-    ctx: &mut InterpContext<'db>,
-    inner_tydesc: *const datalove_rt::rtdt::TyDesc,
-) -> Result<Value, InterpError> {
-    use datalove_rt::rtdt;
-
-    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(inner_tydesc);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
-    };
-    if ptr.is_null() {
-        return Err(InterpError::RuntimeError("Failed to allocate Option".to_string()));
-    }
-    unsafe { *ptr = rtdt::OptionTag::None as u8; }
-    Ok(Value { ptr, tydesc: option_tydesc, location: ValueLocation::TempOwned })
-}
-
 /// Wrap an existing value in Some, consuming the inner value.
 pub(super) fn allocate_option_some_from_value<'db>(
     ctx: &mut InterpContext<'db>,
@@ -263,37 +244,6 @@ pub(super) fn allocate_result_ok_from_value<'db>(
                 inner_value.ptr,
             );
         }
-    }
-
-    Ok(Value { ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned })
-}
-
-/// Allocate a Result<T, String> with Err(string) value.
-pub(super) fn allocate_result_err<'db>(
-    ctx: &mut InterpContext<'db>,
-    ok_tydesc: *const datalove_rt::rtdt::TyDesc,
-    err_tydesc: *const datalove_rt::rtdt::TyDesc,
-    err_ptr: *mut u8,
-) -> Result<Value, InterpError> {
-    use datalove_rt::rtdt;
-
-    let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(ok_tydesc);
-    let result_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(result_tydesc) };
-    let layout = rtdt::layout::compute_result_layout(result_tydesc_ref);
-
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, result_tydesc, 1)
-    };
-    if ptr.is_null() {
-        return Err(InterpError::RuntimeError("Failed to allocate Result".to_string()));
-    }
-
-    unsafe {
-        *ptr = rtdt::ResultTag::Err as u8;
-        let err_payload_ptr = ptr.add(layout.payload_offset as usize);
-        let err_size = (*err_tydesc).size as usize;
-        std::ptr::copy_nonoverlapping(err_ptr, err_payload_ptr, err_size);
     }
 
     Ok(Value { ptr, tydesc: result_tydesc, location: ValueLocation::TempOwned })

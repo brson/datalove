@@ -4,36 +4,6 @@
 
 use super::InterpContext;
 
-/// Get the inner type descriptor for an Option type hint.
-pub(super) fn value_tydesc_for_option<'db>(
-    ctx: &mut InterpContext<'db>,
-    type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
-) -> *const datalove_rt::rtdt::TyDesc {
-    use crate::datalit::ast::TypeHint;
-
-    if let TypeHint::Option(opt) = type_hint.type_hint(ctx.db) {
-        let inner = opt.inner_type(ctx.db);
-        type_hint_to_tydesc(ctx, inner)
-    } else {
-        ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32)
-    }
-}
-
-/// Get the ok type descriptor for a Result type hint.
-pub(super) fn value_tydesc_for_result<'db>(
-    ctx: &mut InterpContext<'db>,
-    type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
-) -> *const datalove_rt::rtdt::TyDesc {
-    use crate::datalit::ast::TypeHint;
-
-    if let TypeHint::Result(res) = type_hint.type_hint(ctx.db) {
-        let inner = res.inner_type(ctx.db);
-        type_hint_to_tydesc(ctx, inner)
-    } else {
-        ctx.tydesc_table.get_or_create(&crate::datalit::tycheck::Type::U32)
-    }
-}
-
 /// Convert a type hint to a tydesc.
 pub(super) fn type_hint_to_tydesc<'db>(
     ctx: &mut InterpContext<'db>,

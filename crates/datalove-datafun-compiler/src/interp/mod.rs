@@ -104,14 +104,14 @@ pub use context::{
 };
 pub use script::{execute_script_with_module_graph, execute_script_unit, pretty_print_value};
 use control::{find_slot_by_name, evaluate_branch_condition, eval_try_option, eval_try_result};
-use tydesc::{type_hint_to_tydesc, value_tydesc_for_option, value_tydesc_for_result};
+use tydesc::type_hint_to_tydesc;
 use frame::CfgControl;
 use memory::{clone_value_to_dest, move_value_to_dest};
 use types::is_copy_type;
 use alloc::{
     allocate_bool, allocate_f32, allocate_u32_raw,
-    allocate_option_none, allocate_option_some_from_value,
-    allocate_result_ok_from_value, allocate_result_err, write_result_err_to_dest,
+    allocate_option_some_from_value,
+    allocate_result_ok_from_value, write_result_err_to_dest,
 };
 use collections::{
     allocate_tuple_from_values, allocate_struct_from_values,
@@ -488,7 +488,7 @@ pub(super) fn execute_function_body<'db>(
     let result = execute_function_body_with_frame(ctx);
 
     // Pop the frame and capture slot states for argument cleanup.
-    let mut frame = ctx.call_stack.pop().unwrap();
+    let frame = ctx.call_stack.pop().unwrap();
     let final_slot_states = frame.slot_states.clone();
 
     // Handle return value based on whether we have a return_dest.
@@ -498,68 +498,13 @@ pub(super) fn execute_function_body<'db>(
             // No cloning needed - just return the value as-is.
             Ok(value)
         }
-        Ok(mut value) if value.location == ValueLocation::Borrowed => {
+        Ok(value) if value.location == ValueLocation::Borrowed => {
             // No return_dest and result is Borrowed (pointing to frame memory).
-            // Clone to heap before frame cleanup since frame will be deallocated.
-            unsafe {
-                let heap_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(
-                    ctx.runtime.handle(),
-                    value.tydesc,
-                    1,
-                );
-                if heap_ptr.is_null() {
-                    return Err(InterpError::RuntimeError(
-                        "Failed to allocate heap memory for return value".to_string()
-                    ));
-                }
-                // Use proper clone to handle types with internal pointers (e.g., Int).
-                let status = datalove_rt::c::dtlv_rti_clone_local(
-                    ctx.runtime.handle(),
-                    value.ptr,
-                    value.tydesc,
-                    heap_ptr,
-                    value.tydesc,
-                );
-                if status != datalove_rt::c::RtStatus::Ok {
-                    datalove_rt::c::dtlv_rti_mem_free_local(
-                        ctx.runtime.handle(),
-                        value.tydesc,
-                        1,
-                        heap_ptr,
-                    );
-                    return Err(InterpError::RuntimeError(
-                        "Failed to clone return value to heap".to_string()
-                    ));
-                }
-
-                // Destroy the original value's contents and mark slot as Moved.
-                let original_ptr = value.ptr;
-                let layout = frame.layout;
-                let slots = layout.slots(ctx.db);
-
-                // Find the slot containing this value.
-                for (slot_index, slot_info) in slots.iter().enumerate() {
-                    let offset = slot_info.offset(ctx.db) as usize;
-                    let slot_ptr = frame.frame_data.as_ptr().add(offset) as *const u8;
-                    if slot_ptr == original_ptr {
-                        if frame.slot_states[slot_index] == SlotState::Available {
-                            frame.slot_states[slot_index] = SlotState::Moved;
-                        }
-                        break;
-                    }
-                }
-
-                // Destroy the original contents after cloning.
-                datalove_rt::c::dtlv_rti_any_destroy_local(
-                    ctx.runtime.handle(),
-                    original_ptr,
-                    value.tydesc,
-                );
-
-                value.ptr = heap_ptr;
-                value.location = ValueLocation::TempOwned;
-            }
-            Ok(value)
+            // This path should be unreachable now that all function calls provide DPS destinations.
+            panic!(
+                "Unreachable: Borrowed return value without DPS destination in function '{}'",
+                func.name(ctx.db).text(ctx.db)
+            );
         }
         other => other,
     };
@@ -587,9 +532,11 @@ pub(super) fn execute_function_body<'db>(
                         // DPS: write None to caller's destination.
                         return write_option_none_to_dest(dest);
                     } else {
-                        // Heap fallback.
-                        let inner_tydesc = value_tydesc_for_option(ctx, ret_type);
-                        return allocate_option_none(ctx, inner_tydesc);
+                        // This path should be unreachable now that all function calls provide DPS destinations.
+                        panic!(
+                            "Unreachable: OptionNone early return without DPS destination in function '{}'",
+                            func.name(ctx.db).text(ctx.db)
+                        );
                     }
                 }
             }
@@ -602,9 +549,11 @@ pub(super) fn execute_function_body<'db>(
                         // DPS: write Err to caller's destination.
                         return write_result_err_to_dest(dest, *tydesc, *ptr);
                     } else {
-                        // Heap fallback.
-                        let ok_tydesc = value_tydesc_for_result(ctx, ret_type);
-                        return allocate_result_err(ctx, ok_tydesc, *tydesc, *ptr);
+                        // This path should be unreachable now that all function calls provide DPS destinations.
+                        panic!(
+                            "Unreachable: ResultErr early return without DPS destination in function '{}'",
+                            func.name(ctx.db).text(ctx.db)
+                        );
                     }
                 }
             }
@@ -1075,8 +1024,6 @@ fn execute_let_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
     let_stmt: ast::StmtLet<'db>,
 ) -> Result<(), InterpError> {
-    use datalove_rt::rtdt::TyTag;
-
     // Find destination slot FIRST so we can pass it to expression evaluation.
     let frame_index = ctx.call_stack.len() - 1;
     let name = let_stmt.name(ctx.db);
@@ -1290,8 +1237,12 @@ fn eval_expression_frame<'db>(
 
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Evaluate function call with arguments in frame context.
-            // Pass caller's dest as return destination for DPS.
-            eval_function_call_frame(ctx, call_expr, dest)
+            // Use caller's dest or expression's temp slot for DPS.
+            let return_dest = match dest {
+                Some(d) => Some(d),
+                None => get_destination_for_expr(ctx, expr).ok(),
+            };
+            eval_function_call_frame(ctx, call_expr, return_dest)
         }
 
         ast::ExprFunKind::UnaryOp(unary_expr) => {
@@ -1819,7 +1770,12 @@ fn eval_expression_frame_borrow<'db>(
         // For function calls in borrow context, the call itself uses normal semantics
         // (arguments may be moved depending on parameter modes).
         ast::ExprFunKind::FunctionCall(call_expr) => {
-            eval_function_call_frame(ctx, call_expr, dest)
+            // Use caller's dest or expression's temp slot for DPS.
+            let return_dest = match dest {
+                Some(d) => Some(d),
+                None => get_destination_for_expr(ctx, expr).ok(),
+            };
+            eval_function_call_frame(ctx, call_expr, return_dest)
         }
 
         // For other expressions (literals, etc.), delegate to normal evaluation.
