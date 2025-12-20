@@ -1267,10 +1267,10 @@ fn eval_expression_frame<'db>(
             let rhs_dest = get_destination_for_expr(ctx, rhs_expr)?;
 
             // Evaluate lhs in borrow context (binops don't consume operands).
-            let lhs = eval_expression_frame_borrow(ctx, lhs_expr, Some(lhs_dest))?;
+            let lhs = eval_expression_frame_borrow(ctx, lhs_expr, lhs_dest)?;
 
             // Evaluate rhs in borrow context.
-            let rhs = match eval_expression_frame_borrow(ctx, rhs_expr, Some(rhs_dest)) {
+            let rhs = match eval_expression_frame_borrow(ctx, rhs_expr, rhs_dest) {
                 Ok(v) => v,
                 Err(e) => {
                     destroy_value(ctx, lhs);
@@ -1326,7 +1326,7 @@ fn eval_expression_frame<'db>(
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
 
             // Evaluate operand in borrow context (unary ops don't consume operands).
-            let operand = eval_expression_frame_borrow(ctx, operand_expr, Some(operand_dest))?;
+            let operand = eval_expression_frame_borrow(ctx, operand_expr, operand_dest)?;
 
             // Use provided dest or own temp slot.
             let result_dest = match dest {
@@ -1655,7 +1655,7 @@ fn eval_return_expression_frame<'db>(
 fn eval_expression_frame_borrow<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
-    dest: Option<Destination>,
+    dest: Destination,
 ) -> Result<Value, InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
 
@@ -1691,14 +1691,7 @@ fn eval_expression_frame_borrow<'db>(
                 let ptr = read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db);
                 let borrowed = Value { ptr, tydesc, ownership: ValueOwnership::Borrowed };
 
-                let result_dest = match dest {
-                    Some(d) => d,
-                    None => get_destination_for_expr(ctx, expr)?,
-                };
-                let result = clone_value_to_dest(ctx, borrowed, result_dest);
-                if dest.is_none() {
-                    mark_temp_slot_available(ctx, expr);
-                }
+                let result = clone_value_to_dest(ctx, borrowed, dest);
                 // Note: We do NOT mark slot as Moved - this is borrow context.
                 Ok(result)
             } else {
@@ -1707,14 +1700,7 @@ fn eval_expression_frame_borrow<'db>(
                 let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
                 let source_value = Value { ptr: frame_ptr, tydesc, ownership: ValueOwnership::Borrowed };
 
-                let result_dest = match dest {
-                    Some(d) => d,
-                    None => get_destination_for_expr(ctx, expr)?,
-                };
-                let result = clone_value_to_dest(ctx, source_value, result_dest);
-                if dest.is_none() {
-                    mark_temp_slot_available(ctx, expr);
-                }
+                let result = clone_value_to_dest(ctx, source_value, dest);
                 // Note: We do NOT mark slot as Moved - this is borrow context.
                 Ok(result)
             }
@@ -1727,9 +1713,9 @@ fn eval_expression_frame_borrow<'db>(
             let lhs_dest = get_destination_for_expr(ctx, lhs_expr)?;
             let rhs_dest = get_destination_for_expr(ctx, rhs_expr)?;
 
-            let lhs = eval_expression_frame_borrow(ctx, lhs_expr, Some(lhs_dest))?;
+            let lhs = eval_expression_frame_borrow(ctx, lhs_expr, lhs_dest)?;
 
-            let rhs = match eval_expression_frame_borrow(ctx, rhs_expr, Some(rhs_dest)) {
+            let rhs = match eval_expression_frame_borrow(ctx, rhs_expr, rhs_dest) {
                 Ok(v) => v,
                 Err(e) => {
                     destroy_value(ctx, lhs);
@@ -1737,13 +1723,8 @@ fn eval_expression_frame_borrow<'db>(
                 }
             };
 
-            let result_dest = match dest {
-                Some(d) => d,
-                None => get_destination_for_expr(ctx, expr)?,
-            };
-
             // Execute binop with borrowed operands.
-            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(result_dest))?;
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(dest))?;
 
             // Clean up temporary operand values and mark slots as Moved.
             destroy_value(ctx, lhs);
@@ -1755,9 +1736,6 @@ fn eval_expression_frame_borrow<'db>(
                 mark_temp_slot_moved(ctx, rhs_expr);
             }
 
-            if dest.is_none() && result.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_available(ctx, expr);
-            }
             Ok(result)
         }
 
@@ -1765,15 +1743,10 @@ fn eval_expression_frame_borrow<'db>(
             let operand_expr = unary_expr.operand(ctx.db);
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
 
-            let operand = eval_expression_frame_borrow(ctx, operand_expr, Some(operand_dest))?;
-
-            let result_dest = match dest {
-                Some(d) => d,
-                None => get_destination_for_expr(ctx, expr)?,
-            };
+            let operand = eval_expression_frame_borrow(ctx, operand_expr, operand_dest)?;
 
             // Execute unop with borrowed operand.
-            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(result_dest))?;
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(dest))?;
 
             // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
@@ -1781,22 +1754,14 @@ fn eval_expression_frame_borrow<'db>(
                 mark_temp_slot_moved(ctx, operand_expr);
             }
 
-            if dest.is_none() && result.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_available(ctx, expr);
-            }
             Ok(result)
         }
 
         // For function calls in borrow context, the call itself uses normal semantics
         // (arguments may be moved depending on parameter modes).
         ast::ExprFunKind::FunctionCall(call_expr) => {
-            // Use caller's dest or expression's temp slot for DPS.
-            let return_dest = match dest {
-                Some(d) => d,
-                None => get_destination_for_expr(ctx, expr)?,
-            };
             // Void functions can't be used in expression context (typechecker ensures this).
-            eval_function_call_frame(ctx, call_expr, return_dest)?
+            eval_function_call_frame(ctx, call_expr, dest)?
                 .ok_or_else(|| InterpError::RuntimeError(
                     format!("Void function '{}' cannot be used in expression context",
                             call_expr.name(ctx.db).text(ctx.db))
@@ -1805,7 +1770,7 @@ fn eval_expression_frame_borrow<'db>(
 
         // For other expressions (literals, etc.), delegate to normal evaluation.
         // These don't involve variable access so borrow vs move doesn't matter.
-        _ => eval_expression_frame(ctx, expr, dest),
+        _ => eval_expression_frame(ctx, expr, Some(dest)),
     }
 }
 
