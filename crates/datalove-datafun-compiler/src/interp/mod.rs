@@ -119,10 +119,10 @@ use collections::{
 };
 use literals::{
     allocate_inline_int_literal, write_inline_int_to_dest, write_option_none_to_dest,
-    allocate_inline_string,
+    allocate_inline_string, write_bool_to_dest, write_f32_to_dest, write_u32_to_dest,
+    write_string_to_dest,
 };
 use arith_widening::{execute_binop, execute_unop};
-use coerce::coerce_value_to_dest;
 
 use bct::text::InternedText;
 
@@ -1105,47 +1105,10 @@ fn execute_let_statement_frame<'db>(
         }
     };
     let dest_tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-    let dest_tag = unsafe { (*dest_tydesc).type_tag };
 
-    // Check if slot is Option/Result/Data and may need coercion.
-    let needs_coercion_check = matches!(dest_tag, TyTag::Option | TyTag::Result | TyTag::Data);
-
-    let value = if needs_coercion_check {
-        // Evaluate without destination first to allow coercion.
-        let value = eval_expression_frame(ctx, let_stmt.value(ctx.db), None)?;
-
-        // Check if coercion needed (value type doesn't match dest type).
-        let value_tag = unsafe { (*value.tydesc).type_tag };
-        if value.tydesc != dest_tydesc && value_tag != dest_tag {
-            // Need to coerce T → Option<T> or T → Result<T>.
-            // coerce_value_to_dest writes directly to dest and cleans up value.
-            let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
-            coerce_value_to_dest(ctx, value, dest)?;
-
-            // Mark slot as Available and return early - value already written.
-            ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
-            return Ok(());
-        } else {
-            // No coercion needed, write to slot.
-            if value.location == ValueLocation::TempOwned {
-                if let Err(e) = write_value_to_slot(&mut ctx.call_stack[frame_index], slot_info, value, ctx.db) {
-                    destroy_value(ctx, value);
-                    return Err(e);
-                }
-                free_value_structure(ctx, value);
-            } else {
-                // Value is Borrowed - need to clone to slot.
-                let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
-                clone_value_to_dest(ctx, value, dest);
-            }
-            ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
-            return Ok(());
-        }
-    } else {
-        // No coercion possible, use standard DPS.
-        let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
-        eval_expression_frame(ctx, let_stmt.value(ctx.db), Some(dest))?
-    };
+    // Evaluate expression with DPS into slot.
+    let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+    let value = eval_expression_frame(ctx, let_stmt.value(ctx.db), Some(dest))?;
 
     // If DPS was used (Borrowed), the value was written directly to slot.
     // If not (TempOwned), we need to write and free.
@@ -1409,9 +1372,21 @@ fn eval_expression_frame<'db>(
             eval_try_result(ctx, operand)
         }
 
-        // Inline literal variants - delegate to script scope evaluation.
-        ast::ExprFunKind::True(_) => allocate_bool(ctx, true),
-        ast::ExprFunKind::False(_) => allocate_bool(ctx, false),
+        // Inline literal variants.
+        ast::ExprFunKind::True(_) => {
+            if let Some(d) = dest {
+                write_bool_to_dest(d, true)
+            } else {
+                allocate_bool(ctx, true)
+            }
+        }
+        ast::ExprFunKind::False(_) => {
+            if let Some(d) = dest {
+                write_bool_to_dest(d, false)
+            } else {
+                allocate_bool(ctx, false)
+            }
+        }
         ast::ExprFunKind::None(_) => {
             if let Some(d) = dest {
                 write_option_none_to_dest(d)
@@ -1432,17 +1407,29 @@ fn eval_expression_frame<'db>(
             let value_str = float_expr.value(ctx.db).as_str(ctx.db);
             let value: f32 = value_str.parse()
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
-            allocate_f32(ctx, value)
+            if let Some(d) = dest {
+                write_f32_to_dest(d, value)
+            } else {
+                allocate_f32(ctx, value)
+            }
         }
         ast::ExprFunKind::Hex(hex_expr) => {
             let value_str = hex_expr.value(ctx.db).as_str(ctx.db);
             let hex_digits = value_str.trim_start_matches("0x").trim_start_matches("0X");
             let value: u32 = u32::from_str_radix(hex_digits, 16)
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse hex: {}", e)))?;
-            allocate_u32_raw(ctx, value)
+            if let Some(d) = dest {
+                write_u32_to_dest(d, value)
+            } else {
+                allocate_u32_raw(ctx, value)
+            }
         }
         ast::ExprFunKind::String(string_expr) => {
-            allocate_inline_string(ctx, &string_expr)
+            if let Some(d) = dest {
+                write_string_to_dest(ctx, &string_expr, d)
+            } else {
+                allocate_inline_string(ctx, &string_expr)
+            }
         }
         ast::ExprFunKind::List(list_expr) => {
             eval_inline_list(ctx, EvalContext::Frame, expr, &list_expr, dest)
@@ -1576,84 +1563,21 @@ fn eval_return_expression_frame<'db>(
 
     // Check if we have a return destination from caller.
     if let Some(return_dest) = ctx.call_stack[frame_index].return_dest {
-        let dest_tag = unsafe { (*return_dest.tydesc).type_tag };
+        // Evaluate expression with DPS into return destination.
+        let value = eval_expression_frame(ctx, expr, Some(return_dest))?;
 
-        // Check if dest is Option/Result (may need coercion).
-        let needs_coercion_check = matches!(dest_tag, TyTag::Option | TyTag::Result | TyTag::Data);
-
-        if needs_coercion_check {
-            // Check if expression needs typed context (some/ok/er/none/error).
-            let needs_typed_context = matches!(
-                expr.expr(ctx.db),
-                ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) |
-                ast::ExprFunKind::Some(_) | ast::ExprFunKind::Ok(_) | ast::ExprFunKind::Er(_)
-            );
-
-            if needs_typed_context {
-                // Evaluate WITH destination - constructors need type context.
-                let value = eval_expression_frame(ctx, expr, Some(return_dest))?;
-
-                // Handle case where expression didn't use dest.
-                if value.ptr != return_dest.ptr {
-                    let size = unsafe { (*value.tydesc).size as usize };
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(
-                            value.ptr,
-                            return_dest.ptr,
-                            size,
-                        );
-                    }
-                    if value.location == ValueLocation::TempOwned {
-                        free_value_structure(ctx, value);
-                    }
-                }
-            } else {
-                // Evaluate WITHOUT destination first to check if coercion is needed.
-                let value = eval_expression_frame(ctx, expr, None)?;
-
-                // Check if coercion is needed (value type doesn't match dest type).
-                let value_tag = unsafe { (*value.tydesc).type_tag };
-                if value.tydesc != return_dest.tydesc && value_tag != dest_tag {
-                    // Need to coerce T → Option<T> or T → Result<T>.
-                    coerce_value_to_dest(ctx, value, return_dest)?;
-                } else {
-                    // No coercion needed - write value to dest.
-                    if value.location == ValueLocation::TempOwned {
-                        // Copy contents and free structure.
-                        let size = unsafe { (*value.tydesc).size as usize };
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(
-                                value.ptr,
-                                return_dest.ptr,
-                                size,
-                            );
-                        }
-                        free_value_structure(ctx, value);
-                    } else {
-                        // Value is Borrowed - clone to dest.
-                        clone_value_to_dest(ctx, value, return_dest);
-                    }
-                }
+        // Handle case where expression didn't use dest (e.g., Name returning borrowed value).
+        if value.ptr != return_dest.ptr {
+            let size = unsafe { (*value.tydesc).size as usize };
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    value.ptr,
+                    return_dest.ptr,
+                    size,
+                );
             }
-        } else {
-            // No coercion possible - evaluate directly into dest via DPS.
-            let value = eval_expression_frame(ctx, expr, Some(return_dest))?;
-
-            // Handle case where expression didn't use dest.
-            if value.ptr != return_dest.ptr {
-                // Value is not at the destination - copy/move it there.
-                let size = unsafe { (*value.tydesc).size as usize };
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        value.ptr,
-                        return_dest.ptr,
-                        size,
-                    );
-                }
-                // Free structure if TempOwned (borrowed values have structure owned elsewhere).
-                if value.location == ValueLocation::TempOwned {
-                    free_value_structure(ctx, value);
-                }
+            if value.location == ValueLocation::TempOwned {
+                free_value_structure(ctx, value);
             }
         }
 
@@ -2058,7 +1982,7 @@ pub(super) fn eval_inline_set<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
     set_expr: &ast::ExprSet<'db>,
-    _dest: Option<Destination>,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     let elements = set_expr.elements(ctx.db);
     let mut values = Vec::with_capacity(elements.len());
@@ -2075,7 +1999,17 @@ pub(super) fn eval_inline_set<'db>(
         }
     }
 
-    allocate_set_from_values(ctx, values)
+    let set_value = allocate_set_from_values(ctx, values)?;
+
+    // If dest provided, copy result there and return as Borrowed.
+    if let Some(d) = dest {
+        let size = unsafe { (*set_value.tydesc).size as usize };
+        unsafe { std::ptr::copy_nonoverlapping(set_value.ptr, d.ptr, size); }
+        free_value_structure(ctx, set_value);
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        Ok(set_value)
+    }
 }
 
 /// Evaluate inline map expression in the given context.
@@ -2083,7 +2017,7 @@ pub(super) fn eval_inline_map<'db>(
     ctx: &mut InterpContext<'db>,
     eval_ctx: EvalContext,
     map_expr: &ast::ExprMap<'db>,
-    _dest: Option<Destination>,
+    dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     let entries = map_expr.entries(ctx.db);
     let mut kv_pairs = Vec::with_capacity(entries.len());
@@ -2115,7 +2049,17 @@ pub(super) fn eval_inline_map<'db>(
         kv_pairs.push((key, value));
     }
 
-    allocate_map_from_values(ctx, kv_pairs)
+    let map_value = allocate_map_from_values(ctx, kv_pairs)?;
+
+    // If dest provided, copy result there and return as Borrowed.
+    if let Some(d) = dest {
+        let size = unsafe { (*map_value.tydesc).size as usize };
+        unsafe { std::ptr::copy_nonoverlapping(map_value.ptr, d.ptr, size); }
+        free_value_structure(ctx, map_value);
+        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, location: ValueLocation::Borrowed })
+    } else {
+        Ok(map_value)
+    }
 }
 
 /// Evaluate inline anonymous tuple expression in the given context.

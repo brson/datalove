@@ -2,92 +2,69 @@
 
 Complete destination-passing style and fix Value semantic confusion.
 
-## Current State
+## Progress
 
-**64 non-DPS locations** across mod.rs and script.rs:
-- 22 calls passing `None` for dest
-- 19 places checking `if dest.is_some()`
-- 23 direct `allocate_*` fallback calls
-
-**Expression types ignoring dest:**
-- Float, Hex, String, Bool literals (always allocate)
-- Set, Map (have `_dest` param but ignore it)
-- Data wrapper, TryOption, TryResult
-
-**ValueLocation confusion:**
-- `Borrowed` conflates "don't free structure" with "not semantically owned"
-- Pattern of checking `ptr == dest.ptr` to decide ownership
-- Move semantics determined at runtime instead of using static analysis
-
-## Goals
-
-1. All expression evaluation uses DPS when dest provided
-2. `return_dest: Destination` (not `Option<Destination>`)
-3. Remove all `allocate_*` fallback paths
-4. Simplify Value to reflect static analysis decisions
+- [x] Phase 1: Add DPS to remaining literals
+- [x] Phase 2: Add DPS to Set/Map
+- [x] Phase 3: Fix coercion check paths (7.2)
+- [ ] Phase 4: Verify operand handling (likely already correct)
+- [ ] Phase 5: Fix Data/Er wrappers (may defer)
+- [ ] Phase 6: Make return_dest non-optional (7.3)
+- [ ] Phase 7: Delete fallback code paths (7.4)
+- [ ] Phase 8: Simplify Value semantics
 
 ---
 
-## Phase 1: Add DPS to Remaining Literals
+## Phase 1: Add DPS to Remaining Literals [DONE]
 
 **Files:** `interp/literals.rs`, `interp/mod.rs`, `interp/script.rs`
 
-Add `write_*_to_dest` functions for:
+Added `write_*_to_dest` functions:
 - `write_bool_to_dest(dest, value)`
 - `write_f32_to_dest(dest, value)`
 - `write_u32_to_dest(dest, value)` (for Hex)
-- `write_string_to_dest(ctx, dest, string_expr)`
+- `write_string_to_dest(ctx, string_expr, dest)`
 
-Update eval match arms to use DPS when dest provided.
-
----
-
-## Phase 2: Add DPS to Set/Map
-
-**Files:** `interp/mod.rs`, `interp/collections.rs`
-
-Currently `eval_inline_set` and `eval_inline_map` have `_dest` params they ignore.
-
-Options:
-- A) Evaluate elements with DPS into pre-allocated collection buffer
-- B) Keep current collect-then-allocate but write final result to dest
-
-Recommend B - simpler, Set/Map have complex internal structure.
+Updated eval match arms in mod.rs and script.rs to use DPS when dest provided.
 
 ---
 
-## Phase 3: Fix Coercion Check Paths (7.2)
+## Phase 2: Add DPS to Set/Map [DONE]
 
-**Problem:** Let statements and return expressions evaluate with `None` first to check if coercion needed.
+**Files:** `interp/mod.rs`
 
-**Locations:**
-- `mod.rs:1115` - let statement coercion check
-- `mod.rs:1612` - return expression coercion check
-- `script.rs:337, 360, 365` - script let statements
+Used option B: Keep collect-then-allocate, copy final result to dest.
 
-**Fix:** Always evaluate with dest. Check coercion *after* by comparing value type to dest type. If mismatch, coerce in place.
+- `eval_inline_set`: Allocate set, copy to dest if provided, free temp
+- `eval_inline_map`: Same pattern
 
 ---
 
-## Phase 4: Fix Operand Evaluation
+## Phase 3: Fix Coercion Check Paths [DONE]
 
-**Problem:** BinOp, UnaryOp, TryOption, TryResult evaluate operands with `None`.
+**Discovery:** The T → Option<T> coercion was dead code. `coerce_value_to_dest` only handles exact type matches (cloning). Tests use explicit `some()`/`ok()` constructors.
 
-**Current:** Operands go to temp slots, operator produces result.
+**Changes:**
+- `eval_let_statement_frame`: Removed 35 lines of coercion check logic, now always uses DPS
+- `eval_return_expression_frame`: Removed 60 lines of coercion check logic, uses DPS directly
+- `execute_let_statement` in script.rs: Simplified to straightforward DPS for typed lets
+- Removed unused `coerce::coerce_value_to_dest` import from mod.rs
 
-**Fix:** These already use temp slots from static analysis. The `None` is correct for operands (they write to their assigned temp slot). But the *result* should use caller's dest.
+---
 
-Verify: `execute_binop`/`execute_unop` already take dest param and use it.
+## Phase 4: Verify Operand Handling
+
+**Status:** Likely already correct.
+
+BinOp, UnaryOp, TryOption, TryResult evaluate operands with `None` because operands go to temp slots from static analysis. The *result* uses caller's dest.
+
+`execute_binop`/`execute_unop` already take dest param and use it.
 
 ---
 
 ## Phase 5: Fix Data/Er Wrappers
 
 **Problem:** `Data` and `Er` expressions evaluate inner value with `None` then wrap.
-
-**Fix:**
-- `Data`: Needs type context - evaluate inner to temp, wrap to dest
-- `Er`: Already requires dest for type context
 
 These may need to stay as-is due to type erasure in Data.
 
@@ -142,21 +119,6 @@ After Phase 6, these paths are unreachable.
    - Static analysis `is_copy_type()`
    - SlotState tracking (Moved/Available)
    - NOT by ValueLocation
-
----
-
-## Execution Order
-
-1. **Phase 1** - Literal DPS (low risk, isolated)
-2. **Phase 2** - Set/Map DPS (medium risk)
-3. **Phase 3** - Coercion paths (high value, fixes 7.2)
-4. **Phase 4** - Verify operand handling (mostly correct already)
-5. **Phase 5** - Data/Er wrappers (may defer)
-6. **Phase 6** - Non-optional return_dest (7.3)
-7. **Phase 7** - Delete fallbacks (7.4)
-8. **Phase 8** - Simplify Value (cleanup)
-
-Test after each phase. Phases 1-4 can be done incrementally.
 
 ---
 

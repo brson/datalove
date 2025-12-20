@@ -184,6 +184,72 @@ pub(super) fn allocate_inline_string<'db>(
     })
 }
 
+/// Write a boolean value to destination.
+pub(super) fn write_bool_to_dest(dest: Destination, value: bool) -> Result<Value, InterpError> {
+    unsafe { *dest.ptr = if value { 1 } else { 0 }; }
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write an f32 value to destination.
+pub(super) fn write_f32_to_dest(dest: Destination, value: f32) -> Result<Value, InterpError> {
+    unsafe { *(dest.ptr as *mut f32) = value; }
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write a u32 value to destination (for hex literals).
+pub(super) fn write_u32_to_dest(dest: Destination, value: u32) -> Result<Value, InterpError> {
+    unsafe { *(dest.ptr as *mut u32) = value; }
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
+/// Write an inline string literal to destination.
+pub(super) fn write_string_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    string_expr: &ast::ExprString<'db>,
+    dest: Destination,
+) -> Result<Value, InterpError> {
+    let string_value_raw = string_expr.value(ctx.db).as_str(ctx.db);
+
+    // Strip quotes if present.
+    let string_value = if string_value_raw.starts_with('"') && string_value_raw.ends_with('"') {
+        &string_value_raw[1..string_value_raw.len()-1]
+    } else {
+        string_value_raw
+    };
+
+    let rt_handle = ctx.runtime.handle();
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_create_local(
+            rt_handle,
+            dest.ptr,
+            dest.tydesc,
+        )
+    };
+
+    if status != datalove_rt::c::RtStatus::Ok {
+        return Err(InterpError::RuntimeError("Failed to create string at dest".to_string()));
+    }
+
+    if !string_value.is_empty() {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                rt_handle,
+                dest.ptr,
+                dest.tydesc,
+                string_value.as_ptr(),
+                string_value.len() as u32,
+            )
+        };
+
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to push string bytes".to_string()));
+        }
+    }
+
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, location: ValueLocation::Borrowed })
+}
+
 /// Write Result::Er from an error payload value.
 ///
 /// Takes ownership of the error payload and wraps it in Er.

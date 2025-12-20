@@ -22,7 +22,8 @@ use super::alloc::{
 use super::collections::allocate_tuple_from_values;
 use super::literals::{
     allocate_inline_int_literal, write_inline_int_to_dest, write_option_none_to_dest,
-    allocate_inline_string,
+    allocate_inline_string, write_bool_to_dest, write_f32_to_dest, write_u32_to_dest,
+    write_string_to_dest,
 };
 use super::arith_widening::{execute_binop, execute_unop};
 use super::coerce::coerce_value_to_dest;
@@ -293,70 +294,35 @@ fn execute_let_statement<'db>(
 ) -> Result<(), InterpError> {
     use crate::datalit::ast::TypeHint;
 
-    // Helper to check if expression needs type context (some/ok/er/none/error).
-    let needs_type_context = |expr: ast::ExprFun<'db>, db: &'db dyn crate::Db| -> bool {
-        matches!(
-            expr.expr(db),
-            ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) |
-            ast::ExprFunKind::Some(_) | ast::ExprFunKind::Ok(_) | ast::ExprFunKind::Er(_)
-        )
-    };
-
-    // Check if we need to coerce T → Option<T> or T → Result<T>.
+    // Evaluate expression, using DPS when type hint is available.
     let final_value = if let Some(type_hint_and_heap) = let_stmt.type_hint(ctx.db) {
         let type_hint = type_hint_and_heap.type_hint(ctx.db);
         match type_hint {
             TypeHint::Option(_) | TypeHint::Result(_) => {
-                // Get expected destination type.
+                // Allocate destination with expected type and evaluate with DPS.
                 let dest_tydesc = type_hint_to_tydesc(ctx, type_hint_and_heap);
-
-                // Check if expression needs type context (some/ok/er/none/error).
-                if needs_type_context(let_stmt.value(ctx.db), ctx.db) {
-                    // Allocate destination and evaluate with type context.
-                    let dest_ptr = unsafe {
-                        datalove_rt::c::dtlv_rti_mem_alloc_local(
-                            ctx.runtime.handle(),
-                            dest_tydesc,
-                            1,
-                        )
-                    };
-                    if dest_ptr.is_null() {
-                        return Err(InterpError::RuntimeError(
-                            "Failed to allocate destination for Option/Result constructor".to_string()
-                        ));
-                    }
-                    let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
-
-                    // Evaluate with destination - constructors will use the type context.
-                    let mut value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), Some(dest))?;
-                    // We allocated the destination, so we own it - mark as TempOwned.
-                    value.location = ValueLocation::TempOwned;
-                    value
-                } else {
-                    // Evaluate expression first (not @none/@error).
-                    let value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?;
-
-                    let dest_ptr = unsafe {
-                        datalove_rt::c::dtlv_rti_mem_alloc_local(
-                            ctx.runtime.handle(),
-                            dest_tydesc,
-                            1,
-                        )
-                    };
-                    if dest_ptr.is_null() {
-                        destroy_value(ctx, value);
-                        return Err(InterpError::RuntimeError(
-                            "Failed to allocate destination for let coercion".to_string()
-                        ));
-                    }
-                    let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
-
-                    // Coerce value to destination (T → Option<T> or T → Result<T>).
-                    coerce_value_to_dest(ctx, value, dest)?
+                let dest_ptr = unsafe {
+                    datalove_rt::c::dtlv_rti_mem_alloc_local(
+                        ctx.runtime.handle(),
+                        dest_tydesc,
+                        1,
+                    )
+                };
+                if dest_ptr.is_null() {
+                    return Err(InterpError::RuntimeError(
+                        "Failed to allocate destination for typed let".to_string()
+                    ));
                 }
+                let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+
+                // Evaluate with destination.
+                let mut value = eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), Some(dest))?;
+                // We allocated the destination, so we own it.
+                value.location = ValueLocation::TempOwned;
+                value
             }
             _ => {
-                // No coercion needed, evaluate normally.
+                // No wrapper type, evaluate normally.
                 eval_expression_in_script_scope(ctx, let_stmt.value(ctx.db), None)?
             }
         }
@@ -518,8 +484,20 @@ pub(super) fn eval_expression_in_script_scope<'db>(
         }
 
         // Inline literal variants.
-        ast::ExprFunKind::True(_) => allocate_bool(ctx, true),
-        ast::ExprFunKind::False(_) => allocate_bool(ctx, false),
+        ast::ExprFunKind::True(_) => {
+            if let Some(d) = dest {
+                write_bool_to_dest(d, true)
+            } else {
+                allocate_bool(ctx, true)
+            }
+        }
+        ast::ExprFunKind::False(_) => {
+            if let Some(d) = dest {
+                write_bool_to_dest(d, false)
+            } else {
+                allocate_bool(ctx, false)
+            }
+        }
         ast::ExprFunKind::None(_) => {
             // @none without destination - requires type context.
             if let Some(d) = dest {
@@ -541,17 +519,29 @@ pub(super) fn eval_expression_in_script_scope<'db>(
             let value_str = float_expr.value(ctx.db).as_str(ctx.db);
             let value: f32 = value_str.parse()
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
-            allocate_f32(ctx, value)
+            if let Some(d) = dest {
+                write_f32_to_dest(d, value)
+            } else {
+                allocate_f32(ctx, value)
+            }
         }
         ast::ExprFunKind::Hex(hex_expr) => {
             let value_str = hex_expr.value(ctx.db).as_str(ctx.db);
             let hex_digits = value_str.trim_start_matches("0x").trim_start_matches("0X");
             let value: u32 = u32::from_str_radix(hex_digits, 16)
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse hex: {}", e)))?;
-            allocate_u32_raw(ctx, value)
+            if let Some(d) = dest {
+                write_u32_to_dest(d, value)
+            } else {
+                allocate_u32_raw(ctx, value)
+            }
         }
         ast::ExprFunKind::String(string_expr) => {
-            allocate_inline_string(ctx, &string_expr)
+            if let Some(d) = dest {
+                write_string_to_dest(ctx, &string_expr, d)
+            } else {
+                allocate_inline_string(ctx, &string_expr)
+            }
         }
         ast::ExprFunKind::List(list_expr) => {
             eval_inline_list(ctx, EvalContext::ScriptScope, expr, &list_expr, dest)
