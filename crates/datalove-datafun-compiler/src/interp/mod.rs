@@ -706,7 +706,9 @@ fn execute_function_body_with_frame<'db>(
                 match stmt {
                     ast::Statement::If(if_s) => {
                         // If-statement: evaluate condition and branch based on result.
-                        let condition_value = eval_expression_frame(ctx, if_s.condition(ctx.db), None)?;
+                        let condition_expr = if_s.condition(ctx.db);
+                        let condition_dest = get_destination_for_expr(ctx, condition_expr)?;
+                        let condition_value = eval_expression_frame(ctx, condition_expr, Some(condition_dest))?;
 
                         // Handle condition based on type (bool, Option, or Result).
                         let is_true = evaluate_branch_condition(
@@ -717,7 +719,7 @@ fn execute_function_body_with_frame<'db>(
                         )?;
 
                         // Mark condition temp as Moved (contents destroyed by evaluate_branch_condition).
-                        mark_temp_slot_moved(ctx, if_s.condition(ctx.db));
+                        mark_temp_slot_moved(ctx, condition_expr);
 
                         current_block_id = if is_true { *then_block } else { *else_block };
                     }
@@ -1383,15 +1385,19 @@ fn eval_expression_frame<'db>(
         }
 
         ast::ExprFunKind::TryOption(try_op) => {
-            // Evaluate operand.
-            let operand = eval_expression_frame(ctx, try_op.operand(ctx.db), None)?;
+            // Evaluate operand to its temp slot.
+            let operand_expr = try_op.operand(ctx.db);
+            let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
+            let operand = eval_expression_frame(ctx, operand_expr, Some(operand_dest))?;
             // Apply try-option operator.
             eval_try_option(ctx, operand)
         }
 
         ast::ExprFunKind::TryResult(try_op) => {
-            // Evaluate operand.
-            let operand = eval_expression_frame(ctx, try_op.operand(ctx.db), None)?;
+            // Evaluate operand to its temp slot.
+            let operand_expr = try_op.operand(ctx.db);
+            let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
+            let operand = eval_expression_frame(ctx, operand_expr, Some(operand_dest))?;
             // Apply try-result operator.
             eval_try_result(ctx, operand)
         }
@@ -1602,8 +1608,9 @@ fn eval_return_expression_frame<'db>(
         }
     }
 
-    // Evaluate expression without destination.
-    let value = eval_expression_frame(ctx, expr, None)?;
+    // Evaluate expression to its temp slot.
+    let expr_dest = get_destination_for_expr(ctx, expr)?;
+    let value = eval_expression_frame(ctx, expr, Some(expr_dest))?;
 
     // Check if we need to wrap the value in Option/Result for return type coercion.
     // This handles the case where return_dest is None (e.g., nested function calls).
