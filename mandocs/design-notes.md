@@ -14,7 +14,7 @@ fun foo() {
 }
 
 fun choose(a: u32) {
-  if a < 10 then
+  if a < 10
     ret
   end if
 }
@@ -24,7 +24,7 @@ Functions with return types allow `ret` with value.
 
 ```
 fun choose(a: u32): bool {
-  if a < 10 then
+  if a < 10
     ret true
   else
     ret false
