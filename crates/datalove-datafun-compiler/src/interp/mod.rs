@@ -1257,7 +1257,7 @@ fn eval_expression_frame<'db>(
             };
 
             // Execute binop with borrowed operands.
-            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(dest))?;
+            execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, dest)?;
 
             // Clean up temporary operand values and mark their slots as Moved.
             destroy_value(ctx, lhs);
@@ -1269,7 +1269,7 @@ fn eval_expression_frame<'db>(
                 mark_temp_slot_moved(ctx, rhs_expr);
             }
 
-            Ok(result)
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
         }
 
         ast::ExprFunKind::FunctionCall(call_expr) => {
@@ -1290,7 +1290,7 @@ fn eval_expression_frame<'db>(
             let operand = eval_expression_frame_borrow(ctx, operand_expr, operand_dest)?;
 
             // Execute unop with borrowed operand.
-            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(dest))?;
+            execute_unop(ctx, unary_expr.op(ctx.db), &operand, dest)?;
 
             // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
@@ -1298,7 +1298,7 @@ fn eval_expression_frame<'db>(
                 mark_temp_slot_moved(ctx, operand_expr);
             }
 
-            Ok(result)
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
         }
 
         ast::ExprFunKind::Tuple(tuple_expr) => {
@@ -1617,7 +1617,7 @@ fn eval_expression_frame_borrow<'db>(
             };
 
             // Execute binop with borrowed operands.
-            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, Some(dest))?;
+            execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, dest)?;
 
             // Clean up temporary operand values and mark slots as Moved.
             destroy_value(ctx, lhs);
@@ -1629,7 +1629,7 @@ fn eval_expression_frame_borrow<'db>(
                 mark_temp_slot_moved(ctx, rhs_expr);
             }
 
-            Ok(result)
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
         }
 
         ast::ExprFunKind::UnaryOp(unary_expr) => {
@@ -1639,7 +1639,7 @@ fn eval_expression_frame_borrow<'db>(
             let operand = eval_expression_frame_borrow(ctx, operand_expr, operand_dest)?;
 
             // Execute unop with borrowed operand.
-            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, Some(dest))?;
+            execute_unop(ctx, unary_expr.op(ctx.db), &operand, dest)?;
 
             // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
@@ -1647,7 +1647,7 @@ fn eval_expression_frame_borrow<'db>(
                 mark_temp_slot_moved(ctx, operand_expr);
             }
 
-            Ok(result)
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
         }
 
         // For function calls in borrow context, the call itself uses normal semantics

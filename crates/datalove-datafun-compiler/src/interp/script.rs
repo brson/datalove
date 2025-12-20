@@ -41,6 +41,42 @@ use super::control::{eval_try_option, eval_try_result};
 use super::{literals, alloc};
 
 // ============================================================================
+// Script-Scope DPS Helpers
+// ============================================================================
+
+/// Allocate a destination for an expression based on its typechecked type.
+fn allocate_dest_for_expr<'db>(
+    ctx: &mut InterpContext<'db>,
+    expr: ast::ExprFun<'db>,
+) -> Result<Destination, InterpError> {
+    use crate::tycheck::Type;
+
+    let type_and_heap = ctx.get_expr_type(expr)
+        .ok_or_else(|| InterpError::RuntimeError("Missing type for expr".into()))?;
+
+    let Type::Datalit(datalit_type) = type_and_heap.ty(ctx.db) else {
+        return Err(InterpError::RuntimeError("Cannot allocate for non-datalit type".into()));
+    };
+
+    let tydesc_ptr = ctx.tydesc_table.get_or_create(&datalit_type);
+    let ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(ctx.runtime.handle(), tydesc_ptr, 1)
+    };
+
+    Ok(Destination { ptr, tydesc: tydesc_ptr })
+}
+
+/// Destroy a destination: run destructors and free the allocation.
+#[allow(dead_code)]
+fn destroy_dest(ctx: &mut InterpContext<'_>, dest: Destination) {
+    unsafe {
+        let rt_handle = ctx.runtime.handle();
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, dest.ptr, dest.tydesc);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, dest.tydesc, 1, dest.ptr);
+    }
+}
+
+// ============================================================================
 // Script Execution Entry Points
 // ============================================================================
 
@@ -436,12 +472,18 @@ pub(super) fn eval_expression_in_script_scope<'db>(
                     return Err(e);
                 }
             };
+            // Get or create destination.
+            let (d, ownership) = match dest {
+                Some(d) => (d, ValueOwnership::Borrowed),
+                None => (allocate_dest_for_expr(ctx, expr)?, ValueOwnership::TempOwned),
+            };
             // Execute binop with borrowed operands.
-            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, dest);
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, d);
             // Clean up temporary operand values.
             destroy_value(ctx, lhs);
             destroy_value(ctx, rhs);
-            result
+            result?;
+            Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership })
         }
         ast::ExprFunKind::Tuple(tuple_expr) => {
             // Evaluate each element in script scope.
@@ -466,11 +508,17 @@ pub(super) fn eval_expression_in_script_scope<'db>(
         ast::ExprFunKind::UnaryOp(unary_expr) => {
             // Evaluate operand (borrow context - we just read, don't consume variables).
             let operand = eval_expression_in_script_scope_borrow(ctx, unary_expr.operand(ctx.db))?;
+            // Get or create destination.
+            let (d, ownership) = match dest {
+                Some(d) => (d, ValueOwnership::Borrowed),
+                None => (allocate_dest_for_expr(ctx, expr)?, ValueOwnership::TempOwned),
+            };
             // Execute unary operation with borrowed operand.
-            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, dest);
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, d);
             // Clean up temporary operand value.
             destroy_value(ctx, operand);
-            result
+            result?;
+            Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership })
         }
         ast::ExprFunKind::TryOption(try_op) => {
             // Evaluate operand.
@@ -683,17 +731,23 @@ fn eval_expression_in_script_scope_borrow<'db>(
                     return Err(e);
                 }
             };
-            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, None);
+            // Allocate destination for intermediate result.
+            let dest = allocate_dest_for_expr(ctx, expr)?;
+            let result = execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, dest);
             destroy_value(ctx, lhs);
             destroy_value(ctx, rhs);
-            result
+            result?;
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::TempOwned })
         }
         ast::ExprFunKind::UnaryOp(unary_expr) => {
             // Nested unary: stay in borrow context.
             let operand = eval_expression_in_script_scope_borrow(ctx, unary_expr.operand(ctx.db))?;
-            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, None);
+            // Allocate destination for intermediate result.
+            let dest = allocate_dest_for_expr(ctx, expr)?;
+            let result = execute_unop(ctx, unary_expr.op(ctx.db), &operand, dest);
             destroy_value(ctx, operand);
-            result
+            result?;
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::TempOwned })
         }
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // Function calls use normal semantics (arguments may be moved).

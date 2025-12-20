@@ -35,62 +35,6 @@ pub(super) fn allocate_f32<'db>(
     Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 
-/// Allocate a u8 value.
-pub(super) fn allocate_u8<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: u8,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U8);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *ptr = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
-/// Allocate an i8 value.
-pub(super) fn allocate_i8<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: i8,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::I8);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *(ptr as *mut i8) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
-/// Allocate a u16 value.
-pub(super) fn allocate_u16<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: u16,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U16);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *(ptr as *mut u16) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
-/// Allocate an i16 value.
-pub(super) fn allocate_i16<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: i16,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::I16);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *(ptr as *mut i16) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
 /// Allocate a u32 value.
 pub(super) fn allocate_u32_raw<'db>(
     ctx: &mut InterpContext<'db>,
@@ -102,48 +46,6 @@ pub(super) fn allocate_u32_raw<'db>(
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
     };
     unsafe { *(ptr as *mut u32) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
-/// Allocate an i32 value.
-pub(super) fn allocate_i32<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: i32,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::I32);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *(ptr as *mut i32) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
-/// Allocate a u64 value.
-pub(super) fn allocate_u64<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: u64,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U64);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *(ptr as *mut u64) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
-/// Allocate an i64 value.
-pub(super) fn allocate_i64<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: i64,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::I64);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *(ptr as *mut i64) = value; }
     Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
 }
 

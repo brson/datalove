@@ -13,7 +13,7 @@ use crate::ast::{BinOp, UnaryOp};
 use super::{InterpContext, InterpError, Value, Destination, ValueOwnership};
 use super::memory::destroy_value;
 use super::types::{is_int_value, is_f32_value, is_fixed_int_value, get_type_tag};
-use super::alloc::{allocate_bigint, widen_fixed_int_to_int};
+use super::alloc::widen_fixed_int_to_int;
 use super::arith::{
     write_f32_result,
     eval_add_checked, eval_sub_checked, eval_mul_checked, eval_div_checked,
@@ -28,13 +28,13 @@ pub(super) fn eval_add<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     // Both f32: add and return f32.
     if is_f32_value(*lhs) && is_f32_value(*rhs) {
         let a = unsafe { *(lhs.ptr as *const f32) };
         let b = unsafe { *(rhs.ptr as *const f32) };
-        return write_f32_result(ctx, a + b, dest);
+        return write_f32_result(a + b, dest);
     }
 
     // Both fixed-width ints of same type: widen to Int and add.
@@ -56,26 +56,12 @@ pub(super) fn eval_add<'db>(
             }
         };
 
-        let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
-            (d.ptr, d.tydesc, true)
-        } else {
-            let result_int = match allocate_bigint(ctx) {
-                Ok(v) => v,
-                Err(e) => {
-                    destroy_value(ctx, lhs_int);
-                    destroy_value(ctx, rhs_int);
-                    return Err(e);
-                }
-            };
-            (result_int.ptr, result_int.tydesc, false)
-        };
-
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_add(
                 ctx.runtime.handle(),
                 lhs_int.ptr, lhs_int.tydesc,
                 rhs_int.ptr, rhs_int.tydesc,
-                result_ptr, result_tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
 
@@ -83,48 +69,25 @@ pub(super) fn eval_add<'db>(
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value {
-                ptr: result_ptr,
-                tydesc: result_tydesc,
-                ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
-            })
+            Ok(())
         } else {
-            if !is_borrowed {
-                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
-                destroy_value(ctx, result_val);
-            }
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
     // Both Int: add directly.
     else if is_int_value(*lhs) && is_int_value(*rhs) {
-        let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
-            (d.ptr, d.tydesc, true)
-        } else {
-            let result_int = allocate_bigint(ctx)?;
-            (result_int.ptr, result_int.tydesc, false)
-        };
-
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_add(
                 ctx.runtime.handle(),
                 lhs.ptr, lhs.tydesc,
                 rhs.ptr, rhs.tydesc,
-                result_ptr, result_tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value {
-                ptr: result_ptr,
-                tydesc: result_tydesc,
-                ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
-            })
+            Ok(())
         } else {
-            if !is_borrowed {
-                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
-                destroy_value(ctx, result_val);
-            }
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
@@ -132,70 +95,40 @@ pub(super) fn eval_add<'db>(
     else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
         let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
 
-        let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
-            (d.ptr, d.tydesc, true)
-        } else {
-            let result_int = allocate_bigint(ctx)?;
-            (result_int.ptr, result_int.tydesc, false)
-        };
-
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_add(
                 ctx.runtime.handle(),
                 lhs_int.ptr, lhs_int.tydesc,
                 rhs.ptr, rhs.tydesc,
-                result_ptr, result_tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
 
         destroy_value(ctx, lhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value {
-                ptr: result_ptr,
-                tydesc: result_tydesc,
-                ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
-            })
+            Ok(())
         } else {
-            if !is_borrowed {
-                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
-                destroy_value(ctx, result_val);
-            }
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
     else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
         let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
 
-        let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
-            (d.ptr, d.tydesc, true)
-        } else {
-            let result_int = allocate_bigint(ctx)?;
-            (result_int.ptr, result_int.tydesc, false)
-        };
-
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_add(
                 ctx.runtime.handle(),
                 lhs.ptr, lhs.tydesc,
                 rhs_int.ptr, rhs_int.tydesc,
-                result_ptr, result_tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
 
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value {
-                ptr: result_ptr,
-                tydesc: result_tydesc,
-                ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
-            })
+            Ok(())
         } else {
-            if !is_borrowed {
-                let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
-                destroy_value(ctx, result_val);
-            }
             Err(InterpError::RuntimeError("Int addition failed".to_string()))
         }
     }
@@ -213,23 +146,14 @@ pub(super) fn eval_sub<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     // Both f32: subtract and return f32.
     if is_f32_value(*lhs) && is_f32_value(*rhs) {
         let a = unsafe { *(lhs.ptr as *const f32) };
         let b = unsafe { *(rhs.ptr as *const f32) };
-        return write_f32_result(ctx, a - b, dest);
+        return write_f32_result(a - b, dest);
     }
-
-    let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
-        if let Some(d) = dest {
-            Ok((d.ptr, d.tydesc, true))
-        } else {
-            let v = allocate_bigint(ctx)?;
-            Ok((v.ptr, v.tydesc, false))
-        }
-    };
 
     // Both fixed-width ints of same type: widen to Int and subtract.
     if is_fixed_int_value(*lhs) && is_fixed_int_value(*rhs) {
@@ -244,14 +168,12 @@ pub(super) fn eval_sub<'db>(
         let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
         let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
 
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
-
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_sub(
                 ctx.runtime.handle(),
                 lhs_int.ptr, lhs_int.tydesc,
                 rhs_int.ptr, rhs_int.tydesc,
-                result_ptr, result_tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
 
@@ -259,72 +181,64 @@ pub(super) fn eval_sub<'db>(
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
     else if is_int_value(*lhs) && is_int_value(*rhs) {
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
-
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_sub(
                 ctx.runtime.handle(),
                 lhs.ptr, lhs.tydesc,
                 rhs.ptr, rhs.tydesc,
-                result_ptr, result_tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
     else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
         let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_sub(
                 ctx.runtime.handle(),
                 lhs_int.ptr, lhs_int.tydesc,
                 rhs.ptr, rhs.tydesc,
-                result_ptr, result_tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
 
         destroy_value(ctx, lhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
     else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
         let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_sub(
                 ctx.runtime.handle(),
                 lhs.ptr, lhs.tydesc,
                 rhs_int.ptr, rhs_int.tydesc,
-                result_ptr, result_tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
 
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int subtraction failed".to_string()))
         }
     }
@@ -340,18 +254,14 @@ pub(super) fn eval_mul<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     // Both f32: multiply and return f32.
     if is_f32_value(*lhs) && is_f32_value(*rhs) {
         let a = unsafe { *(lhs.ptr as *const f32) };
         let b = unsafe { *(rhs.ptr as *const f32) };
-        return write_f32_result(ctx, a * b, dest);
+        return write_f32_result(a * b, dest);
     }
-
-    let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
-        if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
-    };
 
     // Both fixed-width ints of same type: widen to Int and multiply.
     if is_fixed_int_value(*lhs) && is_fixed_int_value(*rhs) {
@@ -365,53 +275,78 @@ pub(super) fn eval_mul<'db>(
 
         let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
         let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
-        let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_mul(
+                ctx.runtime.handle(),
+                lhs_int.ptr, lhs_int.tydesc,
+                rhs_int.ptr, rhs_int.tydesc,
+                dest.ptr, dest.tydesc,
+            )
+        };
+
         destroy_value(ctx, lhs_int);
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
     else if is_int_value(*lhs) && is_int_value(*rhs) {
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
-        let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_mul(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs.ptr, rhs.tydesc,
+                dest.ptr, dest.tydesc,
+            )
+        };
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
     else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
         let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
-        let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_mul(
+                ctx.runtime.handle(),
+                lhs_int.ptr, lhs_int.tydesc,
+                rhs.ptr, rhs.tydesc,
+                dest.ptr, dest.tydesc,
+            )
+        };
+
         destroy_value(ctx, lhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
     else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
         let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
-        let status = unsafe { datalove_rt::c::dtlv_rti_int_mul(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_mul(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs_int.ptr, rhs_int.tydesc,
+                dest.ptr, dest.tydesc,
+            )
+        };
+
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int multiplication failed".to_string()))
         }
     }
@@ -427,18 +362,14 @@ pub(super) fn eval_div<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     // Both f32: divide and return f32.
     if is_f32_value(*lhs) && is_f32_value(*rhs) {
         let a = unsafe { *(lhs.ptr as *const f32) };
         let b = unsafe { *(rhs.ptr as *const f32) };
-        return write_f32_result(ctx, a / b, dest);
+        return write_f32_result(a / b, dest);
     }
-
-    let get_result = |ctx: &mut InterpContext<'db>| -> Result<(*mut u8, *const datalove_rt::rtdt::TyDesc, bool), InterpError> {
-        if let Some(d) = dest { Ok((d.ptr, d.tydesc, true)) } else { let v = allocate_bigint(ctx)?; Ok((v.ptr, v.tydesc, false)) }
-    };
 
     // Both fixed-width ints of same type: widen to Int and divide.
     if is_fixed_int_value(*lhs) && is_fixed_int_value(*rhs) {
@@ -452,53 +383,78 @@ pub(super) fn eval_div<'db>(
 
         let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
         let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
 
-        let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs_int.ptr, lhs_int.tydesc,
+                rhs_int.ptr, rhs_int.tydesc,
+                dest.ptr, dest.tydesc,
+            )
+        };
+
         destroy_value(ctx, lhs_int);
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
     else if is_int_value(*lhs) && is_int_value(*rhs) {
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
-        let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs.ptr, rhs.tydesc,
+                dest.ptr, dest.tydesc,
+            )
+        };
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
     else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
         let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
-        let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs_int.ptr, lhs_int.tydesc, rhs.ptr, rhs.tydesc, result_ptr, result_tydesc) };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs_int.ptr, lhs_int.tydesc,
+                rhs.ptr, rhs.tydesc,
+                dest.ptr, dest.tydesc,
+            )
+        };
+
         destroy_value(ctx, lhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
     else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
         let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
-        let (result_ptr, result_tydesc, is_borrowed) = get_result(ctx)?;
-        let status = unsafe { datalove_rt::c::dtlv_rti_int_div_checked(ctx.runtime.handle(), lhs.ptr, lhs.tydesc, rhs_int.ptr, rhs_int.tydesc, result_ptr, result_tydesc) };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_int_div_checked(
+                ctx.runtime.handle(),
+                lhs.ptr, lhs.tydesc,
+                rhs_int.ptr, rhs_int.tydesc,
+                dest.ptr, dest.tydesc,
+            )
+        };
+
         destroy_value(ctx, rhs_int);
 
         if status == datalove_rt::c::RtStatus::Ok {
-            Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned } })
+            Ok(())
         } else {
-            if !is_borrowed { destroy_value(ctx, Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned }); }
             Err(InterpError::RuntimeError("Int division failed (possibly division by zero)".to_string()))
         }
     }
@@ -515,8 +471,8 @@ pub(super) fn execute_binop<'db>(
     op: BinOp,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     match op {
         // Bare operators: widen to Int.
         BinOp::Add => eval_add(ctx, lhs, rhs, dest),
@@ -550,8 +506,8 @@ pub(super) fn execute_unop<'db>(
     ctx: &mut InterpContext<'db>,
     op: UnaryOp,
     operand: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     match op {
         UnaryOp::Neg => eval_neg(ctx, operand, dest),
         UnaryOp::NegOptional => eval_neg_optional(ctx, operand, dest),
@@ -565,8 +521,8 @@ pub(super) fn execute_unop<'db>(
 pub(super) fn eval_neg<'db>(
     ctx: &mut InterpContext<'db>,
     operand: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     // Only Int (bigint) supports bare negation.
     if !is_int_value(*operand) {
         return Err(InterpError::InvalidExpression(
@@ -574,34 +530,19 @@ pub(super) fn eval_neg<'db>(
         ));
     }
 
-    let (result_ptr, result_tydesc, is_borrowed) = if let Some(d) = dest {
-        (d.ptr, d.tydesc, true)
-    } else {
-        let result_int = allocate_bigint(ctx)?;
-        (result_int.ptr, result_int.tydesc, false)
-    };
-
     let status = unsafe {
         datalove_rt::c::dtlv_rti_int_neg(
             ctx.runtime.handle(),
             operand.ptr,
             operand.tydesc,
-            result_ptr,
-            result_tydesc,
+            dest.ptr,
+            dest.tydesc,
         )
     };
 
     if status == datalove_rt::c::RtStatus::Ok {
-        Ok(Value {
-            ptr: result_ptr,
-            tydesc: result_tydesc,
-            ownership: if is_borrowed { ValueOwnership::Borrowed } else { ValueOwnership::TempOwned },
-        })
+        Ok(())
     } else {
-        if !is_borrowed {
-            let result_val = Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned };
-            destroy_value(ctx, result_val);
-        }
         Err(InterpError::RuntimeError("Int negation failed".to_string()))
     }
 }
@@ -612,20 +553,22 @@ pub(super) fn eval_neg<'db>(
 /// Returns the raw negated value on success, or OptionNone error on overflow.
 /// Operand is borrowed (ref semantics) - caller manages its lifetime.
 pub(super) fn eval_neg_optional<'db>(
-    ctx: &mut InterpContext<'db>,
+    _ctx: &mut InterpContext<'db>,
     operand: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt::TyTag;
 
     let type_tag = unsafe { (*operand.tydesc).type_tag };
-    let operand_tydesc = operand.tydesc;
 
     // Handle 64-bit type separately.
     if type_tag == TyTag::I64 {
         let val = unsafe { *(operand.ptr as *const i64) };
         return match val.checked_neg() {
-            Some(r) => write_typed_int_result_64(ctx, r as u64, operand_tydesc, dest),
+            Some(r) => {
+                write_typed_int_result_64(r as u64, dest);
+                Ok(())
+            }
             None => Err(InterpError::OptionNone),
         };
     }
@@ -653,7 +596,10 @@ pub(super) fn eval_neg_optional<'db>(
     };
 
     match negated_result {
-        Some(result) => write_typed_int_result(ctx, result, operand_tydesc, dest),
+        Some(result) => {
+            write_typed_int_result(result, dest);
+            Ok(())
+        }
         None => Err(InterpError::OptionNone),
     }
 }
@@ -666,19 +612,21 @@ pub(super) fn eval_neg_optional<'db>(
 pub(super) fn eval_neg_result<'db>(
     ctx: &mut InterpContext<'db>,
     operand: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt::TyTag;
 
     let type_tag = unsafe { (*operand.tydesc).type_tag };
-    let operand_tydesc = operand.tydesc;
 
     // Handle 64-bit types separately.
     match type_tag {
         TyTag::I64 => {
             let val = unsafe { *(operand.ptr as *const i64) };
             return match val.checked_neg() {
-                Some(r) => write_typed_int_result_64(ctx, r as u64, operand_tydesc, dest),
+                Some(r) => {
+                    write_typed_int_result_64(r as u64, dest);
+                    Ok(())
+                }
                 None => {
                     let err_string = allocate_error_string(ctx, "overflow")?;
                     Err(InterpError::ResultErr {
@@ -691,7 +639,10 @@ pub(super) fn eval_neg_result<'db>(
         TyTag::U64 => {
             let val = unsafe { *(operand.ptr as *const u64) };
             return match val.checked_neg() {
-                Some(r) => write_typed_int_result_64(ctx, r, operand_tydesc, dest),
+                Some(r) => {
+                    write_typed_int_result_64(r, dest);
+                    Ok(())
+                }
                 None => {
                     let err_string = allocate_error_string(ctx, "overflow")?;
                     Err(InterpError::ResultErr {
@@ -738,7 +689,10 @@ pub(super) fn eval_neg_result<'db>(
     };
 
     match negated_result {
-        Some(result) => write_typed_int_result(ctx, result, operand_tydesc, dest),
+        Some(result) => {
+            write_typed_int_result(result, dest);
+            Ok(())
+        }
         None => {
             let err_string = allocate_error_string(ctx, "overflow")?;
             Err(InterpError::ResultErr {
@@ -749,54 +703,16 @@ pub(super) fn eval_neg_result<'db>(
     }
 }
 
-/// Write a typed integer result to destination or allocate new value.
+/// Write a typed integer result to destination.
 ///
 /// Preserves the original type (i8, i16, i32, u8, u16, u32) from the tydesc.
-fn write_typed_int_result(
-    ctx: &mut InterpContext<'_>,
-    value: u32,
-    tydesc: *const datalove_rt::rtdt::TyDesc,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut u32) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        let ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_local(ctx.runtime.handle(), tydesc, 1)
-        };
-
-        if ptr.is_null() {
-            return Err(InterpError::RuntimeError("Failed to allocate integer".to_string()));
-        }
-
-        unsafe { *(ptr as *mut u32) = value; }
-        Ok(Value { ptr, tydesc, ownership: ValueOwnership::TempOwned })
-    }
+fn write_typed_int_result(value: u32, dest: Destination) {
+    unsafe { *(dest.ptr as *mut u32) = value; }
 }
 
-/// Write a 64-bit typed integer result to destination or allocate new value.
-fn write_typed_int_result_64(
-    ctx: &mut InterpContext<'_>,
-    value: u64,
-    tydesc: *const datalove_rt::rtdt::TyDesc,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut u64) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        let ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_local(ctx.runtime.handle(), tydesc, 1)
-        };
-
-        if ptr.is_null() {
-            return Err(InterpError::RuntimeError("Failed to allocate integer".to_string()));
-        }
-
-        unsafe { *(ptr as *mut u64) = value; }
-        Ok(Value { ptr, tydesc, ownership: ValueOwnership::TempOwned })
-    }
+/// Write a 64-bit typed integer result to destination.
+fn write_typed_int_result_64(value: u64, dest: Destination) {
+    unsafe { *(dest.ptr as *mut u64) = value; }
 }
 
 /// Allocate a string value with the given content for use as an error.

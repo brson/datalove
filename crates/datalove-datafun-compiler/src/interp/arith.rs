@@ -8,117 +8,71 @@
 
 use datalove_rt::rtdt::TyTag;
 
-use super::{InterpContext, InterpError, Value, Destination, ValueOwnership};
-use super::memory::destroy_value;
+use super::{InterpContext, InterpError, Value, Destination};
 use super::types::{is_int_value, is_fixed_int_value, get_type_tag};
-use super::alloc::{
-    allocate_bool, allocate_f32, allocate_u32_raw, allocate_bigint,
-    allocate_u8, allocate_i8, allocate_u16, allocate_i16,
-    allocate_i32, allocate_u64, allocate_i64,
-};
 
 // ============================================================================
-// Result Writers
+// Result Writers (DPS - write directly to destination)
 // ============================================================================
 
-/// Write u32 result to destination or allocate new value.
-pub(super) fn write_u32_result(ctx: &mut InterpContext<'_>, value: u32, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut u32) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_u32_raw(ctx, value)
-    }
+/// Write f32 result to destination.
+pub(super) fn write_f32_result(value: f32, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *(dest.ptr as *mut f32) = value; }
+    Ok(())
 }
 
-/// Write f32 result to destination or allocate new value.
-pub(super) fn write_f32_result(ctx: &mut InterpContext<'_>, value: f32, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut f32) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_f32(ctx, value)
-    }
+/// Write bool result to destination.
+fn write_bool_result(value: bool, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *(dest.ptr as *mut u8) = if value { 1 } else { 0 }; }
+    Ok(())
 }
 
-/// Write bool result to destination or allocate new value.
-pub(super) fn write_bool_result(ctx: &mut InterpContext<'_>, value: bool, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut u8) = if value { 1 } else { 0 }; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_bool(ctx, value)
-    }
+/// Write u8 result to destination.
+fn write_u8_result(value: u8, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *dest.ptr = value; }
+    Ok(())
 }
 
-/// Write u8 result to destination or allocate new value.
-fn write_u8_result(ctx: &mut InterpContext<'_>, value: u8, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *d.ptr = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_u8(ctx, value)
-    }
+/// Write i8 result to destination.
+fn write_i8_result(value: i8, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *(dest.ptr as *mut i8) = value; }
+    Ok(())
 }
 
-/// Write i8 result to destination or allocate new value.
-fn write_i8_result(ctx: &mut InterpContext<'_>, value: i8, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut i8) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_i8(ctx, value)
-    }
+/// Write u16 result to destination.
+fn write_u16_result(value: u16, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *(dest.ptr as *mut u16) = value; }
+    Ok(())
 }
 
-/// Write u16 result to destination or allocate new value.
-fn write_u16_result(ctx: &mut InterpContext<'_>, value: u16, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut u16) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_u16(ctx, value)
-    }
+/// Write i16 result to destination.
+fn write_i16_result(value: i16, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *(dest.ptr as *mut i16) = value; }
+    Ok(())
 }
 
-/// Write i16 result to destination or allocate new value.
-fn write_i16_result(ctx: &mut InterpContext<'_>, value: i16, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut i16) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_i16(ctx, value)
-    }
+/// Write u32 result to destination.
+fn write_u32_result(value: u32, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *(dest.ptr as *mut u32) = value; }
+    Ok(())
 }
 
-/// Write i32 result to destination or allocate new value.
-fn write_i32_result(ctx: &mut InterpContext<'_>, value: i32, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut i32) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_i32(ctx, value)
-    }
+/// Write i32 result to destination.
+fn write_i32_result(value: i32, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *(dest.ptr as *mut i32) = value; }
+    Ok(())
 }
 
-/// Write u64 result to destination or allocate new value.
-fn write_u64_result(ctx: &mut InterpContext<'_>, value: u64, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut u64) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_u64(ctx, value)
-    }
+/// Write u64 result to destination.
+fn write_u64_result(value: u64, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *(dest.ptr as *mut u64) = value; }
+    Ok(())
 }
 
-/// Write i64 result to destination or allocate new value.
-fn write_i64_result(ctx: &mut InterpContext<'_>, value: i64, dest: Option<Destination>) -> Result<Value, InterpError> {
-    if let Some(d) = dest {
-        unsafe { *(d.ptr as *mut i64) = value; }
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        allocate_i64(ctx, value)
-    }
+/// Write i64 result to destination.
+fn write_i64_result(value: i64, dest: Destination) -> Result<(), InterpError> {
+    unsafe { *(dest.ptr as *mut i64) = value; }
+    Ok(())
 }
 
 // ============================================================================
@@ -130,11 +84,11 @@ fn write_i64_result(ctx: &mut InterpContext<'_>, value: i64, dest: Option<Destin
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
 pub(super) fn eval_add_checked<'db>(
-    ctx: &mut InterpContext<'db>,
+    _ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     if !is_fixed_int_value(*lhs) || !is_fixed_int_value(*rhs) {
         return Err(InterpError::InvalidExpression(
             "Checked addition requires fixed-width integer operands".to_string()
@@ -155,7 +109,7 @@ pub(super) fn eval_add_checked<'db>(
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
                 match a.checked_add(b) {
-                    Some(r) => write_u8_result(ctx, r, dest),
+                    Some(r) => write_u8_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -163,7 +117,7 @@ pub(super) fn eval_add_checked<'db>(
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
                 match a.checked_add(b) {
-                    Some(r) => write_i8_result(ctx, r, dest),
+                    Some(r) => write_i8_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -171,7 +125,7 @@ pub(super) fn eval_add_checked<'db>(
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
                 match a.checked_add(b) {
-                    Some(r) => write_u16_result(ctx, r, dest),
+                    Some(r) => write_u16_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -179,7 +133,7 @@ pub(super) fn eval_add_checked<'db>(
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
                 match a.checked_add(b) {
-                    Some(r) => write_i16_result(ctx, r, dest),
+                    Some(r) => write_i16_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -187,7 +141,7 @@ pub(super) fn eval_add_checked<'db>(
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
                 match a.checked_add(b) {
-                    Some(r) => write_u32_result(ctx, r, dest),
+                    Some(r) => write_u32_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -195,7 +149,7 @@ pub(super) fn eval_add_checked<'db>(
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
                 match a.checked_add(b) {
-                    Some(r) => write_i32_result(ctx, r, dest),
+                    Some(r) => write_i32_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -203,7 +157,7 @@ pub(super) fn eval_add_checked<'db>(
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
                 match a.checked_add(b) {
-                    Some(r) => write_u64_result(ctx, r, dest),
+                    Some(r) => write_u64_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -211,7 +165,7 @@ pub(super) fn eval_add_checked<'db>(
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
                 match a.checked_add(b) {
-                    Some(r) => write_i64_result(ctx, r, dest),
+                    Some(r) => write_i64_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -227,11 +181,11 @@ pub(super) fn eval_add_checked<'db>(
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
 pub(super) fn eval_sub_checked<'db>(
-    ctx: &mut InterpContext<'db>,
+    _ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     if !is_fixed_int_value(*lhs) || !is_fixed_int_value(*rhs) {
         return Err(InterpError::InvalidExpression(
             "Checked subtraction requires fixed-width integer operands".to_string()
@@ -252,7 +206,7 @@ pub(super) fn eval_sub_checked<'db>(
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
                 match a.checked_sub(b) {
-                    Some(r) => write_u8_result(ctx, r, dest),
+                    Some(r) => write_u8_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -260,7 +214,7 @@ pub(super) fn eval_sub_checked<'db>(
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
                 match a.checked_sub(b) {
-                    Some(r) => write_i8_result(ctx, r, dest),
+                    Some(r) => write_i8_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -268,7 +222,7 @@ pub(super) fn eval_sub_checked<'db>(
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
                 match a.checked_sub(b) {
-                    Some(r) => write_u16_result(ctx, r, dest),
+                    Some(r) => write_u16_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -276,7 +230,7 @@ pub(super) fn eval_sub_checked<'db>(
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
                 match a.checked_sub(b) {
-                    Some(r) => write_i16_result(ctx, r, dest),
+                    Some(r) => write_i16_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -284,7 +238,7 @@ pub(super) fn eval_sub_checked<'db>(
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
                 match a.checked_sub(b) {
-                    Some(r) => write_u32_result(ctx, r, dest),
+                    Some(r) => write_u32_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -292,7 +246,7 @@ pub(super) fn eval_sub_checked<'db>(
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
                 match a.checked_sub(b) {
-                    Some(r) => write_i32_result(ctx, r, dest),
+                    Some(r) => write_i32_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -300,7 +254,7 @@ pub(super) fn eval_sub_checked<'db>(
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
                 match a.checked_sub(b) {
-                    Some(r) => write_u64_result(ctx, r, dest),
+                    Some(r) => write_u64_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -308,7 +262,7 @@ pub(super) fn eval_sub_checked<'db>(
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
                 match a.checked_sub(b) {
-                    Some(r) => write_i64_result(ctx, r, dest),
+                    Some(r) => write_i64_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -324,11 +278,11 @@ pub(super) fn eval_sub_checked<'db>(
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
 pub(super) fn eval_mul_checked<'db>(
-    ctx: &mut InterpContext<'db>,
+    _ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     if !is_fixed_int_value(*lhs) || !is_fixed_int_value(*rhs) {
         return Err(InterpError::InvalidExpression(
             "Checked multiplication requires fixed-width integer operands".to_string()
@@ -349,7 +303,7 @@ pub(super) fn eval_mul_checked<'db>(
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
                 match a.checked_mul(b) {
-                    Some(r) => write_u8_result(ctx, r, dest),
+                    Some(r) => write_u8_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -357,7 +311,7 @@ pub(super) fn eval_mul_checked<'db>(
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
                 match a.checked_mul(b) {
-                    Some(r) => write_i8_result(ctx, r, dest),
+                    Some(r) => write_i8_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -365,7 +319,7 @@ pub(super) fn eval_mul_checked<'db>(
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
                 match a.checked_mul(b) {
-                    Some(r) => write_u16_result(ctx, r, dest),
+                    Some(r) => write_u16_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -373,7 +327,7 @@ pub(super) fn eval_mul_checked<'db>(
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
                 match a.checked_mul(b) {
-                    Some(r) => write_i16_result(ctx, r, dest),
+                    Some(r) => write_i16_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -381,7 +335,7 @@ pub(super) fn eval_mul_checked<'db>(
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
                 match a.checked_mul(b) {
-                    Some(r) => write_u32_result(ctx, r, dest),
+                    Some(r) => write_u32_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -389,7 +343,7 @@ pub(super) fn eval_mul_checked<'db>(
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
                 match a.checked_mul(b) {
-                    Some(r) => write_i32_result(ctx, r, dest),
+                    Some(r) => write_i32_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -397,7 +351,7 @@ pub(super) fn eval_mul_checked<'db>(
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
                 match a.checked_mul(b) {
-                    Some(r) => write_u64_result(ctx, r, dest),
+                    Some(r) => write_u64_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -405,7 +359,7 @@ pub(super) fn eval_mul_checked<'db>(
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
                 match a.checked_mul(b) {
-                    Some(r) => write_i64_result(ctx, r, dest),
+                    Some(r) => write_i64_result(r, dest),
                     None => Err(InterpError::Overflow),
                 }
             }
@@ -424,23 +378,21 @@ pub(super) fn eval_div_checked<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     // Both int: use runtime checked division.
     if is_int_value(*lhs) && is_int_value(*rhs) {
-        let result_int = allocate_bigint(ctx)?;
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_div_checked(
                 ctx.runtime.handle(),
                 lhs.ptr, lhs.tydesc,
                 rhs.ptr, rhs.tydesc,
-                result_int.ptr, result_int.tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
         if status == datalove_rt::c::RtStatus::Ok {
-            return Ok(result_int);
+            return Ok(());
         } else {
-            destroy_value(ctx, result_int);
             return Err(InterpError::DivisionByZero);
         }
     }
@@ -466,7 +418,7 @@ pub(super) fn eval_div_checked<'db>(
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
                 match a.checked_div(b) {
-                    Some(r) => write_u8_result(ctx, r, dest),
+                    Some(r) => write_u8_result(r, dest),
                     None => Err(InterpError::DivisionByZero),
                 }
             }
@@ -474,7 +426,7 @@ pub(super) fn eval_div_checked<'db>(
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
                 match a.checked_div(b) {
-                    Some(r) => write_i8_result(ctx, r, dest),
+                    Some(r) => write_i8_result(r, dest),
                     None => Err(InterpError::DivisionByZero),
                 }
             }
@@ -482,7 +434,7 @@ pub(super) fn eval_div_checked<'db>(
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
                 match a.checked_div(b) {
-                    Some(r) => write_u16_result(ctx, r, dest),
+                    Some(r) => write_u16_result(r, dest),
                     None => Err(InterpError::DivisionByZero),
                 }
             }
@@ -490,7 +442,7 @@ pub(super) fn eval_div_checked<'db>(
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
                 match a.checked_div(b) {
-                    Some(r) => write_i16_result(ctx, r, dest),
+                    Some(r) => write_i16_result(r, dest),
                     None => Err(InterpError::DivisionByZero),
                 }
             }
@@ -498,7 +450,7 @@ pub(super) fn eval_div_checked<'db>(
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
                 match a.checked_div(b) {
-                    Some(r) => write_u32_result(ctx, r, dest),
+                    Some(r) => write_u32_result(r, dest),
                     None => Err(InterpError::DivisionByZero),
                 }
             }
@@ -506,7 +458,7 @@ pub(super) fn eval_div_checked<'db>(
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
                 match a.checked_div(b) {
-                    Some(r) => write_i32_result(ctx, r, dest),
+                    Some(r) => write_i32_result(r, dest),
                     None => Err(InterpError::DivisionByZero),
                 }
             }
@@ -514,7 +466,7 @@ pub(super) fn eval_div_checked<'db>(
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
                 match a.checked_div(b) {
-                    Some(r) => write_u64_result(ctx, r, dest),
+                    Some(r) => write_u64_result(r, dest),
                     None => Err(InterpError::DivisionByZero),
                 }
             }
@@ -522,7 +474,7 @@ pub(super) fn eval_div_checked<'db>(
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
                 match a.checked_div(b) {
-                    Some(r) => write_i64_result(ctx, r, dest),
+                    Some(r) => write_i64_result(r, dest),
                     None => Err(InterpError::DivisionByZero),
                 }
             }
@@ -543,11 +495,11 @@ pub(super) fn eval_div_checked<'db>(
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
 pub(super) fn eval_add_optional<'db>(
-    ctx: &mut InterpContext<'db>,
+    _ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     if !is_fixed_int_value(*lhs) || !is_fixed_int_value(*rhs) {
         return Err(InterpError::InvalidExpression(
             "Optional addition requires fixed-width integer operands".to_string()
@@ -568,7 +520,7 @@ pub(super) fn eval_add_optional<'db>(
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
                 match a.checked_add(b) {
-                    Some(r) => write_u8_result(ctx, r, dest),
+                    Some(r) => write_u8_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -576,7 +528,7 @@ pub(super) fn eval_add_optional<'db>(
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
                 match a.checked_add(b) {
-                    Some(r) => write_i8_result(ctx, r, dest),
+                    Some(r) => write_i8_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -584,7 +536,7 @@ pub(super) fn eval_add_optional<'db>(
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
                 match a.checked_add(b) {
-                    Some(r) => write_u16_result(ctx, r, dest),
+                    Some(r) => write_u16_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -592,7 +544,7 @@ pub(super) fn eval_add_optional<'db>(
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
                 match a.checked_add(b) {
-                    Some(r) => write_i16_result(ctx, r, dest),
+                    Some(r) => write_i16_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -600,7 +552,7 @@ pub(super) fn eval_add_optional<'db>(
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
                 match a.checked_add(b) {
-                    Some(r) => write_u32_result(ctx, r, dest),
+                    Some(r) => write_u32_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -608,7 +560,7 @@ pub(super) fn eval_add_optional<'db>(
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
                 match a.checked_add(b) {
-                    Some(r) => write_i32_result(ctx, r, dest),
+                    Some(r) => write_i32_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -616,7 +568,7 @@ pub(super) fn eval_add_optional<'db>(
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
                 match a.checked_add(b) {
-                    Some(r) => write_u64_result(ctx, r, dest),
+                    Some(r) => write_u64_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -624,7 +576,7 @@ pub(super) fn eval_add_optional<'db>(
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
                 match a.checked_add(b) {
-                    Some(r) => write_i64_result(ctx, r, dest),
+                    Some(r) => write_i64_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -641,11 +593,11 @@ pub(super) fn eval_add_optional<'db>(
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
 pub(super) fn eval_sub_optional<'db>(
-    ctx: &mut InterpContext<'db>,
+    _ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     if !is_fixed_int_value(*lhs) || !is_fixed_int_value(*rhs) {
         return Err(InterpError::InvalidExpression(
             "Optional subtraction requires fixed-width integer operands".to_string()
@@ -666,7 +618,7 @@ pub(super) fn eval_sub_optional<'db>(
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
                 match a.checked_sub(b) {
-                    Some(r) => write_u8_result(ctx, r, dest),
+                    Some(r) => write_u8_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -674,7 +626,7 @@ pub(super) fn eval_sub_optional<'db>(
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
                 match a.checked_sub(b) {
-                    Some(r) => write_i8_result(ctx, r, dest),
+                    Some(r) => write_i8_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -682,7 +634,7 @@ pub(super) fn eval_sub_optional<'db>(
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
                 match a.checked_sub(b) {
-                    Some(r) => write_u16_result(ctx, r, dest),
+                    Some(r) => write_u16_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -690,7 +642,7 @@ pub(super) fn eval_sub_optional<'db>(
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
                 match a.checked_sub(b) {
-                    Some(r) => write_i16_result(ctx, r, dest),
+                    Some(r) => write_i16_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -698,7 +650,7 @@ pub(super) fn eval_sub_optional<'db>(
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
                 match a.checked_sub(b) {
-                    Some(r) => write_u32_result(ctx, r, dest),
+                    Some(r) => write_u32_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -706,7 +658,7 @@ pub(super) fn eval_sub_optional<'db>(
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
                 match a.checked_sub(b) {
-                    Some(r) => write_i32_result(ctx, r, dest),
+                    Some(r) => write_i32_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -714,7 +666,7 @@ pub(super) fn eval_sub_optional<'db>(
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
                 match a.checked_sub(b) {
-                    Some(r) => write_u64_result(ctx, r, dest),
+                    Some(r) => write_u64_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -722,7 +674,7 @@ pub(super) fn eval_sub_optional<'db>(
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
                 match a.checked_sub(b) {
-                    Some(r) => write_i64_result(ctx, r, dest),
+                    Some(r) => write_i64_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -739,11 +691,11 @@ pub(super) fn eval_sub_optional<'db>(
 /// Operands are borrowed (ref semantics) - caller manages their lifetime.
 /// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
 pub(super) fn eval_mul_optional<'db>(
-    ctx: &mut InterpContext<'db>,
+    _ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     if !is_fixed_int_value(*lhs) || !is_fixed_int_value(*rhs) {
         return Err(InterpError::InvalidExpression(
             "Optional multiplication requires fixed-width integer operands".to_string()
@@ -764,7 +716,7 @@ pub(super) fn eval_mul_optional<'db>(
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
                 match a.checked_mul(b) {
-                    Some(r) => write_u8_result(ctx, r, dest),
+                    Some(r) => write_u8_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -772,7 +724,7 @@ pub(super) fn eval_mul_optional<'db>(
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
                 match a.checked_mul(b) {
-                    Some(r) => write_i8_result(ctx, r, dest),
+                    Some(r) => write_i8_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -780,7 +732,7 @@ pub(super) fn eval_mul_optional<'db>(
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
                 match a.checked_mul(b) {
-                    Some(r) => write_u16_result(ctx, r, dest),
+                    Some(r) => write_u16_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -788,7 +740,7 @@ pub(super) fn eval_mul_optional<'db>(
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
                 match a.checked_mul(b) {
-                    Some(r) => write_i16_result(ctx, r, dest),
+                    Some(r) => write_i16_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -796,7 +748,7 @@ pub(super) fn eval_mul_optional<'db>(
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
                 match a.checked_mul(b) {
-                    Some(r) => write_u32_result(ctx, r, dest),
+                    Some(r) => write_u32_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -804,7 +756,7 @@ pub(super) fn eval_mul_optional<'db>(
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
                 match a.checked_mul(b) {
-                    Some(r) => write_i32_result(ctx, r, dest),
+                    Some(r) => write_i32_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -812,7 +764,7 @@ pub(super) fn eval_mul_optional<'db>(
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
                 match a.checked_mul(b) {
-                    Some(r) => write_u64_result(ctx, r, dest),
+                    Some(r) => write_u64_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -820,7 +772,7 @@ pub(super) fn eval_mul_optional<'db>(
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
                 match a.checked_mul(b) {
-                    Some(r) => write_i64_result(ctx, r, dest),
+                    Some(r) => write_i64_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -840,24 +792,22 @@ pub(super) fn eval_div_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     // Both int: use runtime optional division.
     if is_int_value(*lhs) && is_int_value(*rhs) {
-        let result_int = allocate_bigint(ctx)?;
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_div_checked(
                 ctx.runtime.handle(),
                 lhs.ptr, lhs.tydesc,
                 rhs.ptr, rhs.tydesc,
-                result_int.ptr, result_int.tydesc,
+                dest.ptr, dest.tydesc,
             )
         };
 
         if status == datalove_rt::c::RtStatus::Ok {
-            return Ok(result_int);
+            return Ok(());
         } else {
-            destroy_value(ctx, result_int);
             return Err(InterpError::OptionNone);
         }
     }
@@ -883,7 +833,7 @@ pub(super) fn eval_div_optional<'db>(
                 let a = *(lhs.ptr as *const u8);
                 let b = *(rhs.ptr as *const u8);
                 match a.checked_div(b) {
-                    Some(r) => write_u8_result(ctx, r, dest),
+                    Some(r) => write_u8_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -891,7 +841,7 @@ pub(super) fn eval_div_optional<'db>(
                 let a = *(lhs.ptr as *const i8);
                 let b = *(rhs.ptr as *const i8);
                 match a.checked_div(b) {
-                    Some(r) => write_i8_result(ctx, r, dest),
+                    Some(r) => write_i8_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -899,7 +849,7 @@ pub(super) fn eval_div_optional<'db>(
                 let a = *(lhs.ptr as *const u16);
                 let b = *(rhs.ptr as *const u16);
                 match a.checked_div(b) {
-                    Some(r) => write_u16_result(ctx, r, dest),
+                    Some(r) => write_u16_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -907,7 +857,7 @@ pub(super) fn eval_div_optional<'db>(
                 let a = *(lhs.ptr as *const i16);
                 let b = *(rhs.ptr as *const i16);
                 match a.checked_div(b) {
-                    Some(r) => write_i16_result(ctx, r, dest),
+                    Some(r) => write_i16_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -915,7 +865,7 @@ pub(super) fn eval_div_optional<'db>(
                 let a = *(lhs.ptr as *const u32);
                 let b = *(rhs.ptr as *const u32);
                 match a.checked_div(b) {
-                    Some(r) => write_u32_result(ctx, r, dest),
+                    Some(r) => write_u32_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -923,7 +873,7 @@ pub(super) fn eval_div_optional<'db>(
                 let a = *(lhs.ptr as *const i32);
                 let b = *(rhs.ptr as *const i32);
                 match a.checked_div(b) {
-                    Some(r) => write_i32_result(ctx, r, dest),
+                    Some(r) => write_i32_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -931,7 +881,7 @@ pub(super) fn eval_div_optional<'db>(
                 let a = *(lhs.ptr as *const u64);
                 let b = *(rhs.ptr as *const u64);
                 match a.checked_div(b) {
-                    Some(r) => write_u64_result(ctx, r, dest),
+                    Some(r) => write_u64_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -939,7 +889,7 @@ pub(super) fn eval_div_optional<'db>(
                 let a = *(lhs.ptr as *const i64);
                 let b = *(rhs.ptr as *const i64);
                 match a.checked_div(b) {
-                    Some(r) => write_i64_result(ctx, r, dest),
+                    Some(r) => write_i64_result(r, dest),
                     None => Err(InterpError::OptionNone),
                 }
             }
@@ -963,8 +913,8 @@ pub(super) fn eval_comparison<'db>(
     op: crate::ast::BinOp,
     lhs: &Value,
     rhs: &Value,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     use crate::ast::BinOp;
 
     // Fast path for same-type fixed-width integers.
@@ -1082,7 +1032,7 @@ pub(super) fn eval_comparison<'db>(
                     _ => unreachable!(),
                 }
             };
-            return write_bool_result(ctx, result, dest);
+            return write_bool_result(result, dest);
         }
     }
 
@@ -1112,5 +1062,5 @@ pub(super) fn eval_comparison<'db>(
         _ => false,
     };
 
-    write_bool_result(ctx, result, dest)
+    write_bool_result(result, dest)
 }
