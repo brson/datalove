@@ -3,6 +3,7 @@
 Compare the main README.md,
 the botspec,
 any recent plan* files,
+recent commits,
 and the implementation.
 
 Note areas where the botspec is not up to date
