@@ -20,7 +20,7 @@ fun age(
   if now .< player.born
     ret none
   else
-    ret now -? player.year
+    ret now -? player.born
   end if
 end fun
 ```
@@ -45,7 +45,7 @@ a strongly-typed and declarative pure-data language
 for expressing most typical data structures:
 
 - booleans, fixed integers and bigints, floats
-- anonymous and named tuples, structs, and enums
+- anonymous tuples, structs, and enums
 - lists and strings, maps and sets
 - option and result
 - `data` of any of the above, with runtime introspection and reflection

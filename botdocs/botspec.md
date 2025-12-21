@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2025-12-17
+Last verified: 2025-12-21
 
 ## Overview
 
@@ -269,6 +269,24 @@ import u32.negate
 
 Modules are loaded from `.dfm` files. Each package needs a main module (e.g., `std/std.dfm`).
 
+### 2.9 Void Functions
+
+Functions without a return type are void functions:
+- Don't require a `ret` statement - function can end without `ret`
+- Allow bare `ret` without value for early exit
+- Must NOT have `ret` with a value
+
+```
+fun log_value(x: u32)        // void - no ret needed
+end fun
+
+fun early_exit(n: u32)       // void - bare ret OK
+  if n .< 10
+    ret
+  end if
+end fun
+```
+
 ---
 
 ## 3. Type System
@@ -321,7 +339,7 @@ Linear types have move semantics; copy types can be freely duplicated.
 | `lit-pretty` | Pretty-print datalit |
 | `lit-op` | Perform operations on datalit values |
 | `repl` | Interactive REPL |
-| `docs` | Generate documentation |
+| `typecheck-std` | Typecheck the sys/std library |
 
 ### 4.2 REPL Capabilities
 
