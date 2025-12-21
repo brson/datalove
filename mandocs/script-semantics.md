@@ -1,4 +1,17 @@
-# Datalove (and Datafun) script semantics
+# Datalove script semantics
+
+Datalove is REPL-first,
+and with its strong linear types and functional purity,
+plus virtualized I/O,
+we intend to make it do some sophisticated things like rewind and replay.
+
+The semantics of the REPL will be the semantics of scripts,
+with the exception that scripts are not interactive,
+so won't exercise as many features.
+
+Most of this document deals with representing scripts
+in a way that is repl-compatible.
+
 
 The semantics of scripts are going to be designed to
 such that the requirements of a modern repl map in an obvious way to
@@ -6,52 +19,74 @@ salsa's incremental computation.
 
 Basic repl requirements:
 
-- line-orientation
+- line/statement-orientation
+- ability to interpret standalone expressions
 - incremental compilation
 - incremental execution
 
-I think the way to do this is to make
-every statement submitted a unit of parsing and typechecking,
-keep them all in either a linked list or vec,
+For our purposes I don't think there's any technical reason
+why we need to limit input to single statements, so our underlying
+script input will be:
+
+- The package world - normal modules
+- A growable list of _script units_ wich are either:
+  - A _script fragment_, one or more statements,
+    `let`, `fun` declarations, etc.
+  - A single bare expression
+
+These units typechecked and interpreted in sequence
+form a dynamic repl session. The script interpreter when run in
+non-interactive mode can accept this same mixture of interleaved
+script fragments and expressions, though in practice they will
+usually recieve exactly one script fragment.
+
+They must be retained and re-typechecked together because
+our linear type system will move and invalidate old slots etc,
+so previously defined variables will be invalidated etc.
+Retypechecking will be cheap with memoization.
+
+We will make every script unit submitted a unit of parsing and typechecking,
+keep them all in either a vec,
 salsa will make sure the previous computations are memoized and fresh.
 The repl history is fully reactive, its compilation
-and execution re-calculated (but memoized) every step.
+re-calculated (but memoized) every step.
+Intent is that execution will be memoized too for rewinding;
+this is relatively straightforword for pure functions (datafun `fun`s),
+requires virtualized I/O for non-pure functions (datalove `proc`s).
 
-For datafun's pure type system this should be straightforward.
-Full datalove is not pure and will introduce compliations to solve later.
+Script units that fail typecheck or that have been rewound,
+will be maintained within the repl, but removed from the salsa input;
+this way they can be replayed later if needed. The interpreter
+doesn't need to worry about them though.
 
-Probably we should even hold onto failed typechecks
-and just not include them in subsequent calculations,
-so we can still roll back to those steps.
-Also we're going to want to hold onto commands that are not code,
-but that switch on and off modes, etc.
-We're going to be replaying history, everything must be deterministic.
+For the purposes of this document,
+we are only considering datalit/datafun types,
+all of which can be cloned.
+We'll redesign for non-clonable types later.
+
+
 
 
 ## Accepting repl input
 
+This is just background about repl interaction with script.
+
 The repl frontend doesn't understand datalove.
-It just reads lines and sends them to the engine.
-The engine runs the statement parser
-and if it has a complete statement looks at it:
+It just reads script units and sends them to the repl engine,
+which wraps the compiler and interpreter.
+The repl engine runs the script parser,
+and if it parses:
 
-if it is not a `fun` statement,
-tells the caller to submit it for evalution,
-else keep reading lines.
+- if only whitespace tokens, no-op; UI input field reset
+- if no statements parsed (only comments etc), error
 
-if it is a fun statement,
-and we were already parsing a fun statement,
-error.
+If the input didn't parse:
 
-if it is a fun statement and we were not already parsing
-a fun statement,
-push it to the function statement stack
-and report to the user to keep parsing lines
-because we are now in a fun statement.
+- it tokenizes the input and looks at the first non-whitespace/comment token
+- if it _is not_ a statement keyword the input is an expression
+- if it _is_ a statement keyword, report the parse error
 
-ifc it is a `end fun` statement, and we're parsing a fun
-then we have a full script unit, tell the user to submit the whole thing,
-else error.
+
 
 
 ## Compilation
@@ -59,21 +94,37 @@ else error.
 The script input to salsa consists of something like:
 
 ```
+#[salsa::input]
 struct Script {
     units: Vec<ScriptUnit>,  
 }
 
-struct ScriptUnit {
-    statements: Vec<InternedText>,
+#[salsa::input]
+enum ScriptUnit {
+    ScriptFragment(ScriptFragment),
+    ScriptExpression(ScriptExpression),
+}
+
+#[salsa::input]
+struct ScriptFragment {
+    statements: InternedText,
+}
+
+#[salsa::input]
+struct ScriptExpression {
+    statements: InternedText,
 }
 ```
 
-Not sure what else yet.
 
-For parsing, all script units are independent.
-For resolution and type checking we start with two types of statements: fun and let.
 
-Their treatment is not the sam.
+## Script processing
+
+
+NB: BELOW THIS IS OLD IDEAS
+
+---
+
 
 
 ### Name resolution - resolve function statements
