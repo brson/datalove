@@ -1,0 +1,20 @@
+[
+    ScriptAnalysis(
+        type: "Script",
+        ast: Script(
+            statements: [
+                StmtParseError(
+                    kind: "ParseError",
+                    message: "unterminated function body",
+                ),
+            ],
+        ),
+        typecheck: TypecheckResult(
+            status: "Error",
+            errors: [
+                "InvalidExpression(\"Parse error\")",
+            ],
+        ),
+        output: "",
+    ),
+]

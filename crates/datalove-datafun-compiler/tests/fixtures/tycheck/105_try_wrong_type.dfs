@@ -1,4 +1,4 @@
 fun try_non_option(val: u32): ?u32
   let result = val?
   ret result
-end
+end fun

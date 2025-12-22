@@ -2,4 +2,4 @@
 fun use_try_result(val: !u32): !u32
   let unwrapped: u32 = val!
   ret 42
-end
+end fun

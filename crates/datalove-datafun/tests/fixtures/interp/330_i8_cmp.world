@@ -4,7 +4,7 @@ script
 
 // Test i8 comparison operators.
 fun test_lt(a: i8, b: i8): bool
-    ret a < b
+    ret a .< b
 end fun
 
 fun test_eq(a: i8, b: i8): bool

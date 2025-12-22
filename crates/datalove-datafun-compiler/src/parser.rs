@@ -270,11 +270,13 @@ impl<'db> Parser<'db> {
 
         // Parse body until we hit "end fun"
         let mut body = vec![];
+        let mut found_end_fun = false;
         while let Some((_, line)) = remaining_lines.peek() {
             if line.len() >= 2 {
                 if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
                     if let (Some("end"), Some("fun")) = (t1.word_str(self.db), t2.word_str(self.db)) {
                         remaining_lines.next(); // consume "end fun" line
+                        found_end_fun = true;
                         break;
                     }
                 }
@@ -286,6 +288,17 @@ impl<'db> Parser<'db> {
                 let stmt = self.parse_statement(line, remaining_lines);
                 body.push(stmt);
             }
+        }
+
+        if !found_end_fun {
+            let text = self.source_text();
+            return self.emit_stmt_error(
+                text,
+                0..0,
+                "unterminated function body",
+                "P010",
+                "expected 'end fun' before end of input"
+            );
         }
 
         ast::Statement::Fun(ast::StmtFun::new(

@@ -32,20 +32,155 @@
                         StmtRet(
                             kind: "Ret",
                             value: Some(ExprFun(
-                                expr: ExprFunKind(
-                                    kind: "Name",
-                                    name: "a",
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: Lt,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "b",
+                                        ),
+                                    ),
                                 ),
                             )),
                         ),
                     ],
+                ),
+                StmtFun(
+                    kind: "Fun",
+                    name: "test_eq",
+                    params: [
+                        FunParam(
+                            name: "a",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: I8,
+                            ),
+                        ),
+                        FunParam(
+                            name: "b",
+                            mode: In,
+                            type_hint: TypeHintAndHeap(
+                                heap: Omitted,
+                                type_hint: I8,
+                            ),
+                        ),
+                    ],
+                    return_type: Some(TypeHintAndHeap(
+                        heap: Omitted,
+                        type_hint: Bool,
+                    )),
+                    body: [
+                        StmtRet(
+                            kind: "Ret",
+                            value: Some(ExprFun(
+                                expr: ExprBinOp(
+                                    kind: "BinOp",
+                                    op: Eq,
+                                    lhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "a",
+                                        ),
+                                    ),
+                                    rhs: ExprFun(
+                                        expr: ExprFunKind(
+                                            kind: "Name",
+                                            name: "b",
+                                        ),
+                                    ),
+                                ),
+                            )),
+                        ),
+                    ],
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "lt_result",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "test_lt",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected identifier \'5_i8\'",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected identifier \'10_i8\'",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "eq_result",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprFunctionCall(
+                            kind: "FunctionCall",
+                            name: "test_eq",
+                            args: [
+                                ExprFun(
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected identifier \'5_i8\'",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunParseError(
+                                        kind: "ParseError",
+                                        message: "unexpected identifier \'5_i8\'",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                StmtLet(
+                    kind: "Let",
+                    name: "output",
+                    type_hint: None,
+                    value: ExprFun(
+                        expr: ExprTuple(
+                            kind: "Tuple",
+                            elements: [
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "lt_result",
+                                    ),
+                                ),
+                                ExprFun(
+                                    expr: ExprFunKind(
+                                        kind: "Name",
+                                        name: "eq_result",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
                 ),
             ],
         ),
         typecheck: TypecheckResult(
             status: "Error",
             errors: [
-                "TypecheckErrors([TypeMismatch { expected: \"bool\", actual: \"i8\" }])",
+                "TypecheckErrors([CannotSynthesize, CannotSynthesize, UnresolvedName(\"lt_result\")])",
             ],
         ),
         output: "",
