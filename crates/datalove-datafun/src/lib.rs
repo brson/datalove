@@ -22,3 +22,4 @@ pub use datalove_datafun_pkg::{
 pub mod import_demands;
 pub mod package_resolve;
 pub mod worldfile_analysis;
+pub mod worldfile_analysis_modules;

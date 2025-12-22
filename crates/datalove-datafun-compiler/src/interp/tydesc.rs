@@ -5,7 +5,7 @@
 use super::InterpContext;
 
 /// Convert a type hint to a tydesc.
-pub(super) fn type_hint_to_tydesc<'db>(
+pub fn type_hint_to_tydesc<'db>(
     ctx: &mut InterpContext<'db>,
     type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,
 ) -> *const datalove_rt::rtdt::TyDesc {

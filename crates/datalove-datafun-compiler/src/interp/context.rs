@@ -182,6 +182,16 @@ impl<'db> InterpContext<'db> {
         self.module_functions_graph.populate_script_imports_for_graph(self.db, script, graph);
     }
 
+    /// Get the runtime handle.
+    pub fn runtime_handle(&self) -> datalove_rt::c::LocalRtHandle {
+        self.runtime.handle()
+    }
+
+    /// Get the module function graph.
+    pub fn module_function_graph(&self) -> &ModuleFunctionTableGraph<'db> {
+        &self.module_functions_graph
+    }
+
     /// Pretty-print a value using this context's runtime and tydesc_table.
     pub fn pretty_print_value(&mut self, value: &Value) -> Result<String, InterpError> {
         use datalove_rt as rt;

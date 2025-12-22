@@ -33,3 +33,8 @@ harness = false
 name = "interp_tests"
 path = "tests/interp_tests.rs"
 harness = false
+
+[[test]]
+name = "interp_modules_tests"
+path = "tests/interp_modules_tests.rs"
+harness = false

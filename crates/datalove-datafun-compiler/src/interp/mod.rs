@@ -93,7 +93,7 @@ mod coerce;
 mod literals;
 mod context;
 mod control;
-mod tydesc;
+pub mod tydesc;
 mod script;
 
 pub use value::{Value, Destination, ValueOwnership, EvalContext};
@@ -107,6 +107,7 @@ pub use context::{
 pub use script::{execute_script_with_module_graph, execute_script_unit, pretty_print_value};
 use control::{find_slot_by_name, evaluate_branch_condition, eval_try_option, eval_try_result};
 use tydesc::type_hint_to_tydesc;
+
 use frame::CfgControl;
 use memory::{clone_value_to_dest, move_value_to_dest};
 use types::is_copy_type;
@@ -392,7 +393,7 @@ fn eval_function_call_frame<'db>(
 /// This uses frame-based execution with analysis-driven slot allocation.
 /// If `return_dest` is provided, return expressions write directly to caller's memory.
 /// Returns `None` for void functions.
-pub(super) fn execute_function_body<'db>(
+pub fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
     func_module: Option<ModuleId>,
