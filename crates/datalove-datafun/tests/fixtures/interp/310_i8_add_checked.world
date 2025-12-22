@@ -4,7 +4,7 @@ script
 
 // Test i8 checked addition (+!) with successful result.
 fun test_add_checked(a: i8, b: i8): !i8
-    ret a +! b
+    ret ok (a +! b)
 end fun
 
-let output = test_add_checked(@10_i8, @20_i8)
+let output = test_add_checked(@10, @20)

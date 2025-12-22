@@ -4,7 +4,7 @@ script
 
 // Test i64 optional negation (-?).
 fun test_neg_optional(a: i64): ?i64
-    ret -?a
+    ret some (-?a)
 end fun
 
-let output = test_neg_optional(@42_i64)
+let output = test_neg_optional(@42)

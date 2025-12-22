@@ -37,19 +37,26 @@
                         StmtRet(
                             kind: "Ret",
                             value: Some(ExprFun(
-                                expr: ExprBinOp(
-                                    kind: "BinOp",
-                                    op: AddChecked,
-                                    lhs: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Name",
-                                            name: "a",
-                                        ),
-                                    ),
-                                    rhs: ExprFun(
-                                        expr: ExprFunKind(
-                                            kind: "Name",
-                                            name: "b",
+                                expr: ExprOk(
+                                    kind: "Ok",
+                                    heap: Omitted,
+                                    type_hint: None,
+                                    payload: ExprFun(
+                                        expr: ExprBinOp(
+                                            kind: "BinOp",
+                                            op: AddChecked,
+                                            lhs: ExprFun(
+                                                expr: ExprFunKind(
+                                                    kind: "Name",
+                                                    name: "a",
+                                                ),
+                                            ),
+                                            rhs: ExprFun(
+                                                expr: ExprFunKind(
+                                                    kind: "Name",
+                                                    name: "b",
+                                                ),
+                                            ),
                                         ),
                                     ),
                                 ),
@@ -67,15 +74,19 @@
                             name: "test_add_checked",
                             args: [
                                 ExprFun(
-                                    expr: ExprFunParseError(
-                                        kind: "ParseError",
-                                        message: "unexpected identifier \'10_i8\'",
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "10",
                                     ),
                                 ),
                                 ExprFun(
-                                    expr: ExprFunParseError(
-                                        kind: "ParseError",
-                                        message: "unexpected identifier \'20_i8\'",
+                                    expr: ExprInt(
+                                        kind: "Int",
+                                        heap: Local,
+                                        type_hint: None,
+                                        value: "20",
                                     ),
                                 ),
                             ],
@@ -85,11 +96,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "TypecheckErrors([TypeMismatch { expected: \"@!i8\", actual: \"i8\" }, CannotSynthesize])",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "ok @30",
     ),
 ]

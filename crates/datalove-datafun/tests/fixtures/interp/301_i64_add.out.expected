@@ -7,13 +7,15 @@
                     kind: "Let",
                     name: "a",
                     type_hint: Some(TypeHintAndHeap(
-                        heap: Omitted,
+                        heap: Local,
                         type_hint: I64,
                     )),
                     value: ExprFun(
-                        expr: ExprFunParseError(
-                            kind: "ParseError",
-                            message: "unexpected identifier \'1000000000000_i64\'",
+                        expr: ExprInt(
+                            kind: "Int",
+                            heap: Local,
+                            type_hint: None,
+                            value: "100",
                         ),
                     ),
                 ),
@@ -21,13 +23,15 @@
                     kind: "Let",
                     name: "b",
                     type_hint: Some(TypeHintAndHeap(
-                        heap: Omitted,
+                        heap: Local,
                         type_hint: I64,
                     )),
                     value: ExprFun(
-                        expr: ExprFunParseError(
-                            kind: "ParseError",
-                            message: "unexpected identifier \'2000000000000_i64\'",
+                        expr: ExprInt(
+                            kind: "Int",
+                            heap: Local,
+                            type_hint: None,
+                            value: "200",
                         ),
                     ),
                 ),
@@ -57,11 +61,8 @@
             ],
         ),
         typecheck: TypecheckResult(
-            status: "Error",
-            errors: [
-                "TypecheckErrors([CannotSynthesize, CannotSynthesize, UnresolvedName(\"a\")])",
-            ],
+            status: "Success",
         ),
-        output: "",
+        output: "@300",
     ),
 ]

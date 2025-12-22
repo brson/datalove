@@ -4,7 +4,7 @@ script
 
 // Test i64 optional subtraction (-?) with successful result.
 fun test_sub_optional(a: i64, b: i64): ?i64
-    ret a -? b
+    ret some (a -? b)
 end fun
 
-let output = test_sub_optional(@100_i64, @30_i64)
+let output = test_sub_optional(@100, @30)

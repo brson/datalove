@@ -3,6 +3,6 @@ script
 ----------
 
 // Test i64 bare addition (widens to int).
-let a: i64 = @1000000000000_i64
-let b: i64 = @2000000000000_i64
+let a: @i64 = @100
+let b: @i64 = @200
 let output = a + b
