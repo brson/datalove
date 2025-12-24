@@ -28,6 +28,8 @@ let foo = {
 }
 ```
 
+Heap types: `@` and `#`.
+
 - brace-tree and newline-sensitivity
 - reactive repl
 - linear types with explicit destructors
