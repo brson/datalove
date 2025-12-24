@@ -7,8 +7,10 @@
     `?` / `!`, aspects of anonymous structs.
 - Mercury.
   Argument modes and logic applications.
-- Pascal.
+- Visual Basic / Pascal, etc / Ada.
     Line-oriented syntax tendencies.
+- Visual Basic.
+  Argument modes.
 - JSON5.
   Baseline markup language requirements.
 - Julia.
