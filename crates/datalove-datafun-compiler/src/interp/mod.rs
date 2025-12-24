@@ -110,8 +110,8 @@ use alloc::{
     allocate_result_ok_from_value, write_result_err_to_dest,
 };
 use collections::{
-    allocate_tuple_from_values, allocate_struct_from_values,
-    allocate_map_from_values, allocate_set_from_values,
+    write_tuple_from_values_to_dest, write_struct_from_values_to_dest,
+    write_map_from_values_to_dest, write_set_from_values_to_dest,
 };
 use literals::{
     write_inline_int_to_dest, write_option_none_to_dest,
@@ -1801,13 +1801,7 @@ fn eval_inline_set<'db>(
         }
     }
 
-    let set_value = allocate_set_from_values(ctx, values)?;
-
-    // Copy result to dest.
-    let size = unsafe { (*set_value.tydesc).size as usize };
-    unsafe { std::ptr::copy_nonoverlapping(set_value.ptr, dest.ptr, size); }
-    free_value_structure(ctx, set_value);
-    Ok(())
+    write_set_from_values_to_dest(ctx, values, dest)
 }
 
 /// Evaluate inline map expression with DPS.
@@ -1850,13 +1844,7 @@ fn eval_inline_map<'db>(
         kv_pairs.push((key, value));
     }
 
-    let map_value = allocate_map_from_values(ctx, kv_pairs)?;
-
-    // Copy result to dest.
-    let size = unsafe { (*map_value.tydesc).size as usize };
-    unsafe { std::ptr::copy_nonoverlapping(map_value.ptr, dest.ptr, size); }
-    free_value_structure(ctx, map_value);
-    Ok(())
+    write_map_from_values_to_dest(ctx, kv_pairs, dest)
 }
 
 /// Evaluate inline anonymous tuple expression with DPS.
@@ -1933,11 +1921,7 @@ fn eval_inline_anon_tuple<'db>(
         }
     }
 
-    let tuple_value = allocate_tuple_from_values(ctx, values)?;
-    let size = unsafe { (*tuple_value.tydesc).size as usize };
-    unsafe { std::ptr::copy_nonoverlapping(tuple_value.ptr, dest.ptr, size); }
-    free_value_structure(ctx, tuple_value);
-    Ok(())
+    write_tuple_from_values_to_dest(ctx, values, dest)
 }
 
 /// Evaluate inline anonymous struct expression with DPS.
@@ -2019,10 +2003,6 @@ fn eval_inline_anon_struct<'db>(
         }
     }
 
-    let struct_value = allocate_struct_from_values(ctx, field_values)?;
-    let size = unsafe { (*struct_value.tydesc).size as usize };
-    unsafe { std::ptr::copy_nonoverlapping(struct_value.ptr, dest.ptr, size); }
-    free_value_structure(ctx, struct_value);
-    Ok(())
+    write_struct_from_values_to_dest(ctx, field_values, dest)
 }
 

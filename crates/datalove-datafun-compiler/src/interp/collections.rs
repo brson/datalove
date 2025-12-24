@@ -9,53 +9,33 @@ use bct::text::InternedText;
 use super::{InterpContext, InterpError, Value, ValueOwnership};
 use super::memory::{destroy_value, free_value_structure};
 
-/// Allocate a tuple from a vector of evaluated values.
+/// Write a tuple from a vector of evaluated values to a destination.
 ///
 /// Takes ownership of all element values, copying their data into the tuple
-/// and freeing their original containers.
-pub(super) fn allocate_tuple_from_values<'db>(
+/// at dest and freeing their original containers.
+pub(super) fn write_tuple_from_values_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     values: Vec<Value>,
-) -> Result<Value, InterpError> {
+    dest: super::Destination,
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt;
 
     if values.is_empty() {
         return Err(InterpError::RuntimeError("Cannot create empty tuple".to_string()));
     }
 
-    // Collect element tydescs from the values.
-    let element_tydescs: Vec<*const rtdt::TyDesc> = values.iter()
-        .map(|v| v.tydesc)
-        .collect();
-
-    // Create tuple tydesc.
-    let tuple_tydesc = ctx.tydesc_table.get_or_create_tuple(&element_tydescs);
-    let tuple_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(tuple_tydesc) };
+    let tuple_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(dest.tydesc) };
 
     // Compute layout to get field offsets.
     let layout = rtdt::layout::compute_tuple_layout(tuple_tydesc_ref);
 
-    // Allocate memory for tuple.
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tuple_tydesc, 1)
-    };
-
-    if ptr.is_null() {
-        // Clean up all values on allocation failure.
-        for value in values {
-            destroy_value(ctx, value);
-        }
-        return Err(InterpError::RuntimeError("Failed to allocate tuple".to_string()));
-    }
-
-    // Copy each element to its field offset in the tuple.
+    // Copy each element to its field offset in the tuple at dest.
     for (i, value) in values.into_iter().enumerate() {
         let field_offset = layout.field_offsets[i] as usize;
         let element_size = unsafe { (*value.tydesc).size as usize };
 
         unsafe {
-            let field_ptr = ptr.add(field_offset);
+            let field_ptr = dest.ptr.add(field_offset);
             std::ptr::copy_nonoverlapping(value.ptr, field_ptr, element_size);
         }
 
@@ -72,61 +52,37 @@ pub(super) fn allocate_tuple_from_values<'db>(
         }
     }
 
-    Ok(Value {
-        ptr,
-        tydesc: tuple_tydesc,
-        ownership: ValueOwnership::TempOwned,
-    })
+    Ok(())
 }
 
-/// Allocate a struct from field names and evaluated values.
+/// Write a struct from field names and evaluated values to a destination.
 ///
 /// Takes ownership of all field values, copying their data into the struct
-/// and freeing their original containers. Fields must be provided in sorted
+/// at dest and freeing their original containers. Fields must be provided in sorted
 /// order by name for canonical representation.
-pub(super) fn allocate_struct_from_values<'db>(
+pub(super) fn write_struct_from_values_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     fields: Vec<(InternedText<'db>, Value)>,
-) -> Result<Value, InterpError> {
+    dest: super::Destination,
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt;
 
     if fields.is_empty() {
         return Err(InterpError::RuntimeError("Cannot create empty struct".to_string()));
     }
 
-    // Collect field names and tydescs from the values.
-    let field_names_and_tydescs: Vec<(InternedText<'db>, *const rtdt::TyDesc)> = fields.iter()
-        .map(|(name, value)| (*name, value.tydesc))
-        .collect();
-
-    // Create struct tydesc.
-    let struct_tydesc = ctx.tydesc_table.get_or_create_struct(&field_names_and_tydescs);
-    let struct_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(struct_tydesc) };
+    let struct_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(dest.tydesc) };
 
     // Compute layout to get field offsets.
     let layout = rtdt::layout::compute_struct_layout(struct_tydesc_ref);
 
-    // Allocate memory for struct.
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, struct_tydesc, 1)
-    };
-
-    if ptr.is_null() {
-        // Clean up all values on allocation failure.
-        for (_, value) in fields {
-            destroy_value(ctx, value);
-        }
-        return Err(InterpError::RuntimeError("Failed to allocate struct".to_string()));
-    }
-
-    // Copy each field value to its offset in the struct.
+    // Copy each field value to its offset in the struct at dest.
     for (i, (_, value)) in fields.into_iter().enumerate() {
         let field_offset = layout.field_offsets[i] as usize;
         let field_size = unsafe { (*value.tydesc).size as usize };
 
         unsafe {
-            let field_ptr = ptr.add(field_offset);
+            let field_ptr = dest.ptr.add(field_offset);
             std::ptr::copy_nonoverlapping(value.ptr, field_ptr, field_size);
         }
 
@@ -143,54 +99,37 @@ pub(super) fn allocate_struct_from_values<'db>(
         }
     }
 
-    Ok(Value {
-        ptr,
-        tydesc: struct_tydesc,
-        ownership: ValueOwnership::TempOwned,
-    })
+    Ok(())
 }
 
-/// Allocate a map from a vector of key-value pairs.
+/// Write a map from a vector of key-value pairs to a destination.
 ///
 /// Takes ownership of all key and value values. Keys and values are moved into the
-/// map's B-tree structure. All keys must have the same type and all values must have
-/// the same type.
-pub(super) fn allocate_map_from_values<'db>(
+/// map's B-tree structure at dest. All keys must have the same type and all values
+/// must have the same type.
+pub(super) fn write_map_from_values_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     entries: Vec<(Value, Value)>,
-) -> Result<Value, InterpError> {
+    dest: super::Destination,
+) -> Result<(), InterpError> {
+    use datalove_rt::rtdt::TyDescRef;
 
     if entries.is_empty() {
         return Err(InterpError::RuntimeError("Cannot create empty map".to_string()));
     }
 
-    // All keys must have same type, all values must have same type.
-    let key_tydesc = entries[0].0.tydesc;
-    let value_tydesc = entries[0].1.tydesc;
+    // Get key and value tydescs from the map destination type.
+    let map_tydesc_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+    let key_tydesc = map_tydesc_ref.map_key_ty().as_ptr();
+    let value_tydesc = map_tydesc_ref.map_value_ty().as_ptr();
     let key_size = unsafe { (*key_tydesc).size as usize };
     let value_size = unsafe { (*value_tydesc).size as usize };
     let key_align = unsafe { (*key_tydesc).align };
     let value_align = unsafe { (*value_tydesc).align };
 
-    // Create map tydesc.
-    let map_tydesc = ctx.tydesc_table.create_map_from_key_value_tydescs(key_tydesc, value_tydesc);
-
-    // Allocate map structure.
     let rt_handle = ctx.runtime.handle();
-    let map_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, map_tydesc, 1)
-    };
-
-    if map_ptr.is_null() {
-        for (k, v) in entries {
-            destroy_value(ctx, k);
-            destroy_value(ctx, v);
-        }
-        return Err(InterpError::RuntimeError("Failed to allocate map".to_string()));
-    }
 
     // Sort entries by key for B-tree construction.
-    // For now, use simple comparison based on raw bytes (works for simple numeric types).
     let mut sorted_entries = entries;
     sorted_entries.sort_by(|a, b| {
         unsafe {
@@ -212,7 +151,6 @@ pub(super) fn allocate_map_from_values<'db>(
             destroy_value(ctx, k);
             destroy_value(ctx, v);
         }
-        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr); }
         return Err(InterpError::RuntimeError("Failed to allocate keys buffer".to_string()));
     }
 
@@ -226,7 +164,6 @@ pub(super) fn allocate_map_from_values<'db>(
         }
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_raw_local(rt_handle, keys_buffer_size, key_align, 1, keys_buffer);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr);
         }
         return Err(InterpError::RuntimeError("Failed to allocate values buffer".to_string()));
     }
@@ -241,11 +178,11 @@ pub(super) fn allocate_map_from_values<'db>(
         }
     }
 
-    // Build B-tree from sorted slices.
+    // Build B-tree from sorted slices at dest.
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
             rt_handle,
-            map_ptr,
+            dest.ptr,
             key_tydesc,
             value_tydesc,
             keys_buffer,
@@ -265,7 +202,6 @@ pub(super) fn allocate_map_from_values<'db>(
             destroy_value(ctx, k);
             destroy_value(ctx, v);
         }
-        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, map_tydesc, 1, map_ptr); }
         return Err(InterpError::RuntimeError("Failed to build map B-tree".to_string()));
     }
 
@@ -275,46 +211,31 @@ pub(super) fn allocate_map_from_values<'db>(
         free_value_structure(ctx, v);
     }
 
-    Ok(Value {
-        ptr: map_ptr,
-        tydesc: map_tydesc,
-        ownership: ValueOwnership::TempOwned,
-    })
+    Ok(())
 }
 
-/// Allocate a set from a vector of evaluated values.
+/// Write a set from a vector of evaluated values to a destination.
 ///
 /// Takes ownership of all element values. Elements are moved into the
-/// set's B-tree structure. All elements must have the same type.
-pub(super) fn allocate_set_from_values<'db>(
+/// set's B-tree structure at dest. All elements must have the same type.
+pub(super) fn write_set_from_values_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     values: Vec<Value>,
-) -> Result<Value, InterpError> {
+    dest: super::Destination,
+) -> Result<(), InterpError> {
+    use datalove_rt::rtdt::TyDescRef;
 
     if values.is_empty() {
         return Err(InterpError::RuntimeError("Cannot create empty set".to_string()));
     }
 
-    // All elements must have same type.
-    let element_tydesc = values[0].tydesc;
+    // Get element tydesc from the set destination type.
+    let set_tydesc_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+    let element_tydesc = set_tydesc_ref.set_element_ty().as_ptr();
     let element_size = unsafe { (*element_tydesc).size as usize };
     let element_align = unsafe { (*element_tydesc).align };
 
-    // Create set tydesc.
-    let set_tydesc = ctx.tydesc_table.create_set_from_element_tydesc(element_tydesc);
-
-    // Allocate set structure.
     let rt_handle = ctx.runtime.handle();
-    let set_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, set_tydesc, 1)
-    };
-
-    if set_ptr.is_null() {
-        for v in values {
-            destroy_value(ctx, v);
-        }
-        return Err(InterpError::RuntimeError("Failed to allocate set".to_string()));
-    }
 
     // Sort elements for B-tree construction.
     let mut sorted_values = values;
@@ -335,7 +256,6 @@ pub(super) fn allocate_set_from_values<'db>(
         for v in sorted_values {
             destroy_value(ctx, v);
         }
-        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, set_tydesc, 1, set_ptr); }
         return Err(InterpError::RuntimeError("Failed to allocate set buffer".to_string()));
     }
 
@@ -347,11 +267,11 @@ pub(super) fn allocate_set_from_values<'db>(
         }
     }
 
-    // Build B-tree from sorted slice.
+    // Build B-tree from sorted slice at dest.
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
             rt_handle,
-            set_ptr,
+            dest.ptr,
             element_tydesc,
             buffer,
             sorted_values.len() as u32,
@@ -367,7 +287,6 @@ pub(super) fn allocate_set_from_values<'db>(
         for v in sorted_values {
             destroy_value(ctx, v);
         }
-        unsafe { datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, set_tydesc, 1, set_ptr); }
         return Err(InterpError::RuntimeError("Failed to build set B-tree".to_string()));
     }
 
@@ -376,9 +295,5 @@ pub(super) fn allocate_set_from_values<'db>(
         free_value_structure(ctx, v);
     }
 
-    Ok(Value {
-        ptr: set_ptr,
-        tydesc: set_tydesc,
-        ownership: ValueOwnership::TempOwned,
-    })
+    Ok(())
 }
