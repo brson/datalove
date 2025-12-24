@@ -94,17 +94,12 @@ mod literals;
 mod context;
 mod control;
 pub mod tydesc;
-mod script;
 
-pub use value::{Value, Destination, ValueOwnership, EvalContext};
+pub use value::{Value, Destination, ValueOwnership};
 pub use error::InterpError;
 pub use frame::{SlotState, StackFrame};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
-pub use context::{
-    InterpContext, ScriptScope, ModuleFunctionTableGraph,
-    ScriptVariable, ScriptVarState, ScriptResult,
-};
-pub use script::{execute_script_with_module_graph, execute_script_unit, pretty_print_value};
+pub use context::{InterpContext, ModuleFunctionTableGraph};
 use control::{find_slot_by_name, evaluate_branch_condition, eval_try_option, eval_try_result};
 use tydesc::type_hint_to_tydesc;
 
@@ -131,8 +126,6 @@ use bct::text::InternedText;
 use crate::module_graph::ModuleId;
 use crate::ast;
 use crate::function_analysis::{Terminator, BlockId};
-
-use script::eval_expression_in_script_scope;
 
 // ============================================================================
 // DPS Helpers for Wrapper Payloads and Compound Types
@@ -205,25 +198,13 @@ pub(crate) enum WrapperKind {
 /// Evaluate a Some or Ok expression with DPS.
 ///
 /// Common logic for evaluating wrapper payloads directly into destination memory.
-/// Used by both frame and script scope evaluation.
-pub(crate) fn eval_wrapper_payload_dps<'db>(
+fn eval_wrapper_payload_dps<'db>(
     ctx: &mut InterpContext<'db>,
-    eval_ctx: EvalContext,
     kind: WrapperKind,
-    dest: Option<Destination>,
+    dest: Destination,
     payload_expr: ast::ExprFun<'db>,
 ) -> Result<Value, InterpError> {
     use datalove_rt::rtdt::{TyTag, OptionTag, ResultTag};
-
-    let Some(dest) = dest else {
-        let name = match kind {
-            WrapperKind::Some => "some",
-            WrapperKind::Ok => "ok",
-        };
-        return Err(InterpError::RuntimeError(
-            format!("{} expression requires type context (use type hint)", name)
-        ));
-    };
 
     // Verify destination type and get payload setup.
     let dest_tag = unsafe { (*dest.tydesc).type_tag };
@@ -250,13 +231,8 @@ pub(crate) fn eval_wrapper_payload_dps<'db>(
     // Write variant tag.
     unsafe { *(dest.ptr as *mut u8) = tag_value; }
 
-    // Evaluate payload with DPS based on context.
-    let payload_value = match eval_ctx {
-        EvalContext::Frame => eval_expression_frame(ctx, payload_expr, payload_dest)?,
-        EvalContext::ScriptScope => {
-            script::eval_expression_in_script_scope(ctx, payload_expr, Some(payload_dest))?
-        }
-    };
+    // Evaluate payload with DPS.
+    let payload_value = eval_expression_frame(ctx, payload_expr, payload_dest)?;
 
     // Handle case where operation didn't use dest (e.g., bigint ops).
     if payload_value.ownership == ValueOwnership::TempOwned {
@@ -274,23 +250,17 @@ pub(crate) fn eval_wrapper_payload_dps<'db>(
 // Function Calls and Execution
 // ============================================================================
 
-/// Look up a function by name in script scope or imported modules.
+/// Look up a function by name in the module graph.
 ///
-/// Returns the function definition and its source module (if from a module).
+/// Returns the function definition and its source module.
 /// Looks in this order:
-/// 1. Script-level functions
-/// 2. Current module functions (if executing inside a module)
-/// 3. Imported module functions (from current module's imports)
-/// 4. Script-level imported functions
+/// 1. Current module functions (if executing inside a module)
+/// 2. Imported module functions (from current module's imports)
+/// 3. Globally imported functions
 pub(super) fn lookup_function<'db>(
     ctx: &InterpContext<'db>,
     name: InternedText<'db>,
 ) -> Result<(ast::StmtFun<'db>, Option<ModuleId>), InterpError> {
-    // First check script scope.
-    if let Some(&func) = ctx.script_scope.functions.get(&name) {
-        return Ok((func, None));
-    }
-
     // Check module-based lookup (when executing inside a module).
     if let Some(current_module_id) = ctx.current_module_id {
         if let Some(module_funcs) = ctx.module_functions_graph.get_module_functions(current_module_id) {
@@ -319,7 +289,7 @@ pub(super) fn lookup_function<'db>(
         }
     }
 
-    // Check script-level imported functions.
+    // Check globally imported functions.
     if let Some((func, module_id)) = ctx.module_functions_graph.get(name) {
         return Ok((func, Some(module_id)));
     }
@@ -455,28 +425,25 @@ pub fn execute_function_body<'db>(
         ctx.current_module_id = Some(module_id);
     }
 
-    // Get function analysis.
-    // First check script-level function analyses, then ModuleGraph-based.
-    let analysis = if let Some(analysis) = ctx.script_function_analyses.get(&func) {
-        *analysis
-    } else if let Some(typecheck_result) = &ctx.module_graph_typecheck {
-        let analyses = typecheck_result.function_analyses(ctx.db);
-        match analyses.iter().find(|(f, _)| *f == func).map(|(_, a)| *a) {
-            Some(a) => a,
-            None => {
-                restore_module_context(ctx, prev_module);
-                cleanup_args_on_error(ctx, arg_values);
-                return Err(InterpError::RuntimeError(
-                    format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
-                ));
-            }
-        }
-    } else {
+    // Get function analysis from module graph typecheck result.
+    let Some(typecheck_result) = &ctx.module_graph_typecheck else {
         restore_module_context(ctx, prev_module);
         cleanup_args_on_error(ctx, arg_values);
         return Err(InterpError::RuntimeError(
             "No typecheck result available - cannot execute function".to_string()
         ));
+    };
+
+    let analyses = typecheck_result.function_analyses(ctx.db);
+    let analysis = match analyses.iter().find(|(f, _)| *f == func).map(|(_, a)| *a) {
+        Some(a) => a,
+        None => {
+            restore_module_context(ctx, prev_module);
+            cleanup_args_on_error(ctx, arg_values);
+            return Err(InterpError::RuntimeError(
+                format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
+            ));
+        }
     };
 
     // Check for critical analysis errors (ignore warnings like ValueNotUsed).
@@ -1362,31 +1329,31 @@ fn eval_expression_frame<'db>(
         }
         ast::ExprFunKind::String(string_expr) => write_string_to_dest(ctx, &string_expr, dest),
         ast::ExprFunKind::List(list_expr) => {
-            eval_inline_list(ctx, EvalContext::Frame, expr, &list_expr, Some(dest))
+            eval_inline_list(ctx, expr, &list_expr)
         }
         ast::ExprFunKind::Set(set_expr) => {
-            eval_inline_set(ctx, EvalContext::Frame, &set_expr, Some(dest))
+            eval_inline_set(ctx, &set_expr, dest)
         }
         ast::ExprFunKind::Map(map_expr) => {
-            eval_inline_map(ctx, EvalContext::Frame, &map_expr, Some(dest))
+            eval_inline_map(ctx, &map_expr, dest)
         }
         ast::ExprFunKind::Tensor(_) => {
             Err(InterpError::InvalidExpression("Tensor not yet implemented".to_string()))
         }
         ast::ExprFunKind::AnonTuple(tuple_expr) => {
-            eval_inline_anon_tuple(ctx, EvalContext::Frame, &tuple_expr, Some(dest))
+            eval_inline_anon_tuple(ctx, &tuple_expr, dest)
         }
         ast::ExprFunKind::AnonStruct(struct_expr) => {
-            eval_inline_anon_struct(ctx, EvalContext::Frame, &struct_expr, Some(dest))
+            eval_inline_anon_struct(ctx, &struct_expr, dest)
         }
         ast::ExprFunKind::AnonEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
         ast::ExprFunKind::Some(some_expr) => {
-            eval_wrapper_payload_dps(ctx, EvalContext::Frame, WrapperKind::Some, Some(dest), some_expr.payload(ctx.db))
+            eval_wrapper_payload_dps(ctx, WrapperKind::Some, dest, some_expr.payload(ctx.db))
         }
         ast::ExprFunKind::Ok(ok_expr) => {
-            eval_wrapper_payload_dps(ctx, EvalContext::Frame, WrapperKind::Ok, Some(dest), ok_expr.payload(ctx.db))
+            eval_wrapper_payload_dps(ctx, WrapperKind::Ok, dest, ok_expr.payload(ctx.db))
         }
         ast::ExprFunKind::Er(er_expr) => {
             let payload_expr = er_expr.payload(ctx.db);
@@ -1675,40 +1642,17 @@ fn eval_expression_frame_borrow<'db>(
 }
 
 // ============================================================================
-// Unified Expression Evaluation
+// Collection Expression Evaluation
 // ============================================================================
 
-/// Evaluate an expression in the given context.
-///
-/// This is the unified entry point for expression evaluation that dispatches
-/// to context-specific implementations for variable lookup while sharing
-/// code for literals and operations.
-fn eval_expression<'db>(
-    ctx: &mut InterpContext<'db>,
-    eval_ctx: EvalContext,
-    expr: ast::ExprFun<'db>,
-    dest: Option<Destination>,
-) -> Result<Value, InterpError> {
-    match eval_ctx {
-        EvalContext::ScriptScope => eval_expression_in_script_scope(ctx, expr, dest),
-        EvalContext::Frame => {
-            // Frame context always has destinations (temp slots allocated at analysis time).
-            let dest = dest.expect("Frame context requires destination");
-            eval_expression_frame(ctx, expr, dest)
-        }
-    }
-}
-
-/// Evaluate inline list expression in the given context.
+/// Evaluate inline list expression.
 ///
 /// Uses type information when available to get element tydesc upfront,
 /// enabling DPS optimization for element evaluation.
-pub(super) fn eval_inline_list<'db>(
+fn eval_inline_list<'db>(
     ctx: &mut InterpContext<'db>,
-    eval_ctx: EvalContext,
     expr: ast::ExprFun<'db>,
     list_expr: &ast::ExprList<'db>,
-    _dest: Option<Destination>,
 ) -> Result<Value, InterpError> {
     use crate::tycheck::Type;
     use crate::datalit::tycheck::Type as DatalitType;
@@ -1729,13 +1673,12 @@ pub(super) fn eval_inline_list<'db>(
     let elem_ty = list_type.element_type(ctx.db);
     let elem_tydesc = ctx.tydesc_table.get_or_create(elem_ty.ty(ctx.db));
 
-    eval_list_with_element_tydesc(ctx, eval_ctx, elements, elem_tydesc)
+    eval_list_with_element_tydesc(ctx, elements, elem_tydesc)
 }
 
 /// Evaluate list elements with known element tydesc, using DPS.
 fn eval_list_with_element_tydesc<'db>(
     ctx: &mut InterpContext<'db>,
-    eval_ctx: EvalContext,
     elements: &[ast::ExprFun<'db>],
     element_tydesc: *const datalove_rt::rtdt::TyDesc,
 ) -> Result<Value, InterpError> {
@@ -1793,7 +1736,7 @@ fn eval_list_with_element_tydesc<'db>(
         let elem_dest_ptr = unsafe { data_ptr.add(i * element_size) };
         let elem_dest = Destination { ptr: elem_dest_ptr, tydesc: element_tydesc };
 
-        match eval_expression(ctx, eval_ctx, *elem, Some(elem_dest)) {
+        match eval_expression_frame(ctx, *elem, elem_dest) {
             Ok(value) => {
                 if value.ownership == ValueOwnership::TempOwned {
                     // Expression didn't use dest - copy result and free.
@@ -1827,23 +1770,18 @@ fn eval_list_with_element_tydesc<'db>(
     })
 }
 
-/// Evaluate inline set expression in the given context.
-pub(super) fn eval_inline_set<'db>(
+/// Evaluate inline set expression.
+fn eval_inline_set<'db>(
     ctx: &mut InterpContext<'db>,
-    eval_ctx: EvalContext,
     set_expr: &ast::ExprSet<'db>,
-    dest: Option<Destination>,
+    dest: Destination,
 ) -> Result<Value, InterpError> {
     let elements = set_expr.elements(ctx.db);
     let mut values = Vec::with_capacity(elements.len());
 
     for elem in elements {
-        // In frame context, use temp slots for elements.
-        let elem_dest = match eval_ctx {
-            EvalContext::Frame => Some(get_destination_for_expr(ctx, *elem)?),
-            EvalContext::ScriptScope => None,
-        };
-        match eval_expression(ctx, eval_ctx, *elem, elem_dest) {
+        let elem_dest = get_destination_for_expr(ctx, *elem)?;
+        match eval_expression_frame(ctx, *elem, elem_dest) {
             Ok(v) => values.push(v),
             Err(e) => {
                 for v in values {
@@ -1856,35 +1794,26 @@ pub(super) fn eval_inline_set<'db>(
 
     let set_value = allocate_set_from_values(ctx, values)?;
 
-    // If dest provided, copy result there and return as Borrowed.
-    if let Some(d) = dest {
-        let size = unsafe { (*set_value.tydesc).size as usize };
-        unsafe { std::ptr::copy_nonoverlapping(set_value.ptr, d.ptr, size); }
-        free_value_structure(ctx, set_value);
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        Ok(set_value)
-    }
+    // Copy result to dest and return as Borrowed.
+    let size = unsafe { (*set_value.tydesc).size as usize };
+    unsafe { std::ptr::copy_nonoverlapping(set_value.ptr, dest.ptr, size); }
+    free_value_structure(ctx, set_value);
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
-/// Evaluate inline map expression in the given context.
-pub(super) fn eval_inline_map<'db>(
+/// Evaluate inline map expression.
+fn eval_inline_map<'db>(
     ctx: &mut InterpContext<'db>,
-    eval_ctx: EvalContext,
     map_expr: &ast::ExprMap<'db>,
-    dest: Option<Destination>,
+    dest: Destination,
 ) -> Result<Value, InterpError> {
     let entries = map_expr.entries(ctx.db);
     let mut kv_pairs = Vec::with_capacity(entries.len());
 
     for entry in entries {
         let key_expr = entry.key(ctx.db);
-        // In frame context, use temp slots for keys.
-        let key_dest = match eval_ctx {
-            EvalContext::Frame => Some(get_destination_for_expr(ctx, key_expr)?),
-            EvalContext::ScriptScope => None,
-        };
-        let key = match eval_expression(ctx, eval_ctx, key_expr, key_dest) {
+        let key_dest = get_destination_for_expr(ctx, key_expr)?;
+        let key = match eval_expression_frame(ctx, key_expr, key_dest) {
             Ok(v) => v,
             Err(e) => {
                 for (k, v) in kv_pairs {
@@ -1896,12 +1825,8 @@ pub(super) fn eval_inline_map<'db>(
         };
 
         let value_expr = entry.value(ctx.db);
-        // In frame context, use temp slots for values.
-        let value_dest = match eval_ctx {
-            EvalContext::Frame => Some(get_destination_for_expr(ctx, value_expr)?),
-            EvalContext::ScriptScope => None,
-        };
-        let value = match eval_expression(ctx, eval_ctx, value_expr, value_dest) {
+        let value_dest = get_destination_for_expr(ctx, value_expr)?;
+        let value = match eval_expression_frame(ctx, value_expr, value_dest) {
             Ok(v) => v,
             Err(e) => {
                 destroy_value(ctx, key);
@@ -1918,92 +1843,81 @@ pub(super) fn eval_inline_map<'db>(
 
     let map_value = allocate_map_from_values(ctx, kv_pairs)?;
 
-    // If dest provided, copy result there and return as Borrowed.
-    if let Some(d) = dest {
-        let size = unsafe { (*map_value.tydesc).size as usize };
-        unsafe { std::ptr::copy_nonoverlapping(map_value.ptr, d.ptr, size); }
-        free_value_structure(ctx, map_value);
-        Ok(Value { ptr: d.ptr, tydesc: d.tydesc, ownership: ValueOwnership::Borrowed })
-    } else {
-        Ok(map_value)
-    }
+    // Copy result to dest and return as Borrowed.
+    let size = unsafe { (*map_value.tydesc).size as usize };
+    unsafe { std::ptr::copy_nonoverlapping(map_value.ptr, dest.ptr, size); }
+    free_value_structure(ctx, map_value);
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
-/// Evaluate inline anonymous tuple expression in the given context.
-pub(super) fn eval_inline_anon_tuple<'db>(
+/// Evaluate inline anonymous tuple expression.
+fn eval_inline_anon_tuple<'db>(
     ctx: &mut InterpContext<'db>,
-    eval_ctx: EvalContext,
     tuple_expr: &ast::ExprAnonTuple<'db>,
-    dest: Option<Destination>,
+    dest: Destination,
 ) -> Result<Value, InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag};
 
     let elements = tuple_expr.elements(ctx.db);
 
     // DPS path: if dest is a tuple with matching field count, write directly.
-    if let Some(dest) = dest {
-        let dest_tag = unsafe { (*dest.tydesc).type_tag };
-        if dest_tag == TyTag::Tuple {
-            let tuple_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
-            let tuple_info = tuple_ref.tuple_info();
+    let dest_tag = unsafe { (*dest.tydesc).type_tag };
+    if dest_tag == TyTag::Tuple {
+        let tuple_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+        let tuple_info = tuple_ref.tuple_info();
 
-            if tuple_info.num_fields() as usize == elements.len() {
-                // DPS: evaluate each element directly into its field slot.
-                for (i, elem) in elements.iter().enumerate() {
-                    let field_dest = get_tuple_field_dest(dest, i)
-                        .expect("field index should be valid");
+        if tuple_info.num_fields() as usize == elements.len() {
+            // DPS: evaluate each element directly into its field slot.
+            for (i, elem) in elements.iter().enumerate() {
+                let field_dest = get_tuple_field_dest(dest, i)
+                    .expect("field index should be valid");
 
-                    match eval_expression(ctx, eval_ctx, *elem, Some(field_dest)) {
-                        Ok(field_value) => {
-                            // Handle case where operation didn't use dest.
-                            if field_value.ownership == ValueOwnership::TempOwned {
-                                let size = unsafe { (*field_value.tydesc).size as usize };
-                                unsafe {
-                                    std::ptr::copy_nonoverlapping(
-                                        field_value.ptr,
-                                        field_dest.ptr,
-                                        size,
-                                    );
-                                }
-                                free_value_structure(ctx, field_value);
+                match eval_expression_frame(ctx, *elem, field_dest) {
+                    Ok(field_value) => {
+                        // Handle case where operation didn't use dest.
+                        if field_value.ownership == ValueOwnership::TempOwned {
+                            let size = unsafe { (*field_value.tydesc).size as usize };
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(
+                                    field_value.ptr,
+                                    field_dest.ptr,
+                                    size,
+                                );
                             }
-                        }
-                        Err(e) => {
-                            // Clean up already-written fields.
-                            for j in 0..i {
-                                let written_field = get_tuple_field_dest(dest, j)
-                                    .expect("field index should be valid");
-                                let field_value = Value {
-                                    ptr: written_field.ptr,
-                                    tydesc: written_field.tydesc,
-                                    ownership: ValueOwnership::Borrowed,
-                                };
-                                destroy_value(ctx, field_value);
-                            }
-                            return Err(e);
+                            free_value_structure(ctx, field_value);
                         }
                     }
+                    Err(e) => {
+                        // Clean up already-written fields.
+                        for j in 0..i {
+                            let written_field = get_tuple_field_dest(dest, j)
+                                .expect("field index should be valid");
+                            let field_value = Value {
+                                ptr: written_field.ptr,
+                                tydesc: written_field.tydesc,
+                                ownership: ValueOwnership::Borrowed,
+                            };
+                            destroy_value(ctx, field_value);
+                        }
+                        return Err(e);
+                    }
                 }
-
-                return Ok(Value {
-                    ptr: dest.ptr,
-                    tydesc: dest.tydesc,
-                    ownership: ValueOwnership::Borrowed,
-                });
             }
+
+            return Ok(Value {
+                ptr: dest.ptr,
+                tydesc: dest.tydesc,
+                ownership: ValueOwnership::Borrowed,
+            });
         }
     }
 
-    // Fallback: no dest or type mismatch - allocate new tuple.
+    // Fallback: type mismatch - allocate new tuple.
     let mut values = Vec::with_capacity(elements.len());
 
     for elem in elements {
-        // In frame context, use temp slots for elements.
-        let elem_dest = match eval_ctx {
-            EvalContext::Frame => Some(get_destination_for_expr(ctx, *elem)?),
-            EvalContext::ScriptScope => None,
-        };
-        match eval_expression(ctx, eval_ctx, *elem, elem_dest) {
+        let elem_dest = get_destination_for_expr(ctx, *elem)?;
+        match eval_expression_frame(ctx, *elem, elem_dest) {
             Ok(v) => values.push(v),
             Err(e) => {
                 for v in values {
@@ -2017,12 +1931,11 @@ pub(super) fn eval_inline_anon_tuple<'db>(
     allocate_tuple_from_values(ctx, values)
 }
 
-/// Evaluate inline anonymous struct expression in the given context.
-pub(super) fn eval_inline_anon_struct<'db>(
+/// Evaluate inline anonymous struct expression.
+fn eval_inline_anon_struct<'db>(
     ctx: &mut InterpContext<'db>,
-    eval_ctx: EvalContext,
     struct_expr: &ast::ExprAnonStruct<'db>,
-    dest: Option<Destination>,
+    dest: Destination,
 ) -> Result<Value, InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag};
 
@@ -2034,69 +1947,63 @@ pub(super) fn eval_inline_anon_struct<'db>(
 
     // DPS path: if dest is a struct with matching field count, write directly.
     // Both expression fields and dest fields are in canonical sorted order.
-    if let Some(dest) = dest {
-        let dest_tag = unsafe { (*dest.tydesc).type_tag };
-        if dest_tag == TyTag::Struct {
-            let struct_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
-            let struct_info = struct_ref.struct_info();
+    let dest_tag = unsafe { (*dest.tydesc).type_tag };
+    if dest_tag == TyTag::Struct {
+        let struct_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
+        let struct_info = struct_ref.struct_info();
 
-            if struct_info.num_fields() as usize == sorted_fields.len() {
-                // DPS: evaluate each field directly into its slot.
-                for (i, (_name, value_expr)) in sorted_fields.iter().enumerate() {
-                    let field_dest = get_struct_field_dest(dest, i)
-                        .expect("field index should be valid");
+        if struct_info.num_fields() as usize == sorted_fields.len() {
+            // DPS: evaluate each field directly into its slot.
+            for (i, (_name, value_expr)) in sorted_fields.iter().enumerate() {
+                let field_dest = get_struct_field_dest(dest, i)
+                    .expect("field index should be valid");
 
-                    match eval_expression(ctx, eval_ctx, *value_expr, Some(field_dest)) {
-                        Ok(field_value) => {
-                            // Handle case where operation didn't use dest.
-                            if field_value.ownership == ValueOwnership::TempOwned {
-                                let size = unsafe { (*field_value.tydesc).size as usize };
-                                unsafe {
-                                    std::ptr::copy_nonoverlapping(
-                                        field_value.ptr,
-                                        field_dest.ptr,
-                                        size,
-                                    );
-                                }
-                                free_value_structure(ctx, field_value);
+                match eval_expression_frame(ctx, *value_expr, field_dest) {
+                    Ok(field_value) => {
+                        // Handle case where operation didn't use dest.
+                        if field_value.ownership == ValueOwnership::TempOwned {
+                            let size = unsafe { (*field_value.tydesc).size as usize };
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(
+                                    field_value.ptr,
+                                    field_dest.ptr,
+                                    size,
+                                );
                             }
-                        }
-                        Err(e) => {
-                            // Clean up already-written fields.
-                            for j in 0..i {
-                                let written_field = get_struct_field_dest(dest, j)
-                                    .expect("field index should be valid");
-                                let field_value = Value {
-                                    ptr: written_field.ptr,
-                                    tydesc: written_field.tydesc,
-                                    ownership: ValueOwnership::Borrowed,
-                                };
-                                destroy_value(ctx, field_value);
-                            }
-                            return Err(e);
+                            free_value_structure(ctx, field_value);
                         }
                     }
+                    Err(e) => {
+                        // Clean up already-written fields.
+                        for j in 0..i {
+                            let written_field = get_struct_field_dest(dest, j)
+                                .expect("field index should be valid");
+                            let field_value = Value {
+                                ptr: written_field.ptr,
+                                tydesc: written_field.tydesc,
+                                ownership: ValueOwnership::Borrowed,
+                            };
+                            destroy_value(ctx, field_value);
+                        }
+                        return Err(e);
+                    }
                 }
-
-                return Ok(Value {
-                    ptr: dest.ptr,
-                    tydesc: dest.tydesc,
-                    ownership: ValueOwnership::Borrowed,
-                });
             }
+
+            return Ok(Value {
+                ptr: dest.ptr,
+                tydesc: dest.tydesc,
+                ownership: ValueOwnership::Borrowed,
+            });
         }
     }
 
-    // Fallback: no dest or type mismatch - allocate new struct.
+    // Fallback: type mismatch - allocate new struct.
     let mut field_values = Vec::with_capacity(sorted_fields.len());
 
     for (name, value_expr) in sorted_fields {
-        // In frame context, use temp slots for field values.
-        let value_dest = match eval_ctx {
-            EvalContext::Frame => Some(get_destination_for_expr(ctx, value_expr)?),
-            EvalContext::ScriptScope => None,
-        };
-        match eval_expression(ctx, eval_ctx, value_expr, value_dest) {
+        let value_dest = get_destination_for_expr(ctx, value_expr)?;
+        match eval_expression_frame(ctx, value_expr, value_dest) {
             Ok(v) => field_values.push((name, v)),
             Err(e) => {
                 for (_, v) in field_values {

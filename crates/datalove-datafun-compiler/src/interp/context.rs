@@ -2,30 +2,24 @@
 //!
 //! Core types for interpreter state management:
 //! - [`InterpContext`]: Main interpreter state (runtime, module graph, call stack)
-//! - [`ScriptScope`]: Top-level variable bindings for REPL/script execution
 //! - [`ModuleFunctionTableGraph`]: Tracks imported functions from modules using ModuleId
-//! - [`ScriptResult`]: Result of script execution with value and runtime
 
 use rmx::std::collections::HashMap;
 use bct::text::InternedText;
 
 use crate::module_graph::{ModuleId, ModuleGraph, ModuleGraphTypecheckResult};
-use crate::ast::{self, StmtFun};
+use crate::ast;
 
-use super::{Value, InterpError, StackFrame, destroy_value};
+use super::{InterpError, StackFrame};
 
 // ============================================================================
 // Context Types
 // ============================================================================
 
-/// Interpreter context for script execution.
+/// Interpreter context for module execution.
 pub struct InterpContext<'db> {
     pub(super) db: &'db dyn crate::Db,
     pub(super) runtime: datalove_rt::rust::Runtime,
-    pub(super) script: Option<crate::script::Script>,
-    pub script_scope: ScriptScope<'db>,
-    /// Script-level function analyses (for functions defined in the script).
-    pub(super) script_function_analyses: HashMap<ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>>,
     pub(super) tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
     /// Call stack for frame-based execution.
     pub(super) call_stack: Vec<StackFrame<'db>>,
@@ -39,14 +33,6 @@ pub struct InterpContext<'db> {
     pub(super) expr_types: Vec<Option<crate::tycheck::TypeAndHeap<'db>>>,
 }
 
-/// Script-level scope for REPL incremental execution.
-pub struct ScriptScope<'db> {
-    /// Script-level let bindings with move tracking.
-    pub variables: HashMap<InternedText<'db>, ScriptVariable>,
-    /// Script-level functions.
-    pub functions: HashMap<InternedText<'db>, StmtFun<'db>>,
-}
-
 /// Module function table for tracking imported functions.
 ///
 /// Maps imported function names to their function definitions and source modules.
@@ -55,48 +41,6 @@ pub struct ModuleFunctionTableGraph<'db> {
     imported_functions: HashMap<InternedText<'db>, (ast::StmtFun<'db>, ModuleId)>,
     /// Cache of all functions in each module.
     module_all_functions: HashMap<ModuleId, HashMap<InternedText<'db>, ast::StmtFun<'db>>>,
-}
-
-/// Script-level variable with move tracking for linear semantics.
-pub struct ScriptVariable {
-    pub value: Value,
-    pub state: ScriptVarState,
-    pub is_copy: bool,
-}
-
-/// Move state for script-level variables.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum ScriptVarState {
-    Available,
-    Moved,
-}
-
-/// Result of script execution containing the value and runtime.
-///
-/// The runtime and tydesc_table must be kept alive for the value pointer to remain valid.
-pub struct ScriptResult<'db> {
-    pub value: Value,
-    pub runtime: datalove_rt::rust::Runtime,
-    pub tydesc_table: datalove_datalit::tydesc_table::TyDescTable<'db>,
-}
-
-impl std::fmt::Debug for ScriptResult<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ScriptResult")
-            .field("value", &self.value)
-            .field("runtime", &"<Runtime>")
-            .field("tydesc_table", &"<TyDescTable>")
-            .finish()
-    }
-}
-
-impl Drop for ScriptResult<'_> {
-    fn drop(&mut self) {
-        // NOTE: Value cleanup is now done manually before dropping ScriptResult.
-        // This is because the Drop implementation was running too late,
-        // after the runtime had already started shutting down.
-        // The manual cleanup happens in worldfile_analysis.rs.
-    }
 }
 
 impl<'db> InterpContext<'db> {
@@ -122,12 +66,6 @@ impl<'db> InterpContext<'db> {
         Ok(InterpContext {
             db,
             runtime: datalove_rt::rust::Runtime::new(),
-            script: None,
-            script_scope: ScriptScope {
-                variables: HashMap::new(),
-                functions: HashMap::new(),
-            },
-            script_function_analyses: HashMap::new(),
             tydesc_table: datalove_datalit::tydesc_table::TyDescTable::new(db),
             call_stack: Vec::new(),
             module_functions_graph,
@@ -135,33 +73,6 @@ impl<'db> InterpContext<'db> {
             module_graph_typecheck: Some(typecheck_result),
             expr_types,
         })
-    }
-
-    /// Set the current script for execution.
-    pub fn set_script(&mut self, script: crate::script::Script) {
-        self.script = Some(script);
-    }
-
-    /// Check if this context has a typecheck result.
-    pub fn is_typechecked(&self) -> bool {
-        self.module_graph_typecheck.is_some()
-    }
-
-    /// Merge expression types from a typecheck result.
-    ///
-    /// This extends the expr_types vector with types from the given TypecheckResult.
-    /// Should be called after typechecking each script unit.
-    pub fn merge_expr_types(&mut self, typecheck_result: crate::tycheck::TypecheckResult<'db>) {
-        let new_types = typecheck_result.expr_types(self.db);
-        // Extend our vector if needed and copy types.
-        if new_types.len() > self.expr_types.len() {
-            self.expr_types.resize(new_types.len(), None);
-        }
-        for (i, ty) in new_types.iter().enumerate() {
-            if ty.is_some() {
-                self.expr_types[i] = *ty;
-            }
-        }
     }
 
     /// Look up the type of an expression.
@@ -172,14 +83,6 @@ impl<'db> InterpContext<'db> {
         let id = expr.as_id();
         let index = id.index() as usize;
         self.expr_types.get(index).copied().flatten()
-    }
-
-    /// Populate script-level imports using ModuleGraph.
-    ///
-    /// Parses require/import statements from the script and resolves them
-    /// against the available modules in the graph.
-    pub fn populate_script_imports(&mut self, script: crate::script::Script, graph: ModuleGraph) {
-        self.module_functions_graph.populate_script_imports_for_graph(self.db, script, graph);
     }
 
     /// Get the runtime handle.
@@ -193,7 +96,7 @@ impl<'db> InterpContext<'db> {
     }
 
     /// Pretty-print a value using this context's runtime and tydesc_table.
-    pub fn pretty_print_value(&mut self, value: &Value) -> Result<String, InterpError> {
+    pub fn pretty_print_value(&mut self, value: &super::Value) -> Result<String, InterpError> {
         use datalove_rt as rt;
         use datalove_rt::rtdt;
 
@@ -253,16 +156,6 @@ impl<'db> InterpContext<'db> {
     }
 }
 
-impl ScriptScope<'_> {
-    /// Create a new empty script scope.
-    pub fn new<'db>() -> ScriptScope<'db> {
-        ScriptScope {
-            variables: HashMap::new(),
-            functions: HashMap::new(),
-        }
-    }
-}
-
 impl<'db> ModuleFunctionTableGraph<'db> {
     /// Create a new empty module function table.
     pub fn new() -> ModuleFunctionTableGraph<'db> {
@@ -313,101 +206,4 @@ impl<'db> ModuleFunctionTableGraph<'db> {
         self.module_all_functions.get(&module_id)
     }
 
-    /// Add an imported function.
-    pub fn add_import(&mut self, name: InternedText<'db>, func: ast::StmtFun<'db>, source_module: ModuleId) {
-        self.imported_functions.insert(name, (func, source_module));
-    }
-
-    /// Populate script-level imports using ModuleGraph.
-    ///
-    /// Parses require/import statements from the script and resolves them
-    /// against the available modules in the graph.
-    pub fn populate_script_imports_for_graph(
-        &mut self,
-        db: &'db dyn crate::Db,
-        script: crate::script::Script,
-        graph: ModuleGraph,
-    ) {
-        // Build a map from module alias to ModuleId.
-        let module_alias_map = build_module_alias_map_for_graph(db, script, graph);
-
-        // Process all units to find import statements.
-        let units = script.units(db);
-        for unit_index in 0..units.len() {
-            let parsed = crate::parser::parse_script_unit(db, script, unit_index);
-
-            for statement in parsed.statements(db) {
-                if let ast::Statement::Import(import_stmt) = statement {
-                    let module_name = import_stmt.module_name(db);
-                    let item_name = import_stmt.item_name(db);
-
-                    if let Some(&module_id) = module_alias_map.get(&module_name) {
-                        if let Some(module_funcs) = self.module_all_functions.get(&module_id) {
-                            if let Some(&func) = module_funcs.get(&item_name) {
-                                self.imported_functions.insert(item_name, (func, module_id));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Build module alias map for a script using ModuleGraph.
-///
-/// Maps module aliases (from require statements) to ModuleId.
-fn build_module_alias_map_for_graph<'db>(
-    db: &'db dyn crate::Db,
-    script: crate::script::Script,
-    graph: ModuleGraph,
-) -> HashMap<InternedText<'db>, ModuleId> {
-    use crate::ast::{Statement, StmtRequire};
-
-    let mut alias_map = HashMap::new();
-
-    // Build a map from path string to ModuleId.
-    let mut path_to_module: HashMap<String, ModuleId> = HashMap::new();
-    for module in graph.iter_modules(db) {
-        let module_id = module.id(db);
-        let path = module_id.path(db).clone();
-        path_to_module.insert(path, module_id);
-    }
-
-    // Process all units to find require module statements.
-    let units = script.units(db);
-    for unit_index in 0..units.len() {
-        let parsed = crate::parser::parse_script_unit(db, script, unit_index);
-
-        for statement in parsed.statements(db) {
-            if let Statement::Require(StmtRequire::Module(require_mod)) = statement {
-                // Extract import space, package, and module from the require statement.
-                let import_space = require_mod.import_space(db).as_str(db);
-                let package_alias = require_mod.package_alias(db).as_str(db);
-                let module_alias_text = require_mod.module_alias(db);
-
-                // Build the path string (e.g., "sys/std/u32").
-                let path = format!("{}/{}/{}", import_space, package_alias, module_alias_text.as_str(db));
-
-                // Look up the ModuleId.
-                if let Some(&module_id) = path_to_module.get(&path) {
-                    alias_map.insert(module_alias_text, module_id);
-                }
-            }
-        }
-    }
-
-    alias_map
-}
-
-/// Helper to clean up script scope variables.
-pub(super) fn cleanup_script_scope(ctx: &mut InterpContext<'_>) {
-    let vars: Vec<_> = ctx.script_scope.variables.drain().collect();
-    for (_, var) in vars {
-        if var.state == ScriptVarState::Available {
-            // Available: destroy contents and free structure.
-            destroy_value(ctx, var.value);
-        }
-        // Moved: ownership was transferred to consumer, nothing to do.
-    }
 }

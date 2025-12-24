@@ -24,15 +24,16 @@ name = "tycheck_world_tests"
 path = "tests/tycheck_world_tests.rs"
 harness = false
 
-[[test]]
-name = "std_tests"
-path = "tests/std_tests.rs"
-harness = false
-
-[[test]]
-name = "interp_tests"
-path = "tests/interp_tests.rs"
-harness = false
+# Script-based tests (disabled, pending frame-based script rewrite):
+# [[test]]
+# name = "std_tests"
+# path = "tests/std_tests.rs"
+# harness = false
+#
+# [[test]]
+# name = "interp_tests"
+# path = "tests/interp_tests.rs"
+# harness = false
 
 [[test]]
 name = "interp_modules_tests"

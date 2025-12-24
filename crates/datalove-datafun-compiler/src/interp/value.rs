@@ -66,15 +66,3 @@ impl Destination {
         }
     }
 }
-
-/// Evaluation context for unified expression evaluation.
-///
-/// This enum allows sharing expression evaluation code between script scope
-/// and frame-based execution while keeping context-specific operations separate.
-#[derive(Copy, Clone, Debug)]
-pub enum EvalContext {
-    /// Script scope evaluation - uses ScriptScope for variables.
-    ScriptScope,
-    /// Frame-based evaluation - uses the current stack frame.
-    Frame,
-}
