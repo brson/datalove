@@ -597,7 +597,8 @@ pub fn execute_function_body<'db>(
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Result(_)) {
                     if let Some(dest) = return_dest {
                         // DPS: write Err to caller's destination.
-                        return write_result_err_to_dest(dest, *tydesc, *ptr).map(Some);
+                        write_result_err_to_dest(dest, *tydesc, *ptr)?;
+                        return Ok(Some(dest.to_borrowed_value()));
                     } else {
                         // This path should be unreachable now that all function calls provide DPS destinations.
                         panic!(

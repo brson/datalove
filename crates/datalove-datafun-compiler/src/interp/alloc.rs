@@ -116,7 +116,7 @@ pub(super) fn write_result_err_to_dest(
     dest: Destination,
     err_tydesc: *const datalove_rt::rtdt::TyDesc,
     err_ptr: *mut u8,
-) -> Result<Value, InterpError> {
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt::{self, TyDescRef, TyTag};
 
     let dest_tydesc_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
@@ -137,7 +137,7 @@ pub(super) fn write_result_err_to_dest(
         std::ptr::copy_nonoverlapping(err_ptr, err_payload_ptr, err_size);
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+    Ok(())
 }
 
 /// Widen any fixed-width integer to an Int (bigint) value.
