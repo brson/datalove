@@ -5,7 +5,7 @@
 
 use crate::ast;
 
-use super::{InterpContext, InterpError, Value, Destination, ValueOwnership};
+use super::{InterpContext, InterpError, Value, Destination};
 use super::alloc::write_bigint_to_ptr;
 
 /// Write inline integer literal to destination.
@@ -13,7 +13,7 @@ pub(super) fn write_inline_int_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     int_expr: &ast::ExprInt<'db>,
     dest: Destination,
-) -> Result<Value, InterpError> {
+) -> Result<(), InterpError> {
     let value_str = int_expr.value(ctx.db).as_str(ctx.db);
 
     // Determine the destination type and parse accordingly.
@@ -72,11 +72,11 @@ pub(super) fn write_inline_int_to_dest<'db>(
         }
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+    Ok(())
 }
 
 /// Write Option::None to a destination.
-pub(super) fn write_option_none_to_dest(dest: Destination) -> Result<Value, InterpError> {
+pub(super) fn write_option_none_to_dest(dest: Destination) -> Result<(), InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag, OptionTag};
 
     let dest_tydesc = unsafe { TyDescRef::from_ptr(dest.tydesc) };
@@ -93,25 +93,22 @@ pub(super) fn write_option_none_to_dest(dest: Destination) -> Result<Value, Inte
         *(dest.ptr as *mut u8) = OptionTag::None as u8;
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+    Ok(())
 }
 
 /// Write a boolean value to destination.
-pub(super) fn write_bool_to_dest(dest: Destination, value: bool) -> Result<Value, InterpError> {
+pub(super) fn write_bool_to_dest(dest: Destination, value: bool) {
     unsafe { *dest.ptr = if value { 1 } else { 0 }; }
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Write an f32 value to destination.
-pub(super) fn write_f32_to_dest(dest: Destination, value: f32) -> Result<Value, InterpError> {
+pub(super) fn write_f32_to_dest(dest: Destination, value: f32) {
     unsafe { *(dest.ptr as *mut f32) = value; }
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Write a u32 value to destination (for hex literals).
-pub(super) fn write_u32_to_dest(dest: Destination, value: u32) -> Result<Value, InterpError> {
+pub(super) fn write_u32_to_dest(dest: Destination, value: u32) {
     unsafe { *(dest.ptr as *mut u32) = value; }
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
 
 /// Write an inline string literal to destination.
@@ -119,7 +116,7 @@ pub(super) fn write_string_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     string_expr: &ast::ExprString<'db>,
     dest: Destination,
-) -> Result<Value, InterpError> {
+) -> Result<(), InterpError> {
     let string_value_raw = string_expr.value(ctx.db).as_str(ctx.db);
 
     // Strip quotes if present.
@@ -159,7 +156,7 @@ pub(super) fn write_string_to_dest<'db>(
         }
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+    Ok(())
 }
 
 /// Write Result::Er from an error payload value.
@@ -170,7 +167,7 @@ pub(super) fn write_result_er_from_value<'db>(
     ctx: &mut InterpContext<'db>,
     payload: Value,
     dest: Destination,
-) -> Result<Value, InterpError> {
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag, ResultTag};
     use datalove_rt::rtdt::layout::compute_result_layout;
     use super::memory::destroy_value;
@@ -193,8 +190,7 @@ pub(super) fn write_result_er_from_value<'db>(
         ));
     }
 
-    let result_tydesc = dest.tydesc;
-    let result_ref = unsafe { TyDescRef::from_ptr(result_tydesc) };
+    let result_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
     let layout = compute_result_layout(result_ref);
 
     // Write Er tag.
@@ -219,5 +215,5 @@ pub(super) fn write_result_er_from_value<'db>(
         return Err(InterpError::RuntimeError("Failed to clone error for Er".to_string()));
     }
 
-    Ok(Value { ptr: dest.ptr, tydesc: result_tydesc, ownership: ValueOwnership::Borrowed })
+    Ok(())
 }

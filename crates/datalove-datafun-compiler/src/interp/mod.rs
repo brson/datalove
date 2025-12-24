@@ -579,7 +579,8 @@ pub fn execute_function_body<'db>(
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Option(_)) {
                     if let Some(dest) = return_dest {
                         // DPS: write None to caller's destination.
-                        return write_option_none_to_dest(dest).map(Some);
+                        write_option_none_to_dest(dest)?;
+                        return Ok(Some(dest.to_borrowed_value()));
                     } else {
                         // This path should be unreachable now that all function calls provide DPS destinations.
                         panic!(
@@ -1309,24 +1310,41 @@ fn eval_expression_frame<'db>(
         }
 
         // Inline literal variants - always write to dest.
-        ast::ExprFunKind::True(_) => write_bool_to_dest(dest, true),
-        ast::ExprFunKind::False(_) => write_bool_to_dest(dest, false),
-        ast::ExprFunKind::None(_) => write_option_none_to_dest(dest),
-        ast::ExprFunKind::Int(int_expr) => write_inline_int_to_dest(ctx, &int_expr, dest),
+        ast::ExprFunKind::True(_) => {
+            write_bool_to_dest(dest, true);
+            Ok(dest.to_borrowed_value())
+        }
+        ast::ExprFunKind::False(_) => {
+            write_bool_to_dest(dest, false);
+            Ok(dest.to_borrowed_value())
+        }
+        ast::ExprFunKind::None(_) => {
+            write_option_none_to_dest(dest)?;
+            Ok(dest.to_borrowed_value())
+        }
+        ast::ExprFunKind::Int(int_expr) => {
+            write_inline_int_to_dest(ctx, &int_expr, dest)?;
+            Ok(dest.to_borrowed_value())
+        }
         ast::ExprFunKind::Float(float_expr) => {
             let value_str = float_expr.value(ctx.db).as_str(ctx.db);
             let value: f32 = value_str.parse()
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
-            write_f32_to_dest(dest, value)
+            write_f32_to_dest(dest, value);
+            Ok(dest.to_borrowed_value())
         }
         ast::ExprFunKind::Hex(hex_expr) => {
             let value_str = hex_expr.value(ctx.db).as_str(ctx.db);
             let hex_digits = value_str.trim_start_matches("0x").trim_start_matches("0X");
             let value: u32 = u32::from_str_radix(hex_digits, 16)
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse hex: {}", e)))?;
-            write_u32_to_dest(dest, value)
+            write_u32_to_dest(dest, value);
+            Ok(dest.to_borrowed_value())
         }
-        ast::ExprFunKind::String(string_expr) => write_string_to_dest(ctx, &string_expr, dest),
+        ast::ExprFunKind::String(string_expr) => {
+            write_string_to_dest(ctx, &string_expr, dest)?;
+            Ok(dest.to_borrowed_value())
+        }
         ast::ExprFunKind::List(list_expr) => {
             eval_inline_list(ctx, expr, &list_expr)
         }
@@ -1358,7 +1376,8 @@ fn eval_expression_frame<'db>(
             let payload_expr = er_expr.payload(ctx.db);
             let payload_dest = get_destination_for_expr(ctx, payload_expr)?;
             let payload = eval_expression_frame(ctx, payload_expr, payload_dest)?;
-            literals::write_result_er_from_value(ctx, payload, dest)
+            literals::write_result_er_from_value(ctx, payload, dest)?;
+            Ok(dest.to_borrowed_value())
         }
         ast::ExprFunKind::Data(data_expr) => {
             // Evaluate inner expression to its temp slot.
