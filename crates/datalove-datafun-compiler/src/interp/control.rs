@@ -176,14 +176,15 @@ pub(super) fn evaluate_branch_condition<'db>(
     }
 }
 
-/// Evaluate try-option operator (`val?`).
+/// Evaluate try-option operator (`val?`) with DPS.
 ///
 /// If the operand is None, returns `InterpError::OptionNone` for early return.
-/// If the operand is Some(value), extracts and returns the inner value.
+/// If the operand is Some(value), extracts the inner value and writes to dest.
 pub(super) fn eval_try_option<'db>(
     ctx: &mut InterpContext<'db>,
     operand_value: Value,
-) -> Result<Value, InterpError> {
+    dest: super::Destination,
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag, OptionTag, layout::compute_option_layout};
 
     let tydesc_ref = unsafe { TyDescRef::from_ptr(operand_value.tydesc) };
@@ -205,23 +206,14 @@ pub(super) fn eval_try_option<'db>(
     let layout = compute_option_layout(tydesc_ref);
     let payload_ptr = unsafe { operand_value.ptr.add(layout.payload_offset as usize) };
 
-    let inner_tydesc = tydesc_ref.option_inner_ty().as_ptr();
-    let inner_size = unsafe { (*inner_tydesc).size as usize };
+    let inner_size = unsafe { (*dest.tydesc).size as usize };
 
-    let rt_handle = ctx.runtime.handle();
-    let result_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner_tydesc, 1)
-    };
-
-    if result_ptr.is_null() {
-        destroy_value(ctx, operand_value);
-        return Err(InterpError::RuntimeError("Failed to allocate unwrapped value".to_string()));
-    }
-
+    // Copy payload directly to dest.
     unsafe {
-        std::ptr::copy_nonoverlapping(payload_ptr, result_ptr, inner_size);
+        std::ptr::copy_nonoverlapping(payload_ptr, dest.ptr, inner_size);
     }
 
+    // Clean up the operand.
     if operand_value.ownership == ValueOwnership::TempOwned {
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_local(
@@ -233,21 +225,18 @@ pub(super) fn eval_try_option<'db>(
         }
     }
 
-    Ok(Value {
-        ptr: result_ptr,
-        tydesc: inner_tydesc,
-        ownership: ValueOwnership::TempOwned,
-    })
+    Ok(())
 }
 
-/// Evaluate try-result operator (`val!`).
+/// Evaluate try-result operator (`val!`) with DPS.
 ///
 /// If the operand is Err, returns `InterpError::ResultErr` for early return.
-/// If the operand is Ok(value), extracts and returns the inner value.
+/// If the operand is Ok(value), extracts the inner value and writes to dest.
 pub(super) fn eval_try_result<'db>(
     ctx: &mut InterpContext<'db>,
     operand_value: Value,
-) -> Result<Value, InterpError> {
+    dest: super::Destination,
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag, ResultTag, Data, layout::compute_result_layout};
 
     let tydesc_ref = unsafe { TyDescRef::from_ptr(operand_value.tydesc) };
@@ -309,23 +298,14 @@ pub(super) fn eval_try_result<'db>(
         });
     }
 
-    let ok_tydesc = tydesc_ref.result_ok_ty().as_ptr();
-    let ok_size = unsafe { (*ok_tydesc).size as usize };
+    let ok_size = unsafe { (*dest.tydesc).size as usize };
 
-    let rt_handle = ctx.runtime.handle();
-    let result_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, ok_tydesc, 1)
-    };
-
-    if result_ptr.is_null() {
-        destroy_value(ctx, operand_value);
-        return Err(InterpError::RuntimeError("Failed to allocate unwrapped value".to_string()));
-    }
-
+    // Copy payload directly to dest.
     unsafe {
-        std::ptr::copy_nonoverlapping(payload_ptr, result_ptr, ok_size);
+        std::ptr::copy_nonoverlapping(payload_ptr, dest.ptr, ok_size);
     }
 
+    // Clean up the operand.
     if operand_value.ownership == ValueOwnership::TempOwned {
         unsafe {
             datalove_rt::c::dtlv_rti_mem_free_local(
@@ -337,9 +317,5 @@ pub(super) fn eval_try_result<'db>(
         }
     }
 
-    Ok(Value {
-        ptr: result_ptr,
-        tydesc: ok_tydesc,
-        ownership: ValueOwnership::TempOwned,
-    })
+    Ok(())
 }

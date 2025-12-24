@@ -1297,8 +1297,9 @@ fn eval_expression_frame<'db>(
             let operand_expr = try_op.operand(ctx.db);
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
             let operand = eval_expression_frame(ctx, operand_expr, operand_dest)?;
-            // Apply try-option operator.
-            eval_try_option(ctx, operand)
+            // Apply try-option operator with DPS.
+            eval_try_option(ctx, operand, dest)?;
+            Ok(dest.to_borrowed_value())
         }
 
         ast::ExprFunKind::TryResult(try_op) => {
@@ -1306,8 +1307,9 @@ fn eval_expression_frame<'db>(
             let operand_expr = try_op.operand(ctx.db);
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
             let operand = eval_expression_frame(ctx, operand_expr, operand_dest)?;
-            // Apply try-result operator.
-            eval_try_result(ctx, operand)
+            // Apply try-result operator with DPS.
+            eval_try_result(ctx, operand, dest)?;
+            Ok(dest.to_borrowed_value())
         }
 
         // Inline literal variants - always write to dest.
