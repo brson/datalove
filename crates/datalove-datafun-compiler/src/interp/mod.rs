@@ -1347,22 +1347,27 @@ fn eval_expression_frame<'db>(
             Ok(dest.to_borrowed_value())
         }
         ast::ExprFunKind::List(list_expr) => {
-            eval_inline_list(ctx, expr, &list_expr)
+            eval_inline_list(ctx, expr, &list_expr, dest)?;
+            Ok(dest.to_borrowed_value())
         }
         ast::ExprFunKind::Set(set_expr) => {
-            eval_inline_set(ctx, &set_expr, dest)
+            eval_inline_set(ctx, &set_expr, dest)?;
+            Ok(dest.to_borrowed_value())
         }
         ast::ExprFunKind::Map(map_expr) => {
-            eval_inline_map(ctx, &map_expr, dest)
+            eval_inline_map(ctx, &map_expr, dest)?;
+            Ok(dest.to_borrowed_value())
         }
         ast::ExprFunKind::Tensor(_) => {
             Err(InterpError::InvalidExpression("Tensor not yet implemented".to_string()))
         }
         ast::ExprFunKind::AnonTuple(tuple_expr) => {
-            eval_inline_anon_tuple(ctx, &tuple_expr, dest)
+            eval_inline_anon_tuple(ctx, &tuple_expr, dest)?;
+            Ok(dest.to_borrowed_value())
         }
         ast::ExprFunKind::AnonStruct(struct_expr) => {
-            eval_inline_anon_struct(ctx, &struct_expr, dest)
+            eval_inline_anon_struct(ctx, &struct_expr, dest)?;
+            Ok(dest.to_borrowed_value())
         }
         ast::ExprFunKind::AnonEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
@@ -1664,15 +1669,16 @@ fn eval_expression_frame_borrow<'db>(
 // Collection Expression Evaluation
 // ============================================================================
 
-/// Evaluate inline list expression.
+/// Evaluate inline list expression with DPS.
 ///
-/// Uses type information when available to get element tydesc upfront,
-/// enabling DPS optimization for element evaluation.
+/// Writes the List struct directly to dest. The list's internal data buffer
+/// is still heap-allocated via the runtime allocator.
 fn eval_inline_list<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
     list_expr: &ast::ExprList<'db>,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     use crate::tycheck::Type;
     use crate::datalit::tycheck::Type as DatalitType;
 
@@ -1692,56 +1698,43 @@ fn eval_inline_list<'db>(
     let elem_ty = list_type.element_type(ctx.db);
     let elem_tydesc = ctx.tydesc_table.get_or_create(elem_ty.ty(ctx.db));
 
-    eval_list_with_element_tydesc(ctx, elements, elem_tydesc)
+    eval_list_with_element_tydesc(ctx, elements, elem_tydesc, dest)
 }
 
 /// Evaluate list elements with known element tydesc, using DPS.
+///
+/// Writes the List struct to dest.ptr. The internal data buffer is heap-allocated.
 fn eval_list_with_element_tydesc<'db>(
     ctx: &mut InterpContext<'db>,
     elements: &[ast::ExprFun<'db>],
     element_tydesc: *const datalove_rt::rtdt::TyDesc,
-) -> Result<Value, InterpError> {
+    dest: Destination,
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt::List;
     use datalove_rt::c::RtStatus;
 
-    let list_tydesc = ctx.tydesc_table.create_list_from_element_tydesc(element_tydesc);
     let rt_handle = ctx.runtime.handle();
+    let list_ptr = dest.ptr;
 
-    // Allocate list struct.
-    let list_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, list_tydesc, 1)
-    };
-    if list_ptr.is_null() {
-        return Err(InterpError::RuntimeError("Failed to allocate list".to_string()));
-    }
-
-    // Initialize empty list.
+    // Initialize empty list at dest.
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_list_create_local(rt_handle, list_ptr, list_tydesc)
+        datalove_rt::c::dtlv_rti_list_create_local(rt_handle, list_ptr, dest.tydesc)
     };
     if status != RtStatus::Ok {
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, list_tydesc, 1, list_ptr);
-        }
         return Err(InterpError::RuntimeError("Failed to create list".to_string()));
     }
 
     if elements.is_empty() {
-        return Ok(Value {
-            ptr: list_ptr,
-            tydesc: list_tydesc,
-            ownership: ValueOwnership::TempOwned,
-        });
+        return Ok(());
     }
 
     // Reserve capacity for all elements (allocates data buffer via runtime allocator).
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_list_reserve_local(rt_handle, list_ptr, list_tydesc, elements.len() as u32)
+        datalove_rt::c::dtlv_rti_list_reserve_local(rt_handle, list_ptr, dest.tydesc, elements.len() as u32)
     };
     if status != RtStatus::Ok {
         unsafe {
-            datalove_rt::c::dtlv_rti_list_destroy_local(rt_handle, list_ptr, list_tydesc);
-            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, list_tydesc, 1, list_ptr);
+            datalove_rt::c::dtlv_rti_list_destroy_local(rt_handle, list_ptr, dest.tydesc);
         }
         return Err(InterpError::RuntimeError("Failed to reserve list capacity".to_string()));
     }
@@ -1774,27 +1767,22 @@ fn eval_list_with_element_tydesc<'db>(
                 // Destroy already-written elements and the list.
                 // The list's destroy will clean up all elements and the data buffer.
                 unsafe {
-                    datalove_rt::c::dtlv_rti_list_destroy_local(rt_handle, list_ptr, list_tydesc);
-                    datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, list_tydesc, 1, list_ptr);
+                    datalove_rt::c::dtlv_rti_list_destroy_local(rt_handle, list_ptr, dest.tydesc);
                 }
                 return Err(e);
             }
         }
     }
 
-    Ok(Value {
-        ptr: list_ptr,
-        tydesc: list_tydesc,
-        ownership: ValueOwnership::TempOwned,
-    })
+    Ok(())
 }
 
-/// Evaluate inline set expression.
+/// Evaluate inline set expression with DPS.
 fn eval_inline_set<'db>(
     ctx: &mut InterpContext<'db>,
     set_expr: &ast::ExprSet<'db>,
     dest: Destination,
-) -> Result<Value, InterpError> {
+) -> Result<(), InterpError> {
     let elements = set_expr.elements(ctx.db);
     let mut values = Vec::with_capacity(elements.len());
 
@@ -1813,19 +1801,19 @@ fn eval_inline_set<'db>(
 
     let set_value = allocate_set_from_values(ctx, values)?;
 
-    // Copy result to dest and return as Borrowed.
+    // Copy result to dest.
     let size = unsafe { (*set_value.tydesc).size as usize };
     unsafe { std::ptr::copy_nonoverlapping(set_value.ptr, dest.ptr, size); }
     free_value_structure(ctx, set_value);
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+    Ok(())
 }
 
-/// Evaluate inline map expression.
+/// Evaluate inline map expression with DPS.
 fn eval_inline_map<'db>(
     ctx: &mut InterpContext<'db>,
     map_expr: &ast::ExprMap<'db>,
     dest: Destination,
-) -> Result<Value, InterpError> {
+) -> Result<(), InterpError> {
     let entries = map_expr.entries(ctx.db);
     let mut kv_pairs = Vec::with_capacity(entries.len());
 
@@ -1862,19 +1850,19 @@ fn eval_inline_map<'db>(
 
     let map_value = allocate_map_from_values(ctx, kv_pairs)?;
 
-    // Copy result to dest and return as Borrowed.
+    // Copy result to dest.
     let size = unsafe { (*map_value.tydesc).size as usize };
     unsafe { std::ptr::copy_nonoverlapping(map_value.ptr, dest.ptr, size); }
     free_value_structure(ctx, map_value);
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+    Ok(())
 }
 
-/// Evaluate inline anonymous tuple expression.
+/// Evaluate inline anonymous tuple expression with DPS.
 fn eval_inline_anon_tuple<'db>(
     ctx: &mut InterpContext<'db>,
     tuple_expr: &ast::ExprAnonTuple<'db>,
     dest: Destination,
-) -> Result<Value, InterpError> {
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag};
 
     let elements = tuple_expr.elements(ctx.db);
@@ -1923,15 +1911,11 @@ fn eval_inline_anon_tuple<'db>(
                 }
             }
 
-            return Ok(Value {
-                ptr: dest.ptr,
-                tydesc: dest.tydesc,
-                ownership: ValueOwnership::Borrowed,
-            });
+            return Ok(());
         }
     }
 
-    // Fallback: type mismatch - allocate new tuple.
+    // Fallback: type mismatch - allocate new tuple, copy to dest.
     let mut values = Vec::with_capacity(elements.len());
 
     for elem in elements {
@@ -1947,15 +1931,19 @@ fn eval_inline_anon_tuple<'db>(
         }
     }
 
-    allocate_tuple_from_values(ctx, values)
+    let tuple_value = allocate_tuple_from_values(ctx, values)?;
+    let size = unsafe { (*tuple_value.tydesc).size as usize };
+    unsafe { std::ptr::copy_nonoverlapping(tuple_value.ptr, dest.ptr, size); }
+    free_value_structure(ctx, tuple_value);
+    Ok(())
 }
 
-/// Evaluate inline anonymous struct expression.
+/// Evaluate inline anonymous struct expression with DPS.
 fn eval_inline_anon_struct<'db>(
     ctx: &mut InterpContext<'db>,
     struct_expr: &ast::ExprAnonStruct<'db>,
     dest: Destination,
-) -> Result<Value, InterpError> {
+) -> Result<(), InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag};
 
     let expr_fields = struct_expr.fields(ctx.db);
@@ -2009,15 +1997,11 @@ fn eval_inline_anon_struct<'db>(
                 }
             }
 
-            return Ok(Value {
-                ptr: dest.ptr,
-                tydesc: dest.tydesc,
-                ownership: ValueOwnership::Borrowed,
-            });
+            return Ok(());
         }
     }
 
-    // Fallback: type mismatch - allocate new struct.
+    // Fallback: type mismatch - allocate new struct, copy to dest.
     let mut field_values = Vec::with_capacity(sorted_fields.len());
 
     for (name, value_expr) in sorted_fields {
@@ -2033,6 +2017,10 @@ fn eval_inline_anon_struct<'db>(
         }
     }
 
-    allocate_struct_from_values(ctx, field_values)
+    let struct_value = allocate_struct_from_values(ctx, field_values)?;
+    let size = unsafe { (*struct_value.tydesc).size as usize };
+    unsafe { std::ptr::copy_nonoverlapping(struct_value.ptr, dest.ptr, size); }
+    free_value_structure(ctx, struct_value);
+    Ok(())
 }
 
