@@ -1149,17 +1149,17 @@ fn eval_expression_frame<'db>(
                 };
                 let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
+                let source_value = Value { ptr, tydesc, ownership: ValueOwnership::Borrowed };
+
                 if is_copy {
                     // Copy: clone to dest.
-                    let borrowed = Value { ptr, tydesc, ownership: ValueOwnership::Borrowed };
-                    let result = clone_value_to_dest(ctx, borrowed, dest);
+                    let result = clone_value_to_dest(ctx, source_value, dest);
                     Ok(result)
                 } else {
-                    // Move: take ownership of the reference.
-                    // Return as Borrowed because caller owns the structure memory.
-                    // Contents will be destroyed by consumer, structure freed by caller cleanup.
+                    // Move: shallow copy to dest, mark slot as moved.
+                    let result = move_value_to_dest(source_value, dest);
                     ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
-                    Ok(Value { ptr, tydesc, ownership: ValueOwnership::Borrowed })
+                    Ok(result)
                 }
             } else {
                 // Local/Temporary slot.
@@ -1419,20 +1419,11 @@ fn eval_return_expression_frame<'db>(
         // Evaluate expression with DPS into return destination.
         let value = eval_expression_frame(ctx, expr, return_dest)?;
 
-        // Handle case where expression didn't use dest (e.g., Name returning borrowed value).
-        if value.ptr != return_dest.ptr {
-            let size = unsafe { (*value.tydesc).size as usize };
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    value.ptr,
-                    return_dest.ptr,
-                    size,
-                );
-            }
-            if value.ownership == ValueOwnership::TempOwned {
-                free_value_structure(ctx, value);
-            }
-        }
+        // All expressions now write directly to dest.
+        debug_assert_eq!(
+            value.ptr, return_dest.ptr,
+            "eval_expression_frame should always write to dest"
+        );
 
         // Return as Borrowed - caller owns the destination memory.
         return Ok(Value {

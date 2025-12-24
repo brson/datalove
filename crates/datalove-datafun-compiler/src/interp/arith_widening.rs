@@ -11,7 +11,7 @@
 use crate::ast::{BinOp, UnaryOp};
 use crate::datalit::tycheck::Type;
 
-use super::{InterpContext, InterpError, Value, Destination, ValueOwnership};
+use super::{InterpContext, InterpError, Value, Destination};
 use super::types::{is_int_value, is_f32_value, is_fixed_int_value, get_type_tag};
 use super::alloc::write_widened_int_to_dest;
 use super::arith::{
@@ -663,11 +663,8 @@ pub(super) fn eval_neg_result<'db>(
                     Ok(())
                 }
                 None => {
-                    let err_string = allocate_error_string(ctx, "overflow")?;
-                    Err(InterpError::ResultErr {
-                        tydesc: err_string.tydesc,
-                        ptr: err_string.ptr,
-                    })
+                    let (tydesc, ptr) = allocate_error_string(ctx, "overflow")?;
+                    Err(InterpError::ResultErr { tydesc, ptr })
                 }
             };
         }
@@ -679,11 +676,8 @@ pub(super) fn eval_neg_result<'db>(
                     Ok(())
                 }
                 None => {
-                    let err_string = allocate_error_string(ctx, "overflow")?;
-                    Err(InterpError::ResultErr {
-                        tydesc: err_string.tydesc,
-                        ptr: err_string.ptr,
-                    })
+                    let (tydesc, ptr) = allocate_error_string(ctx, "overflow")?;
+                    Err(InterpError::ResultErr { tydesc, ptr })
                 }
             };
         }
@@ -729,11 +723,8 @@ pub(super) fn eval_neg_result<'db>(
             Ok(())
         }
         None => {
-            let err_string = allocate_error_string(ctx, "overflow")?;
-            Err(InterpError::ResultErr {
-                tydesc: err_string.tydesc,
-                ptr: err_string.ptr,
-            })
+            let (tydesc, ptr) = allocate_error_string(ctx, "overflow")?;
+            Err(InterpError::ResultErr { tydesc, ptr })
         }
     }
 }
@@ -750,11 +741,13 @@ fn write_typed_int_result_64(value: u64, dest: Destination) {
     unsafe { *(dest.ptr as *mut u64) = value; }
 }
 
-/// Allocate a string value with the given content for use as an error.
+/// Allocate a string for use as an error payload.
+///
+/// Returns the tydesc and ptr for use in InterpError::ResultErr.
 fn allocate_error_string<'db>(
     ctx: &mut InterpContext<'db>,
     content: &str,
-) -> Result<Value, InterpError> {
+) -> Result<(*const datalove_rt::rtdt::TyDesc, *mut u8), InterpError> {
     use crate::datalit::tycheck::Type;
 
     let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
@@ -796,9 +789,5 @@ fn allocate_error_string<'db>(
         }
     }
 
-    Ok(Value {
-        ptr: string_ptr,
-        tydesc: tydesc_ptr,
-        ownership: ValueOwnership::TempOwned,
-    })
+    Ok((tydesc_ptr, string_ptr))
 }
