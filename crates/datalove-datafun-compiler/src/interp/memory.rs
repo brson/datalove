@@ -1,7 +1,7 @@
 //! Memory management for interpreter values.
 //!
-//! Functions for destroying, freeing, and cloning values while respecting
-//! ownership semantics tracked by `ValueOwnership`.
+//! Functions for destroying, freeing, and cloning values.
+//! All values are now Borrowed (owned by caller's frame).
 
 use super::{InterpContext, Value, Destination, ValueOwnership};
 
@@ -94,54 +94,33 @@ pub fn destroy_value_contents_only<'db>(
     }
 }
 
-/// Destroy a value, respecting its location.
+/// Destroy a value's contents (frame owns the memory structure).
 ///
-/// For TempOwned values: destroys contents AND frees the memory structure.
-/// For Borrowed values: destroys contents only (frame owns the memory).
+/// All values are now Borrowed, so this only destroys contents.
+/// The memory structure is owned by the caller's frame.
 pub fn destroy_value<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
 ) {
     unsafe {
         let rt_handle = ctx.runtime.handle();
-
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt_handle,
             value.ptr,
             value.tydesc,
         );
-
-        if value.ownership == ValueOwnership::TempOwned {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                rt_handle,
-                value.tydesc,
-                1,
-                value.ptr,
-            );
-        }
     }
 }
 
 /// Free only the value structure without destroying contents.
 ///
-/// Use this when a value's bytes have been copied to a frame slot,
-/// and the frame now owns the pointers. This frees the temporary
-/// heap-allocated structure but leaves sub-allocations intact.
+/// Since all values are now Borrowed (owned by caller's frame),
+/// this is a no-op. Retained for API compatibility.
+#[allow(unused_variables)]
 pub fn free_value_structure<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
 ) {
-    if value.ownership != ValueOwnership::TempOwned {
-        return;
-    }
-
-    unsafe {
-        let rt_handle = ctx.runtime.handle();
-        datalove_rt::c::dtlv_rti_mem_free_local(
-            rt_handle,
-            value.tydesc,
-            1,
-            value.ptr,
-        );
-    }
+    // All values are Borrowed - structure owned by caller's frame.
+    // No action needed.
 }

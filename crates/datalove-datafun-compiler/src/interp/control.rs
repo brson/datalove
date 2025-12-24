@@ -7,7 +7,7 @@
 
 use bct::text::InternedText;
 
-use super::{InterpContext, InterpError, Value, ValueOwnership, SlotState};
+use super::{InterpContext, InterpError, Value, SlotState};
 use super::memory::destroy_value;
 
 /// Find a slot by variable name in the frame layout.
@@ -80,17 +80,7 @@ pub(super) fn evaluate_branch_condition<'db>(
                 }
             }
 
-            if value.ownership == ValueOwnership::TempOwned {
-                unsafe {
-                    datalove_rt::c::dtlv_rti_mem_free_local(
-                        ctx.runtime.handle(),
-                        value.tydesc,
-                        1,
-                        value.ptr,
-                    );
-                }
-            }
-
+            // All values are Borrowed - structure owned by caller.
             Ok(is_some)
         }
         TyTag::Result => {
@@ -152,19 +142,7 @@ pub(super) fn evaluate_branch_condition<'db>(
                 }
             }
 
-            // Only free structure if TempOwned (like Option handling).
-            // Borrowed values are owned by caller and cleaned up via cleanup_args_after_frame.
-            if value.ownership == ValueOwnership::TempOwned {
-                unsafe {
-                    datalove_rt::c::dtlv_rti_mem_free_local(
-                        ctx.runtime.handle(),
-                        value.tydesc,
-                        1,
-                        value.ptr,
-                    );
-                }
-            }
-
+            // All values are Borrowed - structure owned by caller.
             Ok(is_ok)
         }
         _ => {
@@ -213,18 +191,7 @@ pub(super) fn eval_try_option<'db>(
         std::ptr::copy_nonoverlapping(payload_ptr, dest.ptr, inner_size);
     }
 
-    // Clean up the operand.
-    if operand_value.ownership == ValueOwnership::TempOwned {
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                ctx.runtime.handle(),
-                operand_value.tydesc,
-                1,
-                operand_value.ptr,
-            );
-        }
-    }
-
+    // All values are Borrowed - structure owned by caller.
     Ok(())
 }
 
@@ -281,17 +248,7 @@ pub(super) fn eval_try_result<'db>(
             );
         }
 
-        if operand_value.ownership == ValueOwnership::TempOwned {
-            unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(
-                    ctx.runtime.handle(),
-                    operand_value.tydesc,
-                    1,
-                    operand_value.ptr,
-                );
-            }
-        }
-
+        // All values are Borrowed - structure owned by caller.
         return Err(InterpError::ResultErr {
             tydesc: err_tydesc,
             ptr: cloned_err_ptr,
@@ -305,17 +262,6 @@ pub(super) fn eval_try_result<'db>(
         std::ptr::copy_nonoverlapping(payload_ptr, dest.ptr, ok_size);
     }
 
-    // Clean up the operand.
-    if operand_value.ownership == ValueOwnership::TempOwned {
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                ctx.runtime.handle(),
-                operand_value.tydesc,
-                1,
-                operand_value.ptr,
-            );
-        }
-    }
-
+    // All values are Borrowed - structure owned by caller.
     Ok(())
 }

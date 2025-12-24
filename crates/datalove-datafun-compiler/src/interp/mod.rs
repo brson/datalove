@@ -223,17 +223,8 @@ fn eval_wrapper_payload_dps<'db>(
     // Write variant tag.
     unsafe { *(dest.ptr as *mut u8) = tag_value; }
 
-    // Evaluate payload with DPS.
-    let payload_value = eval_expression_frame(ctx, payload_expr, payload_dest)?;
-
-    // Handle case where operation didn't use dest (e.g., bigint ops).
-    if payload_value.ownership == ValueOwnership::TempOwned {
-        let size = unsafe { (*payload_value.tydesc).size as usize };
-        unsafe {
-            std::ptr::copy_nonoverlapping(payload_value.ptr, payload_dest.ptr, size);
-        }
-        memory::free_value_structure(ctx, payload_value);
-    }
+    // Evaluate payload with DPS - writes directly to payload_dest.
+    let _payload_value = eval_expression_frame(ctx, payload_expr, payload_dest)?;
 
     Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
 }
@@ -330,9 +321,8 @@ fn eval_function_call_frame<'db>(
         };
         let value = match eval_expression_frame(ctx, *arg_expr, arg_dest) {
             Ok(v) => {
-                if v.ownership == ValueOwnership::Borrowed {
-                    mark_temp_slot_available(ctx, *arg_expr);
-                }
+                // All values are now Borrowed (written to temp slots).
+                mark_temp_slot_available(ctx, *arg_expr);
                 v
             }
             Err(e) => {
@@ -393,12 +383,8 @@ pub fn execute_function_body<'db>(
                     if slot_states[slot_id.0 as usize] != SlotState::Moved {
                         // Slot was never read/moved, so destroy the argument.
                         destroy_value(ctx, arg_value);
-                    } else if arg_value.ownership == ValueOwnership::TempOwned {
-                        // Slot was moved: contents were consumed by function.
-                        // Free the structure since it's TempOwned (caller allocated it).
-                        free_value_structure(ctx, arg_value);
                     }
-                    // Borrowed values have their structures owned elsewhere.
+                    // All values are Borrowed - structures owned by caller's frame.
                 }
             }
         }
@@ -1028,28 +1014,6 @@ fn read_reference_slot<'db>(
     ptr_value as *mut u8
 }
 
-/// Write a value to a Local or Temporary slot.
-fn write_value_to_slot<'db>(
-    frame: &mut StackFrame<'db>,
-    slot_info: crate::function_analysis::SlotInfo<'db>,
-    value: Value,
-    db: &'db dyn crate::Db,
-) -> Result<(), InterpError> {
-    let offset = slot_info.offset(db) as usize;
-    let size = unsafe { (*value.tydesc).size as usize };
-
-    unsafe {
-        // Copy the actual value bytes into the slot.
-        std::ptr::copy_nonoverlapping(
-            value.ptr,
-            frame.frame_data.as_mut_ptr().add(offset),
-            size
-        );
-    }
-
-    Ok(())
-}
-
 /// Execute a let statement in frame-based mode.
 fn execute_let_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
@@ -1086,19 +1050,9 @@ fn execute_let_statement_frame<'db>(
 
     // Evaluate expression with DPS into slot.
     let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
-    let value = eval_expression_frame(ctx, let_stmt.value(ctx.db), dest)?;
+    let _value = eval_expression_frame(ctx, let_stmt.value(ctx.db), dest)?;
 
-    // If DPS was used (Borrowed), the value was written directly to slot.
-    // If not (TempOwned), we need to write and free.
-    if value.ownership == ValueOwnership::TempOwned {
-        // Write value to slot.
-        if let Err(e) = write_value_to_slot(&mut ctx.call_stack[frame_index], slot_info, value, ctx.db) {
-            destroy_value(ctx, value);
-            return Err(e);
-        }
-        // Free the heap-allocated value structure after copying to frame.
-        free_value_structure(ctx, value);
-    }
+    // All values are now Borrowed and written directly to dest.
 
     // Mark slot as Available.
     ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
@@ -1652,14 +1606,8 @@ fn eval_list_with_element_tydesc<'db>(
         let elem_dest = Destination { ptr: elem_dest_ptr, tydesc: element_tydesc };
 
         match eval_expression_frame(ctx, *elem, elem_dest) {
-            Ok(value) => {
-                if value.ownership == ValueOwnership::TempOwned {
-                    // Expression didn't use dest - copy result and free.
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(value.ptr, elem_dest_ptr, element_size);
-                    }
-                    free_value_structure(ctx, value);
-                }
+            Ok(_value) => {
+                // All values are now Borrowed and written directly to dest.
                 // Update list size.
                 unsafe {
                     let list = list_ptr as *mut List;
@@ -1771,19 +1719,8 @@ fn eval_inline_anon_tuple<'db>(
                     .expect("field index should be valid");
 
                 match eval_expression_frame(ctx, *elem, field_dest) {
-                    Ok(field_value) => {
-                        // Handle case where operation didn't use dest.
-                        if field_value.ownership == ValueOwnership::TempOwned {
-                            let size = unsafe { (*field_value.tydesc).size as usize };
-                            unsafe {
-                                std::ptr::copy_nonoverlapping(
-                                    field_value.ptr,
-                                    field_dest.ptr,
-                                    size,
-                                );
-                            }
-                            free_value_structure(ctx, field_value);
-                        }
+                    Ok(_field_value) => {
+                        // All values are now Borrowed and written directly to dest.
                     }
                     Err(e) => {
                         // Clean up already-written fields.
@@ -1842,19 +1779,8 @@ fn eval_inline_anon_struct<'db>(
                     .expect("field index should be valid");
 
                 match eval_expression_frame(ctx, *value_expr, field_dest) {
-                    Ok(field_value) => {
-                        // Handle case where operation didn't use dest.
-                        if field_value.ownership == ValueOwnership::TempOwned {
-                            let size = unsafe { (*field_value.tydesc).size as usize };
-                            unsafe {
-                                std::ptr::copy_nonoverlapping(
-                                    field_value.ptr,
-                                    field_dest.ptr,
-                                    size,
-                                );
-                            }
-                            free_value_structure(ctx, field_value);
-                        }
+                    Ok(_field_value) => {
+                        // All values are now Borrowed and written directly to dest.
                     }
                     Err(e) => {
                         // Clean up already-written fields.

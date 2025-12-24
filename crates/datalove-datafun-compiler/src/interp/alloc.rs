@@ -3,7 +3,7 @@
 //! Functions for writing values to destinations using destination-passing style (DPS).
 //! Handles Result, Data wrappers, and integer widening.
 
-use super::{InterpContext, InterpError, Value, ValueOwnership, Destination};
+use super::{InterpContext, InterpError, Value, Destination};
 
 /// Write Result::Err to a destination (DPS).
 ///
@@ -179,10 +179,9 @@ pub(super) fn write_bigint_to_ptr(
     }
 }
 
-/// Write Data wrapper to destination, consuming the inner value.
+/// Write Data wrapper to destination, cloning the inner value.
 ///
-/// The Data struct takes ownership of the inner value's pointer.
-/// If the inner value is borrowed, it is cloned first.
+/// The Data struct takes ownership of a cloned copy of the inner value.
 pub(super) fn write_data_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     inner_value: Value,
@@ -190,40 +189,31 @@ pub(super) fn write_data_to_dest<'db>(
 ) -> Result<(), InterpError> {
     use datalove_rt::rtdt;
 
-    // If the inner value is borrowed, we need to clone it since Data will take ownership.
-    let (owned_ptr, owned_tydesc) = if inner_value.ownership == ValueOwnership::TempOwned {
-        (inner_value.ptr, inner_value.tydesc)
-    } else {
-        // Clone borrowed/slot-owned values so Data can own them.
-        let rt_handle = ctx.runtime.handle();
-        let cloned_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner_value.tydesc, 1)
-        };
-        if cloned_ptr.is_null() {
-            return Err(InterpError::RuntimeError("Failed to allocate Data inner clone".to_string()));
-        }
-        unsafe {
-            datalove_rt::c::dtlv_rti_clone_local(
-                rt_handle,
-                inner_value.ptr,
-                inner_value.tydesc,
-                cloned_ptr,
-                inner_value.tydesc,
-            );
-        }
-        (cloned_ptr, inner_value.tydesc)
+    // All values are Borrowed, so we always clone for Data to own.
+    let rt_handle = ctx.runtime.handle();
+    let cloned_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner_value.tydesc, 1)
     };
+    if cloned_ptr.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate Data inner clone".to_string()));
+    }
+    unsafe {
+        datalove_rt::c::dtlv_rti_clone_local(
+            rt_handle,
+            inner_value.ptr,
+            inner_value.tydesc,
+            cloned_ptr,
+            inner_value.tydesc,
+        );
+    }
 
     // Write Data struct to destination.
     unsafe {
         std::ptr::write(
             dest.ptr as *mut rtdt::Data,
-            rtdt::Data::from_pointers(owned_tydesc, owned_ptr)
+            rtdt::Data::from_pointers(inner_value.tydesc, cloned_ptr)
         );
     }
-
-    // Data now owns the pointer to inner value's allocation.
-    // Don't free owned_inner - Data::from_pointers stores owned_ptr directly.
 
     Ok(())
 }
