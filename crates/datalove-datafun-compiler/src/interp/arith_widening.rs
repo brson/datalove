@@ -9,17 +9,52 @@
 //! for fixed-width integers.
 
 use crate::ast::{BinOp, UnaryOp};
+use crate::datalit::tycheck::Type;
 
 use super::{InterpContext, InterpError, Value, Destination, ValueOwnership};
-use super::memory::destroy_value;
 use super::types::{is_int_value, is_f32_value, is_fixed_int_value, get_type_tag};
-use super::alloc::widen_fixed_int_to_int;
+use super::alloc::write_widened_int_to_dest;
 use super::arith::{
     write_f32_result,
     eval_add_checked, eval_sub_checked, eval_mul_checked, eval_div_checked,
     eval_add_optional, eval_sub_optional, eval_mul_optional, eval_div_optional,
     eval_comparison,
 };
+
+/// Temporary widened Int value for arithmetic operations.
+///
+/// Manages allocation and cleanup of temporary Int values when widening
+/// fixed-width integers for bigint arithmetic.
+struct TempInt {
+    ptr: *mut u8,
+    tydesc: *const datalove_rt::rtdt::TyDesc,
+}
+
+impl TempInt {
+    /// Widen a fixed-width integer to a temporary Int.
+    fn widen(ctx: &mut InterpContext<'_>, value: &Value) -> Result<Self, InterpError> {
+        let int_tydesc = ctx.tydesc_table.get_or_create(&Type::Int);
+        let rt_handle = ctx.runtime.handle();
+        let ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, int_tydesc, 1)
+        };
+        if ptr.is_null() {
+            return Err(InterpError::RuntimeError("Failed to allocate Int".to_string()));
+        }
+        let dest = Destination { ptr, tydesc: int_tydesc };
+        write_widened_int_to_dest(rt_handle, value.ptr, value.tydesc, dest)?;
+        Ok(Self { ptr, tydesc: int_tydesc })
+    }
+
+    /// Destroy and free this temporary Int.
+    fn destroy(self, ctx: &mut InterpContext<'_>) {
+        unsafe {
+            let rt_handle = ctx.runtime.handle();
+            datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, self.ptr, self.tydesc);
+            datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, self.tydesc, 1, self.ptr);
+        }
+    }
+}
 
 /// Evaluate addition with automatic widening to int.
 ///
@@ -47,11 +82,11 @@ pub(super) fn eval_add<'db>(
             ));
         }
 
-        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
-        let rhs_int = match widen_fixed_int_to_int(ctx, *rhs) {
+        let lhs_int = TempInt::widen(ctx, lhs)?;
+        let rhs_int = match TempInt::widen(ctx, rhs) {
             Ok(v) => v,
             Err(e) => {
-                destroy_value(ctx, lhs_int);
+                lhs_int.destroy(ctx);
                 return Err(e);
             }
         };
@@ -65,8 +100,8 @@ pub(super) fn eval_add<'db>(
             )
         };
 
-        destroy_value(ctx, lhs_int);
-        destroy_value(ctx, rhs_int);
+        lhs_int.destroy(ctx);
+        rhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -93,7 +128,7 @@ pub(super) fn eval_add<'db>(
     }
     // Mixed fixed-int and Int: widen fixed-int side.
     else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
-        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
+        let lhs_int = TempInt::widen(ctx, lhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_add(
@@ -104,7 +139,7 @@ pub(super) fn eval_add<'db>(
             )
         };
 
-        destroy_value(ctx, lhs_int);
+        lhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -113,7 +148,7 @@ pub(super) fn eval_add<'db>(
         }
     }
     else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
-        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
+        let rhs_int = TempInt::widen(ctx, rhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_add(
@@ -124,7 +159,7 @@ pub(super) fn eval_add<'db>(
             )
         };
 
-        destroy_value(ctx, rhs_int);
+        rhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -165,8 +200,8 @@ pub(super) fn eval_sub<'db>(
             ));
         }
 
-        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
-        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
+        let lhs_int = TempInt::widen(ctx, lhs)?;
+        let rhs_int = TempInt::widen(ctx, rhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_sub(
@@ -177,8 +212,8 @@ pub(super) fn eval_sub<'db>(
             )
         };
 
-        destroy_value(ctx, lhs_int);
-        destroy_value(ctx, rhs_int);
+        lhs_int.destroy(ctx);
+        rhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -203,7 +238,7 @@ pub(super) fn eval_sub<'db>(
         }
     }
     else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
-        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
+        let lhs_int = TempInt::widen(ctx, lhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_sub(
@@ -214,7 +249,7 @@ pub(super) fn eval_sub<'db>(
             )
         };
 
-        destroy_value(ctx, lhs_int);
+        lhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -223,7 +258,7 @@ pub(super) fn eval_sub<'db>(
         }
     }
     else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
-        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
+        let rhs_int = TempInt::widen(ctx, rhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_sub(
@@ -234,7 +269,7 @@ pub(super) fn eval_sub<'db>(
             )
         };
 
-        destroy_value(ctx, rhs_int);
+        rhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -273,8 +308,8 @@ pub(super) fn eval_mul<'db>(
             ));
         }
 
-        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
-        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
+        let lhs_int = TempInt::widen(ctx, lhs)?;
+        let rhs_int = TempInt::widen(ctx, rhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_mul(
@@ -285,8 +320,8 @@ pub(super) fn eval_mul<'db>(
             )
         };
 
-        destroy_value(ctx, lhs_int);
-        destroy_value(ctx, rhs_int);
+        lhs_int.destroy(ctx);
+        rhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -311,7 +346,7 @@ pub(super) fn eval_mul<'db>(
         }
     }
     else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
-        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
+        let lhs_int = TempInt::widen(ctx, lhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_mul(
@@ -322,7 +357,7 @@ pub(super) fn eval_mul<'db>(
             )
         };
 
-        destroy_value(ctx, lhs_int);
+        lhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -331,7 +366,7 @@ pub(super) fn eval_mul<'db>(
         }
     }
     else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
-        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
+        let rhs_int = TempInt::widen(ctx, rhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_mul(
@@ -342,7 +377,7 @@ pub(super) fn eval_mul<'db>(
             )
         };
 
-        destroy_value(ctx, rhs_int);
+        rhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -381,8 +416,8 @@ pub(super) fn eval_div<'db>(
             ));
         }
 
-        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
-        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
+        let lhs_int = TempInt::widen(ctx, lhs)?;
+        let rhs_int = TempInt::widen(ctx, rhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_div_checked(
@@ -393,8 +428,8 @@ pub(super) fn eval_div<'db>(
             )
         };
 
-        destroy_value(ctx, lhs_int);
-        destroy_value(ctx, rhs_int);
+        lhs_int.destroy(ctx);
+        rhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -419,7 +454,7 @@ pub(super) fn eval_div<'db>(
         }
     }
     else if is_fixed_int_value(*lhs) && is_int_value(*rhs) {
-        let lhs_int = widen_fixed_int_to_int(ctx, *lhs)?;
+        let lhs_int = TempInt::widen(ctx, lhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_div_checked(
@@ -430,7 +465,7 @@ pub(super) fn eval_div<'db>(
             )
         };
 
-        destroy_value(ctx, lhs_int);
+        lhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())
@@ -439,7 +474,7 @@ pub(super) fn eval_div<'db>(
         }
     }
     else if is_int_value(*lhs) && is_fixed_int_value(*rhs) {
-        let rhs_int = widen_fixed_int_to_int(ctx, *rhs)?;
+        let rhs_int = TempInt::widen(ctx, rhs)?;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_int_div_checked(
@@ -450,7 +485,7 @@ pub(super) fn eval_div<'db>(
             )
         };
 
-        destroy_value(ctx, rhs_int);
+        rhs_int.destroy(ctx);
 
         if status == datalove_rt::c::RtStatus::Ok {
             Ok(())

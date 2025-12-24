@@ -106,8 +106,8 @@ use frame::CfgControl;
 use memory::{clone_value_to_dest, move_value_to_dest};
 use types::is_copy_type;
 use alloc::{
-    allocate_option_some_from_value,
-    allocate_result_ok_from_value, write_result_err_to_dest,
+    write_option_some_to_dest, write_result_ok_to_dest,
+    write_result_err_to_dest, write_data_to_dest,
 };
 use collections::{
     write_tuple_from_values_to_dest, write_struct_from_values_to_dest,
@@ -1392,14 +1392,14 @@ fn eval_expression_frame<'db>(
             let inner_expr = data_expr.value(ctx.db);
             let inner_dest = get_destination_for_expr(ctx, inner_expr)?;
             let inner_value = eval_expression_frame(ctx, inner_expr, inner_dest)?;
-            // Wrap in Data (clones inner_value if borrowed).
-            let result = alloc::allocate_data_from_value(ctx, inner_value)?;
-            // Clean up original inner value (allocate_data_from_value cloned it).
+            // Wrap in Data (clones inner_value if borrowed, takes ownership if TempOwned).
+            write_data_to_dest(ctx, inner_value, dest)?;
+            // If inner was borrowed, we cloned it for Data; destroy original and mark slot.
             if inner_value.ownership == ValueOwnership::Borrowed {
                 destroy_value(ctx, inner_value);
                 mark_temp_slot_moved(ctx, inner_expr);
             }
-            Ok(result)
+            Ok(dest.to_borrowed_value())
         }
         ast::ExprFunKind::Err(_) => {
             Err(InterpError::InvalidExpression(
@@ -1518,16 +1518,38 @@ fn eval_return_expression_frame<'db>(
                 // Check if value needs wrapping (not already an Option).
                 let value_tag = unsafe { (*value.tydesc).type_tag };
                 if value_tag != TyTag::Option {
-                    // Wrap value in Some.
-                    return allocate_option_some_from_value(ctx, value);
+                    // Wrap value in Some - allocate destination and write.
+                    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(value.tydesc);
+                    let rt_handle = ctx.runtime.handle();
+                    let option_ptr = unsafe {
+                        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
+                    };
+                    if option_ptr.is_null() {
+                        destroy_value(ctx, value);
+                        return Err(InterpError::RuntimeError("Failed to allocate Option wrapper".to_string()));
+                    }
+                    let option_dest = Destination { ptr: option_ptr, tydesc: option_tydesc };
+                    write_option_some_to_dest(ctx, value, option_dest)?;
+                    return Ok(Value { ptr: option_ptr, tydesc: option_tydesc, ownership: ValueOwnership::TempOwned });
                 }
             }
             TypeHint::Result(_) => {
                 // Check if value needs wrapping (not already a Result).
                 let value_tag = unsafe { (*value.tydesc).type_tag };
                 if value_tag != TyTag::Result {
-                    // Wrap value in Ok.
-                    return allocate_result_ok_from_value(ctx, value);
+                    // Wrap value in Ok - allocate destination and write.
+                    let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(value.tydesc);
+                    let rt_handle = ctx.runtime.handle();
+                    let result_ptr = unsafe {
+                        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, result_tydesc, 1)
+                    };
+                    if result_ptr.is_null() {
+                        destroy_value(ctx, value);
+                        return Err(InterpError::RuntimeError("Failed to allocate Result wrapper".to_string()));
+                    }
+                    let result_dest = Destination { ptr: result_ptr, tydesc: result_tydesc };
+                    write_result_ok_to_dest(ctx, value, result_dest)?;
+                    return Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned });
                 }
             }
             _ => {}

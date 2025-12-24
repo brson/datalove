@@ -5,38 +5,6 @@
 
 use super::{InterpContext, Value, Destination, ValueOwnership};
 
-/// Clone a value (for copy types or explicit cloning).
-pub(super) fn clone_value<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: Value,
-) -> Value {
-    let rt_handle = ctx.runtime.handle();
-
-    let cloned_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(
-            rt_handle,
-            value.tydesc,
-            1
-        )
-    };
-
-    unsafe {
-        datalove_rt::c::dtlv_rti_clone_local(
-            rt_handle,
-            value.ptr,
-            value.tydesc,
-            cloned_ptr,
-            value.tydesc,
-        );
-    }
-
-    Value {
-        ptr: cloned_ptr,
-        tydesc: value.tydesc,
-        ownership: ValueOwnership::TempOwned,
-    }
-}
-
 /// Clone a value into a pre-allocated destination.
 pub(super) fn clone_value_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
