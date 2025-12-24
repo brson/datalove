@@ -38,6 +38,7 @@ Datalit types are:
   `error` - dynamically-typed and pointer-packed version of any of the above
 
 Datalit types are value types and stored inline.
+Datalit structs and enums are structurally-typed.
 
 
 
