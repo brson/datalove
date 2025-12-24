@@ -1,106 +1,11 @@
 //! Allocation functions for compound data structures.
 //!
-//! Handles creation of tuples, structs, lists, maps, and sets from
-//! vectors of evaluated values. Each function takes ownership of input
-//! values and moves their data into the allocated structure.
+//! Handles creation of maps and sets from vectors of evaluated values.
+//! Each function takes ownership of input values and moves their data
+//! into the allocated structure.
 
-use bct::text::InternedText;
-
-use super::{InterpContext, InterpError, Value, ValueOwnership};
+use super::{InterpContext, InterpError, Value};
 use super::memory::{destroy_value, free_value_structure};
-
-/// Write a tuple from a vector of evaluated values to a destination.
-///
-/// Takes ownership of all element values, copying their data into the tuple
-/// at dest and freeing their original containers.
-pub(super) fn write_tuple_from_values_to_dest<'db>(
-    ctx: &mut InterpContext<'db>,
-    values: Vec<Value>,
-    dest: super::Destination,
-) -> Result<(), InterpError> {
-    use datalove_rt::rtdt;
-
-    if values.is_empty() {
-        return Err(InterpError::RuntimeError("Cannot create empty tuple".to_string()));
-    }
-
-    let tuple_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(dest.tydesc) };
-
-    // Compute layout to get field offsets.
-    let layout = rtdt::layout::compute_tuple_layout(tuple_tydesc_ref);
-
-    // Copy each element to its field offset in the tuple at dest.
-    for (i, value) in values.into_iter().enumerate() {
-        let field_offset = layout.field_offsets[i] as usize;
-        let element_size = unsafe { (*value.tydesc).size as usize };
-
-        unsafe {
-            let field_ptr = dest.ptr.add(field_offset);
-            std::ptr::copy_nonoverlapping(value.ptr, field_ptr, element_size);
-        }
-
-        // Free the element's container (data has been copied to tuple).
-        if value.ownership == ValueOwnership::TempOwned {
-            unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(
-                    ctx.runtime.handle(),
-                    value.tydesc,
-                    1,
-                    value.ptr,
-                );
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Write a struct from field names and evaluated values to a destination.
-///
-/// Takes ownership of all field values, copying their data into the struct
-/// at dest and freeing their original containers. Fields must be provided in sorted
-/// order by name for canonical representation.
-pub(super) fn write_struct_from_values_to_dest<'db>(
-    ctx: &mut InterpContext<'db>,
-    fields: Vec<(InternedText<'db>, Value)>,
-    dest: super::Destination,
-) -> Result<(), InterpError> {
-    use datalove_rt::rtdt;
-
-    if fields.is_empty() {
-        return Err(InterpError::RuntimeError("Cannot create empty struct".to_string()));
-    }
-
-    let struct_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(dest.tydesc) };
-
-    // Compute layout to get field offsets.
-    let layout = rtdt::layout::compute_struct_layout(struct_tydesc_ref);
-
-    // Copy each field value to its offset in the struct at dest.
-    for (i, (_, value)) in fields.into_iter().enumerate() {
-        let field_offset = layout.field_offsets[i] as usize;
-        let field_size = unsafe { (*value.tydesc).size as usize };
-
-        unsafe {
-            let field_ptr = dest.ptr.add(field_offset);
-            std::ptr::copy_nonoverlapping(value.ptr, field_ptr, field_size);
-        }
-
-        // Free the field's container (data has been copied to struct).
-        if value.ownership == ValueOwnership::TempOwned {
-            unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_local(
-                    ctx.runtime.handle(),
-                    value.tydesc,
-                    1,
-                    value.ptr,
-                );
-            }
-        }
-    }
-
-    Ok(())
-}
 
 /// Write a map from a vector of key-value pairs to a destination.
 ///

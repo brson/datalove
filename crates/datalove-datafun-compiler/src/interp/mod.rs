@@ -100,19 +100,12 @@ pub use frame::{SlotState, StackFrame};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
 pub use context::{InterpContext, ModuleFunctionTableGraph};
 use control::{find_slot_by_name, evaluate_branch_condition, eval_try_option, eval_try_result};
-use tydesc::type_hint_to_tydesc;
 
 use frame::CfgControl;
 use memory::{clone_value_to_dest, move_value_to_dest};
 use types::is_copy_type;
-use alloc::{
-    write_option_some_to_dest, write_result_ok_to_dest,
-    write_result_err_to_dest, write_data_to_dest,
-};
-use collections::{
-    write_tuple_from_values_to_dest, write_struct_from_values_to_dest,
-    write_map_from_values_to_dest, write_set_from_values_to_dest,
-};
+use alloc::{write_result_err_to_dest, write_data_to_dest};
+use collections::{write_map_from_values_to_dest, write_set_from_values_to_dest};
 use literals::{
     write_inline_int_to_dest, write_option_none_to_dest,
     write_bool_to_dest, write_f32_to_dest, write_u32_to_dest,
@@ -1414,14 +1407,11 @@ fn eval_expression_frame<'db>(
 
 /// Evaluate a return expression with destination from frame.
 ///
-/// If the frame has a `return_dest`, the expression is evaluated and written to
-/// caller's memory, with coercion if needed. Otherwise, falls back to heap allocation.
+/// The frame must have a `return_dest`; all callers now provide one.
 fn eval_return_expression_frame<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
 ) -> Result<Value, InterpError> {
-    use datalove_rt::rtdt::TyTag;
-
     let frame_index = ctx.call_stack.len() - 1;
 
     // Check if we have a return destination from caller.
@@ -1452,111 +1442,9 @@ fn eval_return_expression_frame<'db>(
         });
     }
 
-    // No return_dest - fall back to heap allocation (script scope path).
-    // Get the function's return type to check if wrapping/coercion is needed.
-    let func = ctx.call_stack[frame_index].func;
-    let return_type = func.return_type(ctx.db);
-
-    // Check if expression needs typed context (some/ok/er/none/error).
-    let needs_typed_dest = matches!(
-        expr.expr(ctx.db),
-        ast::ExprFunKind::None(_) | ast::ExprFunKind::Err(_) |
-        ast::ExprFunKind::Some(_) | ast::ExprFunKind::Ok(_) | ast::ExprFunKind::Er(_)
-    );
-
-    if needs_typed_dest {
-        // Get the function's return type to provide as destination.
-        if let Some(ret_type) = return_type {
-            let ret_tydesc = type_hint_to_tydesc(ctx, ret_type);
-            let ret_ptr = unsafe {
-                datalove_rt::c::dtlv_rti_mem_alloc_local(
-                    ctx.runtime.handle(),
-                    ret_tydesc,
-                    1
-                )
-            };
-            if ret_ptr.is_null() {
-                return Err(InterpError::RuntimeError("Failed to allocate return buffer".to_string()));
-            }
-
-            let dest = Destination { ptr: ret_ptr, tydesc: ret_tydesc };
-            // Evaluate expression with the typed destination.
-            let result = eval_expression_frame(ctx, expr, dest);
-            if let Err(e) = result {
-                // Free the allocated buffer on error to avoid leaks.
-                unsafe {
-                    datalove_rt::c::dtlv_rti_mem_free_local(
-                        ctx.runtime.handle(),
-                        ret_tydesc,
-                        1,
-                        ret_ptr
-                    );
-                }
-                return Err(e);
-            }
-            let value = result.unwrap();
-
-            // Convert Borrowed to TempOwned since this escapes the frame.
-            if value.ownership == ValueOwnership::Borrowed && value.ptr == ret_ptr {
-                return Ok(Value { ptr: ret_ptr, tydesc: ret_tydesc, ownership: ValueOwnership::TempOwned });
-            } else {
-                return Ok(value);
-            }
-        }
-    }
-
-    // Evaluate expression to its temp slot.
-    let expr_dest = get_destination_for_expr(ctx, expr)?;
-    let value = eval_expression_frame(ctx, expr, expr_dest)?;
-
-    // Check if we need to wrap the value in Option/Result for return type coercion.
-    // This handles the case where return_dest is None (e.g., nested function calls).
-    if let Some(ret_type) = return_type {
-        use crate::datalit::ast::TypeHint;
-        match ret_type.type_hint(ctx.db) {
-            TypeHint::Option(_) => {
-                // Check if value needs wrapping (not already an Option).
-                let value_tag = unsafe { (*value.tydesc).type_tag };
-                if value_tag != TyTag::Option {
-                    // Wrap value in Some - allocate destination and write.
-                    let option_tydesc = ctx.tydesc_table.create_option_from_inner_tydesc(value.tydesc);
-                    let rt_handle = ctx.runtime.handle();
-                    let option_ptr = unsafe {
-                        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, option_tydesc, 1)
-                    };
-                    if option_ptr.is_null() {
-                        destroy_value(ctx, value);
-                        return Err(InterpError::RuntimeError("Failed to allocate Option wrapper".to_string()));
-                    }
-                    let option_dest = Destination { ptr: option_ptr, tydesc: option_tydesc };
-                    write_option_some_to_dest(ctx, value, option_dest)?;
-                    return Ok(Value { ptr: option_ptr, tydesc: option_tydesc, ownership: ValueOwnership::TempOwned });
-                }
-            }
-            TypeHint::Result(_) => {
-                // Check if value needs wrapping (not already a Result).
-                let value_tag = unsafe { (*value.tydesc).type_tag };
-                if value_tag != TyTag::Result {
-                    // Wrap value in Ok - allocate destination and write.
-                    let result_tydesc = ctx.tydesc_table.create_result_from_inner_tydesc(value.tydesc);
-                    let rt_handle = ctx.runtime.handle();
-                    let result_ptr = unsafe {
-                        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, result_tydesc, 1)
-                    };
-                    if result_ptr.is_null() {
-                        destroy_value(ctx, value);
-                        return Err(InterpError::RuntimeError("Failed to allocate Result wrapper".to_string()));
-                    }
-                    let result_dest = Destination { ptr: result_ptr, tydesc: result_tydesc };
-                    write_result_ok_to_dest(ctx, value, result_dest)?;
-                    return Ok(Value { ptr: result_ptr, tydesc: result_tydesc, ownership: ValueOwnership::TempOwned });
-                }
-            }
-            _ => {}
-        }
-    }
-
-    Ok(value)
+    // No return_dest - this was the "script scope" fallback path.
+    // Script scope was removed; all callers now provide return_dest.
+    unreachable!("return_dest should always be Some - script scope was removed");
 }
 
 // ============================================================================
@@ -1927,23 +1815,12 @@ fn eval_inline_anon_tuple<'db>(
         }
     }
 
-    // Fallback: type mismatch - allocate new tuple, copy to dest.
-    let mut values = Vec::with_capacity(elements.len());
-
-    for elem in elements {
-        let elem_dest = get_destination_for_expr(ctx, *elem)?;
-        match eval_expression_frame(ctx, *elem, elem_dest) {
-            Ok(v) => values.push(v),
-            Err(e) => {
-                for v in values {
-                    destroy_value(ctx, v);
-                }
-                return Err(e);
-            }
-        }
-    }
-
-    write_tuple_from_values_to_dest(ctx, values, dest)
+    // Fallback was for type mismatch - but dest should always match the expression type.
+    unreachable!(
+        "eval_inline_anon_tuple: dest type mismatch - expected Tuple with {} fields, got {:?}",
+        elements.len(),
+        dest_tag
+    );
 }
 
 /// Evaluate inline anonymous struct expression with DPS.
@@ -2009,22 +1886,11 @@ fn eval_inline_anon_struct<'db>(
         }
     }
 
-    // Fallback: type mismatch - allocate new struct, copy to dest.
-    let mut field_values = Vec::with_capacity(sorted_fields.len());
-
-    for (name, value_expr) in sorted_fields {
-        let value_dest = get_destination_for_expr(ctx, value_expr)?;
-        match eval_expression_frame(ctx, value_expr, value_dest) {
-            Ok(v) => field_values.push((name, v)),
-            Err(e) => {
-                for (_, v) in field_values {
-                    destroy_value(ctx, v);
-                }
-                return Err(e);
-            }
-        }
-    }
-
-    write_struct_from_values_to_dest(ctx, field_values, dest)
+    // Fallback was for type mismatch - but dest should always match the expression type.
+    unreachable!(
+        "eval_inline_anon_struct: dest type mismatch - expected Struct with {} fields, got {:?}",
+        sorted_fields.len(),
+        dest_tag
+    );
 }
 

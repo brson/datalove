@@ -52,7 +52,7 @@ pub struct StackFrame<'db> {
     pub tracked_slots: Vec<SlotId>,
     /// Destination for return value (caller's memory).
     ///
-    /// If Some, return expressions write directly to this destination.
-    /// If None, return values are heap-allocated (script scope fallback).
+    /// Return expressions write directly to this destination.
+    /// None only for void functions (no return value).
     pub return_dest: Option<Destination>,
 }

@@ -1,81 +1,9 @@
 //! Value allocation and DPS write functions.
 //!
 //! Functions for writing values to destinations using destination-passing style (DPS).
-//! Handles Option, Result, Data wrappers, and integer widening.
+//! Handles Result, Data wrappers, and integer widening.
 
 use super::{InterpContext, InterpError, Value, ValueOwnership, Destination};
-
-/// Write Some wrapper to destination, consuming the inner value.
-///
-/// Copies the inner value to the Option's payload area and frees the inner
-/// value's container if it was TempOwned.
-pub(super) fn write_option_some_to_dest<'db>(
-    ctx: &mut InterpContext<'db>,
-    inner_value: Value,
-    dest: Destination,
-) -> Result<(), InterpError> {
-    use datalove_rt::rtdt::{TyDescRef, OptionTag};
-
-    let option_tydesc_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
-    let layout = datalove_rt::rtdt::layout::compute_option_layout(option_tydesc_ref);
-
-    unsafe {
-        *dest.ptr = OptionTag::Some as u8;
-        let payload_ptr = dest.ptr.add(layout.payload_offset as usize);
-        let inner_size = (*inner_value.tydesc).size as usize;
-        std::ptr::copy_nonoverlapping(inner_value.ptr, payload_ptr, inner_size);
-    }
-
-    // Free the inner value's container (data has been copied to Option).
-    if inner_value.ownership == ValueOwnership::TempOwned {
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                ctx.runtime.handle(),
-                inner_value.tydesc,
-                1,
-                inner_value.ptr,
-            );
-        }
-    }
-
-    Ok(())
-}
-
-/// Write Ok wrapper to destination, consuming the inner value.
-///
-/// Copies the inner value to the Result's payload area and frees the inner
-/// value's container if it was TempOwned.
-pub(super) fn write_result_ok_to_dest<'db>(
-    ctx: &mut InterpContext<'db>,
-    inner_value: Value,
-    dest: Destination,
-) -> Result<(), InterpError> {
-    use datalove_rt::rtdt::{TyDescRef, ResultTag};
-
-    let result_tydesc_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
-    let layout = datalove_rt::rtdt::layout::compute_result_layout(result_tydesc_ref);
-
-    unsafe {
-        *dest.ptr = ResultTag::Ok as u8;
-        let payload_ptr = dest.ptr.add(layout.payload_offset as usize);
-        let inner_size = (*inner_value.tydesc).size as usize;
-        std::ptr::copy_nonoverlapping(inner_value.ptr, payload_ptr, inner_size);
-    }
-
-    // Free the inner value's container.
-    if inner_value.ownership == ValueOwnership::TempOwned {
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                ctx.runtime.handle(),
-                inner_value.tydesc,
-                1,
-                inner_value.ptr,
-            );
-        }
-    }
-
-    Ok(())
-}
 
 /// Write Result::Err to a destination (DPS).
 ///
