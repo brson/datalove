@@ -7,48 +7,6 @@ use crate::datalit::tycheck::Type;
 use super::{InterpContext, InterpError, Value, ValueOwnership, Destination};
 use super::memory::destroy_value;
 
-/// Allocate a boolean value.
-pub(super) fn allocate_bool<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: bool,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::Bool);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *ptr = if value { 1 } else { 0 }; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
-/// Allocate an f32 value.
-pub(super) fn allocate_f32<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: f32,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::F32);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *(ptr as *mut f32) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
-/// Allocate a u32 value.
-pub(super) fn allocate_u32_raw<'db>(
-    ctx: &mut InterpContext<'db>,
-    value: u32,
-) -> Result<Value, InterpError> {
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::U32);
-    let rt_handle = ctx.runtime.handle();
-    let ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-    unsafe { *(ptr as *mut u32) = value; }
-    Ok(Value { ptr, tydesc: tydesc_ptr, ownership: ValueOwnership::TempOwned })
-}
-
 /// Allocate a bigint (Int) value initialized to zero.
 pub(super) fn allocate_bigint<'db>(
     ctx: &mut InterpContext<'db>,

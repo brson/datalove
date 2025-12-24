@@ -89,7 +89,6 @@ mod alloc;
 mod arith;
 mod arith_widening;
 mod collections;
-mod coerce;
 mod literals;
 mod context;
 mod control;

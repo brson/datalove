@@ -1,66 +1,7 @@
-
 use rmx::prelude::*;
 
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
-
-/// Context for rendering diagnostics with source location information.
-///
-/// Simplified version for single-file CLI use case.
-/// Lives in the driver (CLI) outside of salsa.
-struct DiagnosticContext {
-    /// Source information (path, display name).
-    source_info: SourceInfo,
-    /// Original source text (for line:col conversion).
-    source_text: String,
-}
-
-struct SourceInfo {
-    /// File path if the source came from a file.
-    _path: Option<PathBuf>,
-    /// Display name for rendering (e.g., "file.dfs", "<repl-5>", "<test>").
-    display_name: String,
-}
-
-impl DiagnosticContext {
-    /// Register a file source.
-    fn from_file(path: PathBuf, source_text: String) -> Self {
-        let display_name = path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-
-        DiagnosticContext {
-            source_info: SourceInfo {
-                _path: Some(path),
-                display_name,
-            },
-            source_text,
-        }
-    }
-
-    /// Register a test source (no file path).
-    fn _from_test(source_text: String) -> Self {
-        DiagnosticContext {
-            source_info: SourceInfo {
-                _path: None,
-                display_name: "<test>".to_string(),
-            },
-            source_text,
-        }
-    }
-
-    /// Register a REPL input.
-    fn _from_repl(line_num: usize, source_text: String) -> Self {
-        DiagnosticContext {
-            source_info: SourceInfo {
-                _path: None,
-                display_name: format!("<repl-{}>", line_num),
-            },
-            source_text,
-        }
-    }
-}
 
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
