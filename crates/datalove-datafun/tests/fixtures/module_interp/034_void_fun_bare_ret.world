@@ -1,0 +1,14 @@
+----------
+module local/test/main
+----------
+
+fun early_exit(n: @u32)
+    if n .< @10
+        ret
+    end if
+end fun
+
+fun main(): bool
+    early_exit(@5)
+    ret @true
+end fun

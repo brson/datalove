@@ -1,0 +1,11 @@
+----------
+module local/test/main
+----------
+
+fun test_add_checked(a: i64, b: i64): !i64
+    ret ok (a +! b)
+end fun
+
+fun main(): !i64
+    ret test_add_checked(@100, @200)
+end fun

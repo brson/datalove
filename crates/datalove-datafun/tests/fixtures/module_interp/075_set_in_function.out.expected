@@ -1,0 +1,12 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Error",
+        errors: [
+            "CannotSynthesize",
+            "CannotSynthesize",
+            "CannotSynthesize",
+            "CannotSynthesize",
+        ],
+    ),
+    output: "",
+)

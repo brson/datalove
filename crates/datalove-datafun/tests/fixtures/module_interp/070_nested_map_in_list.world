@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): @[@map[u32, u32]]
+    ret @[@map { @1 = @10 }, @map { @2 = @20 }]
+end fun

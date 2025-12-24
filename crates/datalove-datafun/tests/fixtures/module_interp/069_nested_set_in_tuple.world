@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): @(@set[u32], @set[u32])
+    ret @(@set { @1, @2 }, @set { @3, @4 })
+end fun

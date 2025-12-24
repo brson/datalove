@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun shadow(x: int): int
+    let x = x + @1
+    let x = x * @2
+    ret x
+end fun
+
+fun main(): int
+    ret shadow(@5)
+end fun

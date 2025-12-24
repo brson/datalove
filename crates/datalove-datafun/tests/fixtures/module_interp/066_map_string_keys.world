@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): @map[string, u32]
+    ret @map { @"a" = @1, @"b" = @2 }
+end fun

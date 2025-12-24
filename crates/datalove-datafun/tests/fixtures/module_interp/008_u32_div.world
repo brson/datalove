@@ -1,0 +1,11 @@
+----------
+module local/test/main
+----------
+
+fun divide(a: u32, b: u32): !u32
+    ret ok (a /! b)
+end fun
+
+fun main(): !u32
+    ret divide(@84, @2)
+end fun

@@ -1,0 +1,15 @@
+----------
+module local/test/main
+----------
+
+fun process(n: u32): u32
+    if n == @0
+        ret @100
+    else
+        ret n
+    end if
+end fun
+
+fun main(): u32
+    ret process(@0)
+end fun

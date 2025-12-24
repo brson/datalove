@@ -1,0 +1,11 @@
+----------
+module local/test/main
+----------
+
+fun test_gt(a: @i64, b: @i64): @bool
+    ret a .> b
+end fun
+
+fun main(): @bool
+    ret test_gt(@100, @50)
+end fun

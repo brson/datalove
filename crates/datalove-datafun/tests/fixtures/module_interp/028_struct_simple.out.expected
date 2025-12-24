@@ -1,0 +1,6 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    output: "@{x = @1, y = @2}",
+)

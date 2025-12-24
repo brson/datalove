@@ -1,0 +1,6 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    output: "@data @\"hello\"",
+)

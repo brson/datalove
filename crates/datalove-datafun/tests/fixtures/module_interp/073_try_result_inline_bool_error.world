@@ -1,0 +1,16 @@
+----------
+module local/test/main
+----------
+
+fun returns_err(): !u32
+    ret @error @true
+end fun
+
+fun try_err(): !u32
+    let val = returns_err()!
+    ret val
+end fun
+
+fun main(): !u32
+    ret try_err()
+end fun

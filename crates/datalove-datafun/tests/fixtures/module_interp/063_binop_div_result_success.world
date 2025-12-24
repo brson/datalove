@@ -1,0 +1,11 @@
+----------
+module local/test/main
+----------
+
+fun test_div_result(a: u32, b: u32): !u32
+    ret ok (a /! b)
+end fun
+
+fun main(): !u32
+    ret test_div_result(@15, @3)
+end fun

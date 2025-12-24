@@ -1,0 +1,11 @@
+----------
+module local/test/main
+----------
+
+fun wrap(x: @u32): data
+    ret @data x
+end fun
+
+fun main(): data
+    ret wrap(@42)
+end fun

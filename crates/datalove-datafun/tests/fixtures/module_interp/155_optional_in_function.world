@@ -1,0 +1,15 @@
+----------
+module local/test/main
+----------
+
+fun safe_div(a: u32, b: u32): ?u32
+    ret some (a /? b)
+end fun
+
+fun safe_add(a: u32, b: u32): ?u32
+    ret some (a +? b)
+end fun
+
+fun main(): ?u32
+    ret safe_div(@100, @10)
+end fun

@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): f32
+    ret : f32 / @1.5 + @2.5
+end fun

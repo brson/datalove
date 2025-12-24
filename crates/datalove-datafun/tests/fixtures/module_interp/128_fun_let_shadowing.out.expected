@@ -1,0 +1,10 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Error",
+        errors: [
+            "TypeMismatch { expected: \"int\", actual: \"u32\" }",
+            "TypeMismatch { expected: \"int\", actual: \"u32\" }",
+        ],
+    ),
+    output: "",
+)

@@ -1399,8 +1399,14 @@ fn eval_expression_frame<'db>(
             let inner_expr = data_expr.value(ctx.db);
             let inner_dest = get_destination_for_expr(ctx, inner_expr)?;
             let inner_value = eval_expression_frame(ctx, inner_expr, inner_dest)?;
-            // Wrap in Data.
-            alloc::allocate_data_from_value(ctx, inner_value)
+            // Wrap in Data (clones inner_value if borrowed).
+            let result = alloc::allocate_data_from_value(ctx, inner_value)?;
+            // Clean up original inner value (allocate_data_from_value cloned it).
+            if inner_value.ownership == ValueOwnership::Borrowed {
+                destroy_value(ctx, inner_value);
+                mark_temp_slot_moved(ctx, inner_expr);
+            }
+            Ok(result)
         }
         ast::ExprFunKind::Err(_) => {
             Err(InterpError::InvalidExpression(

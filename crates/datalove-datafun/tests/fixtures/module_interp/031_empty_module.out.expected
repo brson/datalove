@@ -1,0 +1,6 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    output: "Error: RuntimeError(\"Function \'main\' reached end without ret statement\")",
+)

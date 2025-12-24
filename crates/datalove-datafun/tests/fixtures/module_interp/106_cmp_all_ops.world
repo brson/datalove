@@ -1,0 +1,19 @@
+----------
+module local/test/main
+----------
+
+fun main(): bool
+    let lt_t = @5 .< @10
+    let lt_f = @10 .< @5
+    let gt_t = @10 .> @5
+    let gt_f = @5 .> @10
+    let le_t = @5 <= @5
+    let le_f = @6 <= @5
+    let ge_t = @10 >= @5
+    let ge_f = @5 >= @10
+    let eq_t = @7 == @7
+    let eq_f = @7 == @8
+    let ne_t = @7 != @8
+    let ne_f = @7 != @7
+    ret lt_t
+end fun

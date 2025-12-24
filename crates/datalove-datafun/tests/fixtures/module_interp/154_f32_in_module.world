@@ -1,0 +1,23 @@
+----------
+module sys/test/f32math
+----------
+
+fun add(a: f32, b: f32): f32
+    ret a + b
+end fun
+
+fun mul(a: f32, b: f32): f32
+    ret a * b
+end fun
+
+----------
+module local/test/main
+----------
+
+require module sys/test/f32math
+import f32math.add
+import f32math.mul
+
+fun main(): f32
+    ret mul(: f32 / @2.0, : f32 / @3.0)
+end fun

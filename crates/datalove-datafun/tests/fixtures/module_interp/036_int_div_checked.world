@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun divide_checked(x: int, y: int): !int
+    ret ok (x /! y)
+end fun
+
+fun main(): !int
+    let a = @1000 + @0
+    let b = @100 + @0
+    ret divide_checked(a, b)
+end fun

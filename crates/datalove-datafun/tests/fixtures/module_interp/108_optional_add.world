@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun add_optional(x: u32, y: u32): ?u32
+    ret some (x +? y)
+end fun
+
+fun main(): ?u32
+    let success = add_optional(@100, @50)
+    let overflow = add_optional(@4294967295, @1)
+    ret success
+end fun

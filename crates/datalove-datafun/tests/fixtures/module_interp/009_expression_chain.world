@@ -1,0 +1,9 @@
+----------
+module local/test/main
+----------
+
+fun main(): int
+    let a = @5 + @10
+    let b = @2 + @0
+    ret a * b
+end fun

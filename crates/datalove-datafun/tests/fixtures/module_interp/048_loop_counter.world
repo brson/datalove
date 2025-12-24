@@ -1,0 +1,18 @@
+----------
+module local/test/main
+----------
+
+fun count_to_three(): !u32
+    let n: u32 = @0
+    loop
+        let n = n +! @1
+        if n >= @3
+            break
+        end if
+    end loop
+    ret ok n
+end fun
+
+fun main(): !u32
+    ret count_to_three()
+end fun

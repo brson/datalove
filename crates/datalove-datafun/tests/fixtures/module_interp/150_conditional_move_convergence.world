@@ -1,0 +1,15 @@
+----------
+module local/test/main
+----------
+
+fun test(cond: bool): u32
+    let x = [@1, @2]
+    if cond
+        let _sink = x
+    end if
+    ret @0
+end fun
+
+fun main(): u32
+    ret test(@true)
+end fun

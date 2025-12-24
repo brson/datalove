@@ -1,0 +1,19 @@
+----------
+module local/test/main
+----------
+
+fun classify(n: u32): u32
+    if n .< @10
+        if n .< @5
+            ret @1
+        else
+            ret @2
+        end if
+    else
+        ret @3
+    end if
+end fun
+
+fun main(): u32
+    ret classify(@15)
+end fun

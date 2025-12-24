@@ -1,0 +1,11 @@
+----------
+module local/test/main
+----------
+
+fun test_neg_result(a: u64): !u64
+    ret ok (-!a)
+end fun
+
+fun main(): !u64
+    ret test_neg_result(@0)
+end fun

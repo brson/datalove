@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): @{x: u32, y: u32}
+    ret @{x = @1, y = @2}
+end fun

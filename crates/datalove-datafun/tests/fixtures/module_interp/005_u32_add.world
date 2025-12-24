@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): int
+    ret @10 + @20
+end fun

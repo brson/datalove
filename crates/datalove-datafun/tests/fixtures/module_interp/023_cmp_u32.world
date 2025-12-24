@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): bool
+    ret @5 .< @10
+end fun

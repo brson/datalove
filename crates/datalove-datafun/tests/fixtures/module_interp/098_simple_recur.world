@@ -1,0 +1,15 @@
+----------
+module local/test/main
+----------
+
+fun recurse(n: u32): !u32
+    if n .< @1
+        ret @0
+    else
+        ret recurse(n -! @1)
+    end if
+end fun
+
+fun main(): !u32
+    ret recurse(@3)
+end fun

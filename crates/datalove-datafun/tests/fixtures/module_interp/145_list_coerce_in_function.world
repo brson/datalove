@@ -1,0 +1,11 @@
+----------
+module local/test/main
+----------
+
+fun make_int_list(): @[@int]
+    ret @[: u8 / @10, : i16 / @20, : i32 / @30]
+end fun
+
+fun main(): @[@int]
+    ret make_int_list()
+end fun

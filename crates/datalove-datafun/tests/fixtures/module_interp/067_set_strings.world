@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): @set[string]
+    ret @set { @"foo", @"bar", @"baz" }
+end fun

@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun unwrap_result(val: !u32): !u32
+    let x: u32 = val!
+    ret ok x
+end fun
+
+fun main(): !u32
+    let input: !u32 = ok @42
+    ret unwrap_result(input)
+end fun

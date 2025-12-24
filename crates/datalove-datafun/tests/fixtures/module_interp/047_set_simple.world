@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): @set[u32]
+    ret @set { @5, @10, @15 }
+end fun

@@ -1,0 +1,6 @@
+----------
+module local/test/main
+----------
+
+fun main(): u32
+end fun
