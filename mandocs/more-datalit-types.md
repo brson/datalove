@@ -1,5 +1,6 @@
 # Future types
 
+- queues
 - ranges 1:2, 1:2:3
 - token types
 - datetimes
