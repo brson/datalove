@@ -36,9 +36,11 @@
 //! - `Available`: Valid data; needs cleanup if not moved
 //! - `Moved`: Ownership transferred; skip cleanup
 //!
-//! Operators use borrow semantics (`eval_*_borrow`): operands are cloned for the
-//! operation, leaving originals intact. Variables consumed by function args or
-//! `ret` are marked `Moved`.
+//! Operators read operands by reference: for variable operands, we construct a
+//! `Value` pointing directly at the slot without cloning. Compound operands
+//! (nested binops, function calls, etc.) are evaluated to temp slots. The result
+//! is written directly to the destination. Variables consumed by function args
+//! or `ret` are marked `Moved`.
 //!
 //! # Control Flow
 //!
@@ -988,6 +990,88 @@ fn read_reference_slot<'db>(
     ptr_value as *mut u8
 }
 
+/// An operand value for binop/unop evaluation.
+///
+/// For variable references, points directly to the variable's slot (no clone).
+/// For compound expressions, points to a temp slot holding the evaluated result.
+struct Operand<'db> {
+    value: Value,
+    /// Whether cleanup is needed after use (true for compound exprs, false for variable refs).
+    needs_cleanup: bool,
+    /// The expression, used for marking temp slot as moved during cleanup.
+    expr: crate::ast::ExprFun<'db>,
+}
+
+/// Evaluate an operand for binop/unop.
+///
+/// For variable references, returns a Value pointing directly to the slot (no clone).
+/// For compound expressions, evaluates to a temp slot and returns a Value pointing there.
+fn eval_operand<'db>(
+    ctx: &mut InterpContext<'db>,
+    expr: crate::ast::ExprFun<'db>,
+) -> Result<Operand<'db>, InterpError> {
+    let frame_index = ctx.call_stack.len() - 1;
+
+    match expr.expr(ctx.db) {
+        crate::ast::ExprFunKind::Name(name) => {
+            // Find slot by name.
+            let layout = ctx.call_stack[frame_index].layout;
+            let slot_info = find_slot_by_name(ctx.db, layout, name)
+                .ok_or_else(|| InterpError::VariableNotFound(name.text(ctx.db).to_string()))?;
+
+            let slot_id = slot_info.slot_id(ctx.db);
+
+            // Check slot state (debug-only).
+            #[cfg(debug_assertions)]
+            if ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] == SlotState::Moved {
+                return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
+            }
+
+            // Get type info.
+            let ty = slot_info.ty(ctx.db);
+            let datalit_ty = match ty.ty(ctx.db) {
+                crate::tycheck::Type::Datalit(dt) => dt.clone(),
+                _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
+            };
+            let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+
+            // Get pointer to value (reference or local slot).
+            let ptr = if slot_info.kind(ctx.db) == crate::function_analysis::SlotKind::Reference {
+                read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db)
+            } else {
+                let offset = slot_info.offset(ctx.db) as usize;
+                unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 }
+            };
+
+            // Return Value pointing to slot. DO NOT mark as moved.
+            Ok(Operand {
+                value: Value { ptr, tydesc },
+                needs_cleanup: false,
+                expr,
+            })
+        }
+        _ => {
+            // Compound expression: evaluate to its temp slot.
+            let temp_dest = get_destination_for_expr(ctx, expr)?;
+            eval_expression_frame(ctx, expr, temp_dest)?;
+            mark_temp_slot_available(ctx, expr);
+            Ok(Operand {
+                value: temp_dest.to_value(),
+                needs_cleanup: true,
+                expr,
+            })
+        }
+    }
+}
+
+/// Cleanup an operand after use if needed.
+fn cleanup_operand<'db>(ctx: &mut InterpContext<'db>, operand: Operand<'db>) {
+    if operand.needs_cleanup {
+        destroy_value(ctx, operand.value);
+        mark_temp_slot_moved(ctx, operand.expr);
+    }
+}
+
 /// Execute a let statement in frame-based mode.
 fn execute_let_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
@@ -1124,31 +1208,30 @@ fn eval_expression_frame<'db>(
         }
 
         ast::ExprFunKind::BinOp(binop_expr) => {
-            // Get temp slot destinations for subexpressions.
             let lhs_expr = binop_expr.lhs(ctx.db);
             let rhs_expr = binop_expr.rhs(ctx.db);
-            let lhs_dest = get_destination_for_expr(ctx, lhs_expr)?;
-            let rhs_dest = get_destination_for_expr(ctx, rhs_expr)?;
 
-            // Evaluate lhs in borrow context (binops don't consume operands).
-            eval_expression_frame_borrow(ctx, lhs_expr, lhs_dest)?;
-            let lhs = lhs_dest.to_value();
+            // Evaluate operands (references for Names, temps for compound).
+            let lhs = eval_operand(ctx, lhs_expr)?;
+            let rhs = match eval_operand(ctx, rhs_expr) {
+                Ok(r) => r,
+                Err(e) => {
+                    cleanup_operand(ctx, lhs);
+                    return Err(e);
+                }
+            };
 
-            // Evaluate rhs in borrow context.
-            if let Err(e) = eval_expression_frame_borrow(ctx, rhs_expr, rhs_dest) {
-                destroy_value(ctx, lhs);
+            // Execute binop directly to dest.
+            // Aliasing (x = x + 1) is safe: arithmetic reads operands before writing.
+            if let Err(e) = execute_binop(ctx, binop_expr.op(ctx.db), &lhs.value, &rhs.value, dest) {
+                cleanup_operand(ctx, lhs);
+                cleanup_operand(ctx, rhs);
                 return Err(e);
             }
-            let rhs = rhs_dest.to_value();
 
-            // Execute binop with borrowed operands.
-            execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, dest)?;
-
-            // Clean up temporary operand values and mark their slots as Moved.
-            destroy_value(ctx, lhs);
-            mark_temp_slot_moved(ctx, lhs_expr);
-            destroy_value(ctx, rhs);
-            mark_temp_slot_moved(ctx, rhs_expr);
+            // Cleanup compound operands.
+            cleanup_operand(ctx, lhs);
+            cleanup_operand(ctx, rhs);
 
             Ok(())
         }
@@ -1164,20 +1247,19 @@ fn eval_expression_frame<'db>(
         }
 
         ast::ExprFunKind::UnaryOp(unary_expr) => {
-            // Get temp slot for operand.
             let operand_expr = unary_expr.operand(ctx.db);
-            let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
 
-            // Evaluate operand in borrow context (unary ops don't consume operands).
-            eval_expression_frame_borrow(ctx, operand_expr, operand_dest)?;
-            let operand = operand_dest.to_value();
+            // Evaluate operand (reference for Name, temp for compound).
+            let operand = eval_operand(ctx, operand_expr)?;
 
-            // Execute unop with borrowed operand.
-            execute_unop(ctx, unary_expr.op(ctx.db), &operand, dest)?;
+            // Execute unop directly to dest.
+            if let Err(e) = execute_unop(ctx, unary_expr.op(ctx.db), &operand.value, dest) {
+                cleanup_operand(ctx, operand);
+                return Err(e);
+            }
 
-            // Clean up temporary operand value and mark slot as Moved.
-            destroy_value(ctx, operand);
-            mark_temp_slot_moved(ctx, operand_expr);
+            // Cleanup compound operand.
+            cleanup_operand(ctx, operand);
 
             Ok(())
         }
@@ -1345,130 +1427,6 @@ fn eval_return_expression_frame<'db>(
     // No return_dest - this was the "script scope" fallback path.
     // Script scope was removed; all callers now provide return_dest.
     unreachable!("return_dest should always be Some - script scope was removed");
-}
-
-// ============================================================================
-// Borrow Context Evaluation
-// ============================================================================
-
-/// Evaluate an expression in borrow context (for binop/unop operands).
-///
-/// In borrow context, linear type variables are cloned instead of moved.
-/// This implements the ref semantics for operator arguments.
-fn eval_expression_frame_borrow<'db>(
-    ctx: &mut InterpContext<'db>,
-    expr: ast::ExprFun<'db>,
-    dest: Destination,
-) -> Result<(), InterpError> {
-    let frame_index = ctx.call_stack.len() - 1;
-
-    match expr.expr(ctx.db) {
-        ast::ExprFunKind::Name(name) => {
-            // Find slot by name.
-            let layout = ctx.call_stack[frame_index].layout;
-            let slot_info = find_slot_by_name(ctx.db, layout, name)
-                .ok_or_else(|| InterpError::VariableNotFound(name.text(ctx.db).to_string()))?;
-
-            let slot_id = slot_info.slot_id(ctx.db);
-
-            // Check slot state (debug-only - static analysis catches use-after-move).
-            #[cfg(debug_assertions)]
-            if ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] == SlotState::Moved {
-                return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
-            }
-
-            // Get type info for the slot.
-            let ty = slot_info.ty(ctx.db);
-            let datalit_ty = match ty.ty(ctx.db) {
-                crate::tycheck::Type::Datalit(dt) => dt.clone(),
-                _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
-            };
-            let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-
-            // In borrow context, ALWAYS clone to destination (never move).
-            // This is the key difference from regular evaluation.
-            let kind = slot_info.kind(ctx.db);
-
-            if kind == crate::function_analysis::SlotKind::Reference {
-                // Reference slot: read pointer to caller's value.
-                let ptr = read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db);
-                let borrowed = Value { ptr, tydesc };
-
-                clone_value_to_dest(ctx, borrowed, dest);
-                // Note: We do NOT mark slot as Moved - this is borrow context.
-            } else {
-                // Local/Temporary slot - clone to destination.
-                let offset = slot_info.offset(ctx.db) as usize;
-                let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
-                let source_value = Value { ptr: frame_ptr, tydesc };
-
-                clone_value_to_dest(ctx, source_value, dest);
-                // Note: We do NOT mark slot as Moved - this is borrow context.
-            }
-            Ok(())
-        }
-
-        // For nested binops/unops, stay in borrow context.
-        ast::ExprFunKind::BinOp(binop_expr) => {
-            let lhs_expr = binop_expr.lhs(ctx.db);
-            let rhs_expr = binop_expr.rhs(ctx.db);
-            let lhs_dest = get_destination_for_expr(ctx, lhs_expr)?;
-            let rhs_dest = get_destination_for_expr(ctx, rhs_expr)?;
-
-            eval_expression_frame_borrow(ctx, lhs_expr, lhs_dest)?;
-            let lhs = lhs_dest.to_value();
-
-            if let Err(e) = eval_expression_frame_borrow(ctx, rhs_expr, rhs_dest) {
-                destroy_value(ctx, lhs);
-                return Err(e);
-            }
-            let rhs = rhs_dest.to_value();
-
-            // Execute binop with borrowed operands.
-            execute_binop(ctx, binop_expr.op(ctx.db), &lhs, &rhs, dest)?;
-
-            // Clean up temporary operand values and mark slots as Moved.
-            destroy_value(ctx, lhs);
-            mark_temp_slot_moved(ctx, lhs_expr);
-            destroy_value(ctx, rhs);
-            mark_temp_slot_moved(ctx, rhs_expr);
-
-            Ok(())
-        }
-
-        ast::ExprFunKind::UnaryOp(unary_expr) => {
-            let operand_expr = unary_expr.operand(ctx.db);
-            let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
-
-            eval_expression_frame_borrow(ctx, operand_expr, operand_dest)?;
-            let operand = operand_dest.to_value();
-
-            // Execute unop with borrowed operand.
-            execute_unop(ctx, unary_expr.op(ctx.db), &operand, dest)?;
-
-            // Clean up temporary operand value and mark slot as Moved.
-            destroy_value(ctx, operand);
-            mark_temp_slot_moved(ctx, operand_expr);
-
-            Ok(())
-        }
-
-        // For function calls in borrow context, the call itself uses normal semantics
-        // (arguments may be moved depending on parameter modes).
-        ast::ExprFunKind::FunctionCall(call_expr) => {
-            // Void functions can't be used in expression context (typechecker ensures this).
-            eval_function_call_frame(ctx, call_expr, dest)?
-                .ok_or_else(|| InterpError::RuntimeError(
-                    format!("Void function '{}' cannot be used in expression context",
-                            call_expr.name(ctx.db).text(ctx.db))
-                ))?;
-            Ok(())
-        }
-
-        // For other expressions (literals, etc.), delegate to normal evaluation.
-        // These don't involve variable access so borrow vs move doesn't matter.
-        _ => eval_expression_frame(ctx, expr, dest),
-    }
 }
 
 // ============================================================================
