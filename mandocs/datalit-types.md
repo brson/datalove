@@ -103,10 +103,15 @@ but because Datalove cares insists on numerical correctness,
 must be used with checked operators to deal with overflow:
 
 ```datalove
-let a: u16 = 1
-let b: u16 = 2
-let d = a +! b // early-return error on overflow
-let c = a +? b // early-return none on overflow
+fun add_result(a: u16, b: u16): !u16
+  let c = a +! b // early-return error on overflow
+  ret ok c
+end fun
+
+fun add_option(a: u16, b: u16): ?u16
+  let c = a +? b // early-return option on overflow
+  ret some c
+end fun
 ```
 
 Unsigned fixed integers support
@@ -114,6 +119,17 @@ Unsigned fixed integers support
 `+!`, `-!`, `*!` and `/!` checked-result binops.
 Signed fixed integers additionally support unary negation,
 `-?` and `-!`.
+
+The "bare" math ops are supported but widen to `int`.
+
+```datalove
+fun add(a: u16, b: u16): int
+  ret a + b
+end fun
+```
+
+This compromise allows for convenient but inefficient math in the repl and scripts,
+while modules are expected to be more careful with overflow.
 
 
 
