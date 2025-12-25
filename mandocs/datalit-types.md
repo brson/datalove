@@ -45,6 +45,44 @@ Datalit structs and enums are structurally-typed.
 
 ## Booleans
 
+The `bool` type has two values, `true` and `false`.
+
+```datalove
+let a: bool = true
+let b: bool = false
+```
+
+Booleans are used in `if` and `else if` conditions.
+
+```datalove
+require sys/std/debug
+
+let a = true
+let b = false
+if a
+  debug.print("a")
+else if b
+  debug.print("b")
+else
+  debug.print
+end if
+```
+
+Booleans support logic operators `and`, `or`, `xor`, `implies` and `not`.
+
+```datalove
+let a = true
+let b = false
+let c = a or b
+let d = a and  b
+let e = a xor b
+let f = a implies b
+let g = not a
+```
+
+
+
+
 ## Fixed integers
 
 ## Big integers
