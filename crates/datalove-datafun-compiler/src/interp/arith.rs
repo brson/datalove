@@ -1,88 +1,64 @@
-//! Arithmetic operations for the interpreter.
+//! Checked and optional arithmetic operations.
 //!
-//! Handles addition, subtraction, multiplication, division with automatic
-//! type widening (u32 -> Int) and various error handling modes:
-//! - Widening: u32 operations widen to Int
 //! - Checked: return error on overflow/division-by-zero
-//! - Optional: return None on overflow/division-by-zero
+//! - Optional: return OptionNone on overflow/division-by-zero
 
 use datalove_rt::rtdt::TyTag;
 
 use super::{InterpContext, InterpError, Value, Destination};
 use super::types::{is_int_value, is_fixed_int_value, get_type_tag};
 
-// ============================================================================
-// Result Writers (DPS - write directly to destination)
-// ============================================================================
-
-/// Write f32 result to destination.
 pub(super) fn write_f32_result(value: f32, dest: Destination) -> Result<(), InterpError> {
     unsafe { *(dest.ptr as *mut f32) = value; }
     Ok(())
 }
 
-/// Write bool result to destination.
 fn write_bool_result(value: bool, dest: Destination) -> Result<(), InterpError> {
     unsafe { *(dest.ptr as *mut u8) = if value { 1 } else { 0 }; }
     Ok(())
 }
 
-/// Write u8 result to destination.
 fn write_u8_result(value: u8, dest: Destination) -> Result<(), InterpError> {
     unsafe { *dest.ptr = value; }
     Ok(())
 }
 
-/// Write i8 result to destination.
 fn write_i8_result(value: i8, dest: Destination) -> Result<(), InterpError> {
     unsafe { *(dest.ptr as *mut i8) = value; }
     Ok(())
 }
 
-/// Write u16 result to destination.
 fn write_u16_result(value: u16, dest: Destination) -> Result<(), InterpError> {
     unsafe { *(dest.ptr as *mut u16) = value; }
     Ok(())
 }
 
-/// Write i16 result to destination.
 fn write_i16_result(value: i16, dest: Destination) -> Result<(), InterpError> {
     unsafe { *(dest.ptr as *mut i16) = value; }
     Ok(())
 }
 
-/// Write u32 result to destination.
 fn write_u32_result(value: u32, dest: Destination) -> Result<(), InterpError> {
     unsafe { *(dest.ptr as *mut u32) = value; }
     Ok(())
 }
 
-/// Write i32 result to destination.
 fn write_i32_result(value: i32, dest: Destination) -> Result<(), InterpError> {
     unsafe { *(dest.ptr as *mut i32) = value; }
     Ok(())
 }
 
-/// Write u64 result to destination.
 fn write_u64_result(value: u64, dest: Destination) -> Result<(), InterpError> {
     unsafe { *(dest.ptr as *mut u64) = value; }
     Ok(())
 }
 
-/// Write i64 result to destination.
 fn write_i64_result(value: i64, dest: Destination) -> Result<(), InterpError> {
     unsafe { *(dest.ptr as *mut i64) = value; }
     Ok(())
 }
 
-// ============================================================================
-// Checked Arithmetic
-// ============================================================================
-
-/// Evaluate checked addition (returns error on overflow).
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
-/// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
+/// Checked addition: error on overflow.
 pub(super) fn eval_add_checked<'db>(
     _ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -176,10 +152,7 @@ pub(super) fn eval_add_checked<'db>(
     }
 }
 
-/// Evaluate checked subtraction (returns error on overflow).
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
-/// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
+/// Checked subtraction: error on underflow.
 pub(super) fn eval_sub_checked<'db>(
     _ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -273,10 +246,7 @@ pub(super) fn eval_sub_checked<'db>(
     }
 }
 
-/// Evaluate checked multiplication (returns error on overflow).
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
-/// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
+/// Checked multiplication: error on overflow.
 pub(super) fn eval_mul_checked<'db>(
     _ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -370,10 +340,7 @@ pub(super) fn eval_mul_checked<'db>(
     }
 }
 
-/// Evaluate checked division (returns error on division by zero or overflow).
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
-/// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64) and int.
+/// Checked division: error on division by zero.
 pub(super) fn eval_div_checked<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -485,15 +452,7 @@ pub(super) fn eval_div_checked<'db>(
     }
 }
 
-// ============================================================================
-// Optional Arithmetic
-// ============================================================================
-
-/// Evaluate optional addition.
-///
-/// Returns the raw result on success, or early-returns OptionNone on overflow.
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
-/// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
+/// Optional addition: OptionNone on overflow.
 pub(super) fn eval_add_optional<'db>(
     _ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -587,11 +546,7 @@ pub(super) fn eval_add_optional<'db>(
     }
 }
 
-/// Evaluate optional subtraction.
-///
-/// Returns the raw result on success, or early-returns OptionNone on underflow.
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
-/// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
+/// Optional subtraction: OptionNone on underflow.
 pub(super) fn eval_sub_optional<'db>(
     _ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -685,11 +640,7 @@ pub(super) fn eval_sub_optional<'db>(
     }
 }
 
-/// Evaluate optional multiplication.
-///
-/// Returns the raw result on success, or early-returns OptionNone on overflow.
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
-/// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64).
+/// Optional multiplication: OptionNone on overflow.
 pub(super) fn eval_mul_optional<'db>(
     _ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -783,11 +734,7 @@ pub(super) fn eval_mul_optional<'db>(
     }
 }
 
-/// Evaluate optional division.
-///
-/// Returns the raw result on success, or early-returns OptionNone on division by zero.
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
-/// Supports all fixed-width integer types (u8, i8, u16, i16, u32, i32, u64, i64) and int.
+/// Optional division: OptionNone on division by zero.
 pub(super) fn eval_div_optional<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -900,14 +847,7 @@ pub(super) fn eval_div_optional<'db>(
     }
 }
 
-// ============================================================================
-// Comparison
-// ============================================================================
-
-/// Evaluate comparison operators.
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
-/// Provides fast paths for all fixed-width integer types.
+/// Evaluate comparison operators (Lt, Le, Gt, Ge, Eq, Ne).
 pub(super) fn eval_comparison<'db>(
     ctx: &mut InterpContext<'db>,
     op: crate::ast::BinOp,

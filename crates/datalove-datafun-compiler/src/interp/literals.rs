@@ -1,14 +1,11 @@
-//! Literal value allocation and writing.
-//!
-//! Functions for allocating and writing literal values (integers, floats,
-//! strings) from parsed AST nodes to runtime values.
+//! Literal value writers: integers, floats, strings, Option, Result.
 
 use crate::ast;
 
 use super::{InterpContext, InterpError, Value, Destination};
 use super::alloc::write_bigint_to_ptr;
 
-/// Write inline integer literal to destination.
+/// Write an integer literal to dest (type determined by dest.tydesc).
 pub(super) fn write_inline_int_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     int_expr: &ast::ExprInt<'db>,
@@ -75,7 +72,7 @@ pub(super) fn write_inline_int_to_dest<'db>(
     Ok(())
 }
 
-/// Write Option::None to a destination.
+/// Write Option::None to dest.
 pub(super) fn write_option_none_to_dest(dest: Destination) -> Result<(), InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag, OptionTag};
 
@@ -96,22 +93,19 @@ pub(super) fn write_option_none_to_dest(dest: Destination) -> Result<(), InterpE
     Ok(())
 }
 
-/// Write a boolean value to destination.
 pub(super) fn write_bool_to_dest(dest: Destination, value: bool) {
     unsafe { *dest.ptr = if value { 1 } else { 0 }; }
 }
 
-/// Write an f32 value to destination.
 pub(super) fn write_f32_to_dest(dest: Destination, value: f32) {
     unsafe { *(dest.ptr as *mut f32) = value; }
 }
 
-/// Write a u32 value to destination (for hex literals).
 pub(super) fn write_u32_to_dest(dest: Destination, value: u32) {
     unsafe { *(dest.ptr as *mut u32) = value; }
 }
 
-/// Write an inline string literal to destination.
+/// Write a string literal to dest.
 pub(super) fn write_string_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     string_expr: &ast::ExprString<'db>,
@@ -159,10 +153,7 @@ pub(super) fn write_string_to_dest<'db>(
     Ok(())
 }
 
-/// Write Result::Er from an error payload value.
-///
-/// Takes ownership of the error payload and wraps it in Er.
-/// Requires a destination to provide the Result type.
+/// Write Result::Err from an Error payload.
 pub(super) fn write_result_er_from_value<'db>(
     ctx: &mut InterpContext<'db>,
     payload: Value,

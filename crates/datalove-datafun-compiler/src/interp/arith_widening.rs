@@ -1,12 +1,7 @@
-//! Widening arithmetic operations.
+//! Widening arithmetic: fixed-width ints widen to Int (bigint).
 //!
-//! Handles arithmetic operations with automatic type widening:
-//! - Fixed-width integer operands are widened to Int (bigint) for add/sub/mul/div
-//! - f32 operands use native float operations
-//! - Int operands use runtime bigint operations
-//!
-//! Also handles unary negation for Int, and checked negation variants
-//! for fixed-width integers.
+//! Bare +/-/*// operators widen fixed-width operands to Int.
+//! Also handles unary negation.
 
 use crate::ast::{BinOp, UnaryOp};
 use crate::datalit::tycheck::Type;
@@ -21,17 +16,13 @@ use super::arith::{
     eval_comparison,
 };
 
-/// Temporary widened Int value for arithmetic operations.
-///
-/// Manages allocation and cleanup of temporary Int values when widening
-/// fixed-width integers for bigint arithmetic.
+/// Temporary Int for widening fixed-width operands.
 struct TempInt {
     ptr: *mut u8,
     tydesc: *const datalove_rt::rtdt::TyDesc,
 }
 
 impl TempInt {
-    /// Widen a fixed-width integer to a temporary Int.
     fn widen(ctx: &mut InterpContext<'_>, value: &Value) -> Result<Self, InterpError> {
         let int_tydesc = ctx.tydesc_table.get_or_create(&Type::Int);
         let rt_handle = ctx.runtime.handle();
@@ -46,7 +37,6 @@ impl TempInt {
         Ok(Self { ptr, tydesc: int_tydesc })
     }
 
-    /// Destroy and free this temporary Int.
     fn destroy(self, ctx: &mut InterpContext<'_>) {
         unsafe {
             let rt_handle = ctx.runtime.handle();
@@ -56,9 +46,7 @@ impl TempInt {
     }
 }
 
-/// Evaluate addition with automatic widening to int.
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
+/// Widening addition: result is Int (or f32 for floats).
 pub(super) fn eval_add<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -174,9 +162,7 @@ pub(super) fn eval_add<'db>(
     }
 }
 
-/// Evaluate subtraction with automatic widening to int.
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
+/// Widening subtraction: result is Int (or f32 for floats).
 pub(super) fn eval_sub<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -282,9 +268,7 @@ pub(super) fn eval_sub<'db>(
     }
 }
 
-/// Evaluate multiplication with automatic widening to int.
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
+/// Widening multiplication: result is Int (or f32 for floats).
 pub(super) fn eval_mul<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -390,9 +374,7 @@ pub(super) fn eval_mul<'db>(
     }
 }
 
-/// Evaluate division with automatic widening to int.
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
+/// Widening division: result is Int (or f32 for floats).
 pub(super) fn eval_div<'db>(
     ctx: &mut InterpContext<'db>,
     lhs: &Value,
@@ -499,8 +481,6 @@ pub(super) fn eval_div<'db>(
 }
 
 /// Execute a binary operation.
-///
-/// Operands are borrowed (ref semantics) - caller manages their lifetime.
 pub(super) fn execute_binop<'db>(
     ctx: &mut InterpContext<'db>,
     op: BinOp,
@@ -535,8 +515,6 @@ pub(super) fn execute_binop<'db>(
 }
 
 /// Execute a unary operation.
-///
-/// Operand is borrowed (ref semantics) - caller manages its lifetime.
 pub(super) fn execute_unop<'db>(
     ctx: &mut InterpContext<'db>,
     op: UnaryOp,
@@ -550,9 +528,7 @@ pub(super) fn execute_unop<'db>(
     }
 }
 
-/// Evaluate negation for Int type.
-///
-/// Operand is borrowed (ref semantics) - caller manages its lifetime.
+/// Negate an Int value.
 pub(super) fn eval_neg<'db>(
     ctx: &mut InterpContext<'db>,
     operand: &Value,
@@ -582,11 +558,7 @@ pub(super) fn eval_neg<'db>(
     }
 }
 
-/// Evaluate optional negation (-?x).
-///
-/// Performs checked negation on signed integers.
-/// Returns the raw negated value on success, or OptionNone error on overflow.
-/// Operand is borrowed (ref semantics) - caller manages its lifetime.
+/// Optional negation (-?x): OptionNone on overflow.
 pub(super) fn eval_neg_optional<'db>(
     _ctx: &mut InterpContext<'db>,
     operand: &Value,
@@ -639,11 +611,7 @@ pub(super) fn eval_neg_optional<'db>(
     }
 }
 
-/// Evaluate result negation (-!x).
-///
-/// Performs checked negation on fixed-width integers.
-/// Returns the raw negated value on success, or ResultErr with "overflow" on overflow.
-/// Operand is borrowed (ref semantics) - caller manages its lifetime.
+/// Result negation (-!x): ResultErr("overflow") on overflow.
 pub(super) fn eval_neg_result<'db>(
     ctx: &mut InterpContext<'db>,
     operand: &Value,
@@ -729,21 +697,15 @@ pub(super) fn eval_neg_result<'db>(
     }
 }
 
-/// Write a typed integer result to destination.
-///
-/// Preserves the original type (i8, i16, i32, u8, u16, u32) from the tydesc.
 fn write_typed_int_result(value: u32, dest: Destination) {
     unsafe { *(dest.ptr as *mut u32) = value; }
 }
 
-/// Write a 64-bit typed integer result to destination.
 fn write_typed_int_result_64(value: u64, dest: Destination) {
     unsafe { *(dest.ptr as *mut u64) = value; }
 }
 
-/// Allocate a string for use as an error payload.
-///
-/// Returns the tydesc and ptr for use in InterpError::ResultErr.
+/// Allocate a String for ResultErr payload.
 fn allocate_error_string<'db>(
     ctx: &mut InterpContext<'db>,
     content: &str,

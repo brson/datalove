@@ -1,8 +1,7 @@
-//! Interpreter context types and module loading.
+//! Interpreter context and module function table.
 //!
-//! Core types for interpreter state management:
-//! - [`InterpContext`]: Main interpreter state (runtime, module graph, call stack)
-//! - [`ModuleFunctionTableGraph`]: Tracks imported functions from modules using ModuleId
+//! - [`InterpContext`]: Runtime, module graph, call stack, tydesc table
+//! - [`ModuleFunctionTableGraph`]: Function definitions by module
 
 use rmx::std::collections::HashMap;
 use bct::text::InternedText;
@@ -12,11 +11,7 @@ use crate::ast;
 
 use super::{InterpError, StackFrame};
 
-// ============================================================================
-// Context Types
-// ============================================================================
-
-/// Interpreter context for module execution.
+/// Main interpreter state.
 pub struct InterpContext<'db> {
     pub(super) db: &'db dyn crate::Db,
     pub(super) runtime: datalove_rt::rust::Runtime,
@@ -33,20 +28,14 @@ pub struct InterpContext<'db> {
     pub(super) expr_types: Vec<Option<crate::tycheck::TypeAndHeap<'db>>>,
 }
 
-/// Module function table for tracking imported functions.
-///
-/// Maps imported function names to their function definitions and source modules.
+/// Function table: maps names to definitions and source modules.
 pub struct ModuleFunctionTableGraph<'db> {
-    /// Maps imported function name → (function definition, source module ID).
     imported_functions: HashMap<InternedText<'db>, (ast::StmtFun<'db>, ModuleId)>,
-    /// Cache of all functions in each module.
     module_all_functions: HashMap<ModuleId, HashMap<InternedText<'db>, ast::StmtFun<'db>>>,
 }
 
 impl<'db> InterpContext<'db> {
-    /// Create a new interpreter context with ModuleGraph typecheck result.
-    ///
-    /// The caller must provide a valid ModuleGraphTypecheckResult with no errors.
+    /// Create context from a successful ModuleGraphTypecheckResult.
     pub fn new_with_module_graph(
         db: &'db dyn crate::Db,
         typecheck_result: ModuleGraphTypecheckResult<'db>,
@@ -75,9 +64,7 @@ impl<'db> InterpContext<'db> {
         })
     }
 
-    /// Look up the type of an expression.
-    ///
-    /// Returns the type if it was recorded during typechecking.
+    /// Get expression type from typechecking.
     pub fn get_expr_type(&self, expr: ast::ExprFun<'db>) -> Option<crate::tycheck::TypeAndHeap<'db>> {
         use salsa::plumbing::AsId;
         let id = expr.as_id();
@@ -85,17 +72,15 @@ impl<'db> InterpContext<'db> {
         self.expr_types.get(index).copied().flatten()
     }
 
-    /// Get the runtime handle.
     pub fn runtime_handle(&self) -> datalove_rt::c::LocalRtHandle {
         self.runtime.handle()
     }
 
-    /// Get the module function graph.
     pub fn module_function_graph(&self) -> &ModuleFunctionTableGraph<'db> {
         &self.module_functions_graph
     }
 
-    /// Pretty-print a value using this context's runtime and tydesc_table.
+    /// Pretty-print a value to a string.
     pub fn pretty_print_value(&mut self, value: &super::Value) -> Result<String, InterpError> {
         use datalove_rt as rt;
         use datalove_rt::rtdt;
@@ -157,7 +142,6 @@ impl<'db> InterpContext<'db> {
 }
 
 impl<'db> ModuleFunctionTableGraph<'db> {
-    /// Create a new empty module function table.
     pub fn new() -> ModuleFunctionTableGraph<'db> {
         ModuleFunctionTableGraph {
             imported_functions: HashMap::new(),
@@ -165,9 +149,7 @@ impl<'db> ModuleFunctionTableGraph<'db> {
         }
     }
 
-    /// Build module function table from a ModuleGraph.
-    ///
-    /// Parses ALL modules in the graph to extract function definitions.
+    /// Build from a ModuleGraph, extracting all function definitions.
     pub fn build_from_graph(
         db: &'db dyn crate::Db,
         graph: ModuleGraph,
@@ -195,15 +177,12 @@ impl<'db> ModuleFunctionTableGraph<'db> {
     }
 
     /// Look up an imported function by name.
-    ///
-    /// Returns the function and its source module ID.
     pub fn get(&self, name: InternedText<'db>) -> Option<(ast::StmtFun<'db>, ModuleId)> {
         self.imported_functions.get(&name).copied()
     }
 
-    /// Get all functions from a module by ID.
+    /// Get all functions defined in a module.
     pub fn get_module_functions(&self, module_id: ModuleId) -> Option<&HashMap<InternedText<'db>, ast::StmtFun<'db>>> {
         self.module_all_functions.get(&module_id)
     }
-
 }

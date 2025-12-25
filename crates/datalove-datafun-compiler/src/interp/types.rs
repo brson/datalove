@@ -1,21 +1,19 @@
-//! Type checking utilities for runtime values.
+//! Type predicates for runtime values.
 
 use datalove_rt::rtdt::TyTag;
 use super::Value;
 
-/// Check if a value is an int (bigint) type.
+/// Check if value is Int (bigint).
 pub(super) fn is_int_value(value: Value) -> bool {
     unsafe { (*value.tydesc).type_tag == TyTag::Int }
 }
 
-/// Check if a value is an f32 type.
+/// Check if value is f32.
 pub(super) fn is_f32_value(value: Value) -> bool {
     unsafe { (*value.tydesc).type_tag == TyTag::F32 }
 }
 
-/// Check if a value is any fixed-width integer type.
-///
-/// Includes: u8, i8, u16, i16, u32, i32, u64, i64.
+/// Check if value is a fixed-width integer (u8/i8/.../u64/i64).
 pub(super) fn is_fixed_int_value(value: Value) -> bool {
     unsafe {
         matches!(
@@ -28,21 +26,19 @@ pub(super) fn is_fixed_int_value(value: Value) -> bool {
     }
 }
 
-/// Get the type tag from a value.
+/// Get the type tag.
 pub(super) fn get_type_tag(value: Value) -> TyTag {
     unsafe { (*value.tydesc).type_tag }
 }
 
-/// Check if a value is a copy type.
+/// Check if value is a copy type (clones transparently).
 ///
-/// Copy types (u32, bool, f32, fixed-width ints) can be implicitly cloned.
-/// Linear types (Int, String, collections) require explicit moves.
-/// Option<T> is copy if T is copy.
+/// Copy: fixed-width ints, bool, f32, Option<copy>, Tuple of copy.
+/// Linear: Int, String, collections.
 pub(super) fn is_copy_type(value: Value) -> bool {
     is_copy_type_by_tydesc(value.tydesc)
 }
 
-/// Check if a type descriptor represents a copy type.
 fn is_copy_type_by_tydesc(tydesc: *const datalove_rt::rtdt::TyDesc) -> bool {
     unsafe {
         match (*tydesc).type_tag {

@@ -1,17 +1,9 @@
-//! Allocation functions for compound data structures.
-//!
-//! Handles creation of maps and sets from vectors of evaluated values.
-//! Each function takes ownership of input values and moves their data
-//! into the allocated structure.
+//! Collection construction: Map and Set from evaluated values.
 
 use super::{InterpContext, InterpError, Value};
 use super::memory::{destroy_value, free_value_structure};
 
-/// Write a map from a vector of key-value pairs to a destination.
-///
-/// Takes ownership of all key and value values. Keys and values are moved into the
-/// map's B-tree structure at dest. All keys must have the same type and all values
-/// must have the same type.
+/// Build a Map at dest from key-value pairs.
 pub(super) fn write_map_from_values_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     entries: Vec<(Value, Value)>,
@@ -119,10 +111,7 @@ pub(super) fn write_map_from_values_to_dest<'db>(
     Ok(())
 }
 
-/// Write a set from a vector of evaluated values to a destination.
-///
-/// Takes ownership of all element values. Elements are moved into the
-/// set's B-tree structure at dest. All elements must have the same type.
+/// Build a Set at dest from element values.
 pub(super) fn write_set_from_values_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     values: Vec<Value>,

@@ -1,58 +1,46 @@
-//! Stack frame management for function execution.
+//! Stack frame for function execution.
 //!
-//! Each function call allocates a `StackFrame` with a byte buffer for slot storage.
+//! Each function call creates a `StackFrame` with a byte buffer for slot storage.
 //! Slots are laid out by `function_analysis::FrameLayout` with computed offsets.
 
 use crate::function_analysis::{ControlFlowGraph, DropPoints, FrameLayout, SlotId};
 use crate::ast;
 use super::{Destination, Value};
 
-/// Slot state for frame-based execution.
-///
-/// Tracks the lifecycle of a slot's contents for proper cleanup.
+/// Slot lifecycle state for cleanup decisions.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum SlotState {
-    /// Slot has not been written to yet. Contains uninitialized/zero bytes.
-    /// Cleanup should skip these slots.
+    /// Not yet written; skip cleanup.
     Uninitialized,
-    /// Slot contains a valid value that needs cleanup if not moved.
+    /// Valid data; needs cleanup if not moved.
     Available,
-    /// Slot has been moved from or explicitly destroyed.
-    /// Cleanup should skip these slots.
+    /// Moved or destroyed; skip cleanup.
     Moved,
 }
 
-/// Control flow result from executing a CFG statement.
+/// CFG statement result.
 pub(super) enum CfgControl {
-    /// Continue to the next statement in the block.
     Continue,
-    /// Return from the function with a value.
     Return(Value),
-    /// Return from void function (no value).
     ReturnVoid,
 }
 
 /// Stack frame for function execution.
-///
-/// Contains the packed frame data buffer and per-slot state tracking.
 pub struct StackFrame<'db> {
-    /// Packed frame data containing all slot values at computed offsets.
+    /// Packed slot data at computed offsets.
     pub frame_data: Vec<u8>,
-    /// Per-slot state tracking for move semantics.
+    /// Per-slot state for move semantics.
     pub slot_states: Vec<SlotState>,
-    /// Function being executed (for debugging).
+    /// Function being executed.
     pub func: ast::StmtFun<'db>,
-    /// Frame layout providing slot offsets and types.
+    /// Slot offsets and types.
     pub layout: FrameLayout<'db>,
-    /// Control flow graph for CFG-based execution.
+    /// Control flow graph.
     pub cfg: ControlFlowGraph<'db>,
-    /// Analysis-computed drop points for cleanup.
+    /// Analysis-computed cleanup points.
     pub drop_points: DropPoints<'db>,
-    /// Slots that need runtime tracking due to conditional moves.
+    /// Slots needing runtime state tracking.
     pub tracked_slots: Vec<SlotId>,
-    /// Destination for return value (caller's memory).
-    ///
-    /// Return expressions write directly to this destination.
-    /// None only for void functions (no return value).
+    /// Caller's return destination (None for void functions).
     pub return_dest: Option<Destination>,
 }

@@ -7,7 +7,6 @@ use super::Value;
 pub enum InterpError {
     // Analysis-time errors.
     TypeErrors,
-    /// Typecheck found errors.
     TypecheckErrors(Vec<crate::tycheck::TypeError>),
     AnalysisErrors(Vec<String>),
 
@@ -19,27 +18,25 @@ pub enum InterpError {
     InvalidExpression(String),
     RuntimeError(String),
 
-    // Control flow.
+    // Control flow signals.
     ReturnOutsideFunction,
     IfOutsideFunction,
-    /// Internal: propagates return value up the call stack.
+    /// Propagates return value up the call stack.
     FunctionReturn(Value),
-    /// Internal: try operator (? or !) triggered early return from CFG.
+    /// Try operator (? or !) triggered early return.
     EarlyReturn,
 
     // Checked arithmetic errors.
     Overflow,
     DivisionByZero,
 
-    /// Optional arithmetic overflow - triggers early return with None.
+    /// Optional operator overflow/error - return None.
     OptionNone,
-    /// Result error - triggers early return with Err.
-    /// Carries the error value (tydesc + ptr) to be wrapped in Result::Err.
+    /// Result operator error - return Err with this payload.
     ResultErr {
         tydesc: *const datalove_rt::rtdt::TyDesc,
         ptr: *mut u8,
     },
 
-    /// Script completed without setting `output` variable.
     NoOutputVariable,
 }

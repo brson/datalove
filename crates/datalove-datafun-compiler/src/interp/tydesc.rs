@@ -1,10 +1,8 @@
-//! Type descriptor utilities for the interpreter.
-//!
-//! Functions for converting type hints to runtime type descriptors.
+//! Type hint to tydesc conversion.
 
 use super::InterpContext;
 
-/// Convert a type hint to a tydesc.
+/// Convert a type hint AST node to a runtime tydesc.
 pub fn type_hint_to_tydesc<'db>(
     ctx: &mut InterpContext<'db>,
     type_hint: crate::datalit::ast::TypeHintAndHeap<'db>,

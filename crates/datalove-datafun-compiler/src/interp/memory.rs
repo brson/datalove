@@ -1,11 +1,17 @@
-//! Memory management for interpreter values.
+//! Memory operations: clone, move, and destroy.
 //!
-//! Functions for destroying, freeing, and cloning values.
-//! All values are now Borrowed (owned by caller's frame).
+//! All values live in caller-owned memory (frame slots). These functions
+//! handle cloning for copy semantics, moving for linear semantics, and
+//! destroying heap-owned data (strings, collections) without freeing the
+//! slot memory itself.
 
 use super::{InterpContext, Value, Destination};
 
-/// Clone a value into a pre-allocated destination.
+/// Deep-clone a value to a destination.
+///
+/// Copies the value and any heap-allocated data it owns. For compatible
+/// type descriptors, uses the runtime clone. For structurally compatible
+/// types with different tydesc pointers, uses memcpy.
 pub(super) fn clone_value_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
@@ -19,12 +25,10 @@ pub(super) fn clone_value_to_dest<'db>(
             datalove_rt::c::dtlv_rti_clone_local(rt_handle, value.ptr, value.tydesc, dest.ptr, dest.tydesc);
         }
     } else {
-        // Tydescs differ but might represent the same type.
         let src_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
         let dst_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
 
         if src_ref.type_tag() == dst_ref.type_tag() && src_ref.size() == dst_ref.size() {
-            // Types are structurally compatible, use raw memcpy.
             unsafe {
                 std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, src_ref.size() as usize);
             }
@@ -39,11 +43,11 @@ pub(super) fn clone_value_to_dest<'db>(
     Value { ptr: dest.ptr, tydesc: dest.tydesc }
 }
 
-/// Move a value into a pre-allocated destination (shallow copy).
+/// Shallow-move a value to a destination.
 ///
-/// Unlike `clone_value_to_dest`, this does a shallow memcpy of the structure
-/// bytes, transferring ownership of any heap-allocated data. The source
-/// should be marked as Moved after calling this to prevent double-free.
+/// Copies the slot bytes (including any heap pointers) without cloning
+/// heap data. The source must be marked `Moved` afterward to prevent
+/// double-free.
 pub(super) fn move_value_to_dest(
     value: Value,
     dest: Destination,
@@ -54,7 +58,6 @@ pub(super) fn move_value_to_dest(
     let dst_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
 
     if src_ref.size() == dst_ref.size() {
-        // Shallow copy: just copy the structure bytes (including any pointers).
         unsafe {
             std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, src_ref.size() as usize);
         }
@@ -68,10 +71,10 @@ pub(super) fn move_value_to_dest(
     Value { ptr: dest.ptr, tydesc: dest.tydesc }
 }
 
-/// Destroy only the contents of a value without freeing its memory.
+/// Destroy heap-owned data without freeing slot memory.
 ///
-/// Use this for values stored inline in frame buffers, where the memory
-/// is owned by the frame Vec<u8> and should not be freed individually.
+/// Frees strings, collections, and other heap data owned by the value.
+/// The slot memory itself (in the frame buffer) is not freed.
 pub fn destroy_value_contents_only<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
@@ -86,10 +89,10 @@ pub fn destroy_value_contents_only<'db>(
     }
 }
 
-/// Destroy a value's contents (frame owns the memory structure).
+/// Destroy a value's heap-owned data.
 ///
-/// All values are now Borrowed, so this only destroys contents.
-/// The memory structure is owned by the caller's frame.
+/// Equivalent to `destroy_value_contents_only`. The slot memory is owned
+/// by the frame and freed when the frame is dropped.
 pub fn destroy_value<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
@@ -104,15 +107,13 @@ pub fn destroy_value<'db>(
     }
 }
 
-/// Free only the value structure without destroying contents.
+/// No-op: slot memory is owned by the frame.
 ///
-/// Since all values are now Borrowed (owned by caller's frame),
-/// this is a no-op. Retained for API compatibility.
+/// Retained for API compatibility. All values live in frame slots;
+/// the frame buffer is freed when the frame is dropped.
 #[allow(unused_variables)]
 pub fn free_value_structure<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
 ) {
-    // All values are Borrowed - structure owned by caller's frame.
-    // No action needed.
 }

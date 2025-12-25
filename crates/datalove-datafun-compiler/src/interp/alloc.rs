@@ -1,13 +1,13 @@
-//! Value allocation and DPS write functions.
+//! DPS write functions for compound types.
 //!
-//! Functions for writing values to destinations using destination-passing style (DPS).
-//! Handles Result, Data wrappers, and integer widening.
+//! Write Result::Err, Int (widened from fixed-width), and Data wrappers
+//! to pre-allocated destinations.
 
 use super::{InterpContext, InterpError, Value, Destination};
 
-/// Write Result::Err to a destination (DPS).
+/// Write Result::Err to a destination.
 ///
-/// The destination must be a Result type. Writes the Err tag and copies the error payload.
+/// Writes the Err tag and copies the error payload bytes.
 pub(super) fn write_result_err_to_dest(
     dest: Destination,
     err_tydesc: *const datalove_rt::rtdt::TyDesc,
@@ -36,11 +36,10 @@ pub(super) fn write_result_err_to_dest(
     Ok(())
 }
 
-/// Write widened fixed-width integer to Int destination.
+/// Widen a fixed-width integer to Int at destination.
 ///
-/// Handles: u8, i8, u16, i16, u32, i32, u64, i64.
-/// For signed types, preserves the sign in the bigint representation.
-/// The destination must be an allocated Int value.
+/// Converts u8/i8/u16/i16/u32/i32/u64/i64 to bigint representation.
+/// Allocates limbs via the runtime allocator.
 pub(super) fn write_widened_int_to_dest(
     rt_handle: *mut u8,
     src_ptr: *const u8,
@@ -121,10 +120,9 @@ pub(super) fn write_widened_int_to_dest(
     Ok(())
 }
 
-/// Initialize a bigint (Int) at the given pointer from an i128 value.
+/// Write an i128 as a bigint (Int) at the given pointer.
 ///
-/// This writes directly to the destination without allocating the Int struct itself.
-/// The limbs are allocated via the runtime allocator.
+/// Allocates limbs via the runtime allocator.
 pub(super) fn write_bigint_to_ptr(
     rt_handle: *mut u8,
     int_ptr: *mut datalove_rt::rtdt::Int,
@@ -179,9 +177,9 @@ pub(super) fn write_bigint_to_ptr(
     }
 }
 
-/// Write Data wrapper to destination, cloning the inner value.
+/// Write a Data wrapper to destination.
 ///
-/// The Data struct takes ownership of a cloned copy of the inner value.
+/// Clones the inner value; the Data struct owns the clone.
 pub(super) fn write_data_to_dest<'db>(
     ctx: &mut InterpContext<'db>,
     inner_value: Value,

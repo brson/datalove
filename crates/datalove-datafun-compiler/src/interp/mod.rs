@@ -1,79 +1,66 @@
-//! Analysis-driven interpreter with linear type semantics.
+//! Frame-based interpreter with linear type semantics.
 //!
 //! # Overview
 //!
-//! The interpreter executes Datafun code after typecheck and function analysis.
-//! It operates in two modes: script scope for top-level statements, and frame-based
-//! execution for function bodies. Both modes enforce linear type semantics and use
-//! destination-passing style (DPS) to minimize heap allocations.
+//! Executes Datafun code after typecheck and function analysis. Uses frame-based
+//! execution with destination-passing style (DPS) to minimize heap allocations.
+//! All values live in caller-owned memory (frame slots); linear type semantics
+//! determine when values are moved vs cloned.
 //!
-//! # Execution Flow
+//! # Execution Model
 //!
-//! 1. **Entry**: [`execute_script_with_module_graph`] receives a typechecked script
-//! 2. **Preparation**: Imports are resolved, functions are analyzed for frame layout
-//! 3. **Execution**: Script units execute sequentially; each statement processes in
-//!    script scope, while function calls create stack frames
-//! 4. **Result**: Script returns via the `output` variable binding
+//! Each function call creates a `StackFrame` with a packed byte buffer for slots.
+//! The `function_analysis` module computes a `FrameLayout` mapping variables and
+//! temporaries to byte offsets. The `ControlFlowGraph` (CFG) drives execution
+//! through basic blocks with explicit terminators.
 //!
-//! # Two Execution Modes
+//! # Destination-Passing Style (DPS)
 //!
-//! **Script scope** (`ScriptScope`): Evaluates top-level `let` bindings and `fun`
-//! definitions. Variables are stored by name in a hashmap with move-state tracking.
-//! Linear values are moved on use; copy values are cloned.
+//! Expressions receive a `Destination` specifying where to write results. This
+//! avoids intermediate allocations: the result is written directly to the caller's
+//! storage (frame slot or return destination). After evaluation, `dest.to_value()`
+//! creates a readable `Value` from the written data.
 //!
-//! **Frame-based** (`StackFrame`): Evaluates function bodies. The `function_analysis`
-//! module computes a `FrameLayout` mapping each variable and temporary to a byte
-//! offset in a packed buffer. The `ControlFlowGraph` (CFG) drives execution through
-//! basic blocks with explicit terminators for branches, loops, and returns.
+//! # Value vs Destination
 //!
-//! # Value Ownership Model
+//! - **Destination**: Write target passed to expression evaluation ("write here")
+//! - **Value**: Readable data after evaluation ("read from here")
 //!
-//! All values are borrowed from caller-owned memory (frame slots or destinations).
-//! **Semantic ownership** (move vs copy) is determined by type (`is_copy_type`) and
-//! `SlotState` tracking. Copy types clone transparently; linear types are moved.
+//! Both are (ptr, tydesc) pairs. Destinations are inputs; Values are outputs.
 //!
 //! # Linear Type Semantics
 //!
 //! Copy types (bool, fixed integers, f32) clone transparently. Linear types (int,
 //! string, collections) use move semantics. `SlotState` tracks each slot:
 //! - `Uninitialized`: Not yet written; skip cleanup
-//! - `Available`: Contains valid data; needs cleanup if not moved
+//! - `Available`: Valid data; needs cleanup if not moved
 //! - `Moved`: Ownership transferred; skip cleanup
 //!
-//! Operators use borrow semantics (`eval_*_borrow` functions): operands are cloned
-//! for the operation, leaving originals intact. Variables consumed by function args
-//! or `ret` are marked `Moved`.
-//!
-//! # Destination-Passing Style
-//!
-//! Expressions accept an optional `Destination` specifying where to write results.
-//! This avoids allocating temporaries when the caller already has storage. Frame
-//! slots serve as destinations for let bindings and expression temporaries.
+//! Operators use borrow semantics (`eval_*_borrow`): operands are cloned for the
+//! operation, leaving originals intact. Variables consumed by function args or
+//! `ret` are marked `Moved`.
 //!
 //! # Control Flow
 //!
-//! Frame execution walks the CFG: execute statements in a block, then follow the
-//! terminator. Terminators handle:
+//! CFG execution: process statements in a block, then follow the terminator:
 //! - `Return`: Function exit
-//! - `Branch`: If-statement condition evaluation
+//! - `Branch`: If-condition evaluation (handles Bool, Option, Result)
 //! - `Goto`: Unconditional jump (with branch-exit drops for convergence)
 //! - `LoopContinue`/`LoopBreak`: Loop control
 //!
 //! # Cleanup
 //!
-//! `DropPoints` from function analysis identifies slots needing cleanup. At function
-//! exit, `cleanup_frame` destroys slots still in `Available` state. Branch-exit
-//! drops handle convergence: when a slot is moved in one branch but not another,
-//! the non-moved branch drops it at exit so both paths converge with the slot
-//! consumed.
+//! `DropPoints` from function analysis identifies slots needing cleanup. At
+//! function exit, `cleanup_frame` destroys slots still `Available`. Branch-exit
+//! drops handle convergence: if a slot is moved in one branch but not another,
+//! the non-moved branch drops it at exit so both paths converge consumed.
 //!
 //! # Key Types
 //!
-//! - [`InterpContext`]: Runtime state, module graph, call stack, type descriptor table
-//! - [`Value`]: Pointer + type descriptor + ownership location
-//! - [`StackFrame`]: Packed byte buffer, per-slot state, CFG, drop points
-//! - [`ScriptScope`]: Named variable bindings with move tracking
-//! - [`Destination`]: Target location for DPS expression evaluation
+//! - [`InterpContext`]: Runtime, module graph, call stack, tydesc table
+//! - [`Value`]: Pointer + type descriptor (readable data)
+//! - [`Destination`]: Pointer + type descriptor (write target)
+//! - [`StackFrame`]: Frame buffer, slot states, CFG, drop points
 
 mod value;
 mod error;

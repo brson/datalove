@@ -1,16 +1,15 @@
-//! Control flow operations for the interpreter.
+//! Control flow: branch conditions and try operators.
 //!
-//! Handles branch conditions, try operators, and boolean extraction:
-//! - `evaluate_branch_condition`: Handles Bool, Option, Result conditions
-//! - `eval_try_option`: The `?` operator for Option types
-//! - `eval_try_result`: The `!` operator for Result types
+//! - `evaluate_branch_condition`: If-condition on Bool, Option, or Result
+//! - `eval_try_option`: The `?` operator (Option unwrap or early return)
+//! - `eval_try_result`: The `!` operator (Result unwrap or early return)
 
 use bct::text::InternedText;
 
 use super::{InterpContext, InterpError, Value, SlotState};
 use super::memory::destroy_value;
 
-/// Find a slot by variable name in the frame layout.
+/// Find a slot by variable name.
 pub(super) fn find_slot_by_name<'db>(
     db: &'db dyn crate::Db,
     layout: crate::function_analysis::FrameLayout<'db>,
@@ -21,14 +20,10 @@ pub(super) fn find_slot_by_name<'db>(
         .copied()
 }
 
-/// Evaluate a branch condition for if-statements.
+/// Evaluate if-condition on Bool, Option, or Result.
 ///
-/// Handles three condition types:
-/// - Bool: simple true/false
-/// - Option: Some is true, None is false; payload bound to then_binding
-/// - Result: Ok is true, Err is false; payload bound to then_binding, error to else_binding
-///
-/// Returns true if the condition is truthy (bool=true, Option=Some, Result=Ok).
+/// Returns true if truthy (Bool=true, Option=Some, Result=Ok).
+/// Binds payloads to then_binding/else_binding slots when present.
 pub(super) fn evaluate_branch_condition<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
@@ -80,7 +75,6 @@ pub(super) fn evaluate_branch_condition<'db>(
                 }
             }
 
-            // All values are Borrowed - structure owned by caller.
             Ok(is_some)
         }
         TyTag::Result => {
@@ -142,7 +136,6 @@ pub(super) fn evaluate_branch_condition<'db>(
                 }
             }
 
-            // All values are Borrowed - structure owned by caller.
             Ok(is_ok)
         }
         _ => {
@@ -154,10 +147,9 @@ pub(super) fn evaluate_branch_condition<'db>(
     }
 }
 
-/// Evaluate try-option operator (`val?`) with DPS.
+/// Evaluate try-option operator (`val?`).
 ///
-/// If the operand is None, returns `InterpError::OptionNone` for early return.
-/// If the operand is Some(value), extracts the inner value and writes to dest.
+/// Some: writes inner to dest. None: returns `InterpError::OptionNone`.
 pub(super) fn eval_try_option<'db>(
     ctx: &mut InterpContext<'db>,
     operand_value: Value,
@@ -186,19 +178,16 @@ pub(super) fn eval_try_option<'db>(
 
     let inner_size = unsafe { (*dest.tydesc).size as usize };
 
-    // Copy payload directly to dest.
     unsafe {
         std::ptr::copy_nonoverlapping(payload_ptr, dest.ptr, inner_size);
     }
 
-    // All values are Borrowed - structure owned by caller.
     Ok(())
 }
 
-/// Evaluate try-result operator (`val!`) with DPS.
+/// Evaluate try-result operator (`val!`).
 ///
-/// If the operand is Err, returns `InterpError::ResultErr` for early return.
-/// If the operand is Ok(value), extracts the inner value and writes to dest.
+/// Ok: writes inner to dest. Err: returns `InterpError::ResultErr`.
 pub(super) fn eval_try_result<'db>(
     ctx: &mut InterpContext<'db>,
     operand_value: Value,
@@ -248,7 +237,6 @@ pub(super) fn eval_try_result<'db>(
             );
         }
 
-        // All values are Borrowed - structure owned by caller.
         return Err(InterpError::ResultErr {
             tydesc: err_tydesc,
             ptr: cloned_err_ptr,
@@ -257,11 +245,9 @@ pub(super) fn eval_try_result<'db>(
 
     let ok_size = unsafe { (*dest.tydesc).size as usize };
 
-    // Copy payload directly to dest.
     unsafe {
         std::ptr::copy_nonoverlapping(payload_ptr, dest.ptr, ok_size);
     }
 
-    // All values are Borrowed - structure owned by caller.
     Ok(())
 }
