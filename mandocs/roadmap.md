@@ -23,6 +23,8 @@ With core->runtime calls.
 
 # on deck
 
+- shadowing
+- var
 - boolean ops - and or xor implies not
 - anonymous enums with payloads
 - named types
