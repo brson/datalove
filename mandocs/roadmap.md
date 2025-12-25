@@ -23,6 +23,7 @@ With core->runtime calls.
 
 # on deck
 
+- boolean ops - and or xor implies not
 - anonymous enums with payloads
 - named types
 - clean up demo files
