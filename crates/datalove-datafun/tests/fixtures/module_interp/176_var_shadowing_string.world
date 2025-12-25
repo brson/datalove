@@ -1,0 +1,9 @@
+----------
+module local/test/main
+----------
+
+fun main(): string
+    var s: string = "hello"
+    var s: string = "world"
+    ret s
+end fun

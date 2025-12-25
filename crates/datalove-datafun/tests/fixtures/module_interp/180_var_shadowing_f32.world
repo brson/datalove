@@ -1,0 +1,9 @@
+----------
+module local/test/main
+----------
+
+fun main(): f32
+    var x: f32 = @1.5
+    var x: f32 = @2.5
+    ret x
+end fun

@@ -1,0 +1,9 @@
+----------
+module local/test/main
+----------
+
+fun main(): bool
+    var b: bool = true
+    var b: bool = false
+    ret b
+end fun

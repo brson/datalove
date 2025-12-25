@@ -1,0 +1,10 @@
+----------
+module local/test/main
+----------
+
+fun main(): int
+    let x = @1000 + @0
+    var x = x + x
+    let x = x + x
+    ret x
+end fun
