@@ -55,7 +55,7 @@ let b: bool = false
 Booleans are used in `if` and `else if` conditions.
 
 ```datalove
-require sys/std/debug
+require sys/core/debug
 
 let a = true
 let b = false
