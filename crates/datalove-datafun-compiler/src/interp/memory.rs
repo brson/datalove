@@ -3,7 +3,7 @@
 //! Functions for destroying, freeing, and cloning values.
 //! All values are now Borrowed (owned by caller's frame).
 
-use super::{InterpContext, Value, Destination, ValueOwnership};
+use super::{InterpContext, Value, Destination};
 
 /// Clone a value into a pre-allocated destination.
 pub(super) fn clone_value_to_dest<'db>(
@@ -36,11 +36,7 @@ pub(super) fn clone_value_to_dest<'db>(
             );
         }
     }
-    Value {
-        ptr: dest.ptr,
-        tydesc: dest.tydesc,
-        ownership: ValueOwnership::Borrowed,
-    }
+    Value { ptr: dest.ptr, tydesc: dest.tydesc }
 }
 
 /// Move a value into a pre-allocated destination (shallow copy).
@@ -69,11 +65,7 @@ pub(super) fn move_value_to_dest(
         );
     }
 
-    Value {
-        ptr: dest.ptr,
-        tydesc: dest.tydesc,
-        ownership: ValueOwnership::Borrowed,
-    }
+    Value { ptr: dest.ptr, tydesc: dest.tydesc }
 }
 
 /// Destroy only the contents of a value without freeing its memory.

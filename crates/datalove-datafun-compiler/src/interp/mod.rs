@@ -28,13 +28,8 @@
 //!
 //! # Value Ownership Model
 //!
-//! The interpreter separates two ownership concepts:
-//!
-//! **Structural ownership** (`ValueOwnership`): Who frees the memory structure.
-//! - `Borrowed`: Points into frame buffer or caller's data. Never freed by holder.
-//! - `TempOwned`: Heap allocation that must be freed after use.
-//!
-//! **Semantic ownership** (move vs copy): Determined by type (`is_copy_type`) and
+//! All values are borrowed from caller-owned memory (frame slots or destinations).
+//! **Semantic ownership** (move vs copy) is determined by type (`is_copy_type`) and
 //! `SlotState` tracking. Copy types clone transparently; linear types are moved.
 //!
 //! # Linear Type Semantics
@@ -94,7 +89,7 @@ mod context;
 mod control;
 pub mod tydesc;
 
-pub use value::{Value, Destination, ValueOwnership};
+pub use value::{Value, Destination};
 pub use error::InterpError;
 pub use frame::{SlotState, StackFrame};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
@@ -226,7 +221,7 @@ fn eval_wrapper_payload_dps<'db>(
     // Evaluate payload with DPS - writes directly to payload_dest.
     let _payload_value = eval_expression_frame(ctx, payload_expr, payload_dest)?;
 
-    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
 }
 
 // ============================================================================
@@ -522,11 +517,11 @@ pub fn execute_function_body<'db>(
             // No cloning needed - just return the value as-is.
             Ok(Some(value))
         }
-        Ok(Some(value)) if value.ownership == ValueOwnership::Borrowed => {
-            // No return_dest and result is Borrowed (pointing to frame memory).
-            // This path should be unreachable now that all function calls provide DPS destinations.
+        Ok(Some(_value)) => {
+            // No return_dest but we got a return value.
+            // This should be unreachable - all function calls provide DPS destinations.
             panic!(
-                "Unreachable: Borrowed return value without DPS destination in function '{}'",
+                "Unreachable: return value without DPS destination in function '{}'",
                 func.name(ctx.db).text(ctx.db)
             );
         }
@@ -559,7 +554,7 @@ pub fn execute_function_body<'db>(
                     if let Some(dest) = return_dest {
                         // DPS: write None to caller's destination.
                         write_option_none_to_dest(dest)?;
-                        return Ok(Some(dest.to_borrowed_value()));
+                        return Ok(Some(dest.to_value()));
                     } else {
                         // This path should be unreachable now that all function calls provide DPS destinations.
                         panic!(
@@ -577,7 +572,7 @@ pub fn execute_function_body<'db>(
                     if let Some(dest) = return_dest {
                         // DPS: write Err to caller's destination.
                         write_result_err_to_dest(dest, *tydesc, *ptr)?;
-                        return Ok(Some(dest.to_borrowed_value()));
+                        return Ok(Some(dest.to_value()));
                     } else {
                         // This path should be unreachable now that all function calls provide DPS destinations.
                         panic!(
@@ -828,11 +823,7 @@ fn process_block_exit_drops<'db>(
         let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
         let slot_ptr = unsafe { frame_data.as_ptr().add(offset) as *mut u8 };
 
-        let value = Value {
-            ptr: slot_ptr,
-            tydesc,
-            ownership: ValueOwnership::Borrowed,
-        };
+        let value = Value { ptr: slot_ptr, tydesc };
         destroy_value_contents_only(ctx, value);
 
         // Mark slot as Moved so cleanup_frame doesn't try to drop it again.
@@ -938,11 +929,7 @@ fn destroy_slot_contents<'db>(
 
     // Destroy the value contents only (not the structure itself).
     // The memory is part of the frame buffer and will be freed with the frame.
-    let value = Value {
-        ptr: slot_ptr,
-        tydesc,
-        ownership: ValueOwnership::Borrowed,
-    };
+    let value = Value { ptr: slot_ptr, tydesc };
     destroy_value_contents_only(ctx, value);
 }
 
@@ -1103,7 +1090,7 @@ fn eval_expression_frame<'db>(
                 };
                 let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-                let source_value = Value { ptr, tydesc, ownership: ValueOwnership::Borrowed };
+                let source_value = Value { ptr, tydesc };
 
                 if is_copy {
                     // Copy: clone to dest.
@@ -1128,7 +1115,7 @@ fn eval_expression_frame<'db>(
                     };
                     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-                    let source_value = Value { ptr: frame_ptr, tydesc, ownership: ValueOwnership::Borrowed };
+                    let source_value = Value { ptr: frame_ptr, tydesc };
                     let result = clone_value_to_dest(ctx, source_value, dest);
                     Ok(result)
                 } else {
@@ -1143,7 +1130,7 @@ fn eval_expression_frame<'db>(
                     };
                     let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
 
-                    let source_value = Value { ptr: frame_ptr, tydesc, ownership: ValueOwnership::Borrowed };
+                    let source_value = Value { ptr: frame_ptr, tydesc };
 
                     // Move to destination (shallow copy), mark source as Moved.
                     let result = move_value_to_dest(source_value, dest);
@@ -1177,15 +1164,11 @@ fn eval_expression_frame<'db>(
 
             // Clean up temporary operand values and mark their slots as Moved.
             destroy_value(ctx, lhs);
-            if lhs.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_moved(ctx, lhs_expr);
-            }
+            mark_temp_slot_moved(ctx, lhs_expr);
             destroy_value(ctx, rhs);
-            if rhs.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_moved(ctx, rhs_expr);
-            }
+            mark_temp_slot_moved(ctx, rhs_expr);
 
-            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
         }
 
         ast::ExprFunKind::FunctionCall(call_expr) => {
@@ -1210,11 +1193,9 @@ fn eval_expression_frame<'db>(
 
             // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
-            if operand.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_moved(ctx, operand_expr);
-            }
+            mark_temp_slot_moved(ctx, operand_expr);
 
-            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
         }
 
         ast::ExprFunKind::Tuple(tuple_expr) => {
@@ -1227,16 +1208,14 @@ fn eval_expression_frame<'db>(
                 let field_dest = Destination { ptr: field_ptr, tydesc: field.tydesc().as_ptr() };
 
                 // Evaluate element directly to field destination.
-                let elem_value = eval_expression_frame(ctx, *elem_expr, field_dest)?;
+                let _elem_value = eval_expression_frame(ctx, *elem_expr, field_dest)?;
 
-                // If element used its own temp slot, it's been written to our field now.
+                // Element used its own temp slot, it's been written to our field now.
                 // The element's temp slot is no longer needed.
-                if elem_value.ownership == ValueOwnership::Borrowed {
-                    mark_temp_slot_available(ctx, *elem_expr);
-                }
+                mark_temp_slot_available(ctx, *elem_expr);
             }
 
-            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
         }
 
         ast::ExprFunKind::TryOption(try_op) => {
@@ -1246,7 +1225,7 @@ fn eval_expression_frame<'db>(
             let operand = eval_expression_frame(ctx, operand_expr, operand_dest)?;
             // Apply try-option operator with DPS.
             eval_try_option(ctx, operand, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
 
         ast::ExprFunKind::TryResult(try_op) => {
@@ -1256,32 +1235,32 @@ fn eval_expression_frame<'db>(
             let operand = eval_expression_frame(ctx, operand_expr, operand_dest)?;
             // Apply try-result operator with DPS.
             eval_try_result(ctx, operand, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
 
         // Inline literal variants - always write to dest.
         ast::ExprFunKind::True(_) => {
             write_bool_to_dest(dest, true);
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::False(_) => {
             write_bool_to_dest(dest, false);
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::None(_) => {
             write_option_none_to_dest(dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::Int(int_expr) => {
             write_inline_int_to_dest(ctx, &int_expr, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::Float(float_expr) => {
             let value_str = float_expr.value(ctx.db).as_str(ctx.db);
             let value: f32 = value_str.parse()
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
             write_f32_to_dest(dest, value);
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::Hex(hex_expr) => {
             let value_str = hex_expr.value(ctx.db).as_str(ctx.db);
@@ -1289,34 +1268,34 @@ fn eval_expression_frame<'db>(
             let value: u32 = u32::from_str_radix(hex_digits, 16)
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse hex: {}", e)))?;
             write_u32_to_dest(dest, value);
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::String(string_expr) => {
             write_string_to_dest(ctx, &string_expr, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::List(list_expr) => {
             eval_inline_list(ctx, expr, &list_expr, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::Set(set_expr) => {
             eval_inline_set(ctx, &set_expr, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::Map(map_expr) => {
             eval_inline_map(ctx, &map_expr, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::Tensor(_) => {
             Err(InterpError::InvalidExpression("Tensor not yet implemented".to_string()))
         }
         ast::ExprFunKind::AnonTuple(tuple_expr) => {
             eval_inline_anon_tuple(ctx, &tuple_expr, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::AnonStruct(struct_expr) => {
             eval_inline_anon_struct(ctx, &struct_expr, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::AnonEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
@@ -1332,21 +1311,19 @@ fn eval_expression_frame<'db>(
             let payload_dest = get_destination_for_expr(ctx, payload_expr)?;
             let payload = eval_expression_frame(ctx, payload_expr, payload_dest)?;
             literals::write_result_er_from_value(ctx, payload, dest)?;
-            Ok(dest.to_borrowed_value())
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::Data(data_expr) => {
             // Evaluate inner expression to its temp slot.
             let inner_expr = data_expr.value(ctx.db);
             let inner_dest = get_destination_for_expr(ctx, inner_expr)?;
             let inner_value = eval_expression_frame(ctx, inner_expr, inner_dest)?;
-            // Wrap in Data (clones inner_value if borrowed, takes ownership if TempOwned).
+            // Wrap in Data (clones inner_value).
             write_data_to_dest(ctx, inner_value, dest)?;
-            // If inner was borrowed, we cloned it for Data; destroy original and mark slot.
-            if inner_value.ownership == ValueOwnership::Borrowed {
-                destroy_value(ctx, inner_value);
-                mark_temp_slot_moved(ctx, inner_expr);
-            }
-            Ok(dest.to_borrowed_value())
+            // We cloned inner for Data; destroy original and mark slot.
+            destroy_value(ctx, inner_value);
+            mark_temp_slot_moved(ctx, inner_expr);
+            Ok(dest.to_value())
         }
         ast::ExprFunKind::Err(_) => {
             Err(InterpError::InvalidExpression(
@@ -1379,11 +1356,10 @@ fn eval_return_expression_frame<'db>(
             "eval_expression_frame should always write to dest"
         );
 
-        // Return as Borrowed - caller owns the destination memory.
+        // Return value - caller owns the destination memory.
         return Ok(Value {
             ptr: return_dest.ptr,
             tydesc: return_dest.tydesc,
-            ownership: ValueOwnership::Borrowed,
         });
     }
 
@@ -1437,7 +1413,7 @@ fn eval_expression_frame_borrow<'db>(
             if kind == crate::function_analysis::SlotKind::Reference {
                 // Reference slot: read pointer to caller's value.
                 let ptr = read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db);
-                let borrowed = Value { ptr, tydesc, ownership: ValueOwnership::Borrowed };
+                let borrowed = Value { ptr, tydesc };
 
                 let result = clone_value_to_dest(ctx, borrowed, dest);
                 // Note: We do NOT mark slot as Moved - this is borrow context.
@@ -1446,7 +1422,7 @@ fn eval_expression_frame_borrow<'db>(
                 // Local/Temporary slot - clone to destination.
                 let offset = slot_info.offset(ctx.db) as usize;
                 let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
-                let source_value = Value { ptr: frame_ptr, tydesc, ownership: ValueOwnership::Borrowed };
+                let source_value = Value { ptr: frame_ptr, tydesc };
 
                 let result = clone_value_to_dest(ctx, source_value, dest);
                 // Note: We do NOT mark slot as Moved - this is borrow context.
@@ -1476,15 +1452,11 @@ fn eval_expression_frame_borrow<'db>(
 
             // Clean up temporary operand values and mark slots as Moved.
             destroy_value(ctx, lhs);
-            if lhs.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_moved(ctx, lhs_expr);
-            }
+            mark_temp_slot_moved(ctx, lhs_expr);
             destroy_value(ctx, rhs);
-            if rhs.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_moved(ctx, rhs_expr);
-            }
+            mark_temp_slot_moved(ctx, rhs_expr);
 
-            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
         }
 
         ast::ExprFunKind::UnaryOp(unary_expr) => {
@@ -1498,11 +1470,9 @@ fn eval_expression_frame_borrow<'db>(
 
             // Clean up temporary operand value and mark slot as Moved.
             destroy_value(ctx, operand);
-            if operand.ownership == ValueOwnership::Borrowed {
-                mark_temp_slot_moved(ctx, operand_expr);
-            }
+            mark_temp_slot_moved(ctx, operand_expr);
 
-            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc, ownership: ValueOwnership::Borrowed })
+            Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
         }
 
         // For function calls in borrow context, the call itself uses normal semantics
@@ -1730,7 +1700,6 @@ fn eval_inline_anon_tuple<'db>(
                             let field_value = Value {
                                 ptr: written_field.ptr,
                                 tydesc: written_field.tydesc,
-                                ownership: ValueOwnership::Borrowed,
                             };
                             destroy_value(ctx, field_value);
                         }
@@ -1790,7 +1759,6 @@ fn eval_inline_anon_struct<'db>(
                             let field_value = Value {
                                 ptr: written_field.ptr,
                                 tydesc: written_field.tydesc,
-                                ownership: ValueOwnership::Borrowed,
                             };
                             destroy_value(ctx, field_value);
                         }
