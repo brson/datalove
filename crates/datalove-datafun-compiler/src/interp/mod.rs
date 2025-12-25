@@ -83,7 +83,7 @@ pub use error::InterpError;
 pub use frame::{SlotState, StackFrame};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
 pub use context::{InterpContext, ModuleFunctionTableGraph};
-use control::{find_slot_by_name, evaluate_branch_condition, eval_try_option, eval_try_result};
+use control::{evaluate_branch_condition, eval_try_option, eval_try_result};
 
 use frame::CfgControl;
 use memory::{clone_value_to_dest, move_value_to_dest};
@@ -1024,9 +1024,9 @@ fn eval_operand<'db>(
 
     match expr.expr(ctx.db) {
         crate::ast::ExprFunKind::Name(name) => {
-            // Find slot by name.
+            // Find slot by resolved slot ID.
             let layout = ctx.call_stack[frame_index].layout;
-            let slot_info = find_slot_by_name(ctx.db, layout, name)
+            let slot_info = layout.get_slot_for_name_expr(ctx.db, expr)
                 .ok_or_else(|| InterpError::VariableNotFound(name.text(ctx.db).to_string()))?;
 
             let slot_id = slot_info.slot_id(ctx.db);
@@ -1087,13 +1087,13 @@ fn execute_let_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
     let_stmt: ast::StmtLet<'db>,
 ) -> Result<(), InterpError> {
-    // Find destination slot FIRST so we can pass it to expression evaluation.
+    // Find destination slot using resolved slot ID.
     let frame_index = ctx.call_stack.len() - 1;
-    let name = let_stmt.name(ctx.db);
     let layout = ctx.call_stack[frame_index].layout;
-    let slot_info = match find_slot_by_name(ctx.db, layout, name) {
+    let slot_info = match layout.get_slot_for_let_stmt(ctx.db, let_stmt) {
         Some(s) => s,
         None => {
+            let name = let_stmt.name(ctx.db);
             return Err(InterpError::RuntimeError(
                 format!("Let binding '{}' not found in frame", name.text(ctx.db))
             ));
@@ -1110,7 +1110,7 @@ fn execute_let_statement_frame<'db>(
         crate::tycheck::Type::Datalit(dt) => dt.clone(),
         _ => {
             return Err(InterpError::RuntimeError(
-                format!("Non-datalit type in slot '{}'", name.text(ctx.db))
+                format!("Non-datalit type in slot '{}'", let_stmt.name(ctx.db).text(ctx.db))
             ));
         }
     };
@@ -1134,11 +1134,11 @@ fn execute_var_statement_frame<'db>(
     var_stmt: ast::StmtVar<'db>,
 ) -> Result<(), InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
-    let name = var_stmt.name(ctx.db);
     let layout = ctx.call_stack[frame_index].layout;
-    let slot_info = match find_slot_by_name(ctx.db, layout, name) {
+    let slot_info = match layout.get_slot_for_var_stmt(ctx.db, var_stmt) {
         Some(s) => s,
         None => {
+            let name = var_stmt.name(ctx.db);
             return Err(InterpError::RuntimeError(
                 format!("Var binding '{}' not found in frame", name.text(ctx.db))
             ));
@@ -1155,7 +1155,7 @@ fn execute_var_statement_frame<'db>(
         crate::tycheck::Type::Datalit(dt) => dt.clone(),
         _ => {
             return Err(InterpError::RuntimeError(
-                format!("Non-datalit type in slot '{}'", name.text(ctx.db))
+                format!("Non-datalit type in slot '{}'", var_stmt.name(ctx.db).text(ctx.db))
             ));
         }
     };
@@ -1180,11 +1180,11 @@ fn execute_set_statement_frame<'db>(
     set_stmt: ast::StmtSet<'db>,
 ) -> Result<(), InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
-    let name = set_stmt.name(ctx.db);
     let layout = ctx.call_stack[frame_index].layout;
-    let slot_info = match find_slot_by_name(ctx.db, layout, name) {
+    let slot_info = match layout.get_slot_for_set_stmt(ctx.db, set_stmt) {
         Some(s) => s,
         None => {
+            let name = set_stmt.name(ctx.db);
             return Err(InterpError::RuntimeError(
                 format!("Variable '{}' not found in frame", name.text(ctx.db))
             ));
@@ -1199,7 +1199,7 @@ fn execute_set_statement_frame<'db>(
         crate::tycheck::Type::Datalit(dt) => dt.clone(),
         _ => {
             return Err(InterpError::RuntimeError(
-                format!("Non-datalit type in slot '{}'", name.text(ctx.db))
+                format!("Non-datalit type in slot '{}'", set_stmt.name(ctx.db).text(ctx.db))
             ));
         }
     };
@@ -1262,9 +1262,9 @@ fn eval_expression_frame<'db>(
 
     match expr.expr(ctx.db) {
         ast::ExprFunKind::Name(name) => {
-            // Find slot by name.
+            // Find slot by resolved slot ID.
             let layout = ctx.call_stack[frame_index].layout;
-            let slot_info = find_slot_by_name(ctx.db, layout, name)
+            let slot_info = layout.get_slot_for_name_expr(ctx.db, expr)
                 .ok_or_else(|| InterpError::VariableNotFound(name.text(ctx.db).to_string()))?;
 
             let slot_id = slot_info.slot_id(ctx.db);

@@ -897,7 +897,7 @@ end fun
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let errors = check_use_before_init(db, func, &slot_alloc.slots(db), init, cfg);
 
@@ -931,7 +931,7 @@ end fun
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let errors = check_use_before_init(db, func, &slot_alloc.slots(db), init, cfg);
 
@@ -955,7 +955,7 @@ end fun
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let errors = check_use_before_init(db, func, &slot_alloc.slots(db), init, cfg);
 
@@ -989,7 +989,7 @@ end fun
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let errors = check_use_before_init(db, func, &slot_alloc.slots(db), init, cfg);
 
@@ -1014,9 +1014,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         let errors = check_double_move(db, func, move_info);
 
@@ -1052,9 +1052,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         let errors = check_double_move(db, func, move_info);
 
@@ -1078,9 +1078,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         let errors = check_double_move(db, func, move_info);
 
@@ -1104,9 +1104,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
 
@@ -1140,9 +1140,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
 
@@ -1168,9 +1168,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
 
@@ -1191,7 +1191,7 @@ end fun
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let errors = check_uninitialized_return(db, func, &slot_alloc.slots(db), init, cfg);
 
@@ -1224,7 +1224,7 @@ end fun
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let errors = check_uninitialized_return(db, func, &slot_alloc.slots(db), init, cfg);
 
@@ -1235,20 +1235,26 @@ end fun
     #[test]
     fn test_uninitialized_return_properly_initialized() {
         let ref db = crate::Database::default();
+        // Test that a properly initialized local returns without error.
+        // Note: With proper shadowing, using `let result = x` when there's an
+        // `out result` parameter would create a NEW local that shadows the
+        // parameter, leaving the Out parameter uninitialized. This test uses
+        // a simple case without Out parameters to test basic initialization.
         let source = r#"
-fun test(x: u32, out result: u32)
+fun test(x: u32): u32
     let result = x
+    ret result
 end fun
         "#;
 
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let errors = check_uninitialized_return(db, func, &slot_alloc.slots(db), init, cfg);
 
-        // Should have no errors - Out parameter is properly initialized.
+        // Should have no errors - the return value is properly initialized.
         assert_eq!(errors.len(), 0);
     }
 
@@ -1265,8 +1271,8 @@ end fun
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
 
         let errors = check_value_not_used(db, &slot_alloc.slots(db), live_ranges);
 
@@ -1298,8 +1304,8 @@ end fun
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
 
         let errors = check_value_not_used(db, &slot_alloc.slots(db), live_ranges);
 
@@ -1319,8 +1325,8 @@ end fun
         let (func, _tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
 
         let errors = check_value_not_used(db, &slot_alloc.slots(db), live_ranges);
 
@@ -1353,9 +1359,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         let errors = check_use_after_move(db, func, &slot_alloc.slots(db), move_info);
 

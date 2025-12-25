@@ -5,7 +5,7 @@ use bct::text::InternedText;
 use std::collections::HashMap;
 use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind, ParamMode};
 use super::{SlotId, ExprId, StmtId, LiveRanges};
-use super::slot_allocation::AllocatedSlot;
+use super::slot_allocation::{AllocatedSlot, SlotAllocation};
 
 /// Information about a read operation.
 #[derive(Clone, Debug)]
@@ -161,7 +161,7 @@ impl<'db> FunctionRegistry<'db> {
 pub fn compute_move_info<'db>(
     db: &'db dyn crate::Db,
     func: StmtFun<'db>,
-    slots: &'db [AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
     live_ranges: LiveRanges<'db>,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> MoveInfo<'db> {
@@ -180,7 +180,7 @@ pub fn compute_move_info<'db>(
         db,
         func.body(db),
         &registry,
-        slots,
+        slot_alloc,
         &mut moves,
         &mut reads,
         &mut expr_counter,
@@ -305,7 +305,7 @@ fn walk_statements<'db>(
     db: &'db dyn crate::Db,
     statements: &[Statement<'db>],
     registry: &FunctionRegistry<'db>,
-    slots: &[AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
     moves: &mut Vec<MoveOp<'db>>,
     reads: &mut Vec<ReadInfo>,
     expr_counter: &mut u32,
@@ -321,10 +321,9 @@ fn walk_statements<'db>(
             Statement::Let(let_stmt) => {
                 // Let binding: RHS is moved to LHS slot.
                 let value_expr = let_stmt.value(db);
-                let name = let_stmt.name(db);
 
-                // Find the slot for this let binding.
-                if let Some(slot_id) = find_slot_by_name(db, slots, name) {
+                // Find the slot for this let binding using resolved mapping.
+                if let Some(slot_id) = slot_alloc.get_slot_for_let_stmt(db, *let_stmt) {
                     // Collect all moves from the RHS expression.
                     collect_moves_from_expr(
                         db,
@@ -333,7 +332,7 @@ fn walk_statements<'db>(
                         MoveKind::Assignment,
                         stmt_id,
                         registry,
-                        slots,
+                        slot_alloc,
                         moves,
                         expr_counter,
                         tycheck_result,
@@ -344,7 +343,7 @@ fn walk_statements<'db>(
                         db,
                         value_expr,
                         stmt_id,
-                        slots,
+                        slot_alloc,
                         reads,
                         expr_counter,
                     );
@@ -353,9 +352,9 @@ fn walk_statements<'db>(
             Statement::Var(var_stmt) => {
                 // Same as let: RHS is moved to LHS slot.
                 let value_expr = var_stmt.value(db);
-                let name = var_stmt.name(db);
 
-                if let Some(slot_id) = find_slot_by_name(db, slots, name) {
+                // Find the slot for this var binding using resolved mapping.
+                if let Some(slot_id) = slot_alloc.get_slot_for_var_stmt(db, *var_stmt) {
                     collect_moves_from_expr(
                         db,
                         value_expr,
@@ -363,7 +362,7 @@ fn walk_statements<'db>(
                         MoveKind::Assignment,
                         stmt_id,
                         registry,
-                        slots,
+                        slot_alloc,
                         moves,
                         expr_counter,
                         tycheck_result,
@@ -373,7 +372,7 @@ fn walk_statements<'db>(
                         db,
                         value_expr,
                         stmt_id,
-                        slots,
+                        slot_alloc,
                         reads,
                         expr_counter,
                     );
@@ -382,9 +381,9 @@ fn walk_statements<'db>(
             Statement::Set(set_stmt) => {
                 // Set: RHS is moved to existing mutable slot.
                 let value_expr = set_stmt.value(db);
-                let name = set_stmt.name(db);
 
-                if let Some(slot_id) = find_slot_by_name(db, slots, name) {
+                // Find the slot for this set statement using resolved mapping.
+                if let Some(slot_id) = slot_alloc.get_slot_for_set_stmt(db, *set_stmt) {
                     collect_moves_from_expr(
                         db,
                         value_expr,
@@ -392,7 +391,7 @@ fn walk_statements<'db>(
                         MoveKind::Assignment,
                         stmt_id,
                         registry,
-                        slots,
+                        slot_alloc,
                         moves,
                         expr_counter,
                         tycheck_result,
@@ -402,7 +401,7 @@ fn walk_statements<'db>(
                         db,
                         value_expr,
                         stmt_id,
-                        slots,
+                        slot_alloc,
                         reads,
                         expr_counter,
                     );
@@ -421,7 +420,7 @@ fn walk_statements<'db>(
                         expr_id,
                         stmt_id,
                         registry,
-                        slots,
+                        slot_alloc,
                         moves,
                         expr_counter,
                         tycheck_result,
@@ -432,7 +431,7 @@ fn walk_statements<'db>(
                         db,
                         value_expr,
                         stmt_id,
-                        slots,
+                        slot_alloc,
                         reads,
                         expr_counter,
                     );
@@ -444,20 +443,20 @@ fn walk_statements<'db>(
                     db,
                     if_stmt.condition(db),
                     stmt_id,
-                    slots,
+                    slot_alloc,
                     reads,
                     expr_counter,
                 );
 
                 // Process then and else branches.
-                walk_statements(db, if_stmt.then_body(db), registry, slots, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
+                walk_statements(db, if_stmt.then_body(db), registry, slot_alloc, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
                 if let Some(else_body) = if_stmt.else_body(db) {
-                    walk_statements(db, else_body, registry, slots, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
+                    walk_statements(db, else_body, registry, slot_alloc, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
                 }
             }
             Statement::Loop(loop_stmt) => {
                 // Process loop body.
-                walk_statements(db, loop_stmt.body(db), registry, slots, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
+                walk_statements(db, loop_stmt.body(db), registry, slot_alloc, moves, reads, expr_counter, stmt_counter, tycheck_result, func);
             }
             Statement::Break(_) | Statement::Continue(_) => {
                 // No moves or reads in control flow statements.
@@ -477,19 +476,20 @@ fn collect_moves_from_expr<'db>(
     move_kind: MoveKind,
     stmt_id: StmtId,
     registry: &FunctionRegistry<'db>,
-    slots: &[AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
     moves: &mut Vec<MoveOp<'db>>,
     expr_counter: &mut u32,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
     func: StmtFun<'db>,
 ) {
+    let slots = slot_alloc.slots(db);
     let expr_id = ExprId(*expr_counter);
     *expr_counter += 1;
 
     match expr.expr(db) {
-        ExprFunKind::Name(name) => {
-            // Name expression: this is a move of the named slot.
-            if let Some(source_slot) = find_slot_by_name(db, slots, name) {
+        ExprFunKind::Name(_) => {
+            // Name expression: this is a move of the named slot using resolved mapping.
+            if let Some(source_slot) = slot_alloc.get_slot_for_name_expr(db, expr) {
                 // Get slot info and type to check copyability.
                 let slot_info = slots.iter()
                     .find(|s| s.slot_id(db) == source_slot)
@@ -508,7 +508,7 @@ fn collect_moves_from_expr<'db>(
         }
         ExprFunKind::FunctionCall(call) => {
             // Function call: arguments might be moved depending on parameter modes.
-            process_function_call(db, call, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            process_function_call(db, call, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Tuple(tuple) => {
             // Tuple: each element might be moved.
@@ -520,7 +520,7 @@ fn collect_moves_from_expr<'db>(
                     move_kind,
                     stmt_id,
                     registry,
-                    slots,
+                    slot_alloc,
                     moves,
                     expr_counter,
                     tycheck_result,
@@ -532,21 +532,21 @@ fn collect_moves_from_expr<'db>(
             // Binary operations borrow their operands (ref semantics).
             // Direct variable references are NOT moved - they are cloned at runtime.
             // But nested function calls within operands can still cause moves.
-            collect_moves_from_expr_borrow_context(db, binop.lhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            collect_moves_from_expr_borrow_context(db, binop.rhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, binop.lhs(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, binop.rhs(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::UnaryOp(unary) => {
             // Unary operations borrow their operands (ref semantics).
             // Direct variable references are NOT moved - they are cloned at runtime.
-            collect_moves_from_expr_borrow_context(db, unary.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, unary.operand(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryOption(try_op) => {
             // Try option: operand might be moved.
-            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryResult(try_op) => {
             // Try result: operand might be moved.
-            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, try_op.operand(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::ParseError(_) => {
             // No moves in parse errors.
@@ -564,54 +564,54 @@ fn collect_moves_from_expr<'db>(
         }
         ExprFunKind::List(list) => {
             for elem in list.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Set(set) => {
             for elem in set.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Map(map) => {
             for entry in map.entries(db) {
-                collect_moves_from_expr(db, entry.key(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-                collect_moves_from_expr(db, entry.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, entry.key(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, entry.value(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Tensor(tensor) => {
             for elem in tensor.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonTuple(tuple) => {
             for elem in tuple.elements(db) {
-                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, *elem, target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
-                collect_moves_from_expr(db, field.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, field.value(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonEnum(e) => {
             if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr(db, payload, target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr(db, payload, target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Some(s) => {
-            collect_moves_from_expr(db, s.payload(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, s.payload(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Ok(o) => {
-            collect_moves_from_expr(db, o.payload(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, o.payload(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Er(e) => {
-            collect_moves_from_expr(db, e.payload(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, e.payload(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Data(d) => {
-            collect_moves_from_expr(db, d.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, d.value(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Err(e) => {
-            collect_moves_from_expr(db, e.value(db), target_slot, move_kind, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr(db, e.value(db), target_slot, move_kind, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
     }
 }
@@ -626,7 +626,7 @@ fn collect_moves_from_expr_borrow_context<'db>(
     expr: ExprFun<'db>,
     stmt_id: StmtId,
     registry: &FunctionRegistry<'db>,
-    slots: &[AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
     moves: &mut Vec<MoveOp<'db>>,
     expr_counter: &mut u32,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
@@ -642,28 +642,28 @@ fn collect_moves_from_expr_borrow_context<'db>(
         }
         ExprFunKind::FunctionCall(call) => {
             // Function calls still cause moves of their arguments.
-            process_function_call(db, call, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            process_function_call(db, call, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Tuple(tuple) => {
             // Tuple elements in borrow context.
             for element in tuple.elements(db) {
-                collect_moves_from_expr_borrow_context(db, *element, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, *element, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::BinOp(binop) => {
             // Nested binop: still borrow context.
-            collect_moves_from_expr_borrow_context(db, binop.lhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            collect_moves_from_expr_borrow_context(db, binop.rhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, binop.lhs(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, binop.rhs(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::UnaryOp(unary) => {
             // Nested unary: still borrow context.
-            collect_moves_from_expr_borrow_context(db, unary.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, unary.operand(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryOption(try_op) => {
-            collect_moves_from_expr_borrow_context(db, try_op.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, try_op.operand(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryResult(try_op) => {
-            collect_moves_from_expr_borrow_context(db, try_op.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, try_op.operand(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::ParseError(_) => {}
 
@@ -679,54 +679,54 @@ fn collect_moves_from_expr_borrow_context<'db>(
         // Collection literals: recurse into elements.
         ExprFunKind::List(list) => {
             for elem in list.elements(db) {
-                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Set(set) => {
             for elem in set.elements(db) {
-                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Map(map) => {
             for entry in map.entries(db) {
-                collect_moves_from_expr_borrow_context(db, entry.key(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-                collect_moves_from_expr_borrow_context(db, entry.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, entry.key(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, entry.value(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Tensor(tensor) => {
             for elem in tensor.elements(db) {
-                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonTuple(tuple) => {
             for elem in tuple.elements(db) {
-                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, *elem, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
-                collect_moves_from_expr_borrow_context(db, field.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, field.value(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonEnum(e) => {
             if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr_borrow_context(db, payload, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_borrow_context(db, payload, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Some(s) => {
-            collect_moves_from_expr_borrow_context(db, s.payload(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, s.payload(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Ok(o) => {
-            collect_moves_from_expr_borrow_context(db, o.payload(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, o.payload(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Er(e) => {
-            collect_moves_from_expr_borrow_context(db, e.payload(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, e.payload(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Data(d) => {
-            collect_moves_from_expr_borrow_context(db, d.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, d.value(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Err(e) => {
-            collect_moves_from_expr_borrow_context(db, e.value(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, e.value(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
     }
 }
@@ -738,16 +738,18 @@ fn collect_moves_from_expr_for_return<'db>(
     return_expr_id: ExprId,
     stmt_id: StmtId,
     registry: &FunctionRegistry<'db>,
-    slots: &[AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
     moves: &mut Vec<MoveOp<'db>>,
     expr_counter: &mut u32,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
     func: StmtFun<'db>,
 ) {
+    let slots = slot_alloc.slots(db);
+
     match expr.expr(db) {
-        ExprFunKind::Name(name) => {
-            // Name expression: this is a move of the named slot for return.
-            if let Some(slot) = find_slot_by_name(db, slots, name) {
+        ExprFunKind::Name(_) => {
+            // Name expression: this is a move of the named slot for return using resolved mapping.
+            if let Some(slot) = slot_alloc.get_slot_for_name_expr(db, expr) {
                 // Get slot info and type to check copyability.
                 let slot_info = slots.iter()
                     .find(|s| s.slot_id(db) == slot)
@@ -766,7 +768,7 @@ fn collect_moves_from_expr_for_return<'db>(
         }
         ExprFunKind::FunctionCall(call) => {
             // Function call: the result is moved to return, but also process arguments.
-            process_function_call(db, call, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            process_function_call(db, call, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Tuple(tuple) => {
             // Tuple: each element might be moved.
@@ -777,7 +779,7 @@ fn collect_moves_from_expr_for_return<'db>(
                     return_expr_id,
                     stmt_id,
                     registry,
-                    slots,
+                    slot_alloc,
                     moves,
                     expr_counter,
                     tycheck_result,
@@ -787,18 +789,18 @@ fn collect_moves_from_expr_for_return<'db>(
         }
         ExprFunKind::BinOp(binop) => {
             // Binary operations borrow their operands (ref semantics).
-            collect_moves_from_expr_borrow_context(db, binop.lhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-            collect_moves_from_expr_borrow_context(db, binop.rhs(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, binop.lhs(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, binop.rhs(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::UnaryOp(unary) => {
             // Unary operations borrow their operands (ref semantics).
-            collect_moves_from_expr_borrow_context(db, unary.operand(db), stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_borrow_context(db, unary.operand(db), stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryOption(try_op) => {
-            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::TryResult(try_op) => {
-            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, try_op.operand(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::ParseError(_) => {
             // No moves in parse errors.
@@ -816,54 +818,54 @@ fn collect_moves_from_expr_for_return<'db>(
         }
         ExprFunKind::List(list) => {
             for elem in list.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Set(set) => {
             for elem in set.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Map(map) => {
             for entry in map.entries(db) {
-                collect_moves_from_expr_for_return(db, entry.key(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
-                collect_moves_from_expr_for_return(db, entry.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, entry.key(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, entry.value(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Tensor(tensor) => {
             for elem in tensor.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonTuple(tuple) => {
             for elem in tuple.elements(db) {
-                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, *elem, return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
-                collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, field.value(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::AnonEnum(e) => {
             if let Some(payload) = e.payload(db) {
-                collect_moves_from_expr_for_return(db, payload, return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+                collect_moves_from_expr_for_return(db, payload, return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
             }
         }
         ExprFunKind::Some(s) => {
-            collect_moves_from_expr_for_return(db, s.payload(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, s.payload(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Ok(o) => {
-            collect_moves_from_expr_for_return(db, o.payload(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, o.payload(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Er(e) => {
-            collect_moves_from_expr_for_return(db, e.payload(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, e.payload(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Data(d) => {
-            collect_moves_from_expr_for_return(db, d.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, d.value(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
         ExprFunKind::Err(e) => {
-            collect_moves_from_expr_for_return(db, e.value(db), return_expr_id, stmt_id, registry, slots, moves, expr_counter, tycheck_result, func);
+            collect_moves_from_expr_for_return(db, e.value(db), return_expr_id, stmt_id, registry, slot_alloc, moves, expr_counter, tycheck_result, func);
         }
     }
 }
@@ -874,12 +876,13 @@ fn process_function_call<'db>(
     call: crate::ast::ExprFunctionCall<'db>,
     stmt_id: StmtId,
     registry: &FunctionRegistry<'db>,
-    slots: &[AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
     moves: &mut Vec<MoveOp<'db>>,
     expr_counter: &mut u32,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
     func: StmtFun<'db>,
 ) {
+    let slots = slot_alloc.slots(db);
     let name = call.name(db);
     let args = call.args(db);
 
@@ -895,9 +898,9 @@ fn process_function_call<'db>(
 
                 // If parameter mode is In, this is a move.
                 if param.mode(db) == ParamMode::In {
-                    // Check if the argument is a name (direct move).
-                    if let ExprFunKind::Name(arg_name) = arg.expr(db) {
-                        if let Some(slot_id) = find_slot_by_name(db, slots, arg_name) {
+                    // Check if the argument is a name (direct move) using resolved mapping.
+                    if let ExprFunKind::Name(_) = arg.expr(db) {
+                        if let Some(slot_id) = slot_alloc.get_slot_for_name_expr(db, *arg) {
                             // Get slot info and type to check copyability.
                             let slot_info = slots.iter()
                                 .find(|s| s.slot_id(db) == slot_id)
@@ -923,7 +926,7 @@ fn process_function_call<'db>(
                             MoveKind::FunctionCall,
                             stmt_id,
                             registry,
-                            slots,
+                            slot_alloc,
                             moves,
                             expr_counter,
                             tycheck_result,
@@ -945,7 +948,7 @@ fn collect_reads_from_expr<'db>(
     db: &'db dyn crate::Db,
     expr: ExprFun<'db>,
     stmt_id: StmtId,
-    slots: &[AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
     reads: &mut Vec<ReadInfo>,
     expr_counter: &mut u32,
 ) {
@@ -953,9 +956,9 @@ fn collect_reads_from_expr<'db>(
     *expr_counter += 1;
 
     match expr.expr(db) {
-        ExprFunKind::Name(name) => {
-            // Name expression: this is a read of the named slot.
-            if let Some(slot_id) = find_slot_by_name(db, slots, name) {
+        ExprFunKind::Name(_) => {
+            // Name expression: this is a read of the named slot using resolved mapping.
+            if let Some(slot_id) = slot_alloc.get_slot_for_name_expr(db, expr) {
                 reads.push(ReadInfo {
                     slot_id,
                     stmt_id,
@@ -965,32 +968,32 @@ fn collect_reads_from_expr<'db>(
         }
         ExprFunKind::BinOp(binop) => {
             // Binary operation: both operands are read.
-            collect_reads_from_expr(db, binop.lhs(db), stmt_id, slots, reads, expr_counter);
-            collect_reads_from_expr(db, binop.rhs(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, binop.lhs(db), stmt_id, slot_alloc, reads, expr_counter);
+            collect_reads_from_expr(db, binop.rhs(db), stmt_id, slot_alloc, reads, expr_counter);
         }
         ExprFunKind::UnaryOp(unary) => {
             // Unary operation: operand is read.
-            collect_reads_from_expr(db, unary.operand(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, unary.operand(db), stmt_id, slot_alloc, reads, expr_counter);
         }
         ExprFunKind::FunctionCall(call) => {
             // Function call: all arguments are read.
             for arg in call.args(db) {
-                collect_reads_from_expr(db, *arg, stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, *arg, stmt_id, slot_alloc, reads, expr_counter);
             }
         }
         ExprFunKind::Tuple(tuple) => {
             // Tuple: all elements are read.
             for elem in tuple.elements(db) {
-                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, *elem, stmt_id, slot_alloc, reads, expr_counter);
             }
         }
         ExprFunKind::TryOption(try_op) => {
             // Try option: operand is read.
-            collect_reads_from_expr(db, try_op.operand(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, try_op.operand(db), stmt_id, slot_alloc, reads, expr_counter);
         }
         ExprFunKind::TryResult(try_op) => {
             // Try result: operand is read.
-            collect_reads_from_expr(db, try_op.operand(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, try_op.operand(db), stmt_id, slot_alloc, reads, expr_counter);
         }
         ExprFunKind::ParseError(_) => {
             // No reads in parse errors.
@@ -1008,54 +1011,54 @@ fn collect_reads_from_expr<'db>(
         }
         ExprFunKind::List(list) => {
             for elem in list.elements(db) {
-                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, *elem, stmt_id, slot_alloc, reads, expr_counter);
             }
         }
         ExprFunKind::Set(set) => {
             for elem in set.elements(db) {
-                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, *elem, stmt_id, slot_alloc, reads, expr_counter);
             }
         }
         ExprFunKind::Map(map) => {
             for entry in map.entries(db) {
-                collect_reads_from_expr(db, entry.key(db), stmt_id, slots, reads, expr_counter);
-                collect_reads_from_expr(db, entry.value(db), stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, entry.key(db), stmt_id, slot_alloc, reads, expr_counter);
+                collect_reads_from_expr(db, entry.value(db), stmt_id, slot_alloc, reads, expr_counter);
             }
         }
         ExprFunKind::Tensor(tensor) => {
             for elem in tensor.elements(db) {
-                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, *elem, stmt_id, slot_alloc, reads, expr_counter);
             }
         }
         ExprFunKind::AnonTuple(tuple) => {
             for elem in tuple.elements(db) {
-                collect_reads_from_expr(db, *elem, stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, *elem, stmt_id, slot_alloc, reads, expr_counter);
             }
         }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
-                collect_reads_from_expr(db, field.value(db), stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, field.value(db), stmt_id, slot_alloc, reads, expr_counter);
             }
         }
         ExprFunKind::AnonEnum(e) => {
             if let Some(payload) = e.payload(db) {
-                collect_reads_from_expr(db, payload, stmt_id, slots, reads, expr_counter);
+                collect_reads_from_expr(db, payload, stmt_id, slot_alloc, reads, expr_counter);
             }
         }
         ExprFunKind::Some(s) => {
-            collect_reads_from_expr(db, s.payload(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, s.payload(db), stmt_id, slot_alloc, reads, expr_counter);
         }
         ExprFunKind::Ok(o) => {
-            collect_reads_from_expr(db, o.payload(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, o.payload(db), stmt_id, slot_alloc, reads, expr_counter);
         }
         ExprFunKind::Er(e) => {
-            collect_reads_from_expr(db, e.payload(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, e.payload(db), stmt_id, slot_alloc, reads, expr_counter);
         }
         ExprFunKind::Data(d) => {
-            collect_reads_from_expr(db, d.value(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, d.value(db), stmt_id, slot_alloc, reads, expr_counter);
         }
         ExprFunKind::Err(e) => {
-            collect_reads_from_expr(db, e.value(db), stmt_id, slots, reads, expr_counter);
+            collect_reads_from_expr(db, e.value(db), stmt_id, slot_alloc, reads, expr_counter);
         }
     }
 }
@@ -1097,13 +1100,6 @@ fn correlate_last_uses<'db>(
     last_uses
 }
 
-/// Find a slot by name.
-fn find_slot_by_name<'db>(db: &'db dyn crate::Db, slots: &[AllocatedSlot<'db>], name: InternedText<'db>) -> Option<SlotId> {
-    slots.iter()
-        .find(|s| s.name(db) == Some(name))
-        .map(|s| s.slot_id(db))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1143,9 +1139,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // Verify we have one move: x -> y (Copy because u32 is copy).
         let moves = move_info.moves(db);
@@ -1173,9 +1169,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // Verify we have one move: x returned (FunctionReturn).
         let moves = move_info.moves(db);
@@ -1205,9 +1201,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // Verify we have one move: x moved to helper (FunctionCall).
         let moves = move_info.moves(db);
@@ -1237,9 +1233,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // Verify we have NO moves because parameter is Ref, not In.
         let moves = move_info.moves(db);
@@ -1263,9 +1259,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // Verify we have two moves: x and y to helper calls (Copy because u32 is copy).
         let moves = move_info.moves(db);
@@ -1302,9 +1298,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // Verify we have two moves: x and y into the tuple (Copy because u32 is copy).
         let moves = move_info.moves(db);
@@ -1337,9 +1333,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // Verify we have identified the last use of x.
         let last_uses = move_info.last_uses(db);
@@ -1367,9 +1363,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // x is read twice in the same statement, so we should have 2 last uses (one for each read at the death point).
         let last_uses = move_info.last_uses(db);
@@ -1399,9 +1395,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // x is used in the then branch, and that should be its last use.
         let last_uses = move_info.last_uses(db);
@@ -1429,9 +1425,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // Each variable (x, a, b) should have exactly one last use.
         let last_uses = move_info.last_uses(db);
@@ -1467,9 +1463,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
 
         // Both x and y should have last uses when they're used in the tuple.
         let last_uses = move_info.last_uses(db);

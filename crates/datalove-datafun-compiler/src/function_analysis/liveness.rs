@@ -4,8 +4,8 @@ use rmx::prelude::*;
 use std::collections::HashMap;
 use super::{SlotId, ProgramPoint, InitState, BlockId, StmtId, SlotKind, Position};
 use super::cfg::ControlFlowGraph;
-use super::slot_allocation::AllocatedSlot;
-use crate::ast::{Statement, StmtFun};
+use super::slot_allocation::{AllocatedSlot, SlotAllocation};
+use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind};
 
 /// Live ranges for all slots.
 #[salsa::tracked]
@@ -119,8 +119,9 @@ pub fn analyze_initialization<'db>(
     db: &'db dyn crate::Db,
     func: StmtFun<'db>,
     cfg: ControlFlowGraph<'db>,
-    slots: &'db [AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
 ) -> InitializationAnalysis<'db> {
+    let slots = slot_alloc.slots(db);
     let slot_count = slots.len();
     let blocks = cfg.blocks(db);
 
@@ -173,7 +174,7 @@ pub fn analyze_initialization<'db>(
 
             // Compute exit state by executing statements.
             let mut state = entry.clone();
-            compute_block_exit_state(db, func, &block.statements, &mut state, slots);
+            compute_block_exit_state(db, func, &block.statements, &mut state, slot_alloc);
 
             // Update exit state if changed.
             let old_exit = exit_map.get(&block.block_id).unwrap();
@@ -216,8 +217,9 @@ fn compute_block_exit_state<'db>(
     func: StmtFun<'db>,
     stmt_ids: &[StmtId],
     state: &mut Vec<InitState>,
-    slots: &[AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
 ) {
+    let slots = slot_alloc.slots(db);
     // Build a flattened list of all statements (including nested ones).
     let all_stmts = flatten_statements(db, func.body(db));
 
@@ -229,14 +231,14 @@ fn compute_block_exit_state<'db>(
 
         match *all_stmts[stmt_idx] {
             Statement::Let(let_stmt) => {
-                // Find the slot for this let binding.
-                if let Some(slot) = find_slot_by_name(db, slots, let_stmt.name(db)) {
+                // Find the slot for this let binding using resolved mapping.
+                if let Some(slot) = slot_alloc.get_slot_for_let_stmt(db, let_stmt) {
                     state[slot.0 as usize] = InitState::Always;
                 }
             }
             Statement::Var(var_stmt) => {
-                // Same as let - marks slot as initialized.
-                if let Some(slot) = find_slot_by_name(db, slots, var_stmt.name(db)) {
+                // Same as let - marks slot as initialized using resolved mapping.
+                if let Some(slot) = slot_alloc.get_slot_for_var_stmt(db, var_stmt) {
                     state[slot.0 as usize] = InitState::Always;
                 }
             }
@@ -248,6 +250,8 @@ fn compute_block_exit_state<'db>(
                 // If-bindings create initialized slots in their respective branches.
                 // This is handled by the CFG - different blocks for then/else.
                 // Here we just mark if-bindings as potentially initialized.
+                // Note: if-bindings are still looked up by name since they're not
+                // standard let/var statements.
                 if let Some(then_name) = if_stmt.then_binding(db) {
                     if let Some(slot) = find_slot_by_name(db, slots, then_name) {
                         state[slot.0 as usize] = InitState::Sometimes;
@@ -305,11 +309,12 @@ pub fn compute_live_ranges<'db>(
     db: &'db dyn crate::Db,
     func: StmtFun<'db>,
     cfg: ControlFlowGraph<'db>,
-    slots: &'db [AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
     init: InitializationAnalysis<'db>,
 ) -> LiveRanges<'db> {
     use std::collections::HashMap;
 
+    let slots = slot_alloc.slots(db);
     let blocks = cfg.blocks(db);
     let all_stmts = flatten_statements(db, func.body(db));
 
@@ -344,8 +349,8 @@ pub fn compute_live_ranges<'db>(
             // Find birth points (where slots are written).
             match *stmt {
                 Statement::Let(let_stmt) => {
-                    // The let binding writes to a slot.
-                    if let Some(slot_id) = find_slot_by_name(db, slots, let_stmt.name(db)) {
+                    // The let binding writes to a slot - use resolved mapping.
+                    if let Some(slot_id) = slot_alloc.get_slot_for_let_stmt(db, let_stmt) {
                         birth_points.insert(slot_id, ProgramPoint {
                             stmt_id,
                             position: Position::After,
@@ -353,11 +358,11 @@ pub fn compute_live_ranges<'db>(
                     }
 
                     // The RHS expression reads from slots.
-                    collect_reads(db, let_stmt.value(db), stmt_id, slots, &mut last_use_points);
+                    collect_reads(db, let_stmt.value(db), stmt_id, slot_alloc, &mut last_use_points);
                 }
                 Statement::Var(var_stmt) => {
-                    // Same as let - writes to a slot.
-                    if let Some(slot_id) = find_slot_by_name(db, slots, var_stmt.name(db)) {
+                    // Same as let - writes to a slot using resolved mapping.
+                    if let Some(slot_id) = slot_alloc.get_slot_for_var_stmt(db, var_stmt) {
                         birth_points.insert(slot_id, ProgramPoint {
                             stmt_id,
                             position: Position::After,
@@ -365,25 +370,26 @@ pub fn compute_live_ranges<'db>(
                     }
 
                     // The RHS expression reads from slots.
-                    collect_reads(db, var_stmt.value(db), stmt_id, slots, &mut last_use_points);
+                    collect_reads(db, var_stmt.value(db), stmt_id, slot_alloc, &mut last_use_points);
                 }
                 Statement::Set(set_stmt) => {
                     // Set reads from the RHS expression.
-                    collect_reads(db, set_stmt.value(db), stmt_id, slots, &mut last_use_points);
+                    collect_reads(db, set_stmt.value(db), stmt_id, slot_alloc, &mut last_use_points);
                     // Note: Set writes to an existing slot but doesn't create a birth point.
                     // The slot was already born at the var statement.
                 }
                 Statement::Ret(ret_stmt) => {
                     // Return reads from slots (if value present).
                     if let Some(value) = ret_stmt.value(db) {
-                        collect_reads(db, value, stmt_id, slots, &mut last_use_points);
+                        collect_reads(db, value, stmt_id, slot_alloc, &mut last_use_points);
                     }
                 }
                 Statement::If(if_stmt) => {
                     // Condition reads from slots.
-                    collect_reads(db, if_stmt.condition(db), stmt_id, slots, &mut last_use_points);
+                    collect_reads(db, if_stmt.condition(db), stmt_id, slot_alloc, &mut last_use_points);
 
-                    // If-bindings are birth points.
+                    // If-bindings are birth points. Note: if-bindings still use name lookup
+                    // since they're not standard let/var statements.
                     if let Some(then_name) = if_stmt.then_binding(db) {
                         if let Some(slot_id) = find_slot_by_name(db, slots, then_name) {
                             birth_points.insert(slot_id, ProgramPoint {
@@ -455,17 +461,15 @@ pub fn compute_live_ranges<'db>(
 /// Collect all reads from an expression.
 fn collect_reads<'db>(
     db: &'db dyn crate::Db,
-    expr: crate::ast::ExprFun<'db>,
+    expr: ExprFun<'db>,
     stmt_id: StmtId,
-    slots: &[AllocatedSlot<'db>],
+    slot_alloc: SlotAllocation<'db>,
     last_use_points: &mut HashMap<SlotId, ProgramPoint>,
 ) {
-    use crate::ast::ExprFunKind;
-
     match expr.expr(db) {
-        ExprFunKind::Name(name) => {
-            // This is a read of a named slot.
-            if let Some(slot_id) = find_slot_by_name(db, slots, name) {
+        ExprFunKind::Name(_) => {
+            // This is a read of a named slot - use resolved mapping.
+            if let Some(slot_id) = slot_alloc.get_slot_for_name_expr(db, expr) {
                 let use_point = ProgramPoint {
                     stmt_id,
                     position: Position::Before,
@@ -476,29 +480,29 @@ fn collect_reads<'db>(
         }
         ExprFunKind::BinOp(binop) => {
             // Both sides of binary op are reads.
-            collect_reads(db, binop.lhs(db), stmt_id, slots, last_use_points);
-            collect_reads(db, binop.rhs(db), stmt_id, slots, last_use_points);
+            collect_reads(db, binop.lhs(db), stmt_id, slot_alloc, last_use_points);
+            collect_reads(db, binop.rhs(db), stmt_id, slot_alloc, last_use_points);
         }
         ExprFunKind::UnaryOp(unop) => {
-            collect_reads(db, unop.operand(db), stmt_id, slots, last_use_points);
+            collect_reads(db, unop.operand(db), stmt_id, slot_alloc, last_use_points);
         }
         ExprFunKind::FunctionCall(call) => {
             // All arguments are reads.
             for arg in call.args(db) {
-                collect_reads(db, *arg, stmt_id, slots, last_use_points);
+                collect_reads(db, *arg, stmt_id, slot_alloc, last_use_points);
             }
         }
         ExprFunKind::Tuple(tuple) => {
             // All tuple elements are reads.
             for elem in tuple.elements(db) {
-                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+                collect_reads(db, *elem, stmt_id, slot_alloc, last_use_points);
             }
         }
         ExprFunKind::TryOption(try_opt) => {
-            collect_reads(db, try_opt.operand(db), stmt_id, slots, last_use_points);
+            collect_reads(db, try_opt.operand(db), stmt_id, slot_alloc, last_use_points);
         }
         ExprFunKind::TryResult(try_res) => {
-            collect_reads(db, try_res.operand(db), stmt_id, slots, last_use_points);
+            collect_reads(db, try_res.operand(db), stmt_id, slot_alloc, last_use_points);
         }
         ExprFunKind::ParseError(_) => {
             // Parse errors don't read from slots.
@@ -517,54 +521,54 @@ fn collect_reads<'db>(
 
         ExprFunKind::List(list) => {
             for elem in list.elements(db) {
-                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+                collect_reads(db, *elem, stmt_id, slot_alloc, last_use_points);
             }
         }
         ExprFunKind::Set(set) => {
             for elem in set.elements(db) {
-                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+                collect_reads(db, *elem, stmt_id, slot_alloc, last_use_points);
             }
         }
         ExprFunKind::Map(map) => {
             for entry in map.entries(db) {
-                collect_reads(db, entry.key(db), stmt_id, slots, last_use_points);
-                collect_reads(db, entry.value(db), stmt_id, slots, last_use_points);
+                collect_reads(db, entry.key(db), stmt_id, slot_alloc, last_use_points);
+                collect_reads(db, entry.value(db), stmt_id, slot_alloc, last_use_points);
             }
         }
         ExprFunKind::Tensor(tensor) => {
             for elem in tensor.elements(db) {
-                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+                collect_reads(db, *elem, stmt_id, slot_alloc, last_use_points);
             }
         }
         ExprFunKind::AnonTuple(tuple) => {
             for elem in tuple.elements(db) {
-                collect_reads(db, *elem, stmt_id, slots, last_use_points);
+                collect_reads(db, *elem, stmt_id, slot_alloc, last_use_points);
             }
         }
         ExprFunKind::AnonStruct(s) => {
             for field in s.fields(db) {
-                collect_reads(db, field.value(db), stmt_id, slots, last_use_points);
+                collect_reads(db, field.value(db), stmt_id, slot_alloc, last_use_points);
             }
         }
         ExprFunKind::AnonEnum(e) => {
             if let Some(payload) = e.payload(db) {
-                collect_reads(db, payload, stmt_id, slots, last_use_points);
+                collect_reads(db, payload, stmt_id, slot_alloc, last_use_points);
             }
         }
         ExprFunKind::Some(s) => {
-            collect_reads(db, s.payload(db), stmt_id, slots, last_use_points);
+            collect_reads(db, s.payload(db), stmt_id, slot_alloc, last_use_points);
         }
         ExprFunKind::Ok(o) => {
-            collect_reads(db, o.payload(db), stmt_id, slots, last_use_points);
+            collect_reads(db, o.payload(db), stmt_id, slot_alloc, last_use_points);
         }
         ExprFunKind::Er(e) => {
-            collect_reads(db, e.payload(db), stmt_id, slots, last_use_points);
+            collect_reads(db, e.payload(db), stmt_id, slot_alloc, last_use_points);
         }
         ExprFunKind::Data(d) => {
-            collect_reads(db, d.value(db), stmt_id, slots, last_use_points);
+            collect_reads(db, d.value(db), stmt_id, slot_alloc, last_use_points);
         }
         ExprFunKind::Err(e) => {
-            collect_reads(db, e.value(db), stmt_id, slots, last_use_points);
+            collect_reads(db, e.value(db), stmt_id, slot_alloc, last_use_points);
         }
     }
 }
@@ -622,7 +626,7 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         // x is a Reference slot (parameter) - Always initialized.
         // y is a Local slot - becomes Always after let statement.
@@ -656,7 +660,7 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let x_slot = find_slot_by_name(db, &slot_alloc, "x");
         let blocks = cfg.blocks(db);
@@ -683,7 +687,7 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let x_slot = find_slot_by_name(db, &slot_alloc, "x");
         let y_slot = find_slot_by_name(db, &slot_alloc, "y");
@@ -728,7 +732,7 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let x_slot = find_slot_by_name(db, &slot_alloc, "x");
         let y_slot = find_slot_by_name(db, &slot_alloc, "y");
@@ -760,7 +764,7 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         let a_slot = find_slot_by_name(db, &slot_alloc, "a");
         let b_slot = find_slot_by_name(db, &slot_alloc, "b");
@@ -800,7 +804,7 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
 
         // x is only initialized in the innermost then-branch.
         let x_slot = find_slot_by_name(db, &slot_alloc, "x");
@@ -831,8 +835,8 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
 
         // x is a Reference slot (parameter).
         let x_range = live_ranges.get_range(db, slot_alloc.slots(db)[0].slot_id(db)).unwrap();
@@ -866,8 +870,8 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
 
         // b is read once (in let c = b).
         let b_slot = find_slot_by_name(db, &slot_alloc, "b");
@@ -902,12 +906,14 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
 
         // a and b are Reference slots (parameters), so they're live for entire function.
-        let a_range = live_ranges.get_range(db, slot_alloc.slots(db)[0].slot_id(db)).unwrap();
-        let b_range = live_ranges.get_range(db, slot_alloc.slots(db)[1].slot_id(db)).unwrap();
+        let a_slot = find_slot_by_name(db, &slot_alloc, "a");
+        let b_slot = find_slot_by_name(db, &slot_alloc, "b");
+        let a_range = live_ranges.get_range(db, a_slot).unwrap();
+        let b_range = live_ranges.get_range(db, b_slot).unwrap();
 
         // Both are born at function entry.
         assert_eq!(a_range.birth(db).position, Position::Before);
@@ -918,7 +924,8 @@ end fun
         assert_eq!(b_range.death(db).position, Position::After);
 
         // c is a Local slot, born when written, dies when read.
-        let c_range = live_ranges.get_range(db, slot_alloc.slots(db)[2].slot_id(db)).unwrap();
+        let c_slot = find_slot_by_name(db, &slot_alloc, "c");
+        let c_range = live_ranges.get_range(db, c_slot).unwrap();
         assert_eq!(c_range.birth(db).stmt_id, StmtId(0));  // let c = ...
         assert_eq!(c_range.death(db).stmt_id, StmtId(1));  // ret c
     }
@@ -937,8 +944,8 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
 
         // a and b are Reference slots (parameters), live for entire function.
         let a_range = live_ranges.get_range(db, slot_alloc.slots(db)[0].slot_id(db)).unwrap();
@@ -964,8 +971,8 @@ end fun
         let func = parse_function(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
 
         // x is a parameter, born at entry, dies at exit.
         let x_range = live_ranges.get_range(db, slot_alloc.slots(db)[0].slot_id(db)).unwrap();

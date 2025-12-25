@@ -224,10 +224,28 @@ After implementing shadowing, these existing tests use broken `let` semantics an
 - `084_for_loop_conditional_sum_labeled.world` - same
 - `085_for_loop_count_labeled.world` - same
 
+## Status
+
+**Completed:**
+- Slot allocation now tracks scope and resolves names at analysis time
+- FrameLayout and SlotAllocation store resolution maps (name_resolutions, let_stmt_slots, var_stmt_slots, set_stmt_slots)
+- Interpreter uses resolved slots instead of name lookup
+- Loop tests rewritten to use var/set
+- New shadowing tests added (165-170)
+- All 170 tests pass with DATALOVE_LEAK_CHECK=ignore
+
+**Remaining:**
+- Update liveness.rs to use resolved slots instead of find_slot_by_name
+- Update moves.rs to use resolved slots
+- Update validation.rs to use resolved slots
+- Update drops.rs to generate correct drop points for shadowed slots
+
+Until the analysis passes are updated, shadowing of linear types will leak memory (the shadowed slot's value isn't destroyed). Copy types work correctly.
+
 ## Benefits
 
 - Correct shadowing semantics (each `let`/`var` creates new binding)
 - Correct `var`/`set` semantics (mutation, not shadowing)
-- No memory leaks for linear types
+- No memory leaks for linear types (once analysis passes updated)
 - Direct slot lookup by AST identity (no string comparison at runtime)
 - Analysis-time resolution catches undefined variables earlier

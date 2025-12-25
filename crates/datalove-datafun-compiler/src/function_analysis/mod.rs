@@ -147,13 +147,13 @@ pub fn analyze_function<'db>(
     let slots = slot_allocation.slots(db);
 
     // Phase 3: Initialization analysis.
-    let init_analysis = liveness::analyze_initialization(db, func, control_flow, slots);
+    let init_analysis = liveness::analyze_initialization(db, func, control_flow, slot_allocation);
 
     // Phase 4: Live ranges.
-    let live_ranges = liveness::compute_live_ranges(db, func, control_flow, slots, init_analysis);
+    let live_ranges = liveness::compute_live_ranges(db, func, control_flow, slot_allocation, init_analysis);
 
     // Phase 5: Move tracking.
-    let move_info = moves::compute_move_info(db, func, slots, live_ranges, tycheck_result);
+    let move_info = moves::compute_move_info(db, func, slot_allocation, live_ranges, tycheck_result);
 
     // Phase 5.5: Per-block move analysis for precise drop points.
     let moved_analysis = moves::analyze_moves_per_block(db, func, control_flow, slots, move_info);
@@ -183,7 +183,7 @@ pub fn analyze_function<'db>(
     let tracked_slots: Vec<SlotId> = tracked_set.into_iter().collect();
 
     // Phase 7: Frame layout with types.
-    let frame_layout = build_frame_layout(db, func, slots, tycheck_result);
+    let frame_layout = build_frame_layout(db, func, slot_allocation, tycheck_result);
 
     // Phase 8: Validation.
     let mut errors = Vec::new();
@@ -210,10 +210,11 @@ pub fn analyze_function<'db>(
 fn build_frame_layout<'db>(
     db: &'db dyn crate::Db,
     func: StmtFun<'db>,
-    slots: &[slot_allocation::AllocatedSlot<'db>],
+    slot_allocation: slot_allocation::SlotAllocation<'db>,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> FrameLayout<'db> {
     let expr_types = tycheck_result.expr_types(db);
+    let slots = slot_allocation.slots(db);
 
     // Build a map from slot names to their types.
     let mut slots_with_types = Vec::new();
@@ -248,7 +249,14 @@ fn build_frame_layout<'db>(
         slots_with_types.push((slot.slot_id(db), slot.name(db), slot.kind(db), ty, slot.expr(db)));
     }
 
-    FrameLayout::compute_layout(db, slots_with_types)
+    FrameLayout::compute_layout(
+        db,
+        slots_with_types,
+        slot_allocation.name_resolutions(db).clone(),
+        slot_allocation.let_stmt_slots(db).clone(),
+        slot_allocation.var_stmt_slots(db).clone(),
+        slot_allocation.set_stmt_slots(db).clone(),
+    )
 }
 
 /// Get type for a parameter slot.

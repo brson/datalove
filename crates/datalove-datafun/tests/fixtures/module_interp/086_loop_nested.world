@@ -3,14 +3,14 @@ module local/test/main
 ----------
 
 fun nested_loops(): !u32
-    let total: u32 = @0
-    let outer: u32 = @0
+    var total: u32 = @0
+    var outer: u32 = @0
     loop
-        let outer = outer +! @1
-        let inner: u32 = @0
+        set outer = outer +! @1
+        var inner: u32 = @0
         loop
-            let inner = inner +! @1
-            let total = total +! @1
+            set inner = inner +! @1
+            set total = total +! @1
             if inner >= @2
                 break
             end if

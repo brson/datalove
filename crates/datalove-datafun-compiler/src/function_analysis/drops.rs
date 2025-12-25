@@ -280,9 +280,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
         let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
 
@@ -312,9 +312,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
         let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
 
@@ -347,9 +347,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
         let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
 
@@ -386,9 +386,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
         let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
 
@@ -428,9 +428,9 @@ end fun
         let (func, tycheck_result) = parse_and_typecheck(db, source);
         let slot_alloc = allocate_slots(db, func);
         let cfg = build_cfg(db, func);
-        let init = analyze_initialization(db, func, cfg, &slot_alloc.slots(db));
-        let live_ranges = compute_live_ranges(db, func, cfg, &slot_alloc.slots(db), init);
-        let move_info = compute_move_info(db, func, &slot_alloc.slots(db), live_ranges, tycheck_result);
+        let init = analyze_initialization(db, func, cfg, slot_alloc);
+        let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
+        let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
         let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
 

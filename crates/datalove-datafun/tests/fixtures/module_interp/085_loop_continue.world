@@ -3,17 +3,17 @@ module local/test/main
 ----------
 
 fun skip_iteration(): !u32
-    let sum: u32 = @0
-    let i: u32 = @0
+    var sum: u32 = @0
+    var i: u32 = @0
     loop
-        let i = i +! @1
+        set i = i +! @1
         if i .> @5
             break
         end if
         if i == @3
             continue
         end if
-        let sum = sum +! i
+        set sum = sum +! i
     end loop
     ret ok sum
 end fun

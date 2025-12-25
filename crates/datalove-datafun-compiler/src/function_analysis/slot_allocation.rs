@@ -1,8 +1,9 @@
 //! Slot allocation for function frames.
 
 use rmx::prelude::*;
+use std::collections::HashMap;
 use bct::text::InternedText;
-use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind};
+use crate::ast::{Statement, StmtFun, StmtLet, StmtVar, StmtSet, ExprFun, ExprFunKind};
 use crate::datalit::ast::TypeHint;
 use super::{SlotId, SlotKind};
 
@@ -40,6 +41,64 @@ pub struct SlotAllocation<'db> {
     /// All allocated slots.
     #[returns(ref)]
     pub slots: Vec<AllocatedSlot<'db>>,
+    /// Maps Name expressions to their resolved slot IDs.
+    #[returns(ref)]
+    pub name_resolutions: Vec<super::layout::NameResolution<'db>>,
+    /// Maps let statements to their destination slot IDs.
+    #[returns(ref)]
+    pub let_stmt_slots: Vec<super::layout::LetStmtSlot<'db>>,
+    /// Maps var statements to their destination slot IDs.
+    #[returns(ref)]
+    pub var_stmt_slots: Vec<super::layout::VarStmtSlot<'db>>,
+    /// Maps set statements to their target slot IDs.
+    #[returns(ref)]
+    pub set_stmt_slots: Vec<super::layout::SetStmtSlot<'db>>,
+}
+
+impl<'db> SlotAllocation<'db> {
+    /// Get the slot ID for a Name expression.
+    pub fn get_slot_for_name_expr(
+        self,
+        db: &'db dyn crate::Db,
+        expr: ExprFun<'db>,
+    ) -> Option<SlotId> {
+        self.name_resolutions(db).iter()
+            .find(|nr| nr.expr(db) == expr)
+            .map(|nr| nr.slot_id(db))
+    }
+
+    /// Get the destination slot ID for a let statement.
+    pub fn get_slot_for_let_stmt(
+        self,
+        db: &'db dyn crate::Db,
+        stmt: StmtLet<'db>,
+    ) -> Option<SlotId> {
+        self.let_stmt_slots(db).iter()
+            .find(|ls| ls.stmt(db) == stmt)
+            .map(|ls| ls.slot_id(db))
+    }
+
+    /// Get the destination slot ID for a var statement.
+    pub fn get_slot_for_var_stmt(
+        self,
+        db: &'db dyn crate::Db,
+        stmt: StmtVar<'db>,
+    ) -> Option<SlotId> {
+        self.var_stmt_slots(db).iter()
+            .find(|vs| vs.stmt(db) == stmt)
+            .map(|vs| vs.slot_id(db))
+    }
+
+    /// Get the target slot ID for a set statement.
+    pub fn get_slot_for_set_stmt(
+        self,
+        db: &'db dyn crate::Db,
+        stmt: StmtSet<'db>,
+    ) -> Option<SlotId> {
+        self.set_stmt_slots(db).iter()
+            .find(|ss| ss.stmt(db) == stmt)
+            .map(|ss| ss.slot_id(db))
+    }
 }
 
 /// Internal builder for slot allocation.
@@ -48,6 +107,16 @@ struct SlotAllocationBuilder<'db> {
     slots: Vec<(SlotId, Option<String>, SlotKind, Option<ExprFun<'db>>, SlotDestruction)>,
     /// Next slot ID to allocate.
     next_slot_id: u32,
+    /// Current scope: maps variable names to their most recent slot.
+    scope: HashMap<InternedText<'db>, SlotId>,
+    /// Maps Name expressions to their resolved slot IDs.
+    name_resolutions: HashMap<ExprFun<'db>, SlotId>,
+    /// Maps let statements to their destination slot IDs.
+    let_stmt_slots: HashMap<StmtLet<'db>, SlotId>,
+    /// Maps var statements to their destination slot IDs.
+    var_stmt_slots: HashMap<StmtVar<'db>, SlotId>,
+    /// Maps set statements to their target slot IDs.
+    set_stmt_slots: HashMap<StmtSet<'db>, SlotId>,
 }
 
 /// A slot that has been allocated.
@@ -67,6 +136,11 @@ impl<'db> SlotAllocationBuilder<'db> {
         Self {
             slots: Vec::new(),
             next_slot_id: 0,
+            scope: HashMap::new(),
+            name_resolutions: HashMap::new(),
+            let_stmt_slots: HashMap::new(),
+            var_stmt_slots: HashMap::new(),
+            set_stmt_slots: HashMap::new(),
         }
     }
 
@@ -106,10 +180,6 @@ impl<'db> SlotAllocationBuilder<'db> {
     fn analyze_statement(&mut self, db: &'db dyn crate::Db, stmt: &Statement<'db>) {
         match stmt {
             Statement::Let(let_stmt) => {
-                // Allocate slot for the let binding.
-                let name_str = let_stmt.name(db).text(db).to_string();
-                self.alloc_slot(Some(name_str), SlotKind::Local, None);
-
                 // Check if let has a coercible type hint (Option/Result/Data).
                 // If so, the RHS needs a temp because interpreter evaluates without dest
                 // first to check if coercion is needed.
@@ -125,13 +195,22 @@ impl<'db> SlotAllocationBuilder<'db> {
                 } else {
                     ExprContext::HasDest
                 };
+
+                // FIRST: Analyze RHS (uses current scope, before new slot).
                 self.analyze_expr(db, let_stmt.value(db), rhs_ctx);
+
+                // THEN: Allocate slot and update scope.
+                let name = let_stmt.name(db);
+                let name_str = name.text(db).to_string();
+                let slot_id = self.alloc_slot(Some(name_str), SlotKind::Local, None);
+
+                // Record statement -> slot mapping.
+                self.let_stmt_slots.insert(*let_stmt, slot_id);
+
+                // Update scope (shadowing any previous binding).
+                self.scope.insert(name, slot_id);
             }
             Statement::Var(var_stmt) => {
-                // Allocate mutable slot for the var binding.
-                let name_str = var_stmt.name(db).text(db).to_string();
-                self.alloc_slot(Some(name_str), SlotKind::Mutable, None);
-
                 // Check if var has a coercible type hint.
                 let needs_coercion_check = var_stmt.type_hint(db).map_or(false, |th| {
                     matches!(
@@ -145,10 +224,29 @@ impl<'db> SlotAllocationBuilder<'db> {
                 } else {
                     ExprContext::HasDest
                 };
+
+                // FIRST: Analyze RHS (uses current scope, before new slot).
                 self.analyze_expr(db, var_stmt.value(db), rhs_ctx);
+
+                // THEN: Allocate mutable slot and update scope.
+                let name = var_stmt.name(db);
+                let name_str = name.text(db).to_string();
+                let slot_id = self.alloc_slot(Some(name_str), SlotKind::Mutable, None);
+
+                // Record statement -> slot mapping.
+                self.var_stmt_slots.insert(*var_stmt, slot_id);
+
+                // Update scope (shadowing any previous binding).
+                self.scope.insert(name, slot_id);
             }
             Statement::Set(set_stmt) => {
                 // Set uses an existing mutable slot, no new slot allocation.
+                // Look up target in scope and record mapping.
+                let name = set_stmt.name(db);
+                if let Some(&slot_id) = self.scope.get(&name) {
+                    self.set_stmt_slots.insert(*set_stmt, slot_id);
+                }
+
                 // RHS writes directly to the existing slot.
                 self.analyze_expr(db, set_stmt.value(db), ExprContext::HasDest);
             }
@@ -166,17 +264,19 @@ impl<'db> SlotAllocationBuilder<'db> {
                 // This temp is destroyed inline after branch evaluation.
                 self.analyze_expr_inline(db, if_stmt.condition(db));
 
-                // Allocate slot for then binding if present.
+                // Allocate slot for then binding if present and add to scope.
                 if let Some(name) = if_stmt.then_binding(db) {
                     let name_str = name.text(db).to_string();
-                    self.alloc_slot(Some(name_str), SlotKind::Local, None);
+                    let slot_id = self.alloc_slot(Some(name_str), SlotKind::Local, None);
+                    self.scope.insert(name, slot_id);
                 }
                 self.analyze_statements(db, if_stmt.then_body(db));
 
-                // Allocate slot for else binding if present.
+                // Allocate slot for else binding if present and add to scope.
                 if let Some(name) = if_stmt.else_binding(db) {
                     let name_str = name.text(db).to_string();
-                    self.alloc_slot(Some(name_str), SlotKind::Local, None);
+                    let slot_id = self.alloc_slot(Some(name_str), SlotKind::Local, None);
+                    self.scope.insert(name, slot_id);
                 }
                 if let Some(else_body) = if_stmt.else_body(db) {
                     self.analyze_statements(db, else_body);
@@ -223,7 +323,12 @@ impl<'db> SlotAllocationBuilder<'db> {
         destruction: SlotDestruction,
     ) {
         match expr.expr(db) {
-            ExprFunKind::Name(_) => {
+            ExprFunKind::Name(name) => {
+                // Resolve name to slot using current scope.
+                if let Some(&slot_id) = self.scope.get(&name) {
+                    self.name_resolutions.insert(expr, slot_id);
+                }
+
                 // Name expressions never need their own temp:
                 // - If HasDest: clones directly to parent's destination
                 // - If NeedsDest + move type: returns borrowed ref to source
@@ -416,11 +521,13 @@ pub fn allocate_slots<'db>(
 ) -> SlotAllocation<'db> {
     let mut builder = SlotAllocationBuilder::new();
 
-    // Allocate reference slots for all parameters.
+    // Allocate reference slots for all parameters and add to scope.
     // All parameters (In/Out/Ref/Mut) are passed by reference.
     for param in func.params(db) {
-        let name_str = param.name(db).text(db).to_string();
-        builder.alloc_slot(Some(name_str), SlotKind::Reference, None);
+        let name = param.name(db);
+        let name_str = name.text(db).to_string();
+        let slot_id = builder.alloc_slot(Some(name_str), SlotKind::Reference, None);
+        builder.scope.insert(name, slot_id);
     }
 
     // Allocate slots for body statements.
@@ -432,5 +539,27 @@ pub fn allocate_slots<'db>(
         AllocatedSlot::new(db, slot_id, interned_name, kind, expr, destruction)
     }).collect();
 
-    SlotAllocation::new(db, slots)
+    use super::layout::{NameResolution, LetStmtSlot, VarStmtSlot, SetStmtSlot};
+
+    let name_resolutions: Vec<_> = builder.name_resolutions.into_iter()
+        .map(|(expr, slot_id)| NameResolution::new(db, expr, slot_id))
+        .collect();
+    let let_stmt_slots: Vec<_> = builder.let_stmt_slots.into_iter()
+        .map(|(stmt, slot_id)| LetStmtSlot::new(db, stmt, slot_id))
+        .collect();
+    let var_stmt_slots: Vec<_> = builder.var_stmt_slots.into_iter()
+        .map(|(stmt, slot_id)| VarStmtSlot::new(db, stmt, slot_id))
+        .collect();
+    let set_stmt_slots: Vec<_> = builder.set_stmt_slots.into_iter()
+        .map(|(stmt, slot_id)| SetStmtSlot::new(db, stmt, slot_id))
+        .collect();
+
+    SlotAllocation::new(
+        db,
+        slots,
+        name_resolutions,
+        let_stmt_slots,
+        var_stmt_slots,
+        set_stmt_slots,
+    )
 }

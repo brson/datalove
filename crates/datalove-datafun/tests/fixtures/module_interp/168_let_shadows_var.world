@@ -1,0 +1,9 @@
+----------
+module local/test/main
+----------
+
+fun main(): !u32
+    var x: u32 = @1
+    let x = x +! @1
+    ret ok x
+end fun

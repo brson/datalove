@@ -3,11 +3,11 @@ module local/test/main
 ----------
 
 fun sum_to_three(): !u32
-    let sum: u32 = @0
-    let i: u32 = @0
+    var sum: u32 = @0
+    var i: u32 = @0
     loop
-        let i = i +! @1
-        let sum = sum +! i
+        set i = i +! @1
+        set sum = sum +! i
         if i >= @3
             break
         end if

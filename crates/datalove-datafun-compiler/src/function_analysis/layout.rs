@@ -4,6 +4,7 @@ use rmx::prelude::*;
 use bct::text::InternedText;
 use super::{SlotId, SlotKind};
 use super::type_sizing::{compute_datafun_type_layout, TypeLayout};
+use crate::ast::{ExprFun, StmtLet, StmtVar, StmtSet};
 
 /// Align a value up to the given alignment.
 /// Alignment must be a power of 2.
@@ -19,6 +20,46 @@ pub struct FrameLayout<'db> {
     pub total_align: u32,
     #[returns(ref)]
     pub slots: Vec<SlotInfo<'db>>,
+    /// Maps Name expressions to their resolved slot IDs.
+    #[returns(ref)]
+    pub name_resolutions: Vec<NameResolution<'db>>,
+    /// Maps let statements to their destination slot IDs.
+    #[returns(ref)]
+    pub let_stmt_slots: Vec<LetStmtSlot<'db>>,
+    /// Maps var statements to their destination slot IDs.
+    #[returns(ref)]
+    pub var_stmt_slots: Vec<VarStmtSlot<'db>>,
+    /// Maps set statements to their target slot IDs.
+    #[returns(ref)]
+    pub set_stmt_slots: Vec<SetStmtSlot<'db>>,
+}
+
+/// Maps a Name expression to its resolved slot.
+#[salsa::tracked]
+pub struct NameResolution<'db> {
+    pub expr: ExprFun<'db>,
+    pub slot_id: SlotId,
+}
+
+/// Maps a let statement to its destination slot.
+#[salsa::tracked]
+pub struct LetStmtSlot<'db> {
+    pub stmt: StmtLet<'db>,
+    pub slot_id: SlotId,
+}
+
+/// Maps a var statement to its destination slot.
+#[salsa::tracked]
+pub struct VarStmtSlot<'db> {
+    pub stmt: StmtVar<'db>,
+    pub slot_id: SlotId,
+}
+
+/// Maps a set statement to its target slot.
+#[salsa::tracked]
+pub struct SetStmtSlot<'db> {
+    pub stmt: StmtSet<'db>,
+    pub slot_id: SlotId,
 }
 
 /// Information about a single slot in the frame.
@@ -49,10 +90,62 @@ impl<'db> FrameLayout<'db> {
             .copied()
     }
 
+    /// Get the slot for a Name expression using resolved slot ID.
+    pub fn get_slot_for_name_expr(
+        self,
+        db: &'db dyn crate::Db,
+        expr: ExprFun<'db>,
+    ) -> Option<SlotInfo<'db>> {
+        let slot_id = self.name_resolutions(db).iter()
+            .find(|nr| nr.expr(db) == expr)
+            .map(|nr| nr.slot_id(db))?;
+        self.get_slot(db, slot_id)
+    }
+
+    /// Get the destination slot for a let statement.
+    pub fn get_slot_for_let_stmt(
+        self,
+        db: &'db dyn crate::Db,
+        stmt: StmtLet<'db>,
+    ) -> Option<SlotInfo<'db>> {
+        let slot_id = self.let_stmt_slots(db).iter()
+            .find(|ls| ls.stmt(db) == stmt)
+            .map(|ls| ls.slot_id(db))?;
+        self.get_slot(db, slot_id)
+    }
+
+    /// Get the destination slot for a var statement.
+    pub fn get_slot_for_var_stmt(
+        self,
+        db: &'db dyn crate::Db,
+        stmt: StmtVar<'db>,
+    ) -> Option<SlotInfo<'db>> {
+        let slot_id = self.var_stmt_slots(db).iter()
+            .find(|vs| vs.stmt(db) == stmt)
+            .map(|vs| vs.slot_id(db))?;
+        self.get_slot(db, slot_id)
+    }
+
+    /// Get the target slot for a set statement.
+    pub fn get_slot_for_set_stmt(
+        self,
+        db: &'db dyn crate::Db,
+        stmt: StmtSet<'db>,
+    ) -> Option<SlotInfo<'db>> {
+        let slot_id = self.set_stmt_slots(db).iter()
+            .find(|ss| ss.stmt(db) == stmt)
+            .map(|ss| ss.slot_id(db))?;
+        self.get_slot(db, slot_id)
+    }
+
     /// Compute frame layout from allocated slots with types.
     pub fn compute_layout(
         db: &'db dyn crate::Db,
         slots: Vec<(SlotId, Option<InternedText<'db>>, SlotKind, crate::tycheck::TypeAndHeap<'db>, Option<crate::ast::ExprFun<'db>>)>,
+        name_resolutions: Vec<NameResolution<'db>>,
+        let_stmt_slots: Vec<LetStmtSlot<'db>>,
+        var_stmt_slots: Vec<VarStmtSlot<'db>>,
+        set_stmt_slots: Vec<SetStmtSlot<'db>>,
     ) -> Self {
         use std::mem::{size_of, align_of};
 
@@ -90,6 +183,15 @@ impl<'db> FrameLayout<'db> {
         // Total size must be aligned to maximum alignment.
         let total_size = align_up(offset, max_align);
 
-        FrameLayout::new(db, total_size, max_align, slot_infos)
+        FrameLayout::new(
+            db,
+            total_size,
+            max_align,
+            slot_infos,
+            name_resolutions,
+            let_stmt_slots,
+            var_stmt_slots,
+            set_stmt_slots,
+        )
     }
 }
