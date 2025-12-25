@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun test_var_set_int(): int
+    var x: int = @100
+    set x = @200
+    ret x
+end fun
+
+fun main(): int
+    ret test_var_set_int()
+end fun

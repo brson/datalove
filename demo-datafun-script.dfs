@@ -132,9 +132,9 @@ let i: @u32 = (1 +! 2) -! 3 *! 4 /! 5
 // this is only available in procs, not funs, so not datafun
 // let i: @u32 = (1 ++ 2) -- 3 ** 4 // 5
 
-// compound assignment
+// compound assignment fixme
 var i = 0
-set i += 1;
+set i = i + 1;
 
 // numeric types expand when using overflowing math
 let a /* : @u16 */ = 1 + 2

@@ -725,6 +725,67 @@ fn check_statement<'db>(
             }
         }
 
+        Statement::Var(stmt) => {
+            let name = stmt.name(db);
+            let value = stmt.value(db);
+
+            // Same as let: if type hint provided, check against it.
+            let var_type = match stmt.type_hint(db) {
+                Some(type_hint) => {
+                    match convert_type_hint(db, type_hint) {
+                        Ok(expected_type) => {
+                            match check_expr(ctx, value, expected_type) {
+                                Ok(()) => Some(expected_type),
+                                Err(e) => {
+                                    ctx.add_error(e);
+                                    None
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            ctx.add_error(e);
+                            None
+                        }
+                    }
+                }
+                None => {
+                    match ctx.synthesize_expr(value) {
+                        Ok(ty) => Some(ty),
+                        Err(e) => {
+                            ctx.add_error(e);
+                            None
+                        }
+                    }
+                }
+            };
+
+            // Add mutable variable to context if we got a type.
+            if let Some(ty) = var_type {
+                ctx.add_variable(name, ty);
+            }
+        }
+
+        Statement::Set(stmt) => {
+            let name = stmt.name(db);
+            let value = stmt.value(db);
+
+            // Look up the variable type.
+            match ctx.lookup_variable(name) {
+                Some(expected_type) => {
+                    // Check that value matches the variable's type.
+                    if let Err(e) = check_expr(ctx, value, expected_type) {
+                        ctx.add_error(e);
+                    }
+                }
+                None => {
+                    // Variable not found.
+                    ctx.add_error(TypeError::DatalitError(
+                        format!("undefined variable: {}", name.text(db))
+                    ));
+                }
+            }
+        }
+
         Statement::Fun(stmt) => {
             let name = stmt.name(db);
             let params = stmt.params(db);

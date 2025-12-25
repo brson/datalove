@@ -76,6 +76,9 @@ pub enum SlotKind {
     /// Let bindings - actual storage in callee's frame.
     /// Uses actual type size/alignment. Dropped at end of scope if not moved.
     Local,
+    /// Var bindings - mutable storage in callee's frame.
+    /// Uses actual type size/alignment. Can be mutated via `set`.
+    Mutable,
     /// Expression temporaries - actual storage in callee's frame.
     /// Uses actual type size/alignment. Dropped at end of scope if not moved.
     Temporary,
@@ -89,7 +92,7 @@ impl SlotKind {
     pub fn ownership(self) -> SlotOwnership {
         match self {
             SlotKind::Reference => SlotOwnership::Borrowed,
-            SlotKind::Local | SlotKind::Temporary => SlotOwnership::Owned,
+            SlotKind::Local | SlotKind::Mutable | SlotKind::Temporary => SlotOwnership::Owned,
         }
     }
 }
@@ -221,8 +224,8 @@ fn build_frame_layout<'db>(
                 // Parameter - get type from parameter type hint.
                 get_param_type(db, func, slot.name(db))
             }
-            SlotKind::Local => {
-                // Let binding - get type from RHS expression.
+            SlotKind::Local | SlotKind::Mutable => {
+                // Let/var binding - get type from RHS expression.
                 get_local_type(db, func, slot.name(db), expr_types)
             }
             SlotKind::Temporary => {
@@ -316,6 +319,26 @@ fn find_local_type_recursive<'db>(
                         return Some(*ty);
                     }
                 }
+            }
+            Statement::Var(var_stmt) => {
+                if var_stmt.name(db) == name {
+                    // First, check if there's an explicit type hint.
+                    if let Some(type_hint) = var_stmt.type_hint(db) {
+                        return Some(convert_type_hint_to_type(db, type_hint));
+                    }
+
+                    // No type hint - get the type from the RHS expression.
+                    let value_expr = var_stmt.value(db);
+                    let expr_id = value_expr.as_id();
+                    let index = expr_id.index() as usize;
+
+                    if let Some(Some(ty)) = expr_types.get(index) {
+                        return Some(*ty);
+                    }
+                }
+            }
+            Statement::Set(_) => {
+                // Set doesn't introduce new variables - skip.
             }
             Statement::If(if_stmt) => {
                 // Check if this is a then_binding or else_binding.

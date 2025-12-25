@@ -23,6 +23,8 @@ pub struct ParseResult<'db> {
 #[derive(salsa::Update)]
 pub enum Statement<'db> {
     Let(StmtLet<'db>),
+    Var(StmtVar<'db>),
+    Set(StmtSet<'db>),
     Fun(StmtFun<'db>),
     Ret(StmtRet<'db>),
     Require(StmtRequire<'db>),
@@ -38,6 +40,21 @@ pub enum Statement<'db> {
 pub struct StmtLet<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub value: ExprFun<'db>,
+}
+
+/// Mutable variable declaration.
+#[salsa::tracked]
+pub struct StmtVar<'db> {
+    pub name: InternedText<'db>,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub value: ExprFun<'db>,
+}
+
+/// Mutation of an existing mutable variable.
+#[salsa::tracked]
+pub struct StmtSet<'db> {
+    pub name: InternedText<'db>,
     pub value: ExprFun<'db>,
 }
 

@@ -654,8 +654,8 @@ fn execute_function_body_with_frame<'db>(
 
                         current_block_id = if is_true { *then_block } else { *else_block };
                     }
-                    ast::Statement::Let(_) => {
-                        // Let-statement with try operator: branching decision already made.
+                    ast::Statement::Let(_) | ast::Statement::Var(_) => {
+                        // Let/var-statement with try operator: branching decision already made.
                         // If we reached this point, the try succeeded (otherwise an error
                         // would have propagated). Go to then_block (continuation).
                         current_block_id = *then_block;
@@ -701,6 +701,16 @@ fn execute_cfg_statement<'db>(
         ast::Statement::Let(let_stmt) => {
             // Evaluate expression and store in frame slot.
             execute_let_statement_frame(ctx, *let_stmt)?;
+            Ok(CfgControl::Continue)
+        }
+        ast::Statement::Var(var_stmt) => {
+            // Same as let - evaluate expression and store in mutable slot.
+            execute_var_statement_frame(ctx, *var_stmt)?;
+            Ok(CfgControl::Continue)
+        }
+        ast::Statement::Set(set_stmt) => {
+            // Mutate existing mutable slot.
+            execute_set_statement_frame(ctx, *set_stmt)?;
             Ok(CfgControl::Continue)
         }
         ast::Statement::Ret(ret_stmt) => {
@@ -1111,6 +1121,130 @@ fn execute_let_statement_frame<'db>(
     eval_expression_frame(ctx, let_stmt.value(ctx.db), dest)?;
 
     // Mark slot as Available.
+    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+
+    Ok(())
+}
+
+/// Execute a var statement in frame-based mode.
+///
+/// Same as let, but allocates to a Mutable slot.
+fn execute_var_statement_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    var_stmt: ast::StmtVar<'db>,
+) -> Result<(), InterpError> {
+    let frame_index = ctx.call_stack.len() - 1;
+    let name = var_stmt.name(ctx.db);
+    let layout = ctx.call_stack[frame_index].layout;
+    let slot_info = match find_slot_by_name(ctx.db, layout, name) {
+        Some(s) => s,
+        None => {
+            return Err(InterpError::RuntimeError(
+                format!("Var binding '{}' not found in frame", name.text(ctx.db))
+            ));
+        }
+    };
+
+    let slot_id = slot_info.slot_id(ctx.db);
+
+    // Create destination from slot.
+    let offset = slot_info.offset(ctx.db) as usize;
+    let dest_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset) };
+    let ty = slot_info.ty(ctx.db);
+    let datalit_ty = match ty.ty(ctx.db) {
+        crate::tycheck::Type::Datalit(dt) => dt.clone(),
+        _ => {
+            return Err(InterpError::RuntimeError(
+                format!("Non-datalit type in slot '{}'", name.text(ctx.db))
+            ));
+        }
+    };
+    let dest_tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+
+    // Evaluate expression with DPS into slot.
+    let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
+    eval_expression_frame(ctx, var_stmt.value(ctx.db), dest)?;
+
+    // Mark slot as Available.
+    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+
+    Ok(())
+}
+
+/// Execute a set statement in frame-based mode.
+///
+/// Mutates an existing mutable slot. For linear types, destroys old value after
+/// evaluating RHS (to handle self-referential cases like `set x = x + x`).
+fn execute_set_statement_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    set_stmt: ast::StmtSet<'db>,
+) -> Result<(), InterpError> {
+    let frame_index = ctx.call_stack.len() - 1;
+    let name = set_stmt.name(ctx.db);
+    let layout = ctx.call_stack[frame_index].layout;
+    let slot_info = match find_slot_by_name(ctx.db, layout, name) {
+        Some(s) => s,
+        None => {
+            return Err(InterpError::RuntimeError(
+                format!("Variable '{}' not found in frame", name.text(ctx.db))
+            ));
+        }
+    };
+
+    let slot_id = slot_info.slot_id(ctx.db);
+    let ty = slot_info.ty(ctx.db);
+    let is_copy = crate::function_analysis::is_copy_type(ctx.db, ty);
+
+    let datalit_ty = match ty.ty(ctx.db) {
+        crate::tycheck::Type::Datalit(dt) => dt.clone(),
+        _ => {
+            return Err(InterpError::RuntimeError(
+                format!("Non-datalit type in slot '{}'", name.text(ctx.db))
+            ));
+        }
+    };
+    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+
+    if is_copy {
+        // Copy type: evaluate directly to slot.
+        let offset = slot_info.offset(ctx.db) as usize;
+        let dest_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset) };
+        let dest = Destination { ptr: dest_ptr, tydesc };
+        eval_expression_frame(ctx, set_stmt.value(ctx.db), dest)?;
+    } else {
+        // Linear type: must handle self-reference (e.g., `set x = x + x`).
+        // 1. Evaluate RHS to a temp buffer (reads old x value).
+        // 2. Destroy old value in slot.
+        // 3. Move new value from temp to slot.
+
+        // Allocate temp buffer for the new value.
+        let type_layout = crate::function_analysis::compute_datafun_type_layout(
+            ctx.db,
+            ty,
+        );
+        let mut temp_buffer = vec![0u8; type_layout.size as usize];
+        let temp_ptr = temp_buffer.as_mut_ptr();
+
+        // Evaluate RHS into temp.
+        let temp_dest = Destination { ptr: temp_ptr, tydesc };
+        eval_expression_frame(ctx, set_stmt.value(ctx.db), temp_dest)?;
+
+        // Destroy old value in slot.
+        let offset = slot_info.offset(ctx.db) as usize;
+        let slot_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset) };
+        let old_value = Value { ptr: slot_ptr, tydesc };
+        destroy_value(ctx, old_value);
+
+        // Move new value from temp to slot (memcpy, no clone/destroy needed).
+        unsafe {
+            std::ptr::copy_nonoverlapping(temp_ptr, slot_ptr, type_layout.size as usize);
+        }
+
+        // Temp buffer is dropped but the data was moved out, not destroyed.
+        std::mem::forget(temp_buffer);
+    }
+
+    // Slot remains Available after set.
     ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
 
     Ok(())

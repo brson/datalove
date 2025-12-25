@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun test_int_self_add(): int
+    var x: int = @1000
+    set x = x + x
+    ret x
+end fun
+
+fun main(): int
+    ret test_int_self_add()
+end fun

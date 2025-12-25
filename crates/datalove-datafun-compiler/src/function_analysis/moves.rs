@@ -350,6 +350,64 @@ fn walk_statements<'db>(
                     );
                 }
             }
+            Statement::Var(var_stmt) => {
+                // Same as let: RHS is moved to LHS slot.
+                let value_expr = var_stmt.value(db);
+                let name = var_stmt.name(db);
+
+                if let Some(slot_id) = find_slot_by_name(db, slots, name) {
+                    collect_moves_from_expr(
+                        db,
+                        value_expr,
+                        slot_id,
+                        MoveKind::Assignment,
+                        stmt_id,
+                        registry,
+                        slots,
+                        moves,
+                        expr_counter,
+                        tycheck_result,
+                        func,
+                    );
+                    collect_reads_from_expr(
+                        db,
+                        value_expr,
+                        stmt_id,
+                        slots,
+                        reads,
+                        expr_counter,
+                    );
+                }
+            }
+            Statement::Set(set_stmt) => {
+                // Set: RHS is moved to existing mutable slot.
+                let value_expr = set_stmt.value(db);
+                let name = set_stmt.name(db);
+
+                if let Some(slot_id) = find_slot_by_name(db, slots, name) {
+                    collect_moves_from_expr(
+                        db,
+                        value_expr,
+                        slot_id,
+                        MoveKind::Assignment,
+                        stmt_id,
+                        registry,
+                        slots,
+                        moves,
+                        expr_counter,
+                        tycheck_result,
+                        func,
+                    );
+                    collect_reads_from_expr(
+                        db,
+                        value_expr,
+                        stmt_id,
+                        slots,
+                        reads,
+                        expr_counter,
+                    );
+                }
+            }
             Statement::Ret(ret_stmt) => {
                 // Return statement: returned value is moved to caller (if present).
                 if let Some(value_expr) = ret_stmt.value(db) {

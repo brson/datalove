@@ -178,6 +178,73 @@ impl<'db> CfgBuilder<'db> {
                     }
                 }
 
+                Statement::Var(var_stmt) => {
+                    // Same as let - add to current block with possible try handling.
+                    let stmt_id = self.alloc_stmt_id(stmt.clone());
+                    current_stmts.push(stmt_id);
+
+                    if self.expr_may_return_early(db, var_stmt.value(db)) {
+                        let early_return_block = self.alloc_block_id();
+                        let continue_block = self.alloc_block_id();
+
+                        self.add_block(BasicBlock {
+                            block_id: current_block,
+                            statements: current_stmts.clone(),
+                            terminator: Terminator::Branch {
+                                condition_stmt: stmt_id,
+                                then_block: continue_block,
+                                else_block: early_return_block,
+                            },
+                        });
+
+                        self.add_block(BasicBlock {
+                            block_id: early_return_block,
+                            statements: Vec::new(),
+                            terminator: Terminator::TryReturn,
+                        });
+
+                        self.add_edge(current_block, continue_block);
+                        self.add_edge(current_block, early_return_block);
+
+                        current_block = continue_block;
+                        current_stmts = Vec::new();
+                    }
+                }
+
+                Statement::Set(set_stmt) => {
+                    // Set is a simple statement, add to current block.
+                    let stmt_id = self.alloc_stmt_id(stmt.clone());
+                    current_stmts.push(stmt_id);
+
+                    // Check if the value expression contains try operators.
+                    if self.expr_may_return_early(db, set_stmt.value(db)) {
+                        let early_return_block = self.alloc_block_id();
+                        let continue_block = self.alloc_block_id();
+
+                        self.add_block(BasicBlock {
+                            block_id: current_block,
+                            statements: current_stmts.clone(),
+                            terminator: Terminator::Branch {
+                                condition_stmt: stmt_id,
+                                then_block: continue_block,
+                                else_block: early_return_block,
+                            },
+                        });
+
+                        self.add_block(BasicBlock {
+                            block_id: early_return_block,
+                            statements: Vec::new(),
+                            terminator: Terminator::TryReturn,
+                        });
+
+                        self.add_edge(current_block, continue_block);
+                        self.add_edge(current_block, early_return_block);
+
+                        current_block = continue_block;
+                        current_stmts = Vec::new();
+                    }
+                }
+
                 Statement::Ret(_ret_stmt) => {
                     // Return statement terminates the current block.
                     let stmt_id = self.alloc_stmt_id(stmt.clone());

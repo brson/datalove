@@ -1,0 +1,20 @@
+----------
+module local/test/main
+----------
+
+fun sum_to_three(): !u32
+    var sum: u32 = @0
+    var i: u32 = @0
+    loop
+        set i = i +! @1
+        set sum = sum +! i
+        if i >= @3
+            break
+        end if
+    end loop
+    ret ok sum
+end fun
+
+fun main(): !u32
+    ret sum_to_three()
+end fun

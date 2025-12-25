@@ -127,6 +127,31 @@ impl<'db> SlotAllocationBuilder<'db> {
                 };
                 self.analyze_expr(db, let_stmt.value(db), rhs_ctx);
             }
+            Statement::Var(var_stmt) => {
+                // Allocate mutable slot for the var binding.
+                let name_str = var_stmt.name(db).text(db).to_string();
+                self.alloc_slot(Some(name_str), SlotKind::Mutable, None);
+
+                // Check if var has a coercible type hint.
+                let needs_coercion_check = var_stmt.type_hint(db).map_or(false, |th| {
+                    matches!(
+                        th.type_hint(db),
+                        TypeHint::Option(_) | TypeHint::Result(_) | TypeHint::Data
+                    )
+                });
+
+                let rhs_ctx = if needs_coercion_check {
+                    ExprContext::NeedsDest
+                } else {
+                    ExprContext::HasDest
+                };
+                self.analyze_expr(db, var_stmt.value(db), rhs_ctx);
+            }
+            Statement::Set(set_stmt) => {
+                // Set uses an existing mutable slot, no new slot allocation.
+                // RHS writes directly to the existing slot.
+                self.analyze_expr(db, set_stmt.value(db), ExprContext::HasDest);
+            }
             Statement::Fun(_) => {
                 // Nested functions not yet supported.
             }

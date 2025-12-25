@@ -115,8 +115,8 @@ pub fn get_slot_type<'db>(
             // Parameter - get type from tycheck result.
             get_param_type(db, func, slot.name(db), tycheck_result)
         }
-        SlotKind::Local => {
-            // Let binding - get type from RHS expression.
+        SlotKind::Local | SlotKind::Mutable => {
+            // Let/var binding - get type from RHS expression.
             let expr_types = tycheck_result.expr_types(db);
             get_local_type(db, func, slot.name(db), expr_types)
         }
@@ -205,6 +205,26 @@ fn find_local_type_in_stmts<'db>(
                         return Some(*ty);
                     }
                 }
+            }
+            Statement::Var(var_stmt) => {
+                if var_stmt.name(db) == name {
+                    // First, check if there's an explicit type hint.
+                    if let Some(type_hint) = var_stmt.type_hint(db) {
+                        return Some(convert_type_hint_to_type(db, type_hint));
+                    }
+
+                    // No type hint - get the type from the RHS expression.
+                    let value_expr = var_stmt.value(db);
+                    let expr_id = value_expr.as_id();
+                    let index = expr_id.index() as usize;
+
+                    if let Some(Some(ty)) = expr_types.get(index) {
+                        return Some(*ty);
+                    }
+                }
+            }
+            Statement::Set(_) => {
+                // Set doesn't introduce new variables - skip.
             }
             Statement::If(if_stmt) => {
                 // Search in then-body.

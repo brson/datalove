@@ -234,6 +234,16 @@ fn compute_block_exit_state<'db>(
                     state[slot.0 as usize] = InitState::Always;
                 }
             }
+            Statement::Var(var_stmt) => {
+                // Same as let - marks slot as initialized.
+                if let Some(slot) = find_slot_by_name(db, slots, var_stmt.name(db)) {
+                    state[slot.0 as usize] = InitState::Always;
+                }
+            }
+            Statement::Set(_) => {
+                // Set doesn't create a new slot - it uses an existing one.
+                // The slot is already initialized from var.
+            }
             Statement::If(if_stmt) => {
                 // If-bindings create initialized slots in their respective branches.
                 // This is handled by the CFG - different blocks for then/else.
@@ -344,6 +354,24 @@ pub fn compute_live_ranges<'db>(
 
                     // The RHS expression reads from slots.
                     collect_reads(db, let_stmt.value(db), stmt_id, slots, &mut last_use_points);
+                }
+                Statement::Var(var_stmt) => {
+                    // Same as let - writes to a slot.
+                    if let Some(slot_id) = find_slot_by_name(db, slots, var_stmt.name(db)) {
+                        birth_points.insert(slot_id, ProgramPoint {
+                            stmt_id,
+                            position: Position::After,
+                        });
+                    }
+
+                    // The RHS expression reads from slots.
+                    collect_reads(db, var_stmt.value(db), stmt_id, slots, &mut last_use_points);
+                }
+                Statement::Set(set_stmt) => {
+                    // Set reads from the RHS expression.
+                    collect_reads(db, set_stmt.value(db), stmt_id, slots, &mut last_use_points);
+                    // Note: Set writes to an existing slot but doesn't create a birth point.
+                    // The slot was already born at the var statement.
                 }
                 Statement::Ret(ret_stmt) => {
                     // Return reads from slots (if value present).

@@ -136,6 +136,14 @@ fn walk_statements_for_reads<'db>(
                 // Reads from RHS expression.
                 collect_reads_from_expr(db, let_stmt.value(db), stmt_id, slots, reads);
             }
+            Statement::Var(var_stmt) => {
+                // Reads from RHS expression.
+                collect_reads_from_expr(db, var_stmt.value(db), stmt_id, slots, reads);
+            }
+            Statement::Set(set_stmt) => {
+                // Reads from RHS expression.
+                collect_reads_from_expr(db, set_stmt.value(db), stmt_id, slots, reads);
+            }
             Statement::Ret(ret_stmt) => {
                 // Reads from return expression (if present).
                 if let Some(value) = ret_stmt.value(db) {
@@ -554,6 +562,12 @@ fn walk_for_expr_mapping<'db>(
             Statement::Let(let_stmt) => {
                 map_expr_ids(db, let_stmt.value(db), stmt_id, map, expr_counter);
             }
+            Statement::Var(var_stmt) => {
+                map_expr_ids(db, var_stmt.value(db), stmt_id, map, expr_counter);
+            }
+            Statement::Set(set_stmt) => {
+                map_expr_ids(db, set_stmt.value(db), stmt_id, map, expr_counter);
+            }
             Statement::Ret(ret_stmt) => {
                 if let Some(value) = ret_stmt.value(db) {
                     map_expr_ids(db, value, stmt_id, map, expr_counter);
@@ -743,6 +757,18 @@ fn walk_and_track_init<'db>(
                         current_state[slot_idx] = InitState::Always;
                     }
                 }
+            }
+            Statement::Var(var_stmt) => {
+                // Same as let: this slot is now initialized.
+                if let Some(slot_id) = find_slot_by_name(db, slots, var_stmt.name(db)) {
+                    let slot_idx = slot_id.0 as usize;
+                    if slot_idx < current_state.len() {
+                        current_state[slot_idx] = InitState::Always;
+                    }
+                }
+            }
+            Statement::Set(_) => {
+                // Set doesn't change initialization state - slot is already initialized.
             }
             Statement::If(if_stmt) => {
                 // For if statements, we need to track both branches.

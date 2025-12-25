@@ -174,6 +174,8 @@ impl<'db> Parser<'db> {
 
         match self.peek_word(&mut tokens) {
             Some("let") => self.parse_let(&mut tokens),
+            Some("var") => self.parse_var(&mut tokens),
+            Some("set") => self.parse_set(&mut tokens),
             Some("fun") => self.parse_fun(&mut tokens, remaining_lines),
             Some("ret") => self.parse_ret(&mut tokens),
             Some("require") => self.parse_require(&mut tokens),
@@ -189,7 +191,7 @@ impl<'db> Parser<'db> {
                     span,
                     "unexpected statement",
                     "P001",
-                    "expected 'let', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'"
+                    "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'"
                 )
             }
         }
@@ -230,6 +232,75 @@ impl<'db> Parser<'db> {
             self.db,
             name,
             type_hint,
+            value,
+        ))
+    }
+
+    fn parse_var(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> ast::Statement<'db> {
+        self.eat_word(tokens, "var");
+
+        let name = self.need_name(tokens);
+
+        // Check for type hint: `: type`
+        let type_hint = if self.peek_sigil(tokens, Sigil::Colon) {
+            self.eat_sigil(tokens, Sigil::Colon);
+            Some(self.parse_type_hint_and_heap(tokens))
+        } else {
+            None
+        };
+
+        // Need `=` sigil.
+        if !self.eat_sigil(tokens, Sigil::Equals) {
+            let (text, span) = self.peek_text_span(tokens);
+            return self.emit_stmt_error(
+                text,
+                span,
+                "expected '=' after var binding",
+                "D024",
+                "expected '='"
+            );
+        }
+
+        // Parse the value expression.
+        let value = self.parse_expr_full(tokens);
+
+        ast::Statement::Var(ast::StmtVar::new(
+            self.db,
+            name,
+            type_hint,
+            value,
+        ))
+    }
+
+    fn parse_set(
+        &mut self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) -> ast::Statement<'db> {
+        self.eat_word(tokens, "set");
+
+        let name = self.need_name(tokens);
+
+        // Need `=` sigil.
+        if !self.eat_sigil(tokens, Sigil::Equals) {
+            let (text, span) = self.peek_text_span(tokens);
+            return self.emit_stmt_error(
+                text,
+                span,
+                "expected '=' after set target",
+                "D025",
+                "expected '='"
+            );
+        }
+
+        // Parse the value expression.
+        let value = self.parse_expr_full(tokens);
+
+        ast::Statement::Set(ast::StmtSet::new(
+            self.db,
+            name,
             value,
         ))
     }

@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun test_self_add(): !u32
+    var x: u32 = @10
+    set x = x +! @5
+    ret ok x
+end fun
+
+fun main(): !u32
+    ret test_self_add()
+end fun

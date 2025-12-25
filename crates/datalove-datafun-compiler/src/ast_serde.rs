@@ -15,6 +15,8 @@ pub struct Script {
 #[serde(tag = "kind")]
 pub enum Statement {
     Let(StmtLet),
+    Var(StmtVar),
+    Set(StmtSet),
     Fun(StmtFun),
     Ret(StmtRet),
     Require(StmtRequire),
@@ -30,6 +32,19 @@ pub enum Statement {
 pub struct StmtLet {
     pub name: String,
     pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
+    pub value: ExprFun,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtVar {
+    pub name: String,
+    pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
+    pub value: ExprFun,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtSet {
+    pub name: String,
     pub value: ExprFun,
 }
 
@@ -372,6 +387,8 @@ impl Statement {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: &crate::ast::Statement<'db>) -> Self {
         match ast {
             crate::ast::Statement::Let(s) => Statement::Let(StmtLet::from_ast(db, *s)),
+            crate::ast::Statement::Var(s) => Statement::Var(StmtVar::from_ast(db, *s)),
+            crate::ast::Statement::Set(s) => Statement::Set(StmtSet::from_ast(db, *s)),
             crate::ast::Statement::Fun(s) => Statement::Fun(StmtFun::from_ast(db, *s)),
             crate::ast::Statement::Ret(s) => Statement::Ret(StmtRet::from_ast(db, *s)),
             crate::ast::Statement::Require(s) => Statement::Require(StmtRequire::from_ast(db, s)),
@@ -390,6 +407,25 @@ impl StmtLet {
         StmtLet {
             name: ast.name(db).as_str(db).to_string(),
             type_hint: ast.type_hint(db).map(|th| crate::datalit::ast_serde::TypeHintAndHeap::from_ast(db, th)),
+            value: ExprFun::from_ast(db, ast.value(db)),
+        }
+    }
+}
+
+impl StmtVar {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::StmtVar<'db>) -> Self {
+        StmtVar {
+            name: ast.name(db).as_str(db).to_string(),
+            type_hint: ast.type_hint(db).map(|th| crate::datalit::ast_serde::TypeHintAndHeap::from_ast(db, th)),
+            value: ExprFun::from_ast(db, ast.value(db)),
+        }
+    }
+}
+
+impl StmtSet {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::StmtSet<'db>) -> Self {
+        StmtSet {
+            name: ast.name(db).as_str(db).to_string(),
             value: ExprFun::from_ast(db, ast.value(db)),
         }
     }
