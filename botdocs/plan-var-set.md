@@ -248,8 +248,9 @@ Create test fixtures in `crates/datalove-datafun/tests/fixtures/module_interp/`:
 6. Liveness/moves/validation
 7. Tests
 
-## Dependencies
+## Order
 
-Must implement AFTER plan-shadowing.md (proper name resolution) or simultaneously:
-- `set` relies on looking up the correct slot for a name
-- With broken name lookup, `set x = ...` might hit wrong slot
+Implement BEFORE plan-shadowing.md:
+- var/set doesn't create multiple slots with same name, so current lookup works
+- Rewrite loop accumulation tests to use var/set
+- Then fix shadowing without breaking tests
