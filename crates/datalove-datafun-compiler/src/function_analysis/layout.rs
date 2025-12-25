@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use bct::text::InternedText;
 use super::{SlotId, SlotKind};
 use super::type_sizing::{compute_datafun_type_layout, TypeLayout};
-use crate::ast::{ExprFun, StmtLet, StmtVar, StmtSet};
+use crate::ast::{ExprFun, StmtLet, StmtVar, StmtSet, StmtIf};
 
 /// Align a value up to the given alignment.
 /// Alignment must be a power of 2.
@@ -32,6 +32,9 @@ pub struct FrameLayout<'db> {
     /// Maps set statements to their target slot IDs.
     #[returns(ref)]
     pub set_stmt_slots: Vec<SetStmtSlot<'db>>,
+    /// Maps if-statement bindings to their slot IDs.
+    #[returns(ref)]
+    pub if_binding_slots: Vec<IfBindingSlot<'db>>,
 }
 
 /// Maps a Name expression to its resolved slot.
@@ -59,6 +62,15 @@ pub struct VarStmtSlot<'db> {
 #[salsa::tracked]
 pub struct SetStmtSlot<'db> {
     pub stmt: StmtSet<'db>,
+    pub slot_id: SlotId,
+}
+
+/// Maps an if-statement binding to its slot.
+#[salsa::tracked]
+pub struct IfBindingSlot<'db> {
+    pub stmt: StmtIf<'db>,
+    /// True for then-binding, false for else-binding.
+    pub is_then_binding: bool,
     pub slot_id: SlotId,
 }
 
@@ -146,6 +158,7 @@ impl<'db> FrameLayout<'db> {
         let_stmt_slots: Vec<LetStmtSlot<'db>>,
         var_stmt_slots: Vec<VarStmtSlot<'db>>,
         set_stmt_slots: Vec<SetStmtSlot<'db>>,
+        if_binding_slots: Vec<IfBindingSlot<'db>>,
     ) -> Self {
         use std::mem::{size_of, align_of};
 
@@ -192,6 +205,7 @@ impl<'db> FrameLayout<'db> {
             let_stmt_slots,
             var_stmt_slots,
             set_stmt_slots,
+            if_binding_slots,
         )
     }
 }

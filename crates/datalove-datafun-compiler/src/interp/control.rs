@@ -4,21 +4,9 @@
 //! - `eval_try_option`: The `?` operator (Option unwrap or early return)
 //! - `eval_try_result`: The `!` operator (Result unwrap or early return)
 
-use bct::text::InternedText;
-
 use super::{InterpContext, InterpError, Value, SlotState};
 use super::memory::destroy_value;
-
-/// Find a slot by variable name.
-pub(super) fn find_slot_by_name<'db>(
-    db: &'db dyn crate::Db,
-    layout: crate::function_analysis::FrameLayout<'db>,
-    name: InternedText<'db>,
-) -> Option<crate::function_analysis::SlotInfo<'db>> {
-    layout.slots(db).iter()
-        .find(|s| s.name(db) == Some(name))
-        .copied()
-}
+use crate::ast::StmtIf;
 
 /// Evaluate if-condition on Bool, Option, or Result.
 ///
@@ -27,13 +15,23 @@ pub(super) fn find_slot_by_name<'db>(
 pub(super) fn evaluate_branch_condition<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
-    then_binding: Option<InternedText<'db>>,
-    else_binding: Option<InternedText<'db>>,
+    if_stmt: StmtIf<'db>,
 ) -> Result<bool, InterpError> {
     use datalove_rt::rtdt::{TyTag, OptionTag, ResultTag, TyDescRef};
     use datalove_rt::rtdt::layout::{compute_option_layout, compute_result_layout};
 
     let type_tag = unsafe { (*value.tydesc).type_tag };
+    let frame_index = ctx.call_stack.len() - 1;
+    let frame_layout = ctx.call_stack[frame_index].layout;
+
+    // Look up then/else binding slots from the if-binding mapping.
+    let then_slot = frame_layout.if_binding_slots(ctx.db).iter()
+        .find(|ibs| ibs.stmt(ctx.db) == if_stmt && ibs.is_then_binding(ctx.db))
+        .and_then(|ibs| frame_layout.get_slot(ctx.db, ibs.slot_id(ctx.db)));
+
+    let else_slot = frame_layout.if_binding_slots(ctx.db).iter()
+        .find(|ibs| ibs.stmt(ctx.db) == if_stmt && !ibs.is_then_binding(ctx.db))
+        .and_then(|ibs| frame_layout.get_slot(ctx.db, ibs.slot_id(ctx.db)));
 
     match type_tag {
         TyTag::Bool => {
@@ -46,32 +44,28 @@ pub(super) fn evaluate_branch_condition<'db>(
             let is_some = tag == OptionTag::Some as u8;
 
             if is_some {
-                if let Some(binding_name) = then_binding {
+                if let Some(slot_info) = then_slot {
                     let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
                     let layout = compute_option_layout(tydesc_ref);
                     let inner_tydesc = tydesc_ref.option_inner_ty();
 
-                    let frame_index = ctx.call_stack.len() - 1;
-                    let frame_layout = ctx.call_stack[frame_index].layout;
-                    if let Some(slot_info) = find_slot_by_name(ctx.db, frame_layout, binding_name) {
-                        let slot_offset = slot_info.offset(ctx.db) as usize;
-                        let slot_ptr = unsafe {
-                            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
-                        };
+                    let slot_offset = slot_info.offset(ctx.db) as usize;
+                    let slot_ptr = unsafe {
+                        ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
+                    };
 
-                        let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
-                        let inner_size = inner_tydesc.size() as usize;
+                    let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                    let inner_size = inner_tydesc.size() as usize;
 
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, inner_size);
-                        }
-
-                        let slot_index = frame_layout.slots(ctx.db)
-                            .iter()
-                            .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
-                            .unwrap_or(0);
-                        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, inner_size);
                     }
+
+                    let slot_index = frame_layout.slots(ctx.db)
+                        .iter()
+                        .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
+                        .expect("if-binding slot must exist in frame layout");
+                    ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
                 }
             }
 
@@ -82,57 +76,49 @@ pub(super) fn evaluate_branch_condition<'db>(
             let is_ok = tag == ResultTag::Ok as u8;
 
             if is_ok {
-                if let Some(binding_name) = then_binding {
+                if let Some(slot_info) = then_slot {
                     let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
                     let layout = compute_result_layout(tydesc_ref);
                     let ok_tydesc = tydesc_ref.result_ok_ty();
 
-                    let frame_index = ctx.call_stack.len() - 1;
-                    let frame_layout = ctx.call_stack[frame_index].layout;
-                    if let Some(slot_info) = find_slot_by_name(ctx.db, frame_layout, binding_name) {
-                        let slot_offset = slot_info.offset(ctx.db) as usize;
-                        let slot_ptr = unsafe {
-                            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
-                        };
+                    let slot_offset = slot_info.offset(ctx.db) as usize;
+                    let slot_ptr = unsafe {
+                        ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
+                    };
 
-                        let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
-                        let ok_size = ok_tydesc.size() as usize;
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, ok_size);
-                        }
-
-                        let slot_index = frame_layout.slots(ctx.db)
-                            .iter()
-                            .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
-                            .unwrap_or(0);
-                        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                    let ok_size = ok_tydesc.size() as usize;
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, ok_size);
                     }
+
+                    let slot_index = frame_layout.slots(ctx.db)
+                        .iter()
+                        .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
+                        .expect("if-binding slot must exist in frame layout");
+                    ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
                 }
             } else {
-                if let Some(binding_name) = else_binding {
+                if let Some(slot_info) = else_slot {
                     let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
                     let layout = compute_result_layout(tydesc_ref);
 
-                    let frame_index = ctx.call_stack.len() - 1;
-                    let frame_layout = ctx.call_stack[frame_index].layout;
-                    if let Some(slot_info) = find_slot_by_name(ctx.db, frame_layout, binding_name) {
-                        let slot_offset = slot_info.offset(ctx.db) as usize;
-                        let slot_ptr = unsafe {
-                            ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
-                        };
+                    let slot_offset = slot_info.offset(ctx.db) as usize;
+                    let slot_ptr = unsafe {
+                        ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
+                    };
 
-                        let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
-                        let error_size = std::mem::size_of::<datalove_rt::rtdt::Error>();
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, error_size);
-                        }
-
-                        let slot_index = frame_layout.slots(ctx.db)
-                            .iter()
-                            .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
-                            .unwrap_or(0);
-                        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                    let error_size = std::mem::size_of::<datalove_rt::rtdt::Error>();
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, error_size);
                     }
+
+                    let slot_index = frame_layout.slots(ctx.db)
+                        .iter()
+                        .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
+                        .expect("if-binding slot must exist in frame layout");
+                    ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
                 }
             }
 

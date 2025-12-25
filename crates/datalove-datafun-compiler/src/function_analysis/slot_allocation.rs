@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use std::collections::HashMap;
 use bct::text::InternedText;
-use crate::ast::{Statement, StmtFun, StmtLet, StmtVar, StmtSet, ExprFun, ExprFunKind};
+use crate::ast::{Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtIf, ExprFun, ExprFunKind};
 use crate::datalit::ast::TypeHint;
 use super::{SlotId, SlotKind};
 
@@ -53,6 +53,9 @@ pub struct SlotAllocation<'db> {
     /// Maps set statements to their target slot IDs.
     #[returns(ref)]
     pub set_stmt_slots: Vec<super::layout::SetStmtSlot<'db>>,
+    /// Maps if-statement bindings to their slot IDs.
+    #[returns(ref)]
+    pub if_binding_slots: Vec<super::layout::IfBindingSlot<'db>>,
 }
 
 impl<'db> SlotAllocation<'db> {
@@ -117,6 +120,9 @@ struct SlotAllocationBuilder<'db> {
     var_stmt_slots: HashMap<StmtVar<'db>, SlotId>,
     /// Maps set statements to their target slot IDs.
     set_stmt_slots: HashMap<StmtSet<'db>, SlotId>,
+    /// Maps if-statement bindings to their slot IDs.
+    /// Key is (StmtIf, is_then_binding).
+    if_binding_slots: HashMap<(StmtIf<'db>, bool), SlotId>,
 }
 
 /// A slot that has been allocated.
@@ -141,6 +147,7 @@ impl<'db> SlotAllocationBuilder<'db> {
             let_stmt_slots: HashMap::new(),
             var_stmt_slots: HashMap::new(),
             set_stmt_slots: HashMap::new(),
+            if_binding_slots: HashMap::new(),
         }
     }
 
@@ -264,23 +271,34 @@ impl<'db> SlotAllocationBuilder<'db> {
                 // This temp is destroyed inline after branch evaluation.
                 self.analyze_expr_inline(db, if_stmt.condition(db));
 
+                // Save scope before branches. Each branch has its own scope.
+                let scope_before_if = self.scope.clone();
+
                 // Allocate slot for then binding if present and add to scope.
                 if let Some(name) = if_stmt.then_binding(db) {
                     let name_str = name.text(db).to_string();
                     let slot_id = self.alloc_slot(Some(name_str), SlotKind::Local, None);
                     self.scope.insert(name, slot_id);
+                    self.if_binding_slots.insert((*if_stmt, true), slot_id);
                 }
                 self.analyze_statements(db, if_stmt.then_body(db));
+
+                // Restore scope before else branch. Else branch doesn't see then binding.
+                self.scope = scope_before_if.clone();
 
                 // Allocate slot for else binding if present and add to scope.
                 if let Some(name) = if_stmt.else_binding(db) {
                     let name_str = name.text(db).to_string();
                     let slot_id = self.alloc_slot(Some(name_str), SlotKind::Local, None);
                     self.scope.insert(name, slot_id);
+                    self.if_binding_slots.insert((*if_stmt, false), slot_id);
                 }
                 if let Some(else_body) = if_stmt.else_body(db) {
                     self.analyze_statements(db, else_body);
                 }
+
+                // Restore scope after if. Bindings from branches are not visible after.
+                self.scope = scope_before_if;
             }
             Statement::Loop(loop_stmt) => {
                 // Recursively analyze loop body.
@@ -539,7 +557,7 @@ pub fn allocate_slots<'db>(
         AllocatedSlot::new(db, slot_id, interned_name, kind, expr, destruction)
     }).collect();
 
-    use super::layout::{NameResolution, LetStmtSlot, VarStmtSlot, SetStmtSlot};
+    use super::layout::{NameResolution, LetStmtSlot, VarStmtSlot, SetStmtSlot, IfBindingSlot};
 
     let name_resolutions: Vec<_> = builder.name_resolutions.into_iter()
         .map(|(expr, slot_id)| NameResolution::new(db, expr, slot_id))
@@ -553,6 +571,9 @@ pub fn allocate_slots<'db>(
     let set_stmt_slots: Vec<_> = builder.set_stmt_slots.into_iter()
         .map(|(stmt, slot_id)| SetStmtSlot::new(db, stmt, slot_id))
         .collect();
+    let if_binding_slots: Vec<_> = builder.if_binding_slots.into_iter()
+        .map(|((stmt, is_then), slot_id)| IfBindingSlot::new(db, stmt, is_then, slot_id))
+        .collect();
 
     SlotAllocation::new(
         db,
@@ -561,5 +582,6 @@ pub fn allocate_slots<'db>(
         let_stmt_slots,
         var_stmt_slots,
         set_stmt_slots,
+        if_binding_slots,
     )
 }

@@ -645,8 +645,7 @@ fn execute_function_body_with_frame<'db>(
                         let is_true = evaluate_branch_condition(
                             ctx,
                             condition_value,
-                            if_s.then_binding(ctx.db),
-                            if_s.else_binding(ctx.db),
+                            *if_s,
                         )?;
 
                         // Mark condition temp as Moved (contents destroyed by evaluate_branch_condition).

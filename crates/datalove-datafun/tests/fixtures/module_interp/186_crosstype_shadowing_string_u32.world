@@ -1,0 +1,9 @@
+----------
+module local/test/main
+----------
+
+fun main(): !u32
+    let x: string = "hello"
+    let x: u32 = @99
+    ret ok x
+end fun

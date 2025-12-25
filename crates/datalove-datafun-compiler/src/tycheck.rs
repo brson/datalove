@@ -619,10 +619,14 @@ pub fn typecheck_module_graph<'db>(
             }
         }
 
-        for statement in script.statements(db) {
-            if let Statement::Fun(func_stmt) = statement {
-                let analysis = crate::function_analysis::analyze_function(db, *func_stmt, module_typecheck_result);
-                function_analyses.push((*func_stmt, analysis));
+        // Only run function analysis if there are no typecheck errors.
+        // With errors, expr_types may be incomplete, causing analysis to fail.
+        if ctx.errors.is_empty() {
+            for statement in script.statements(db) {
+                if let Statement::Fun(func_stmt) = statement {
+                    let analysis = crate::function_analysis::analyze_function(db, *func_stmt, module_typecheck_result);
+                    function_analyses.push((*func_stmt, analysis));
+                }
             }
         }
     }
@@ -926,35 +930,44 @@ fn check_statement<'db>(
                 let inner_type = Type::Datalit(inner_ty.ty(db).clone());
                 let binding_ty = TypeAndHeap::new(db, inner_heap, inner_type);
 
-                // Add binding to context for then body.
-                ctx.variables.insert(binding_name, binding_ty);
+                // Add binding to context for then body (save old if shadowing).
+                let old_binding = ctx.variables.insert(binding_name, binding_ty);
 
                 // Type check then body.
                 for stmt in then_body {
                     check_statement(ctx, stmt);
                 }
 
-                // Remove binding from context.
-                ctx.variables.remove(&binding_name);
+                // Restore old binding or remove.
+                if let Some(old) = old_binding {
+                    ctx.variables.insert(binding_name, old);
+                } else {
+                    ctx.variables.remove(&binding_name);
+                }
 
                 // Type check else body if present.
                 if let Some(else_stmts) = else_body {
                     // If there's an else binding, bind error type for Result.
                     if let Some(else_binding_name) = else_binding {
                         if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty.ty(db) {
-                            // Bind Error type.
+                            // Bind Error type (save old if shadowing).
                             let error_ty = TypeAndHeap::new(
                                 db,
                                 datalit::ast::Heap::Omitted,
                                 Type::Datalit(datalit::tycheck::Type::Error),
                             );
-                            ctx.variables.insert(else_binding_name, error_ty);
+                            let old_else_binding = ctx.variables.insert(else_binding_name, error_ty);
 
                             for stmt in else_stmts {
                                 check_statement(ctx, stmt);
                             }
 
-                            ctx.variables.remove(&else_binding_name);
+                            // Restore old binding or remove.
+                            if let Some(old) = old_else_binding {
+                                ctx.variables.insert(else_binding_name, old);
+                            } else {
+                                ctx.variables.remove(&else_binding_name);
+                            }
                         } else {
                             let actual_type = type_to_string(db, condition_ty.ty(db));
                             ctx.add_error(ctx.error_type_mismatch(

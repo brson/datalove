@@ -1,0 +1,16 @@
+----------
+module local/test/main
+----------
+
+fun test(opt: ?u32): bool
+    if opt |x|
+        let x: bool = @true
+        ret x
+    else
+        ret @false
+    end if
+end fun
+
+fun main(): bool
+    ret test(some @42)
+end fun

@@ -1,0 +1,16 @@
+----------
+module local/test/main
+----------
+
+fun test(opt: ?u32): u32
+    if opt |x|
+        var x: u32 = @100
+        ret x
+    else
+        ret @999
+    end if
+end fun
+
+fun main(): u32
+    ret test(some @42)
+end fun
