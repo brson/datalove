@@ -772,12 +772,6 @@ fn process_block_exit_drops<'db>(
     let tracked_slots = ctx.call_stack[frame_index].tracked_slots.clone();
     let slots = layout.slots(ctx.db);
 
-    // Build a map from SlotId to slot_index for quick lookup.
-    let slot_id_to_index: std::collections::HashMap<_, _> = slots.iter()
-        .enumerate()
-        .map(|(idx, slot)| (slot.slot_id(ctx.db), idx))
-        .collect();
-
     // Find all drops for this block exit.
     for drop_point in drop_points.drops(ctx.db) {
         // Only process BlockExit drops for THIS block.
@@ -795,10 +789,12 @@ fn process_block_exit_drops<'db>(
 
         let slot_id = drop_point.slot_id(ctx.db);
 
-        // Find the slot info and index.
-        let Some(&slot_index) = slot_id_to_index.get(&slot_id) else {
+        // Use slot_id.0 as the index into slots and slot_states.
+        // Slots are allocated sequentially, so slot_id.0 equals position.
+        let slot_index = slot_id.0 as usize;
+        if slot_index >= slots.len() {
             continue;
-        };
+        }
         let slot_info = &slots[slot_index];
 
         // For tracked slots (conditional init or move), check runtime state.
@@ -846,22 +842,27 @@ fn cleanup_frame<'db>(
     ctx: &mut InterpContext<'db>,
     frame: StackFrame<'db>,
 ) {
-    use crate::function_analysis::{DropReason, DropLocation};
+    use crate::function_analysis::{DropReason, SlotId};
+    use std::collections::HashSet;
 
     let layout = frame.layout;
     let slots = layout.slots(ctx.db);
     let drop_points = frame.drop_points;
     let tracked_slots = &frame.tracked_slots;
 
-    // Build a map from SlotId to slot_index for quick lookup.
-    let slot_id_to_index: std::collections::HashMap<_, _> = slots.iter()
-        .enumerate()
-        .map(|(idx, slot)| (slot.slot_id(ctx.db), idx))
-        .collect();
+    // Track which slots have been destroyed to prevent double-free.
+    // This is needed because drops are generated for each return block,
+    // but only one return path is actually taken at runtime.
+    let mut destroyed_slots: HashSet<SlotId> = HashSet::new();
 
     // Process drop points from the analysis.
     for drop_point in drop_points.drops(ctx.db) {
         let slot_id = drop_point.slot_id(ctx.db);
+
+        // Skip if we already destroyed this slot.
+        if destroyed_slots.contains(&slot_id) {
+            continue;
+        }
 
         // Only process actual drops, not markers for moved/uninitialized slots.
         // BranchExit drops are processed inline during CFG execution, not here.
@@ -880,17 +881,26 @@ fn cleanup_frame<'db>(
             }
         }
 
-        // Only process AfterStmt drops here; BlockExit drops are handled inline.
-        if matches!(drop_point.location(ctx.db), DropLocation::BlockExit(_)) {
+        // BlockExit drops with BranchExit reason are handled inline during CFG execution.
+        // BlockExit drops with EndOfScope/EarlyReturn reason (from blocks with no statements)
+        // should be processed here at function exit.
+        // (BranchExit reason is already filtered out above, so we don't need to check here.)
+
+        // Use slot_id.0 as the index into slots and slot_states.
+        // Slots are allocated sequentially, so slot_id.0 equals position.
+        let slot_index = slot_id.0 as usize;
+        if slot_index >= slots.len() {
             continue;
         }
-
-        // Find the slot info and index.
-        let Some(&slot_index) = slot_id_to_index.get(&slot_id) else {
-            // Slot not found in layout - shouldn't happen.
-            continue;
-        };
         let slot_info = &slots[slot_index];
+
+        // Verify slot_id matches position (debug check).
+        debug_assert_eq!(
+            slot_info.slot_id(ctx.db),
+            slot_id,
+            "Slot at position {} has id {:?}, expected {:?}",
+            slot_index, slot_info.slot_id(ctx.db), slot_id
+        );
 
         // For tracked slots (conditional init or move), check runtime state.
         // For non-tracked slots, static analysis guarantees correctness.
@@ -901,6 +911,7 @@ fn cleanup_frame<'db>(
         }
 
         destroy_slot_contents(ctx, slot_info, &frame.frame_data);
+        destroyed_slots.insert(slot_id);
     }
 }
 

@@ -227,6 +227,25 @@ fn find_local_type_in_stmts<'db>(
                 // Set doesn't introduce new variables - skip.
             }
             Statement::If(if_stmt) => {
+                // Check if this is a then_binding or else_binding.
+                if let Some(then_name) = if_stmt.then_binding(db) {
+                    if then_name == name {
+                        // Then-binding type is determined by condition type.
+                        let ty = super::get_type_from_if_binding(
+                            db, *if_stmt, true, expr_types
+                        );
+                        return Some(ty);
+                    }
+                }
+                if let Some(else_name) = if_stmt.else_binding(db) {
+                    if else_name == name {
+                        // Else-binding type is determined by condition type.
+                        let ty = super::get_type_from_if_binding(
+                            db, *if_stmt, false, expr_types
+                        );
+                        return Some(ty);
+                    }
+                }
                 // Search in then-body.
                 if let Some(ty) = find_local_type_in_stmts(db, if_stmt.then_body(db), name, expr_types) {
                     return Some(ty);

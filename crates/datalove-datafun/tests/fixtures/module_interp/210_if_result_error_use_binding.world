@@ -1,0 +1,20 @@
+----------
+module local/test/main
+----------
+
+fun test(): !u32
+    ret er error @"failed"
+end fun
+
+fun uses_error(e: error): u32
+    ret @42
+end fun
+
+fun main(): u32
+    if test() |value|
+        ret value
+    else |err|
+        let x = uses_error(err)
+        ret x
+    end if
+end fun

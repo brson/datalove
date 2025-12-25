@@ -66,6 +66,7 @@ pub fn compute_drop_points<'db>(
     func: StmtFun<'db>,
     cfg: ControlFlowGraph<'db>,
     slots: &'db [AllocatedSlot<'db>],
+    slot_allocation: super::slot_allocation::SlotAllocation<'db>,
     init_analysis: InitializationAnalysis<'db>,
     moved_analysis: MovedAnalysis<'db>,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
@@ -180,17 +181,27 @@ pub fn compute_drop_points<'db>(
                         continue;
                     }
 
-                    // Check if the slot is initialized at this block's exit.
-                    let init_state = init_analysis.get_exit_state(db, block.block_id, slot_id)
-                        .unwrap_or(InitState::Never);
+                    // Check if this is an if-binding slot. If-bindings are initialized
+                    // by Branch terminators, not by statements, so per-block init analysis
+                    // may not correctly track them. For if-bindings, we always generate
+                    // drops and rely on runtime state tracking.
+                    let is_if_binding = slot_allocation.if_binding_slots(db)
+                        .iter()
+                        .any(|ibs| ibs.slot_id(db) == slot_id);
 
-                    match init_state {
-                        InitState::Never => {
-                            // Never initialized, no drop needed.
-                            continue;
-                        }
-                        InitState::Sometimes | InitState::Always => {
-                            // Initialized, continue with drop check.
+                    if !is_if_binding {
+                        // Check if the slot is initialized at this block's exit.
+                        let init_state = init_analysis.get_exit_state(db, block.block_id, slot_id)
+                            .unwrap_or(InitState::Never);
+
+                        match init_state {
+                            InitState::Never => {
+                                // Never initialized, no drop needed.
+                                continue;
+                            }
+                            InitState::Sometimes | InitState::Always => {
+                                // Initialized, continue with drop check.
+                            }
                         }
                     }
 
@@ -216,14 +227,18 @@ pub fn compute_drop_points<'db>(
                     }
 
                     // Insert drop at the last statement of this exit block.
-                    if let Some(&last_stmt) = block.statements.last() {
-                        drops.push(DropPoint::new(
-                            db,
-                            slot_id,
-                            DropLocation::AfterStmt(last_stmt),
-                            reason,
-                        ));
-                    }
+                    // If the block has no statements, use BlockExit instead.
+                    let location = if let Some(&last_stmt) = block.statements.last() {
+                        DropLocation::AfterStmt(last_stmt)
+                    } else {
+                        DropLocation::BlockExit(block.block_id)
+                    };
+                    drops.push(DropPoint::new(
+                        db,
+                        slot_id,
+                        location,
+                        reason,
+                    ));
                 }
             }
             Terminator::Branch { .. } | Terminator::Goto(_) => {
@@ -284,7 +299,7 @@ end fun
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
 
         // x is moved to the return, so it should NOT have a drop point.
         let drops = drop_points.drops(db);
@@ -316,7 +331,7 @@ end fun
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
 
         // Parameters (Reference slots) should never be dropped.
         let drops = drop_points.drops(db);
@@ -351,7 +366,7 @@ end fun
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
 
         // x is moved, y is not moved and is non-copy, so y should be dropped.
         let drops = drop_points.drops(db);
@@ -390,7 +405,7 @@ end fun
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
 
         // With per-block move analysis:
         // - In then branch: x is moved (ret x), y is not moved → y needs drop
@@ -432,7 +447,7 @@ end fun
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
         let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), init, moved_analysis, tycheck_result);
+        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
 
         // a is moved, b and c are not moved and are non-copy, so b and c should be dropped.
         let drops = drop_points.drops(db);

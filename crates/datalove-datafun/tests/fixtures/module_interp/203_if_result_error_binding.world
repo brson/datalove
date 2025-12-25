@@ -1,0 +1,15 @@
+----------
+module local/test/main
+----------
+
+fun test(): !u32
+    ret er error @"failed"
+end fun
+
+fun main(): u32
+    if test() |value|
+        ret value
+    else |err|
+        ret @999
+    end if
+end fun

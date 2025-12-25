@@ -159,7 +159,7 @@ pub fn analyze_function<'db>(
     let moved_analysis = moves::analyze_moves_per_block(db, func, control_flow, slots, move_info);
 
     // Phase 6: Drop points (using per-block move analysis).
-    let drop_points = drops::compute_drop_points(db, func, control_flow, slots, init_analysis, moved_analysis, tycheck_result);
+    let drop_points = drops::compute_drop_points(db, func, control_flow, slots, slot_allocation, init_analysis, moved_analysis, tycheck_result);
 
     // Phase 6.5: Identify slots that need runtime tracking.
     // Include:
@@ -310,7 +310,7 @@ fn get_type_from_stmt_rhs<'db>(
 ///
 /// For then-bindings: unwrap Option/Result to get inner type.
 /// For else-bindings (Result only): get Error type.
-fn get_type_from_if_binding<'db>(
+pub(crate) fn get_type_from_if_binding<'db>(
     db: &'db dyn crate::Db,
     if_stmt: crate::ast::StmtIf<'db>,
     is_then_binding: bool,

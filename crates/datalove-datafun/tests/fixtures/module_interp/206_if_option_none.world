@@ -1,0 +1,15 @@
+----------
+module local/test/main
+----------
+
+fun test(): ?u32
+    ret none
+end fun
+
+fun main(): u32
+    if test() |val|
+        ret val
+    else
+        ret @999
+    end if
+end fun

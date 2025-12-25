@@ -1,0 +1,15 @@
+----------
+module local/test/main
+----------
+
+fun test(): ?ref str
+    ret some @"hello world"
+end fun
+
+fun main(): ref str
+    if test() |value|
+        ret value
+    else
+        ret @"got none"
+    end if
+end fun

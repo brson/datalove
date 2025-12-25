@@ -17,7 +17,7 @@ pub(super) fn evaluate_branch_condition<'db>(
     value: Value,
     if_stmt: StmtIf<'db>,
 ) -> Result<bool, InterpError> {
-    use datalove_rt::rtdt::{TyTag, OptionTag, ResultTag, TyDescRef};
+    use datalove_rt::rtdt::{TyTag, OptionTag, ResultTag, TyDescRef, Data, Error};
     use datalove_rt::rtdt::layout::{compute_option_layout, compute_result_layout};
 
     let type_tag = unsafe { (*value.tydesc).type_tag };
@@ -55,20 +55,26 @@ pub(super) fn evaluate_branch_condition<'db>(
                     };
 
                     let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
-                    let inner_size = inner_tydesc.size() as usize;
 
+                    // Clone inner value to slot (deep copy with heap).
+                    let rt_handle = ctx.runtime.handle();
                     unsafe {
-                        std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, inner_size);
+                        datalove_rt::c::dtlv_rti_clone_local(
+                            rt_handle,
+                            payload_ptr,
+                            inner_tydesc.as_ptr(),
+                            slot_ptr,
+                            inner_tydesc.as_ptr(),
+                        );
                     }
 
-                    let slot_index = frame_layout.slots(ctx.db)
-                        .iter()
-                        .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
-                        .expect("if-binding slot must exist in frame layout");
-                    ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    let slot_id = slot_info.slot_id(ctx.db);
+                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
                 }
             }
 
+            // Destroy the original Option (frees any heap data in the payload).
+            destroy_value(ctx, value);
             Ok(is_some)
         }
         TyTag::Result => {
@@ -87,17 +93,25 @@ pub(super) fn evaluate_branch_condition<'db>(
                     };
 
                     let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
-                    let ok_size = ok_tydesc.size() as usize;
+
+                    // Clone Ok payload to slot (deep copy with heap).
+                    let rt_handle = ctx.runtime.handle();
                     unsafe {
-                        std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, ok_size);
+                        datalove_rt::c::dtlv_rti_clone_local(
+                            rt_handle,
+                            payload_ptr,
+                            ok_tydesc.as_ptr(),
+                            slot_ptr,
+                            ok_tydesc.as_ptr(),
+                        );
                     }
 
-                    let slot_index = frame_layout.slots(ctx.db)
-                        .iter()
-                        .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
-                        .expect("if-binding slot must exist in frame layout");
-                    ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    let slot_id = slot_info.slot_id(ctx.db);
+                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
                 }
+
+                // Destroy the original Result (frees any heap data in the Ok payload).
+                destroy_value(ctx, value);
             } else {
                 if let Some(slot_info) = else_slot {
                     let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
@@ -109,17 +123,48 @@ pub(super) fn evaluate_branch_condition<'db>(
                     };
 
                     let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
-                    let error_size = std::mem::size_of::<datalove_rt::rtdt::Error>();
+
+                    // Read the Error from the payload. Error has same layout as Data.
+                    let error_data = unsafe { std::ptr::read(payload_ptr as *const Data) };
+                    let inner_tydesc = error_data.tydesc();
+                    let inner_value_ptr = error_data.value_ptr();
+
+                    // Clone the Error's inner value to new heap allocation.
+                    let rt_handle = ctx.runtime.handle();
+                    let cloned_ptr = unsafe {
+                        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner_tydesc, 1)
+                    };
+                    if cloned_ptr.is_null() {
+                        destroy_value(ctx, value);
+                        return Err(InterpError::RuntimeError(
+                            "Failed to allocate Error inner clone for if-result binding".to_string()
+                        ));
+                    }
                     unsafe {
-                        std::ptr::copy_nonoverlapping(payload_ptr, slot_ptr, error_size);
+                        datalove_rt::c::dtlv_rti_clone_local(
+                            rt_handle,
+                            inner_value_ptr,
+                            inner_tydesc,
+                            cloned_ptr,
+                            inner_tydesc,
+                        );
                     }
 
-                    let slot_index = frame_layout.slots(ctx.db)
-                        .iter()
-                        .position(|s| s.slot_id(ctx.db) == slot_info.slot_id(ctx.db))
-                        .expect("if-binding slot must exist in frame layout");
-                    ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Available;
+                    // Write new Error (with cloned data) to else_slot.
+                    unsafe {
+                        let new_data = Data::from_pointers(inner_tydesc, cloned_ptr);
+                        std::ptr::write(
+                            slot_ptr as *mut Error,
+                            std::mem::transmute(new_data),
+                        );
+                    }
+
+                    let slot_id = slot_info.slot_id(ctx.db);
+                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
                 }
+
+                // Destroy the original Result (frees the original Error's heap data).
+                destroy_value(ctx, value);
             }
 
             Ok(is_ok)
