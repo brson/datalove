@@ -80,28 +80,8 @@ let f = a implies b
 let g = not a
 ```
 
-Truth tables:
-
-| a     | b     | a and b |
-|-------|-------|---------|
-| false | false | false   |
-| false | true  | false   |
-| true  | false | false   |
-| true  | true  | true    |
-
-| a     | b     | a or b |
-|-------|-------|--------|
-| false | false | false  |
-| false | true  | true   |
-| true  | false | true   |
-| true  | true  | true   |
-
-| a     | b     | a xor b |
-|-------|-------|---------|
-| false | false | false   |
-| false | true  | true    |
-| true  | false | true    |
-| true  | true  | false   |
+`implies` being logical implication,
+rarely given a first-class operator but common in logic:
 
 | a     | b     | a implies b |
 |-------|-------|-------------|
@@ -110,15 +90,33 @@ Truth tables:
 | true  | false | false       |
 | true  | true  | true        |
 
-| a     | not a |
-|-------|-------|
-| false | true  |
-| true  | false |
-
 
 
 
 ## Fixed integers
+
+Standard fixed integers,
+`u8`, `u16`, `u16`, `u32`, `u64`,
+`i8`, `i16`, `i16`, `i32`, `i64`;
+these are efficient and inlineable,
+but because Datalove cares insists on numerical correctness,
+must be used with checked operators to deal with overflow:
+
+```datalove
+let a: u16 = 1
+let b: u16 = 2
+let d = a +! b // early-return error on overflow
+let c = a +? b // early-return none on overflow
+```
+
+Unsigned fixed integers support
+`+?`, `-?`, `*?` and `/?` checked-option binops, and
+`+!`, `-!`, `*!` and `/!` checked-result binops.
+Signed fixed integers additionally support unary negation,
+`-?` and `-!`.
+
+
+
 
 ## Big integers
 
