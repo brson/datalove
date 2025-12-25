@@ -80,6 +80,41 @@ let f = a implies b
 let g = not a
 ```
 
+Truth tables:
+
+| a     | b     | a and b |
+|-------|-------|---------|
+| false | false | false   |
+| false | true  | false   |
+| true  | false | false   |
+| true  | true  | true    |
+
+| a     | b     | a or b |
+|-------|-------|--------|
+| false | false | false  |
+| false | true  | true   |
+| true  | false | true   |
+| true  | true  | true   |
+
+| a     | b     | a xor b |
+|-------|-------|---------|
+| false | false | false   |
+| false | true  | true    |
+| true  | false | true    |
+| true  | true  | false   |
+
+| a     | b     | a implies b |
+|-------|-------|-------------|
+| false | false | true        |
+| false | true  | true        |
+| true  | false | false       |
+| true  | true  | true        |
+
+| a     | not a |
+|-------|-------|
+| false | true  |
+| true  | false |
+
 
 
 
