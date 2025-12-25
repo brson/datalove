@@ -215,3 +215,45 @@ pub(super) fn write_data_to_dest<'db>(
 
     Ok(())
 }
+
+/// Write an Error wrapper to destination.
+///
+/// Clones the inner value; the Error struct owns the clone.
+/// Error has the same layout as Data.
+pub(super) fn write_error_to_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+    inner_value: Value,
+    dest: Destination,
+) -> Result<(), InterpError> {
+    use datalove_rt::rtdt;
+
+    // All values are Borrowed, so we always clone for Error to own.
+    let rt_handle = ctx.runtime.handle();
+    let cloned_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner_value.tydesc, 1)
+    };
+    if cloned_ptr.is_null() {
+        return Err(InterpError::RuntimeError("Failed to allocate Error inner clone".to_string()));
+    }
+    unsafe {
+        datalove_rt::c::dtlv_rti_clone_local(
+            rt_handle,
+            inner_value.ptr,
+            inner_value.tydesc,
+            cloned_ptr,
+            inner_value.tydesc,
+        );
+    }
+
+    // Write Error struct to destination. Error has same layout as Data.
+    unsafe {
+        let data = rtdt::Data::from_pointers(inner_value.tydesc, cloned_ptr);
+        // Transmute Data to Error since they have identical layouts.
+        std::ptr::write(
+            dest.ptr as *mut rtdt::Error,
+            std::mem::transmute(data)
+        );
+    }
+
+    Ok(())
+}

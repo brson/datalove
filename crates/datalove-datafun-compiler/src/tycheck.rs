@@ -1936,10 +1936,16 @@ fn check_expr<'db>(
         }
 
         // Handle Er expressions - check against Result type.
-        ExprFunKind::Er(_er_expr) => {
+        ExprFunKind::Er(er_expr) => {
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::Result(_)) => {
-                    // Er can check against any Result type.
+                    // Check payload against Error type.
+                    let error_ty = TypeAndHeap::new(
+                        db,
+                        datalit::ast::Heap::Omitted,
+                        Type::Datalit(datalit::tycheck::Type::Error)
+                    );
+                    check_expr(ctx, er_expr.payload(db), error_ty)?;
                     ctx.store_expr_type(expr, expected);
                     Ok(())
                 }

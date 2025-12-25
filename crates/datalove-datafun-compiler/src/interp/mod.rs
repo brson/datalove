@@ -88,7 +88,7 @@ use control::{evaluate_branch_condition, eval_try_option, eval_try_result};
 use frame::CfgControl;
 use memory::{clone_value_to_dest, move_value_to_dest};
 use types::is_copy_type;
-use alloc::{write_result_err_to_dest, write_data_to_dest};
+use alloc::{write_result_err_to_dest, write_data_to_dest, write_error_to_dest};
 use collections::{write_map_from_values_to_dest, write_set_from_values_to_dest};
 use literals::{
     write_inline_int_to_dest, write_option_none_to_dest,
@@ -1528,10 +1528,18 @@ fn eval_expression_frame<'db>(
             mark_temp_slot_moved(ctx, inner_expr);
             Ok(())
         }
-        ast::ExprFunKind::Err(_) => {
-            Err(InterpError::InvalidExpression(
-                "@error literal requires type context".to_string()
-            ))
+        ast::ExprFunKind::Err(err_expr) => {
+            // Evaluate inner expression to its temp slot.
+            let inner_expr = err_expr.value(ctx.db);
+            let inner_dest = get_destination_for_expr(ctx, inner_expr)?;
+            eval_expression_frame(ctx, inner_expr, inner_dest)?;
+            let inner_value = inner_dest.to_value();
+            // Wrap in Error (clones inner_value).
+            write_error_to_dest(ctx, inner_value, dest)?;
+            // We cloned inner for Error; destroy original and mark slot.
+            destroy_value(ctx, inner_value);
+            mark_temp_slot_moved(ctx, inner_expr);
+            Ok(())
         }
         ast::ExprFunKind::ParseError(_) => {
             Err(InterpError::InvalidExpression("Parse error in expression".to_string()))
