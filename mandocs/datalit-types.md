@@ -64,7 +64,7 @@ if a
 else if b
   debug.print("b")
 else
-  debug.print
+  debug.print("other")
 end if
 ```
 
