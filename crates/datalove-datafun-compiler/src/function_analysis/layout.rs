@@ -41,6 +41,9 @@ pub struct FrameLayout<'db> {
     /// Precomputed field evaluation order for anonymous struct literals.
     #[returns(ref)]
     pub struct_field_orders: Vec<StructFieldOrder<'db>>,
+    /// Indexed lookup: StmtIf salsa ID -> (then_slot, else_slot) for if-bindings.
+    #[returns(ref)]
+    pub if_binding_slot_index: Vec<Option<(Option<SlotInfo<'db>>, Option<SlotInfo<'db>>)>>,
 }
 
 /// Maps a Name expression to its resolved slot.
@@ -230,6 +233,24 @@ impl<'db> FrameLayout<'db> {
             name_expr_slot_index[index] = slot_info;
         }
 
+        // Build indexed lookup for if-binding slots (O(1) access by StmtIf salsa ID).
+        let mut if_binding_slot_index: Vec<Option<(Option<SlotInfo<'db>>, Option<SlotInfo<'db>>)>> = Vec::new();
+        for ibs in &if_binding_slots {
+            let if_stmt = ibs.stmt(db);
+            let slot_id = ibs.slot_id(db);
+            let slot_info = slot_infos.iter().find(|s| s.slot_id(db) == slot_id).copied();
+            let index = if_stmt.as_id().index() as usize;
+            if index >= if_binding_slot_index.len() {
+                if_binding_slot_index.resize(index + 1, None);
+            }
+            let entry = if_binding_slot_index[index].get_or_insert((None, None));
+            if ibs.is_then_binding(db) {
+                entry.0 = slot_info;
+            } else {
+                entry.1 = slot_info;
+            }
+        }
+
         FrameLayout::new(
             db,
             total_size,
@@ -242,6 +263,7 @@ impl<'db> FrameLayout<'db> {
             set_stmt_slots,
             if_binding_slots,
             struct_field_orders,
+            if_binding_slot_index,
         )
     }
 
@@ -254,5 +276,22 @@ impl<'db> FrameLayout<'db> {
         self.struct_field_orders(db).iter()
             .find(|sfo| sfo.expr(db) == expr)
             .map(|sfo| sfo.permutation(db).as_slice())
+    }
+
+    /// Get the if-binding slots for an if-statement using indexed lookup.
+    ///
+    /// Returns (then_slot, else_slot) where each is None if no binding exists.
+    pub fn get_if_binding_slots(
+        self,
+        db: &'db dyn crate::Db,
+        if_stmt: StmtIf<'db>,
+    ) -> (Option<SlotInfo<'db>>, Option<SlotInfo<'db>>) {
+        use salsa::plumbing::AsId;
+        let index = if_stmt.as_id().index() as usize;
+        self.if_binding_slot_index(db)
+            .get(index)
+            .copied()
+            .flatten()
+            .unwrap_or((None, None))
     }
 }

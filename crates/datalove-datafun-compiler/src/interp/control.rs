@@ -24,14 +24,8 @@ pub(super) fn evaluate_branch_condition<'db>(
     let frame_index = ctx.call_stack.len() - 1;
     let frame_layout = ctx.call_stack[frame_index].layout;
 
-    // Look up then/else binding slots from the if-binding mapping.
-    let then_slot = frame_layout.if_binding_slots(ctx.db).iter()
-        .find(|ibs| ibs.stmt(ctx.db) == if_stmt && ibs.is_then_binding(ctx.db))
-        .and_then(|ibs| frame_layout.get_slot(ctx.db, ibs.slot_id(ctx.db)));
-
-    let else_slot = frame_layout.if_binding_slots(ctx.db).iter()
-        .find(|ibs| ibs.stmt(ctx.db) == if_stmt && !ibs.is_then_binding(ctx.db))
-        .and_then(|ibs| frame_layout.get_slot(ctx.db, ibs.slot_id(ctx.db)));
+    // Look up then/else binding slots using indexed lookup.
+    let (then_slot, else_slot) = frame_layout.get_if_binding_slots(ctx.db, if_stmt);
 
     match type_tag {
         TyTag::Bool => {
