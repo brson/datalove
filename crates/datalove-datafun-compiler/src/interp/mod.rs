@@ -399,6 +399,24 @@ pub fn execute_function_body<'db>(
     // Initialize slot states (all Uninitialized until written to).
     let mut slot_states = vec![SlotState::Uninitialized; slots.len()];
 
+    // Pre-compute tydescs for all slots (avoids repeated hash lookups during execution).
+    let mut slot_tydescs = Vec::with_capacity(slots.len());
+    for slot in slots {
+        let ty = slot.ty(ctx.db);
+        let datalit_ty = match ty.ty(ctx.db) {
+            crate::tycheck::Type::Datalit(dt) => dt.clone(),
+            _ => {
+                restore_module_context(ctx, prev_module);
+                cleanup_args_on_error(ctx, arg_values);
+                return Err(InterpError::RuntimeError(
+                    "Non-datalit type in slot (compiler bug)".to_string()
+                ));
+            }
+        };
+        let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+        slot_tydescs.push(tydesc);
+    }
+
     // Initialize parameters by writing argument values to their slot offsets.
     let params = func.params(ctx.db);
     for (i, param) in params.iter().enumerate() {
@@ -444,6 +462,7 @@ pub fn execute_function_body<'db>(
     let frame = StackFrame {
         frame_data,
         slot_states,
+        slot_tydescs,
         func,
         layout,
         cfg,
@@ -770,13 +789,7 @@ fn process_block_exit_drops<'db>(
         // Destroy the slot contents.
         let frame_data = &ctx.call_stack[frame_index].frame_data;
         let offset = slot_info.offset(ctx.db) as usize;
-        let ty = slot_info.ty(ctx.db);
-
-        let datalit_ty = match ty.ty(ctx.db) {
-            crate::tycheck::Type::Datalit(dt) => dt.clone(),
-            _ => continue,
-        };
-        let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+        let tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
         let slot_ptr = unsafe { frame_data.as_ptr().add(offset) as *mut u8 };
 
         let value = Value { ptr: slot_ptr, tydesc };
@@ -872,7 +885,7 @@ fn cleanup_frame<'db>(
             }
         }
 
-        destroy_slot_contents(ctx, slot_info, &frame.frame_data);
+        destroy_slot_contents(ctx, &frame, slot_info, slot_id);
         destroyed_slots.insert(slot_id);
     }
 }
@@ -880,23 +893,13 @@ fn cleanup_frame<'db>(
 /// Destroy the contents of a slot (helper for cleanup_frame).
 fn destroy_slot_contents<'db>(
     ctx: &mut InterpContext<'db>,
+    frame: &StackFrame<'db>,
     slot_info: &crate::function_analysis::SlotInfo<'db>,
-    frame_data: &[u8],
+    slot_id: crate::function_analysis::SlotId,
 ) {
     let offset = slot_info.offset(ctx.db) as usize;
-
-    // Get the type descriptor for this slot.
-    let ty = slot_info.ty(ctx.db);
-    let datalit_ty = match ty.ty(ctx.db) {
-        crate::tycheck::Type::Datalit(dt) => dt.clone(),
-        _ => {
-            // Skip non-datalit types.
-            return;
-        }
-    };
-    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-
-    let slot_ptr = unsafe { frame_data.as_ptr().add(offset) as *mut u8 };
+    let tydesc = get_slot_tydesc(frame, slot_id);
+    let slot_ptr = unsafe { frame.frame_data.as_ptr().add(offset) as *mut u8 };
 
     // Destroy the value contents only (not the structure itself).
     // The memory is part of the frame buffer and will be freed with the frame.
@@ -921,18 +924,12 @@ fn get_destination_for_expr<'db>(
             "No temp slot allocated for expression".to_string()
         ))?;
 
+    let slot_id = slot_info.slot_id(ctx.db);
     let offset = slot_info.offset(ctx.db) as usize;
     let ptr = unsafe {
         ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset)
     };
-    let ty = slot_info.ty(ctx.db);
-    let datalit_ty = match ty.ty(ctx.db) {
-        crate::tycheck::Type::Datalit(dt) => dt.clone(),
-        _ => return Err(InterpError::RuntimeError(
-            "Non-datalit type in temp slot".to_string()
-        )),
-    };
-    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+    let tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
     Ok(Destination { ptr, tydesc })
 }
 
@@ -972,6 +969,15 @@ fn read_reference_slot<'db>(
     ptr_value as *mut u8
 }
 
+/// Get the cached tydesc for a slot from the stack frame.
+#[inline]
+fn get_slot_tydesc<'db>(
+    frame: &StackFrame<'db>,
+    slot_id: crate::function_analysis::SlotId,
+) -> *const datalove_datalit::rtdt::TyDesc {
+    frame.slot_tydescs[slot_id.0 as usize]
+}
+
 /// An operand value for binop/unop evaluation.
 ///
 /// For variable references, points directly to the variable's slot (no clone).
@@ -1009,13 +1015,8 @@ fn eval_operand<'db>(
                 return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
             }
 
-            // Get type info.
-            let ty = slot_info.ty(ctx.db);
-            let datalit_ty = match ty.ty(ctx.db) {
-                crate::tycheck::Type::Datalit(dt) => dt.clone(),
-                _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
-            };
-            let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+            // Get cached tydesc for this slot.
+            let tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
 
             // Get pointer to value (reference or local slot).
             let ptr = if slot_info.kind(ctx.db) == crate::function_analysis::SlotKind::Reference {
@@ -1077,16 +1078,7 @@ fn execute_let_statement_frame<'db>(
     // Create destination from slot.
     let offset = slot_info.offset(ctx.db) as usize;
     let dest_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset) };
-    let ty = slot_info.ty(ctx.db);
-    let datalit_ty = match ty.ty(ctx.db) {
-        crate::tycheck::Type::Datalit(dt) => dt.clone(),
-        _ => {
-            return Err(InterpError::RuntimeError(
-                format!("Non-datalit type in slot '{}'", let_stmt.name(ctx.db).text(ctx.db))
-            ));
-        }
-    };
-    let dest_tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+    let dest_tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
 
     // Evaluate expression with DPS into slot.
     let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
@@ -1122,16 +1114,7 @@ fn execute_var_statement_frame<'db>(
     // Create destination from slot.
     let offset = slot_info.offset(ctx.db) as usize;
     let dest_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset) };
-    let ty = slot_info.ty(ctx.db);
-    let datalit_ty = match ty.ty(ctx.db) {
-        crate::tycheck::Type::Datalit(dt) => dt.clone(),
-        _ => {
-            return Err(InterpError::RuntimeError(
-                format!("Non-datalit type in slot '{}'", var_stmt.name(ctx.db).text(ctx.db))
-            ));
-        }
-    };
-    let dest_tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+    let dest_tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
 
     // Evaluate expression with DPS into slot.
     let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
@@ -1166,16 +1149,7 @@ fn execute_set_statement_frame<'db>(
     let slot_id = slot_info.slot_id(ctx.db);
     let ty = slot_info.ty(ctx.db);
     let is_copy = crate::function_analysis::is_copy_type(ctx.db, ty);
-
-    let datalit_ty = match ty.ty(ctx.db) {
-        crate::tycheck::Type::Datalit(dt) => dt.clone(),
-        _ => {
-            return Err(InterpError::RuntimeError(
-                format!("Non-datalit type in slot '{}'", set_stmt.name(ctx.db).text(ctx.db))
-            ));
-        }
-    };
-    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
+    let tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
 
     if is_copy {
         // Copy type: evaluate directly to slot.
@@ -1251,20 +1225,15 @@ fn eval_expression_frame<'db>(
             let ty = slot_info.ty(ctx.db);
             let is_copy = crate::function_analysis::is_copy_type(ctx.db, ty);
 
+            // Get cached tydesc for this slot.
+            let tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
+
             // Read value from slot.
             let kind = slot_info.kind(ctx.db);
 
             if kind == crate::function_analysis::SlotKind::Reference {
                 // Reference slot: read pointer to caller's value.
                 let ptr = read_reference_slot(&ctx.call_stack[frame_index], slot_info, ctx.db);
-
-                // Get tydesc from slot's type info (not from the data pointer).
-                let datalit_ty = match ty.ty(ctx.db) {
-                    crate::tycheck::Type::Datalit(dt) => dt.clone(),
-                    _ => return Err(InterpError::RuntimeError("Non-datalit type in reference slot".to_string())),
-                };
-                let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-
                 let source_value = Value { ptr, tydesc };
 
                 if is_copy {
@@ -1278,34 +1247,16 @@ fn eval_expression_frame<'db>(
                 Ok(())
             } else {
                 // Local/Temporary slot.
+                let offset = slot_info.offset(ctx.db) as usize;
+                let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
+                let source_value = Value { ptr: frame_ptr, tydesc };
+
                 if is_copy {
                     // For Copy types, clone to dest.
-                    let offset = slot_info.offset(ctx.db) as usize;
-                    let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
-
-                    let datalit_ty = match ty.ty(ctx.db) {
-                        crate::tycheck::Type::Datalit(dt) => dt.clone(),
-                        _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
-                    };
-                    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-
-                    let source_value = Value { ptr: frame_ptr, tydesc };
                     clone_value_to_dest(ctx, source_value, dest);
                 } else {
                     // For Move types, move to dest, then mark source as moved.
                     // The move does a shallow copy (memcpy), transferring heap ownership.
-                    let offset = slot_info.offset(ctx.db) as usize;
-                    let frame_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_ptr().add(offset) as *mut u8 };
-
-                    let datalit_ty = match ty.ty(ctx.db) {
-                        crate::tycheck::Type::Datalit(dt) => dt.clone(),
-                        _ => return Err(InterpError::RuntimeError("Non-datalit type in slot".to_string())),
-                    };
-                    let tydesc = ctx.tydesc_table.get_or_create(&datalit_ty);
-
-                    let source_value = Value { ptr: frame_ptr, tydesc };
-
-                    // Move to destination (shallow copy), mark source as Moved.
                     move_value_to_dest(source_value, dest);
                     ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
                 }

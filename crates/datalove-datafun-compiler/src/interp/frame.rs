@@ -31,6 +31,8 @@ pub struct StackFrame<'db> {
     pub frame_data: Vec<u8>,
     /// Per-slot state for move semantics.
     pub slot_states: Vec<SlotState>,
+    /// Cached tydescs for each slot, indexed by SlotId.
+    pub slot_tydescs: Vec<*const datalove_datalit::rtdt::TyDesc>,
     /// Function being executed.
     pub func: ast::StmtFun<'db>,
     /// Slot offsets and types.
