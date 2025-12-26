@@ -107,6 +107,8 @@ pub struct SlotInfo<'db> {
     pub offset: u32,
     pub ty: crate::tycheck::TypeAndHeap<'db>,
     pub expr: Option<crate::ast::ExprFun<'db>>,  // For temporaries: the creating expression
+    /// Precomputed: whether the type has copy semantics.
+    pub is_copy: bool,
 }
 
 impl<'db> FrameLayout<'db> {
@@ -207,8 +209,11 @@ impl<'db> FrameLayout<'db> {
             // Align offset to this slot's alignment requirement.
             offset = align_up(offset, layout.align);
 
+            // Precompute copyability.
+            let is_copy = super::is_copy_type(db, ty);
+
             // Create slot info.
-            let slot_info = SlotInfo::new(db, slot_id, name, kind, offset, ty, expr);
+            let slot_info = SlotInfo::new(db, slot_id, name, kind, offset, ty, expr, is_copy);
             slot_infos.push(slot_info);
 
             // Advance offset by slot size.

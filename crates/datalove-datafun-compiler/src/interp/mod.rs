@@ -87,7 +87,6 @@ use control::{evaluate_branch_condition, eval_try_option, eval_try_result};
 
 use frame::CfgControl;
 use memory::{clone_value_to_dest, move_value_to_dest};
-use types::is_copy_type;
 use alloc::{write_result_err_to_dest, write_data_to_dest, write_error_to_dest};
 use collections::{write_map_from_values_to_dest, write_set_from_values_to_dest};
 use literals::{
@@ -312,13 +311,14 @@ pub fn execute_function_body<'db>(
         db: &dyn crate::Db,
     ) {
         for (i, arg_value) in arg_values.into_iter().enumerate() {
-            if is_copy_type(arg_value) {
-                // Copy types were cloned by the function, free the original structure.
-                free_value_structure(ctx, arg_value);
-            } else {
-                // Non-copy types: check if they were moved (consumed by function).
-                // Use O(1) indexed lookup by parameter position.
-                if let Some(slot_info) = layout.get_param_slot(db, i) {
+            // Use O(1) indexed lookup by parameter position.
+            if let Some(slot_info) = layout.get_param_slot(db, i) {
+                // Use precomputed copyability from slot_info.
+                if slot_info.is_copy(db) {
+                    // Copy types were cloned by the function, free the original structure.
+                    free_value_structure(ctx, arg_value);
+                } else {
+                    // Non-copy types: check if they were moved (consumed by function).
                     let slot_id = slot_info.slot_id(db);
                     if slot_states[slot_id.0 as usize] != SlotState::Moved {
                         // Slot was never read/moved, so destroy the argument.
@@ -1146,7 +1146,8 @@ fn execute_set_statement_frame<'db>(
 
     let slot_id = slot_info.slot_id(ctx.db);
     let ty = slot_info.ty(ctx.db);
-    let is_copy = crate::function_analysis::is_copy_type(ctx.db, ty);
+    // Use precomputed copyability from slot_info.
+    let is_copy = slot_info.is_copy(ctx.db);
     let tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
 
     if is_copy {
@@ -1219,9 +1220,8 @@ fn eval_expression_frame<'db>(
                 return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
             }
 
-            // Check copyability.
-            let ty = slot_info.ty(ctx.db);
-            let is_copy = crate::function_analysis::is_copy_type(ctx.db, ty);
+            // Use precomputed copyability from slot_info.
+            let is_copy = slot_info.is_copy(ctx.db);
 
             // Get cached tydesc for this slot.
             let tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
