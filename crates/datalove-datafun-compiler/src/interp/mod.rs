@@ -354,14 +354,18 @@ pub fn execute_function_body<'db>(
     };
 
     let analyses = typecheck_result.function_analyses(ctx.db);
-    let analysis = match analyses.iter().find(|(f, _)| *f == func).map(|(_, a)| *a) {
-        Some(a) => a,
-        None => {
-            restore_module_context(ctx, prev_module);
-            cleanup_args_on_error(ctx, arg_values);
-            return Err(InterpError::RuntimeError(
-                format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
-            ));
+    let analysis = {
+        use salsa::plumbing::AsId;
+        let index = func.as_id().index() as usize;
+        match analyses.get(index).copied().flatten() {
+            Some(a) => a,
+            None => {
+                restore_module_context(ctx, prev_module);
+                cleanup_args_on_error(ctx, arg_values);
+                return Err(InterpError::RuntimeError(
+                    format!("No analysis found for function '{}'", func.name(ctx.db).text(ctx.db))
+                ));
+            }
         }
     };
 

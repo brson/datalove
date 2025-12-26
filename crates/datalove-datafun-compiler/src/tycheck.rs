@@ -601,7 +601,7 @@ pub fn typecheck_module_graph<'db>(
     let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
     let mut module_exports_map: BTreeMap<ModuleId, MgModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<ModuleId, MgModuleImports<'db>> = BTreeMap::new();
-    let mut function_analyses: Vec<(crate::ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>)> = Vec::new();
+    let mut function_analyses: Vec<Option<crate::function_analysis::FunctionAnalysis<'db>>> = Vec::new();
     let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
     let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
 
@@ -754,8 +754,13 @@ pub fn typecheck_module_graph<'db>(
         if ctx.errors.is_empty() {
             for statement in script.statements(db) {
                 if let Statement::Fun(func_stmt) = statement {
+                    use salsa::plumbing::AsId;
                     let analysis = crate::function_analysis::analyze_function(db, *func_stmt, module_typecheck_result);
-                    function_analyses.push((*func_stmt, analysis));
+                    let index = func_stmt.as_id().index() as usize;
+                    if index >= function_analyses.len() {
+                        function_analyses.resize(index + 1, None);
+                    }
+                    function_analyses[index] = Some(analysis);
                 }
             }
         }

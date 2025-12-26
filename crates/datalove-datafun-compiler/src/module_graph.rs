@@ -59,8 +59,11 @@ pub struct ModuleGraphTypecheckResult<'db> {
     pub module_imports: BTreeMap<ModuleId, ModuleImports<'db>>,
 
     /// Function analysis results for all functions in all modules.
+    ///
+    /// Indexed by StmtFun salsa ID, contains analysis for all functions
+    /// across all modules in the graph.
     #[returns(ref)]
-    pub function_analyses: Vec<(crate::ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>)>,
+    pub function_analyses: Vec<Option<crate::function_analysis::FunctionAnalysis<'db>>>,
 
     /// Expression types from all modules, combined.
     ///
