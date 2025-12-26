@@ -1,11 +1,16 @@
-//! Memory operations: clone, move, and destroy.
+//! Memory operations: clone, move, destroy, and cleanup.
 //!
 //! All values live in caller-owned memory (frame slots). These functions
 //! handle cloning for copy semantics, moving for linear semantics, and
 //! destroying heap-owned data (strings, collections) without freeing the
 //! slot memory itself.
+//!
+//! Also includes frame cleanup logic using analysis-computed drop points.
 
-use super::{InterpContext, Value, Destination};
+use super::{InterpContext, InterpError, Value, Destination};
+use super::frame::{StackFrame, SlotState};
+use super::slots::get_slot_tydesc;
+use crate::function_analysis::BlockId;
 
 /// Deep-clone a value to a destination.
 ///
@@ -116,4 +121,129 @@ pub fn free_value_structure<'db>(
     ctx: &mut InterpContext<'db>,
     value: Value,
 ) {
+}
+
+// ============================================================================
+// Frame Cleanup
+// ============================================================================
+
+/// Process block-exit drops when leaving a block via Goto.
+///
+/// This handles branch convergence: when a slot is moved in one branch but not another,
+/// we drop it at the exit of the branch where it's not moved. This ensures the slot
+/// is "consumed" on all paths to the join point.
+pub(super) fn process_block_exit_drops<'db>(
+    ctx: &mut InterpContext<'db>,
+    block_id: BlockId,
+) -> Result<(), InterpError> {
+    let frame_index = ctx.call_stack.len() - 1;
+    let drop_points = ctx.call_stack[frame_index].drop_points;
+    let layout = ctx.call_stack[frame_index].layout;
+    let tracked_slots = ctx.call_stack[frame_index].tracked_slots.clone();
+    let slots = layout.slots(ctx.db);
+
+    // Use pre-indexed BranchExit drops for this block (O(1) lookup).
+    for drop_point in drop_points.get_branch_exit_drops(ctx.db, block_id) {
+        let slot_id = drop_point.slot_id(ctx.db);
+
+        // Use slot_id.0 as the index into slots and slot_states.
+        // Slots are allocated sequentially, so slot_id.0 equals position.
+        let slot_index = slot_id.0 as usize;
+        if slot_index >= slots.len() {
+            continue;
+        }
+        let slot_info = &slots[slot_index];
+
+        // For tracked slots (conditional init or move), check runtime state.
+        // For non-tracked slots, static analysis guarantees correctness.
+        if tracked_slots.contains(&slot_id) {
+            if ctx.call_stack[frame_index].slot_states[slot_index] != SlotState::Available {
+                continue;
+            }
+        }
+
+        // Destroy the slot contents.
+        let frame_data = &ctx.call_stack[frame_index].frame_data;
+        let offset = slot_info.offset(ctx.db) as usize;
+        let tydesc = get_slot_tydesc(&ctx.call_stack[frame_index], slot_id);
+        let slot_ptr = unsafe { frame_data.as_ptr().add(offset) as *mut u8 };
+
+        let value = Value { ptr: slot_ptr, tydesc };
+        destroy_value_contents_only(ctx, value);
+
+        // Mark slot as Moved so cleanup_frame doesn't try to drop it again.
+        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Moved;
+    }
+
+    Ok(())
+}
+
+/// Clean up a stack frame using analysis-computed drop points.
+///
+/// Uses drop_points as source of truth, combined with runtime slot_states
+/// to handle conditional moves. Drop points identify non-copy, initialized, owned
+/// slots that need cleanup. Runtime slot_states filter out slots that were actually
+/// moved at runtime (handling conditional branches).
+///
+/// Temporaries are handled inline during evaluation:
+/// - BinOp/UnaryOp operands: marked Moved after destroy_value
+/// - If-condition temps: marked Moved after evaluate_branch_condition
+/// - Return value temps: marked Moved after heap clone
+pub(super) fn cleanup_frame<'db>(
+    ctx: &mut InterpContext<'db>,
+    frame: StackFrame<'db>,
+    exit_block_id: BlockId,
+) {
+    let layout = frame.layout;
+    let slots = layout.slots(ctx.db);
+    let drop_points = frame.drop_points;
+    let tracked_slots = &frame.tracked_slots;
+
+    // Use pre-indexed function exit drops for this specific return block.
+    for drop_point in drop_points.get_function_exit_drops(ctx.db, exit_block_id) {
+        let slot_id = drop_point.slot_id(ctx.db);
+
+        // Use slot_id.0 as the index into slots and slot_states.
+        // Slots are allocated sequentially, so slot_id.0 equals position.
+        let slot_index = slot_id.0 as usize;
+        if slot_index >= slots.len() {
+            continue;
+        }
+        let slot_info = &slots[slot_index];
+
+        // Verify slot_id matches position (debug check).
+        debug_assert_eq!(
+            slot_info.slot_id(ctx.db),
+            slot_id,
+            "Slot at position {} has id {:?}, expected {:?}",
+            slot_index, slot_info.slot_id(ctx.db), slot_id
+        );
+
+        // For tracked slots (conditional init or move), check runtime state.
+        // For non-tracked slots, static analysis guarantees correctness.
+        if tracked_slots.contains(&slot_id) {
+            if frame.slot_states[slot_index] != SlotState::Available {
+                continue;
+            }
+        }
+
+        destroy_slot_contents(ctx, &frame, slot_info, slot_id);
+    }
+}
+
+/// Destroy the contents of a slot (helper for cleanup_frame).
+fn destroy_slot_contents<'db>(
+    ctx: &mut InterpContext<'db>,
+    frame: &StackFrame<'db>,
+    slot_info: &crate::function_analysis::SlotInfo<'db>,
+    slot_id: crate::function_analysis::SlotId,
+) {
+    let offset = slot_info.offset(ctx.db) as usize;
+    let tydesc = get_slot_tydesc(frame, slot_id);
+    let slot_ptr = unsafe { frame.frame_data.as_ptr().add(offset) as *mut u8 };
+
+    // Destroy the value contents only (not the structure itself).
+    // The memory is part of the frame buffer and will be freed with the frame.
+    let value = Value { ptr: slot_ptr, tydesc };
+    destroy_value_contents_only(ctx, value);
 }
