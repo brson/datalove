@@ -36,6 +36,6 @@ harness = false
 # harness = false
 
 [[test]]
-name = "interp_modules_tests"
-path = "tests/interp_modules_tests.rs"
+name = "module_interp_tests"
+path = "tests/module_interp_tests.rs"
 harness = false
