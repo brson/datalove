@@ -86,6 +86,18 @@ pub struct TypeErrorEntry<'db> {
     pub error: TypeError,
 }
 
+/// Resolved call target from typechecking.
+///
+/// Stores the resolved function AST and source module for a function call,
+/// eliminating the need for runtime name lookup.
+#[salsa::tracked]
+pub struct ResolvedCallTarget<'db> {
+    /// The resolved function AST.
+    pub func: StmtFun<'db>,
+    /// The source module (None for script-local functions).
+    pub module_id: Option<crate::module_graph::ModuleId>,
+}
+
 /// Result of typechecking a script.
 #[salsa::tracked]
 pub struct TypecheckResult<'db> {
@@ -98,6 +110,10 @@ pub struct TypecheckResult<'db> {
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
     pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+
+    /// Resolved call targets, indexed by ExprFunctionCall ID.
+    #[returns(ref)]
+    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
 }
 
 /// Context for typechecking.
@@ -108,11 +124,15 @@ pub struct TypeContext<'db> {
     variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
     /// Function signatures (name -> function type).
     functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
+    /// Function ASTs for resolving call targets (name -> (AST, module_id)).
+    function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<crate::module_graph::ModuleId>)>,
     /// Expected return type for current function (if inside a function).
     expected_return_type: Option<TypeAndHeap<'db>>,
     errors: Vec<TypeError>,
     /// Expression types, indexed by ExprFun ID.
     expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    /// Resolved call targets, indexed by ExprFunctionCall ID.
+    call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
     /// Current loop nesting depth (for validating break/continue).
     loop_depth: u32,
 }
@@ -127,9 +147,11 @@ impl<'db> TypeContext<'db> {
             source,
             variables: HashMap::new(),
             functions: HashMap::new(),
+            function_asts: HashMap::new(),
             expected_return_type: None,
             errors: Vec::new(),
             expr_types: Vec::new(),
+            call_targets: Vec::new(),
             loop_depth: 0,
         }
     }
@@ -304,8 +326,33 @@ impl<'db> TypeContext<'db> {
         self.variables.insert(name, ty);
     }
 
+    /// Add a function signature only (for imports where AST comes from another module).
     pub fn add_function(&mut self, name: InternedText<'db>, func_type: TypeFunction<'db>) {
         self.functions.insert(name, func_type);
+    }
+
+    /// Add a function with its AST (for local function definitions).
+    pub fn add_function_with_ast(
+        &mut self,
+        name: InternedText<'db>,
+        func_type: TypeFunction<'db>,
+        func_ast: StmtFun<'db>,
+        module_id: Option<crate::module_graph::ModuleId>,
+    ) {
+        self.functions.insert(name, func_type);
+        self.function_asts.insert(name, (func_ast, module_id));
+    }
+
+    /// Add an imported function with its resolved AST.
+    pub fn add_imported_function(
+        &mut self,
+        name: InternedText<'db>,
+        func_type: TypeFunction<'db>,
+        func_ast: StmtFun<'db>,
+        source_module_id: crate::module_graph::ModuleId,
+    ) {
+        self.functions.insert(name, func_type);
+        self.function_asts.insert(name, (func_ast, Some(source_module_id)));
     }
 
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<TypeAndHeap<'db>> {
@@ -314,6 +361,25 @@ impl<'db> TypeContext<'db> {
 
     fn lookup_function(&self, name: InternedText<'db>) -> Option<TypeFunction<'db>> {
         self.functions.get(&name).copied()
+    }
+
+    /// Look up the resolved function AST by name.
+    fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(StmtFun<'db>, Option<crate::module_graph::ModuleId>)> {
+        self.function_asts.get(&name).copied()
+    }
+
+    /// Store resolved call target for a function call expression.
+    fn store_call_target(&mut self, call: ExprFunctionCall<'db>, func: StmtFun<'db>, module_id: Option<crate::module_graph::ModuleId>) {
+        use salsa::plumbing::AsId;
+        let id = call.as_id();
+        let index = id.index() as usize;
+
+        // Ensure the vector is large enough.
+        if index >= self.call_targets.len() {
+            self.call_targets.resize(index + 1, None);
+        }
+
+        self.call_targets[index] = Some(ResolvedCallTarget::new(self.db, func, module_id));
     }
 
     /// Store the type for an expression.
@@ -350,7 +416,7 @@ pub fn type_check<'db>(
     // First pass: collect all function signatures.
     for statement in script.statements(db) {
         if let Statement::Fun(stmt) = statement {
-            collect_function_signature(&mut ctx, stmt);
+            collect_function_signature(&mut ctx, stmt, None);
         }
     }
 
@@ -365,7 +431,7 @@ pub fn type_check<'db>(
         .map(|e| TypeErrorEntry::new(db, e))
         .collect();
 
-    TypecheckResult::new(db, script, errors, ctx.expr_types)
+    TypecheckResult::new(db, script, errors, ctx.expr_types, ctx.call_targets)
 }
 
 /// Typecheck a script for diagnostic emission.
@@ -405,6 +471,23 @@ pub fn type_check_with_module_graph<'db>(
         path_to_id.insert(id.path(db).clone(), id);
     }
 
+    // Build a map of function ASTs per module for resolving imports.
+    let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let module_source = module.source(db);
+        let parse_result = crate::parser::parse(db, module_source);
+        let module_script = parse_result.script(db);
+
+        let mut funcs = HashMap::new();
+        for statement in module_script.statements(db) {
+            if let Statement::Fun(func) = statement {
+                funcs.insert(func.name(db), *func);
+            }
+        }
+        module_function_asts.insert(module_id, funcs);
+    }
+
     // Build module alias map from require statements.
     let module_exports_map = graph_typecheck.module_exports(db);
     let alias_map = build_module_alias_map_for_graph(db, script, &path_to_id);
@@ -425,8 +508,16 @@ pub fn type_check_with_module_graph<'db>(
                         .map(|(_, func_type)| *func_type);
 
                     if let Some(func_type) = func_opt {
-                        // Add the function to the context.
-                        ctx.add_function(item_name, func_type);
+                        // Look up the function AST from the source module.
+                        if let Some(source_funcs) = module_function_asts.get(&source_module_id) {
+                            if let Some(&func_ast) = source_funcs.get(&item_name) {
+                                ctx.add_imported_function(item_name, func_type, func_ast, source_module_id);
+                            } else {
+                                ctx.add_function(item_name, func_type);
+                            }
+                        } else {
+                            ctx.add_function(item_name, func_type);
+                        }
                     } else {
                         ctx.add_error(TypeError::UnresolvedName(
                             format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
@@ -445,10 +536,10 @@ pub fn type_check_with_module_graph<'db>(
         }
     }
 
-    // First pass: collect all function signatures.
+    // First pass: collect all function signatures (script-local, no module).
     for statement in script.statements(db) {
         if let Statement::Fun(stmt) = statement {
-            collect_function_signature(&mut ctx, stmt);
+            collect_function_signature(&mut ctx, stmt, None);
         }
     }
 
@@ -463,7 +554,7 @@ pub fn type_check_with_module_graph<'db>(
         .map(|e| TypeErrorEntry::new(db, e))
         .collect();
 
-    TypecheckResult::new(db, script, errors, ctx.expr_types)
+    TypecheckResult::new(db, script, errors, ctx.expr_types, ctx.call_targets)
 }
 
 /// Look up the type of a variable after typechecking.
@@ -483,7 +574,7 @@ pub fn lookup_variable_type<'db>(
     // First pass: collect all function signatures.
     for statement in script.statements(db) {
         if let Statement::Fun(stmt) = statement {
-            collect_function_signature(&mut ctx, stmt);
+            collect_function_signature(&mut ctx, stmt, None);
         }
     }
 
@@ -512,12 +603,30 @@ pub fn typecheck_module_graph<'db>(
     let mut module_imports_map: BTreeMap<ModuleId, MgModuleImports<'db>> = BTreeMap::new();
     let mut function_analyses: Vec<(crate::ast::StmtFun<'db>, crate::function_analysis::FunctionAnalysis<'db>)> = Vec::new();
     let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
+    let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
 
     // Build a map from module path to ModuleId for quick lookup.
     let mut path_to_id: HashMap<String, ModuleId> = HashMap::new();
     for module in graph.iter_modules(db) {
         let id = module.id(db);
         path_to_id.insert(id.path(db).clone(), id);
+    }
+
+    // Build a map of function ASTs per module for resolving imports.
+    let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let source = module.source(db);
+        let parse_result = crate::parser::parse(db, source);
+        let script = parse_result.script(db);
+
+        let mut funcs = HashMap::new();
+        for statement in script.statements(db) {
+            if let Statement::Fun(func) = statement {
+                funcs.insert(func.name(db), *func);
+            }
+        }
+        module_function_asts.insert(module_id, funcs);
     }
 
     // Process each module in dependency order.
@@ -554,7 +663,17 @@ pub fn typecheck_module_graph<'db>(
                             .map(|(_, func_type)| *func_type);
 
                         if let Some(func_type) = func_opt {
-                            ctx.add_function(item_name, func_type);
+                            // Look up the function AST from the source module.
+                            if let Some(source_funcs) = module_function_asts.get(&source_module_id) {
+                                if let Some(&func_ast) = source_funcs.get(&item_name) {
+                                    ctx.add_imported_function(item_name, func_type, func_ast, source_module_id);
+                                } else {
+                                    // Fallback: add just the type (shouldn't happen in well-formed code).
+                                    ctx.add_function(item_name, func_type);
+                                }
+                            } else {
+                                ctx.add_function(item_name, func_type);
+                            }
                             module_import_functions.push((item_name, source_module_id, item_name));
                         } else {
                             ctx.add_error(TypeError::UnresolvedName(
@@ -577,7 +696,7 @@ pub fn typecheck_module_graph<'db>(
         // First pass: collect all function signatures from this module.
         for statement in script.statements(db) {
             if let Statement::Fun(stmt) = statement {
-                collect_function_signature(&mut ctx, &stmt);
+                collect_function_signature(&mut ctx, &stmt, Some(module_id));
             }
         }
 
@@ -606,7 +725,7 @@ pub fn typecheck_module_graph<'db>(
             .iter()
             .map(|e| TypeErrorEntry::new(db, e.clone()))
             .collect();
-        let module_typecheck_result = TypecheckResult::new(db, script, errors, ctx.expr_types.clone());
+        let module_typecheck_result = TypecheckResult::new(db, script, errors, ctx.expr_types.clone(), ctx.call_targets.clone());
 
         // Merge this module's expr_types into combined.
         let new_types = &ctx.expr_types;
@@ -616,6 +735,17 @@ pub fn typecheck_module_graph<'db>(
         for (i, ty) in new_types.iter().enumerate() {
             if ty.is_some() {
                 combined_expr_types[i] = *ty;
+            }
+        }
+
+        // Merge this module's call_targets into combined.
+        let new_targets = &ctx.call_targets;
+        if new_targets.len() > combined_call_targets.len() {
+            combined_call_targets.resize(new_targets.len(), None);
+        }
+        for (i, target) in new_targets.iter().enumerate() {
+            if target.is_some() {
+                combined_call_targets[i] = *target;
             }
         }
 
@@ -631,13 +761,14 @@ pub fn typecheck_module_graph<'db>(
         }
     }
 
-    ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, function_analyses, combined_expr_types)
+    ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, function_analyses, combined_expr_types, combined_call_targets)
 }
 
 /// Collect function signature without checking body (first pass).
 pub fn collect_function_signature<'db>(
     ctx: &mut TypeContext<'db>,
     stmt: &StmtFun<'db>,
+    module_id: Option<crate::module_graph::ModuleId>,
 ) {
     let db = ctx.db;
     let name = stmt.name(db);
@@ -673,9 +804,9 @@ pub fn collect_function_signature<'db>(
         }
     };
 
-    // Create function type and add to context.
+    // Create function type and add to context with AST.
     let func_type = TypeFunction::new(db, param_types, ret_ty);
-    ctx.add_function(name, func_type);
+    ctx.add_function_with_ast(name, func_type, *stmt, module_id);
 }
 
 /// Check a statement.
@@ -802,7 +933,7 @@ fn check_statement<'db>(
                 None => {
                     // Function not in context (shouldn't happen in normal flow).
                     // Collect signature now for error resilience.
-                    collect_function_signature(ctx, stmt);
+                    collect_function_signature(ctx, stmt, None);
                     match ctx.lookup_function(name) {
                         Some(func_type) => func_type,
                         None => return, // Errors already recorded.
@@ -1681,6 +1812,11 @@ fn synthesize_function_call<'db>(
     // Check each argument type.
     for (arg, expected_param_ty) in args.iter().zip(param_types.iter()) {
         check_expr(ctx, *arg, *expected_param_ty)?;
+    }
+
+    // Store resolved call target for interpreter.
+    if let Some((func_ast, module_id)) = ctx.lookup_function_ast(name) {
+        ctx.store_call_target(call, func_ast, module_id);
     }
 
     // Return the function's return type.

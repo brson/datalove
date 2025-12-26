@@ -26,6 +26,8 @@ pub struct InterpContext<'db> {
     pub(super) module_graph_typecheck: Option<ModuleGraphTypecheckResult<'db>>,
     /// Expression types from typechecking, indexed by ExprFun salsa ID.
     pub(super) expr_types: Vec<Option<crate::tycheck::TypeAndHeap<'db>>>,
+    /// Resolved call targets from typechecking, indexed by ExprFunctionCall salsa ID.
+    pub(super) call_targets: Vec<Option<crate::tycheck::ResolvedCallTarget<'db>>>,
 }
 
 /// Function table: maps names to definitions and source modules.
@@ -49,8 +51,9 @@ impl<'db> InterpContext<'db> {
         let graph = typecheck_result.graph(db);
         let module_functions_graph = ModuleFunctionTableGraph::build_from_graph(db, graph);
 
-        // Initialize expr_types from module graph typecheck.
+        // Initialize expr_types and call_targets from module graph typecheck.
         let expr_types = typecheck_result.expr_types(db).clone();
+        let call_targets = typecheck_result.call_targets(db).clone();
 
         Ok(InterpContext {
             db,
@@ -61,6 +64,7 @@ impl<'db> InterpContext<'db> {
             current_module_id: None,
             module_graph_typecheck: Some(typecheck_result),
             expr_types,
+            call_targets,
         })
     }
 
@@ -70,6 +74,14 @@ impl<'db> InterpContext<'db> {
         let id = expr.as_id();
         let index = id.index() as usize;
         self.expr_types.get(index).copied().flatten()
+    }
+
+    /// Get resolved call target from typechecking.
+    pub fn get_call_target(&self, call: ast::ExprFunctionCall<'db>) -> Option<crate::tycheck::ResolvedCallTarget<'db>> {
+        use salsa::plumbing::AsId;
+        let id = call.as_id();
+        let index = id.index() as usize;
+        self.call_targets.get(index).copied().flatten()
     }
 
     pub fn runtime_handle(&self) -> datalove_rt::c::LocalRtHandle {

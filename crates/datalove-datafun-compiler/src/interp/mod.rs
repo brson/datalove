@@ -97,8 +97,6 @@ use literals::{
 };
 use arith_widening::{execute_binop, execute_unop};
 
-use bct::text::InternedText;
-
 use crate::module_graph::ModuleId;
 use crate::ast;
 use crate::function_analysis::{Terminator, BlockId};
@@ -217,54 +215,6 @@ fn eval_wrapper_payload_dps<'db>(
 // Function Calls and Execution
 // ============================================================================
 
-/// Look up a function by name in the module graph.
-///
-/// Returns the function definition and its source module.
-/// Looks in this order:
-/// 1. Current module functions (if executing inside a module)
-/// 2. Imported module functions (from current module's imports)
-/// 3. Globally imported functions
-pub(super) fn lookup_function<'db>(
-    ctx: &InterpContext<'db>,
-    name: InternedText<'db>,
-) -> Result<(ast::StmtFun<'db>, Option<ModuleId>), InterpError> {
-    // Check module-based lookup (when executing inside a module).
-    if let Some(current_module_id) = ctx.current_module_id {
-        if let Some(module_funcs) = ctx.module_functions_graph.get_module_functions(current_module_id) {
-            if let Some(&func) = module_funcs.get(&name) {
-                return Ok((func, Some(current_module_id)));
-            }
-        }
-
-        // Check what the current module imported from other modules.
-        if let Some(typecheck_result) = &ctx.module_graph_typecheck {
-            let module_imports_map = typecheck_result.module_imports(ctx.db);
-
-            if let Some(imports) = module_imports_map.get(&current_module_id) {
-                // Look for the function in the imports.
-                for (local_name, source_module_id, _source_name) in imports.functions(ctx.db) {
-                    if *local_name == name {
-                        // Found the import - look up the function AST from the source module.
-                        if let Some(module_funcs) = ctx.module_functions_graph.get_module_functions(*source_module_id) {
-                            if let Some(&func_ast) = module_funcs.get(&name) {
-                                return Ok((func_ast, Some(*source_module_id)));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Check globally imported functions.
-    if let Some((func, module_id)) = ctx.module_functions_graph.get(name) {
-        return Ok((func, Some(module_id)));
-    }
-
-    // Function not found.
-    Err(InterpError::FunctionNotFound(name.text(ctx.db).to_string()))
-}
-
 /// Evaluate a function call from frame-based execution.
 ///
 /// The return value is written directly to `return_dest`.
@@ -274,11 +224,19 @@ fn eval_function_call_frame<'db>(
     call_expr: ast::ExprFunctionCall<'db>,
     return_dest: Destination,
 ) -> Result<Option<Value>, InterpError> {
-    let name = call_expr.name(ctx.db);
     let arg_exprs = call_expr.args(ctx.db);
 
-    // Look up the function (script or module).
-    let (func, func_module) = lookup_function(ctx, name)?;
+    // Use pre-resolved call target from typechecking.
+    let (func, func_module) = match ctx.get_call_target(call_expr) {
+        Some(target) => (target.func(ctx.db), target.module_id(ctx.db)),
+        None => {
+            let name = call_expr.name(ctx.db);
+            panic!(
+                "No resolved call target for function '{}' - typechecking should have resolved this",
+                name.text(ctx.db)
+            );
+        }
+    };
 
     let params = func.params(ctx.db);
 
@@ -286,7 +244,7 @@ fn eval_function_call_frame<'db>(
     if arg_exprs.len() != params.len() {
         return Err(InterpError::InvalidExpression(
             format!("Function '{}' expects {} arguments but {} provided",
-                name.text(ctx.db), params.len(), arg_exprs.len())
+                func.name(ctx.db).text(ctx.db), params.len(), arg_exprs.len())
         ));
     }
 

@@ -68,6 +68,13 @@ pub struct ModuleGraphTypecheckResult<'db> {
     /// across all modules in the graph.
     #[returns(ref)]
     pub expr_types: Vec<Option<crate::tycheck::TypeAndHeap<'db>>>,
+
+    /// Resolved call targets from all modules, combined.
+    ///
+    /// Indexed by ExprFunctionCall salsa ID, contains resolved function ASTs
+    /// for all function calls across all modules in the graph.
+    #[returns(ref)]
+    pub call_targets: Vec<Option<crate::tycheck::ResolvedCallTarget<'db>>>,
 }
 
 impl<'db> ModuleGraphTypecheckResult<'db> {
