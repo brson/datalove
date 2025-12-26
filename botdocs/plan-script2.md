@@ -27,6 +27,25 @@ The function interpreter is clean:
 - Would fit Salsa's reactive model
 - Complex, potentially confusing for users
 
+## Current Status (December 2025)
+
+**Script interpreter is gutted.** The REPL engine currently has:
+```rust
+fn eval_script_statement(&mut self, _source: String) -> Eval {
+    todo!("script interpreter gutted - pending frame-based rewrite")
+}
+```
+
+**DPS cleanup is complete.** All expressions now use mandatory `Destination`,
+not `Option<Destination>`. The code explicitly marks the old script scope as removed.
+
+**Function interpreter is the reference implementation.** The frame-based
+execution with FunctionAnalysis, StackFrame, CFG, and DropPoints is complete
+and working. This serves as the template for the script rewrite.
+
+**Remaining work:** Phases 1-4 below (ScriptUnitAnalysis, ScriptUnitFrame,
+name lookup, CFG execution).
+
 ## Proposed Architecture
 
 **Per-unit analysis and frames, semantically contiguous.**
@@ -186,26 +205,30 @@ fn execute_script_unit<'db>(
 }
 ```
 
-### Phase 5: Full DPS for Script Expressions
+### Phase 5: Full DPS for Script Expressions ✅ COMPLETE
 
-New `eval_expression_script` that requires `Destination`:
+DPS is now mandatory everywhere. All expression evaluation uses:
 
 ```rust
-fn eval_expression_script<'db>(
+fn eval_expression_frame<'db>(
     ctx: &mut InterpContext<'db>,
-    unit_index: usize,  // which unit's frame to use for temps
     expr: ast::ExprFun<'db>,
     dest: Destination,  // required, not optional
-) -> Result<Value, InterpError>
+) -> Result<(), InterpError>
 ```
 
-### Phase 6: Migration
+Scripts will reuse the same `eval_expression_frame` function.
 
-1. Build new script interpreter in parallel with old
-2. Add tests for parity
-3. Switch over
-4. Remove old `ScriptScope`-based code
-5. Clean up `Option<Destination>` → require `Destination` everywhere
+### Phase 6: Migration ✅ MOSTLY COMPLETE
+
+1. ~~Build new script interpreter in parallel with old~~
+2. ~~Add tests for parity~~
+3. ~~Switch over~~
+4. ~~Remove old `ScriptScope`-based code~~ - Script scope removed
+5. ~~Clean up `Option<Destination>` → require `Destination` everywhere~~ - Done
+
+The script interpreter is currently gutted; implementing Phases 1-4 will
+complete the migration.
 
 ## Files Involved
 
@@ -214,9 +237,11 @@ fn eval_expression_script<'db>(
 - (or extend existing `function_analysis/` to handle scripts)
 
 **To modify:**
-- `interp/script.rs` - rewrite with frame-based execution
-- `interp/context.rs` - replace `ScriptScope` with `ScriptFrame`
-- `interp/mod.rs` - unify `Option<Destination>` to required
+- `interp/script.rs` - rewrite with frame-based execution (currently gutted)
+- `interp/context.rs` - add `script_frames` and `script_analyses` vectors
+
+**Already done:**
+- `interp/mod.rs` - DPS with mandatory `Destination` is complete
 
 **Reference (existing frame implementation):**
 - `interp/mod.rs` - `eval_expression_frame`, `execute_function_body_with_frame`
