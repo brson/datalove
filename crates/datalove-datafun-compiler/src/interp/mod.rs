@@ -471,7 +471,7 @@ pub fn execute_function_body<'db>(
     ctx.call_stack.push(frame);
 
     // Execute function body.
-    let result = execute_function_body_with_frame(ctx);
+    let (result, exit_block_id) = execute_function_body_with_frame(ctx);
 
     // Pop the frame and capture slot states for argument cleanup.
     let frame = ctx.call_stack.pop().unwrap();
@@ -500,7 +500,7 @@ pub fn execute_function_body<'db>(
     };
 
     // Clean up frame values before returning.
-    cleanup_frame(ctx, frame);
+    cleanup_frame(ctx, frame, exit_block_id);
 
     // Clean up arguments based on their final slot states.
     cleanup_args_after_frame(ctx, arg_values, &final_slot_states, layout, ctx.db);
@@ -558,9 +558,11 @@ pub fn execute_function_body<'db>(
 
 
 /// Execute function body with CFG-based execution.
+///
+/// Returns (result, exit_block_id) where exit_block_id is the block that caused the return.
 fn execute_function_body_with_frame<'db>(
     ctx: &mut InterpContext<'db>,
-) -> Result<Option<Value>, InterpError> {
+) -> (Result<Option<Value>, InterpError>, BlockId) {
     // Get the current frame (top of stack).
     let frame_index = ctx.call_stack.len() - 1;
 
@@ -572,23 +574,28 @@ fn execute_function_body_with_frame<'db>(
     let mut current_block_id = BlockId(0);
 
     loop {
-        let block = cfg.get_block(ctx.db, current_block_id)
-            .ok_or_else(|| InterpError::RuntimeError(
+        let block = match cfg.get_block(ctx.db, current_block_id) {
+            Some(b) => b,
+            None => return (Err(InterpError::RuntimeError(
                 format!("Invalid block ID {:?}", current_block_id)
-            ))?;
+            )), current_block_id),
+        };
 
         // Execute all statements in the current block.
         for stmt_id in &block.statements {
-            let stmt = cfg.get_stmt(ctx.db, *stmt_id)
-                .ok_or_else(|| InterpError::RuntimeError(
+            let stmt = match cfg.get_stmt(ctx.db, *stmt_id) {
+                Some(s) => s,
+                None => return (Err(InterpError::RuntimeError(
                     format!("Invalid stmt ID {:?}", stmt_id)
-                ))?;
+                )), current_block_id),
+            };
 
             // Execute statement.
-            match execute_cfg_statement(ctx, stmt)? {
-                CfgControl::Continue => continue,
-                CfgControl::Return(value) => return Ok(Some(value)),
-                CfgControl::ReturnVoid => return Ok(None),
+            match execute_cfg_statement(ctx, stmt) {
+                Ok(CfgControl::Continue) => continue,
+                Ok(CfgControl::Return(value)) => return (Ok(Some(value)), current_block_id),
+                Ok(CfgControl::ReturnVoid) => return (Ok(None), current_block_id),
+                Err(e) => return (Err(e), current_block_id),
             }
         }
 
@@ -597,35 +604,41 @@ fn execute_function_body_with_frame<'db>(
             Terminator::Return => {
                 // For void functions, implicit return at end of function is OK.
                 if func.return_type(ctx.db).is_none() {
-                    return Ok(None);
+                    return (Ok(None), current_block_id);
                 }
                 // Non-void function reached end without ret - error.
-                return Err(InterpError::RuntimeError(
+                return (Err(InterpError::RuntimeError(
                     format!("Function '{}' reached end without ret statement",
                             func.name(ctx.db).text(ctx.db))
-                ));
+                )), current_block_id);
             }
             Terminator::Branch { condition_stmt, then_block, else_block } => {
                 // Get the statement that caused the branch.
-                let stmt = cfg.get_stmt(ctx.db, *condition_stmt)
-                    .ok_or_else(|| InterpError::RuntimeError(
+                let stmt = match cfg.get_stmt(ctx.db, *condition_stmt) {
+                    Some(s) => s,
+                    None => return (Err(InterpError::RuntimeError(
                         format!("Invalid condition stmt ID {:?}", condition_stmt)
-                    ))?;
+                    )), current_block_id),
+                };
 
                 match stmt {
                     ast::Statement::If(if_s) => {
                         // If-statement: evaluate condition and branch based on result.
                         let condition_expr = if_s.condition(ctx.db);
-                        let condition_dest = get_destination_for_expr(ctx, condition_expr)?;
-                        eval_expression_frame(ctx, condition_expr, condition_dest)?;
+                        let condition_dest = match get_destination_for_expr(ctx, condition_expr) {
+                            Ok(d) => d,
+                            Err(e) => return (Err(e), current_block_id),
+                        };
+                        if let Err(e) = eval_expression_frame(ctx, condition_expr, condition_dest) {
+                            return (Err(e), current_block_id);
+                        }
                         let condition_value = condition_dest.to_value();
 
                         // Handle condition based on type (bool, Option, or Result).
-                        let is_true = evaluate_branch_condition(
-                            ctx,
-                            condition_value,
-                            *if_s,
-                        )?;
+                        let is_true = match evaluate_branch_condition(ctx, condition_value, *if_s) {
+                            Ok(b) => b,
+                            Err(e) => return (Err(e), current_block_id),
+                        };
 
                         // Mark condition temp as Moved (contents destroyed by evaluate_branch_condition).
                         mark_temp_slot_moved(ctx, condition_expr);
@@ -639,20 +652,22 @@ fn execute_function_body_with_frame<'db>(
                         current_block_id = *then_block;
                     }
                     _ => {
-                        return Err(InterpError::RuntimeError(
+                        return (Err(InterpError::RuntimeError(
                             "Branch terminator with unexpected statement type".to_string()
-                        ));
+                        )), current_block_id);
                     }
                 }
             }
             Terminator::Goto(next_block) => {
                 // Process any block-exit drops before moving to next block.
-                process_block_exit_drops(ctx, current_block_id)?;
+                if let Err(e) = process_block_exit_drops(ctx, current_block_id) {
+                    return (Err(e), current_block_id);
+                }
                 current_block_id = *next_block;
             }
             Terminator::TryReturn => {
                 // Early return from ? operator - propagate.
-                return Err(InterpError::EarlyReturn);
+                return (Err(InterpError::EarlyReturn), current_block_id);
             }
             Terminator::LoopContinue(header_block) => {
                 // Jump to loop header for next iteration.
@@ -799,28 +814,16 @@ fn process_block_exit_drops<'db>(
 fn cleanup_frame<'db>(
     ctx: &mut InterpContext<'db>,
     frame: StackFrame<'db>,
+    exit_block_id: BlockId,
 ) {
-    use crate::function_analysis::SlotId;
-    use std::collections::HashSet;
-
     let layout = frame.layout;
     let slots = layout.slots(ctx.db);
     let drop_points = frame.drop_points;
     let tracked_slots = &frame.tracked_slots;
 
-    // Track which slots have been destroyed to prevent double-free.
-    // This is needed because drops are generated for each return block,
-    // but only one return path is actually taken at runtime.
-    let mut destroyed_slots: HashSet<SlotId> = HashSet::new();
-
-    // Use pre-filtered function exit drops (EndOfScope/EarlyReturn only).
-    for drop_point in drop_points.function_exit_drops(ctx.db) {
+    // Use pre-indexed function exit drops for this specific return block.
+    for drop_point in drop_points.get_function_exit_drops(ctx.db, exit_block_id) {
         let slot_id = drop_point.slot_id(ctx.db);
-
-        // Skip if we already destroyed this slot.
-        if destroyed_slots.contains(&slot_id) {
-            continue;
-        }
 
         // Use slot_id.0 as the index into slots and slot_states.
         // Slots are allocated sequentially, so slot_id.0 equals position.
@@ -847,7 +850,6 @@ fn cleanup_frame<'db>(
         }
 
         destroy_slot_contents(ctx, &frame, slot_info, slot_id);
-        destroyed_slots.insert(slot_id);
     }
 }
 
