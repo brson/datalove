@@ -13,8 +13,16 @@ use crate::ast::StmtFun;
 /// Drop points for all slots.
 #[salsa::tracked]
 pub struct DropPoints<'db> {
+    /// All drop points.
     #[returns(ref)]
     pub drops: Vec<DropPoint<'db>>,
+    /// BranchExit drops indexed by block ID for O(1) lookup.
+    /// Index is BlockId.0, value is vec of drops at that block exit.
+    #[returns(ref)]
+    pub branch_exit_drops_by_block: Vec<Vec<DropPoint<'db>>>,
+    /// Function exit drops (EndOfScope/EarlyReturn) - pre-filtered.
+    #[returns(ref)]
+    pub function_exit_drops: Vec<DropPoint<'db>>,
 }
 
 /// A single drop point.
@@ -48,6 +56,15 @@ impl<'db> DropPoints<'db> {
     /// Get all drop points for a specific slot.
     pub fn drops_for_slot(self, db: &'db dyn crate::Db, slot_id: SlotId) -> Vec<DropPoint<'db>> {
         self.drops(db).iter().filter(|d| d.slot_id(db) == slot_id).copied().collect()
+    }
+
+    /// Get BranchExit drops for a specific block (O(1) lookup).
+    pub fn get_branch_exit_drops(self, db: &'db dyn crate::Db, block_id: BlockId) -> &'db [DropPoint<'db>] {
+        let idx = block_id.0 as usize;
+        self.branch_exit_drops_by_block(db)
+            .get(idx)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 }
 
@@ -251,7 +268,35 @@ pub fn compute_drop_points<'db>(
         }
     }
 
-    DropPoints::new(db, drops)
+    // Build pre-indexed collections for O(1) runtime lookup.
+
+    // Find max block ID to size the vector.
+    let max_block_id = blocks.iter().map(|b| b.block_id.0).max().unwrap_or(0) as usize;
+
+    // Segregate BranchExit drops by block ID.
+    let mut branch_exit_drops_by_block: Vec<Vec<DropPoint<'db>>> = vec![Vec::new(); max_block_id + 1];
+    let mut function_exit_drops: Vec<DropPoint<'db>> = Vec::new();
+
+    for drop_point in &drops {
+        match drop_point.reason(db) {
+            DropReason::BranchExit => {
+                if let DropLocation::BlockExit(block_id) = drop_point.location(db) {
+                    let idx = block_id.0 as usize;
+                    if idx < branch_exit_drops_by_block.len() {
+                        branch_exit_drops_by_block[idx].push(*drop_point);
+                    }
+                }
+            }
+            DropReason::EndOfScope | DropReason::EarlyReturn => {
+                function_exit_drops.push(*drop_point);
+            }
+            DropReason::Moved | DropReason::Uninitialized => {
+                // Informational markers, not used at runtime.
+            }
+        }
+    }
+
+    DropPoints::new(db, drops, branch_exit_drops_by_block, function_exit_drops)
 }
 
 #[cfg(test)]

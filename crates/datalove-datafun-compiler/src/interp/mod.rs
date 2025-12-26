@@ -743,29 +743,14 @@ fn process_block_exit_drops<'db>(
     ctx: &mut InterpContext<'db>,
     block_id: BlockId,
 ) -> Result<(), InterpError> {
-    use crate::function_analysis::{DropReason, DropLocation};
-
     let frame_index = ctx.call_stack.len() - 1;
     let drop_points = ctx.call_stack[frame_index].drop_points;
     let layout = ctx.call_stack[frame_index].layout;
     let tracked_slots = ctx.call_stack[frame_index].tracked_slots.clone();
     let slots = layout.slots(ctx.db);
 
-    // Find all drops for this block exit.
-    for drop_point in drop_points.drops(ctx.db) {
-        // Only process BlockExit drops for THIS block.
-        let DropLocation::BlockExit(exit_block) = drop_point.location(ctx.db) else {
-            continue;
-        };
-        if exit_block != block_id {
-            continue;
-        }
-
-        // Only process BranchExit drops.
-        if drop_point.reason(ctx.db) != DropReason::BranchExit {
-            continue;
-        }
-
+    // Use pre-indexed BranchExit drops for this block (O(1) lookup).
+    for drop_point in drop_points.get_branch_exit_drops(ctx.db, block_id) {
         let slot_id = drop_point.slot_id(ctx.db);
 
         // Use slot_id.0 as the index into slots and slot_states.
@@ -815,7 +800,7 @@ fn cleanup_frame<'db>(
     ctx: &mut InterpContext<'db>,
     frame: StackFrame<'db>,
 ) {
-    use crate::function_analysis::{DropReason, SlotId};
+    use crate::function_analysis::SlotId;
     use std::collections::HashSet;
 
     let layout = frame.layout;
@@ -828,36 +813,14 @@ fn cleanup_frame<'db>(
     // but only one return path is actually taken at runtime.
     let mut destroyed_slots: HashSet<SlotId> = HashSet::new();
 
-    // Process drop points from the analysis.
-    for drop_point in drop_points.drops(ctx.db) {
+    // Use pre-filtered function exit drops (EndOfScope/EarlyReturn only).
+    for drop_point in drop_points.function_exit_drops(ctx.db) {
         let slot_id = drop_point.slot_id(ctx.db);
 
         // Skip if we already destroyed this slot.
         if destroyed_slots.contains(&slot_id) {
             continue;
         }
-
-        // Only process actual drops, not markers for moved/uninitialized slots.
-        // BranchExit drops are processed inline during CFG execution, not here.
-        match drop_point.reason(ctx.db) {
-            DropReason::EndOfScope | DropReason::EarlyReturn => {
-                // This slot needs cleanup at function exit.
-            }
-            DropReason::BranchExit => {
-                // BranchExit drops are handled inline during CFG execution.
-                // Skip them here.
-                continue;
-            }
-            DropReason::Moved | DropReason::Uninitialized => {
-                // These are informational - no actual drop needed.
-                continue;
-            }
-        }
-
-        // BlockExit drops with BranchExit reason are handled inline during CFG execution.
-        // BlockExit drops with EndOfScope/EarlyReturn reason (from blocks with no statements)
-        // should be processed here at function exit.
-        // (BranchExit reason is already filtered out above, so we don't need to check here.)
 
         // Use slot_id.0 as the index into slots and slot_states.
         // Slots are allocated sequentially, so slot_id.0 equals position.
