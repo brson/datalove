@@ -27,6 +27,13 @@ The function interpreter is clean:
 - Would fit Salsa's reactive model
 - Complex, potentially confusing for users
 
+## Design Principles
+
+**Keep script interpreter isolated.** The script interpreter is experimental and
+may undergo significant churn. Minimize coupling with the function interpreter
+and other stable components. Prefer duplicating code over creating shared
+abstractions prematurely.
+
 ## Current Status (December 2025)
 
 **Script interpreter is gutted.** The REPL engine currently has:
@@ -265,3 +272,9 @@ complete the migration.
 
 1. **Script-level `if`/`loop`**: Currently errors at script level. Need to enable
    in parser/tycheck before interpreter can handle them.
+
+2. **`ret` and early-return in scripts**: In batch mode, `ret` exits the script.
+   In REPL mode, `ret` or early-return operators (`+?`/`+!`) end the current
+   script unit and report the value; the REPL continues accepting more units.
+   Each script unit behaves like an implicit function for early-return purposes.
+   May need a `Terminator::ScriptUnitReturn` distinct from function `Return`.
