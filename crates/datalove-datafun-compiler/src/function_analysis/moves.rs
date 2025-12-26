@@ -1354,8 +1354,8 @@ end fun
         let ref db = crate::Database::default();
 
         let source = r#"
-fun test(x: u32): u32
-    let y = x +! x
+fun test(x: @u32): @u32
+    let y = x + x
     ret y
 end fun
         "#;

@@ -122,17 +122,18 @@ pub fn get_slot_type<'db>(
         }
         SlotKind::Temporary => {
             // Temporary - get type from the creating expression.
-            if let Some(expr) = slot.expr(db) {
-                let expr_types = tycheck_result.expr_types(db);
-                let expr_id = expr.as_id();
-                let index = expr_id.index() as usize;
+            let expr = slot.expr(db)
+                .expect("Temporary slot must have an expression");
+            let expr_types = tycheck_result.expr_types(db);
+            let expr_id = expr.as_id();
+            let index = expr_id.index() as usize;
 
-                expr_types.get(index)
-                    .and_then(|opt| *opt)
-                    .unwrap_or_else(|| create_placeholder_type(db))
-            } else {
-                create_placeholder_type(db)
-            }
+            expr_types.get(index)
+                .and_then(|opt| *opt)
+                .unwrap_or_else(|| panic!(
+                    "Temporary expression at index {} must have type from typechecker",
+                    index
+                ))
         }
     }
 }
@@ -144,20 +145,16 @@ fn get_param_type<'db>(
     param_name: Option<bct::text::InternedText<'db>>,
     _tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> crate::tycheck::TypeAndHeap<'db> {
-    
+    let name = param_name.expect("Parameter slot must have a name");
 
-    if let Some(name) = param_name {
-        for param in func.params(db) {
-            if param.name(db) == name {
-                let type_hint = param.type_hint(db);
-
-                // Convert type hint to type.
-                return convert_type_hint_to_type(db, type_hint);
-            }
+    for param in func.params(db) {
+        if param.name(db) == name {
+            let type_hint = param.type_hint(db);
+            return convert_type_hint_to_type(db, type_hint);
         }
     }
-    // Fallback to placeholder if param not found.
-    create_placeholder_type(db)
+
+    panic!("Parameter '{}' not found in function signature", name.text(db));
 }
 
 /// Get type for a local (let binding) slot.
@@ -167,14 +164,13 @@ fn get_local_type<'db>(
     local_name: Option<bct::text::InternedText<'db>>,
     expr_types: &[Option<crate::tycheck::TypeAndHeap<'db>>],
 ) -> crate::tycheck::TypeAndHeap<'db> {
-    if let Some(name) = local_name {
-        // Find the let statement with this name recursively.
-        if let Some(ty) = find_local_type_in_stmts(db, func.body(db), name, expr_types) {
-            return ty;
-        }
+    let name = local_name.expect("Local slot must have a name");
+
+    if let Some(ty) = find_local_type_in_stmts(db, func.body(db), name, expr_types) {
+        return ty;
     }
-    // Fallback to placeholder if local not found or no type.
-    create_placeholder_type(db)
+
+    panic!("Local '{}' not found in function body", name.text(db));
 }
 
 /// Recursively search for a let binding in statements (including nested blocks).
@@ -313,20 +309,6 @@ fn convert_type_hint_to_type<'db>(
     TypeAndHeap::new(db, type_hint.heap(db), Type::Datalit(datalit_type))
 }
 
-/// Create a placeholder type (bool on local heap) for slots without type info.
-fn create_placeholder_type<'db>(
-    db: &'db dyn crate::Db,
-) -> crate::tycheck::TypeAndHeap<'db> {
-    use crate::tycheck::{Type, TypeAndHeap};
-    use crate::datalit;
-
-    TypeAndHeap::new(
-        db,
-        datalit::ast::Heap::Local,
-        Type::Datalit(datalit::tycheck::Type::Bool)
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,6 +329,7 @@ mod tests {
         let source = Source::new(db, S(source_code));
         let script = crate::parser::parse_for_diagnostics(db, source);
         let tycheck_result = crate::tycheck::type_check(db, source, script);
+
         let statements = script.statements(db);
 
         // Find the function.
@@ -381,15 +364,15 @@ mod tests {
         let source = r#"
 fun test(): bool
     let a = true
-    let b: u8 = @5
-    let c: i8 = @-5
-    let d: u16 = @300
-    let e: i16 = @-300
-    let f = @42u32
-    let g = @-42i32
-    let h = @1000000u64
-    let i = @-1000000i64
-    let j = @3.14f32
+    let b: @u8 = @5
+    let c: @i8 = @-5
+    let d: @u16 = @300
+    let e: @i16 = @-300
+    let f: @u32 = @42
+    let g: @i32 = @-42
+    let h: @u64 = @1000000
+    let i: @i64 = @-1000000
+    let j: @f32 = @3.14
     ret a
 end fun
         "#;
