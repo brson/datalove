@@ -74,11 +74,12 @@ pub(super) fn evaluate_branch_condition<'db>(
         TyTag::Result => {
             let tag = unsafe { *(value.ptr as *const u8) };
             let is_ok = tag == ResultTag::Ok as u8;
+            // Compute layout once, reuse in both Ok and Err branches.
+            let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
+            let layout = compute_result_layout(tydesc_ref);
 
             if is_ok {
                 if let Some(slot_info) = then_slot {
-                    let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
-                    let layout = compute_result_layout(tydesc_ref);
                     let ok_tydesc = tydesc_ref.result_ok_ty();
 
                     let slot_offset = slot_info.offset(ctx.db) as usize;
@@ -108,9 +109,6 @@ pub(super) fn evaluate_branch_condition<'db>(
                 destroy_value(ctx, value);
             } else {
                 if let Some(slot_info) = else_slot {
-                    let tydesc_ref = unsafe { TyDescRef::from_ptr(value.tydesc) };
-                    let layout = compute_result_layout(tydesc_ref);
-
                     let slot_offset = slot_info.offset(ctx.db) as usize;
                     let slot_ptr = unsafe {
                         ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(slot_offset)
