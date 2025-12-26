@@ -23,6 +23,9 @@ pub struct FrameLayout<'db> {
     /// Maps Name expressions to their resolved slot IDs.
     #[returns(ref)]
     pub name_resolutions: Vec<NameResolution<'db>>,
+    /// Indexed lookup: ExprFun salsa ID -> SlotInfo for Name expressions.
+    #[returns(ref)]
+    pub name_expr_slot_index: Vec<Option<SlotInfo<'db>>>,
     /// Maps let statements to their destination slot IDs.
     #[returns(ref)]
     pub let_stmt_slots: Vec<LetStmtSlot<'db>>,
@@ -117,16 +120,15 @@ impl<'db> FrameLayout<'db> {
             .copied()
     }
 
-    /// Get the slot for a Name expression using resolved slot ID.
+    /// Get the slot for a Name expression using indexed lookup.
     pub fn get_slot_for_name_expr(
         self,
         db: &'db dyn crate::Db,
         expr: ExprFun<'db>,
     ) -> Option<SlotInfo<'db>> {
-        let slot_id = self.name_resolutions(db).iter()
-            .find(|nr| nr.expr(db) == expr)
-            .map(|nr| nr.slot_id(db))?;
-        self.get_slot(db, slot_id)
+        use salsa::plumbing::AsId;
+        let index = expr.as_id().index() as usize;
+        self.name_expr_slot_index(db).get(index).copied().flatten()
     }
 
     /// Get the destination slot for a let statement.
@@ -176,6 +178,7 @@ impl<'db> FrameLayout<'db> {
         if_binding_slots: Vec<IfBindingSlot<'db>>,
         struct_field_orders: Vec<StructFieldOrder<'db>>,
     ) -> Self {
+        use salsa::plumbing::AsId;
         use std::mem::{size_of, align_of};
 
         let mut offset = 0u32;
@@ -212,12 +215,28 @@ impl<'db> FrameLayout<'db> {
         // Total size must be aligned to maximum alignment.
         let total_size = align_up(offset, max_align);
 
+        // Build indexed lookup for name expressions (O(1) access by ExprFun salsa ID).
+        let mut name_expr_slot_index: Vec<Option<SlotInfo<'db>>> = Vec::new();
+        for nr in &name_resolutions {
+            let expr = nr.expr(db);
+            let slot_id = nr.slot_id(db);
+            // Find SlotInfo by slot_id.
+            let slot_info = slot_infos.iter().find(|s| s.slot_id(db) == slot_id).copied();
+            // Extend vector to fit expression ID.
+            let index = expr.as_id().index() as usize;
+            if index >= name_expr_slot_index.len() {
+                name_expr_slot_index.resize(index + 1, None);
+            }
+            name_expr_slot_index[index] = slot_info;
+        }
+
         FrameLayout::new(
             db,
             total_size,
             max_align,
             slot_infos,
             name_resolutions,
+            name_expr_slot_index,
             let_stmt_slots,
             var_stmt_slots,
             set_stmt_slots,
