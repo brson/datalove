@@ -7,6 +7,15 @@ for multi-arch compatibility.
 
 
 
+
+## Unit
+
+`()`.
+Byte-sized.
+
+
+
+
 ## Scalars
 
 `bool`,

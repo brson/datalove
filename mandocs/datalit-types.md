@@ -11,6 +11,8 @@ for serialization and configuration.
 
 Datalit types are:
 
+- [Unit](#user-content-unit),
+  `()`, also a zero-element anonymous tuple.
 - [Booleans](#user-content-booleans),
   `bool` - `true` and `false`
 - [Fixed integers](#user-content-fixed-integers),
@@ -20,6 +22,7 @@ Datalit types are:
   `int`
 - [Floating point numbers](#user-content-floating-point-numbers),
   `f32`
+- [Anynomous tuples](#user-content-anynymous-tuples)
 - [Anonymous structs](#user-content-anonymous-structs)
 - [Anonymous enums (ADTs)](#user-content-anonymous-enums)
 - [Lists](#user-content-lists),
@@ -39,6 +42,14 @@ Datalit types are:
 
 Datalit types are value types and stored inline.
 Datalit structs and enums are structurally-typed.
+
+
+
+## Unit
+
+Spelled `()`, which can also be considered a zero-element anonymous tuple.
+
+It is byte-sized, not zero-sized.
 
 
 
@@ -137,6 +148,8 @@ while modules are expected to be more careful with overflow.
 ## Big integers
 
 ## Floating point numbers
+
+## Anonymous tuples
 
 ## Anonymous structs
 
