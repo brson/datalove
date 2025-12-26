@@ -188,7 +188,7 @@ pub(super) fn process_block_exit_drops<'db>(
 /// Temporaries are handled inline during evaluation:
 /// - BinOp/UnaryOp operands: marked Moved after destroy_value
 /// - If-condition temps: marked Moved after evaluate_branch_condition
-/// - Return value temps: marked Moved after heap clone
+/// - Data/Error wrapper temps: marked Moved after cloning to wrapper
 pub(super) fn cleanup_frame<'db>(
     ctx: &mut InterpContext<'db>,
     frame: StackFrame<'db>,
