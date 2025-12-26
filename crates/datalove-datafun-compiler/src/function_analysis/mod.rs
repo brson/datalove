@@ -288,6 +288,7 @@ fn build_frame_layout<'db>(
         slot_allocation.var_stmt_slots(db).clone(),
         slot_allocation.set_stmt_slots(db).clone(),
         slot_allocation.if_binding_slots(db).clone(),
+        slot_allocation.struct_field_orders(db).clone(),
     )
 }
 

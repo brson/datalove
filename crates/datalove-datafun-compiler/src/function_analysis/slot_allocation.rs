@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use std::collections::HashMap;
 use bct::text::InternedText;
-use crate::ast::{Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtIf, ExprFun, ExprFunKind};
+use crate::ast::{Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtIf, ExprFun, ExprFunKind, ExprAnonStruct};
 use crate::datalit::ast::TypeHint;
 use super::{SlotId, SlotKind};
 
@@ -56,6 +56,9 @@ pub struct SlotAllocation<'db> {
     /// Maps if-statement bindings to their slot IDs.
     #[returns(ref)]
     pub if_binding_slots: Vec<super::layout::IfBindingSlot<'db>>,
+    /// Precomputed field evaluation order for anonymous struct literals.
+    #[returns(ref)]
+    pub struct_field_orders: Vec<super::layout::StructFieldOrder<'db>>,
 }
 
 impl<'db> SlotAllocation<'db> {
@@ -123,6 +126,8 @@ struct SlotAllocationBuilder<'db> {
     /// Maps if-statement bindings to their slot IDs.
     /// Key is (StmtIf, is_then_binding).
     if_binding_slots: HashMap<(StmtIf<'db>, bool), SlotId>,
+    /// Precomputed field evaluation order for anonymous struct literals.
+    struct_field_orders: Vec<(ExprAnonStruct<'db>, Vec<usize>)>,
 }
 
 /// A slot that has been allocated.
@@ -148,6 +153,7 @@ impl<'db> SlotAllocationBuilder<'db> {
             var_stmt_slots: HashMap::new(),
             set_stmt_slots: HashMap::new(),
             if_binding_slots: HashMap::new(),
+            struct_field_orders: Vec::new(),
         }
     }
 
@@ -482,6 +488,15 @@ impl<'db> SlotAllocationBuilder<'db> {
                 if ctx == ExprContext::NeedsDest {
                     self.alloc_slot_with_destruction(None, SlotKind::Temporary, Some(expr), destruction);
                 }
+                // Compute permutation from source order to canonical (alphabetical) order.
+                let fields = s.fields(db);
+                let mut indexed_names: Vec<(usize, &str)> = fields.iter()
+                    .enumerate()
+                    .map(|(i, f)| (i, f.name(db).as_str(db)))
+                    .collect();
+                indexed_names.sort_by_key(|(_, name)| *name);
+                let permutation: Vec<usize> = indexed_names.iter().map(|(i, _)| *i).collect();
+                self.struct_field_orders.push((s, permutation));
             }
             ExprFunKind::AnonEnum(e) => {
                 // Payload writes to enum data area if parent has dest.
@@ -557,7 +572,7 @@ pub fn allocate_slots<'db>(
         AllocatedSlot::new(db, slot_id, interned_name, kind, expr, destruction)
     }).collect();
 
-    use super::layout::{NameResolution, LetStmtSlot, VarStmtSlot, SetStmtSlot, IfBindingSlot};
+    use super::layout::{NameResolution, LetStmtSlot, VarStmtSlot, SetStmtSlot, IfBindingSlot, StructFieldOrder};
 
     let name_resolutions: Vec<_> = builder.name_resolutions.into_iter()
         .map(|(expr, slot_id)| NameResolution::new(db, expr, slot_id))
@@ -574,6 +589,9 @@ pub fn allocate_slots<'db>(
     let if_binding_slots: Vec<_> = builder.if_binding_slots.into_iter()
         .map(|((stmt, is_then), slot_id)| IfBindingSlot::new(db, stmt, is_then, slot_id))
         .collect();
+    let struct_field_orders: Vec<_> = builder.struct_field_orders.into_iter()
+        .map(|(expr, permutation)| StructFieldOrder::new(db, expr, permutation))
+        .collect();
 
     SlotAllocation::new(
         db,
@@ -583,5 +601,6 @@ pub fn allocate_slots<'db>(
         var_stmt_slots,
         set_stmt_slots,
         if_binding_slots,
+        struct_field_orders,
     )
 }

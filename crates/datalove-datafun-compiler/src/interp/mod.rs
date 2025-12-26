@@ -1762,27 +1762,30 @@ fn eval_inline_anon_struct<'db>(
     use datalove_rt::rtdt::{TyDescRef, TyTag};
 
     let expr_fields = struct_expr.fields(ctx.db);
-    let mut sorted_fields: Vec<_> = expr_fields.iter()
-        .map(|f| (f.name(ctx.db), f.value(ctx.db)))
-        .collect();
-    sorted_fields.sort_by_key(|(name, _)| name.as_str(ctx.db));
+
+    // Get precomputed field order from frame layout.
+    let frame_index = ctx.call_stack.len() - 1;
+    let layout = ctx.call_stack[frame_index].layout;
+    let permutation = layout.get_struct_field_order(ctx.db, *struct_expr)
+        .expect("struct field order should be precomputed during analysis");
 
     // DPS path: if dest is a struct with matching field count, write directly.
-    // Both expression fields and dest fields are in canonical sorted order.
+    // Both expression fields (via permutation) and dest fields are in canonical sorted order.
     let dest_tag = unsafe { (*dest.tydesc).type_tag };
     if dest_tag == TyTag::Struct {
         let struct_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
         let struct_info = struct_ref.struct_info();
 
-        if struct_info.num_fields() as usize == sorted_fields.len() {
-            // DPS: evaluate each field directly into its slot.
-            for (i, (_name, value_expr)) in sorted_fields.iter().enumerate() {
-                let field_dest = get_struct_field_dest(dest, i)
+        if struct_info.num_fields() as usize == expr_fields.len() {
+            // DPS: evaluate each field directly into its slot, using precomputed order.
+            for (canonical_idx, &source_idx) in permutation.iter().enumerate() {
+                let value_expr = expr_fields[source_idx].value(ctx.db);
+                let field_dest = get_struct_field_dest(dest, canonical_idx)
                     .expect("field index should be valid");
 
-                if let Err(e) = eval_expression_frame(ctx, *value_expr, field_dest) {
+                if let Err(e) = eval_expression_frame(ctx, value_expr, field_dest) {
                     // Clean up already-written fields.
-                    for j in 0..i {
+                    for j in 0..canonical_idx {
                         let written_field = get_struct_field_dest(dest, j)
                             .expect("field index should be valid");
                         destroy_value(ctx, written_field.to_value());
@@ -1798,7 +1801,7 @@ fn eval_inline_anon_struct<'db>(
     // Fallback was for type mismatch - but dest should always match the expression type.
     unreachable!(
         "eval_inline_anon_struct: dest type mismatch - expected Struct with {} fields, got {:?}",
-        sorted_fields.len(),
+        expr_fields.len(),
         dest_tag
     );
 }

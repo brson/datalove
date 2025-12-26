@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use bct::text::InternedText;
 use super::{SlotId, SlotKind};
 use super::type_sizing::{compute_datafun_type_layout, TypeLayout};
-use crate::ast::{ExprFun, StmtLet, StmtVar, StmtSet, StmtIf};
+use crate::ast::{ExprFun, ExprAnonStruct, StmtLet, StmtVar, StmtSet, StmtIf};
 
 /// Align a value up to the given alignment.
 /// Alignment must be a power of 2.
@@ -35,6 +35,9 @@ pub struct FrameLayout<'db> {
     /// Maps if-statement bindings to their slot IDs.
     #[returns(ref)]
     pub if_binding_slots: Vec<IfBindingSlot<'db>>,
+    /// Precomputed field evaluation order for anonymous struct literals.
+    #[returns(ref)]
+    pub struct_field_orders: Vec<StructFieldOrder<'db>>,
 }
 
 /// Maps a Name expression to its resolved slot.
@@ -72,6 +75,18 @@ pub struct IfBindingSlot<'db> {
     /// True for then-binding, false for else-binding.
     pub is_then_binding: bool,
     pub slot_id: SlotId,
+}
+
+/// Precomputed field evaluation order for an anonymous struct literal.
+///
+/// Maps source field order to canonical (alphabetical) order.
+#[salsa::tracked]
+pub struct StructFieldOrder<'db> {
+    pub expr: ExprAnonStruct<'db>,
+    /// Permutation from source order to canonical order.
+    /// `permutation[i]` is the source index of the field at canonical position `i`.
+    #[returns(ref)]
+    pub permutation: Vec<usize>,
 }
 
 /// Information about a single slot in the frame.
@@ -159,6 +174,7 @@ impl<'db> FrameLayout<'db> {
         var_stmt_slots: Vec<VarStmtSlot<'db>>,
         set_stmt_slots: Vec<SetStmtSlot<'db>>,
         if_binding_slots: Vec<IfBindingSlot<'db>>,
+        struct_field_orders: Vec<StructFieldOrder<'db>>,
     ) -> Self {
         use std::mem::{size_of, align_of};
 
@@ -206,6 +222,18 @@ impl<'db> FrameLayout<'db> {
             var_stmt_slots,
             set_stmt_slots,
             if_binding_slots,
+            struct_field_orders,
         )
+    }
+
+    /// Get the precomputed field evaluation order for a struct literal.
+    pub fn get_struct_field_order(
+        self,
+        db: &'db dyn crate::Db,
+        expr: ExprAnonStruct<'db>,
+    ) -> Option<&'db [usize]> {
+        self.struct_field_orders(db).iter()
+            .find(|sfo| sfo.expr(db) == expr)
+            .map(|sfo| sfo.permutation(db).as_slice())
     }
 }
