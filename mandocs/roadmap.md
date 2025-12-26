@@ -11,6 +11,7 @@ With core->runtime calls.
 
 # in progress
 
+- unit type
 - script/function unification semantics
 - move/clone semantics - moves-etc.md
 - argument modes - moves-etc.md
