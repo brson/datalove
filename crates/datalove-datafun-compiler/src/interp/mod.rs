@@ -308,8 +308,7 @@ pub fn execute_function_body<'db>(
         ctx: &mut InterpContext<'_>,
         arg_values: Vec<Value>,
         slot_states: &[SlotState],
-        slots: &[crate::function_analysis::SlotInfo<'_>],
-        params: &[ast::FunParam<'_>],
+        layout: crate::function_analysis::FrameLayout<'_>,
         db: &dyn crate::Db,
     ) {
         for (i, arg_value) in arg_values.into_iter().enumerate() {
@@ -318,8 +317,8 @@ pub fn execute_function_body<'db>(
                 free_value_structure(ctx, arg_value);
             } else {
                 // Non-copy types: check if they were moved (consumed by function).
-                let param_name = params[i].name(db);
-                if let Some(slot_info) = slots.iter().find(|s| s.name(db) == Some(param_name)) {
+                // Use O(1) indexed lookup by parameter position.
+                if let Some(slot_info) = layout.get_param_slot(db, i) {
                     let slot_id = slot_info.slot_id(db);
                     if slot_states[slot_id.0 as usize] != SlotState::Moved {
                         // Slot was never read/moved, so destroy the argument.
@@ -430,17 +429,16 @@ pub fn execute_function_body<'db>(
             ));
         }
 
-        let param_name = param.name(ctx.db);
         let arg_value = arg_values[i];
 
-        // Find the slot for this parameter.
-        let slot_info = match slots.iter().find(|s| s.name(ctx.db) == Some(param_name)) {
+        // Find the slot for this parameter using O(1) indexed lookup.
+        let slot_info = match layout.get_param_slot(ctx.db, i) {
             Some(s) => s,
             None => {
                 restore_module_context(ctx, prev_module);
                 cleanup_args_on_error(ctx, arg_values);
                 return Err(InterpError::RuntimeError(
-                    format!("Parameter '{}' not found in frame layout", param_name.text(ctx.db))
+                    format!("Parameter '{}' not found in frame layout", param.name(ctx.db).text(ctx.db))
                 ));
             }
         };
@@ -505,7 +503,7 @@ pub fn execute_function_body<'db>(
     cleanup_frame(ctx, frame);
 
     // Clean up arguments based on their final slot states.
-    cleanup_args_after_frame(ctx, arg_values, &final_slot_states, slots, params, ctx.db);
+    cleanup_args_after_frame(ctx, arg_values, &final_slot_states, layout, ctx.db);
 
     // Restore previous module.
     restore_module_context(ctx, prev_module);

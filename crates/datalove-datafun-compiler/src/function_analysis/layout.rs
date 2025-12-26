@@ -44,6 +44,9 @@ pub struct FrameLayout<'db> {
     /// Indexed lookup: StmtIf salsa ID -> (then_slot, else_slot) for if-bindings.
     #[returns(ref)]
     pub if_binding_slot_index: Vec<Option<(Option<SlotInfo<'db>>, Option<SlotInfo<'db>>)>>,
+    /// Parameter slots in declaration order (for O(1) lookup by parameter index).
+    #[returns(ref)]
+    pub param_slots: Vec<SlotInfo<'db>>,
 }
 
 /// Maps a Name expression to its resolved slot.
@@ -251,6 +254,12 @@ impl<'db> FrameLayout<'db> {
             }
         }
 
+        // Collect parameter slots (Reference slots) in declaration order.
+        let param_slots: Vec<SlotInfo<'db>> = slot_infos.iter()
+            .filter(|s| s.kind(db) == SlotKind::Reference)
+            .copied()
+            .collect();
+
         FrameLayout::new(
             db,
             total_size,
@@ -264,6 +273,7 @@ impl<'db> FrameLayout<'db> {
             if_binding_slots,
             struct_field_orders,
             if_binding_slot_index,
+            param_slots,
         )
     }
 
@@ -293,5 +303,10 @@ impl<'db> FrameLayout<'db> {
             .copied()
             .flatten()
             .unwrap_or((None, None))
+    }
+
+    /// Get the slot for a parameter by its index (position in parameter list).
+    pub fn get_param_slot(self, db: &'db dyn crate::Db, index: usize) -> Option<SlotInfo<'db>> {
+        self.param_slots(db).get(index).copied()
     }
 }
