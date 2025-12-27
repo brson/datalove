@@ -197,7 +197,7 @@ pub fn analyze_modules_worldfile(
         main_func,
         Some(main_module_id),
         Vec::new(),
-        Some(return_dest),
+        return_dest,
     );
 
     let output = match result {

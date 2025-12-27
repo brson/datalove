@@ -173,20 +173,20 @@ fn eval_function_call_frame<'db>(
     }
 
     // Execute the function body with arguments and return destination.
-    execute_function_body(ctx, func, func_module, arg_values, Some(return_dest))
+    execute_function_body(ctx, func, func_module, arg_values, return_dest)
 }
 
 /// Execute a function body and return its result.
 ///
 /// This uses frame-based execution with analysis-driven slot allocation.
-/// If `return_dest` is provided, return expressions write directly to caller's memory.
+/// Return expressions write directly to caller's memory via `return_dest`.
 /// All functions return a value (void functions return unit `()`).
 pub fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
     func_module: Option<ModuleId>,
     arg_values: Vec<Value>,
-    return_dest: Option<Destination>,
+    return_dest: Destination,
 ) -> Result<Option<Value>, InterpError> {
     // Helper to clean up arguments on early error (before frame execution).
     // All arguments must be destroyed since they were never used.
@@ -406,17 +406,9 @@ pub fn execute_function_body<'db>(
             // Early return via ? operator - create Option::None.
             if let Some(ret_type) = return_type {
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Option(_)) {
-                    if let Some(dest) = return_dest {
-                        // DPS: write None to caller's destination.
-                        write_option_none_to_dest(dest)?;
-                        return Ok(Some(dest.to_value()));
-                    } else {
-                        // This path should be unreachable now that all function calls provide DPS destinations.
-                        panic!(
-                            "Unreachable: OptionNone early return without DPS destination in function '{}'",
-                            func.name(ctx.db).text(ctx.db)
-                        );
-                    }
+                    // DPS: write None to caller's destination.
+                    write_option_none_to_dest(return_dest)?;
+                    return Ok(Some(return_dest.to_value()));
                 }
             }
         }
@@ -424,17 +416,9 @@ pub fn execute_function_body<'db>(
             // Early return via ! operator - create Result::Err.
             if let Some(ret_type) = return_type {
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Result(_)) {
-                    if let Some(dest) = return_dest {
-                        // DPS: write Err to caller's destination.
-                        write_result_err_to_dest(dest, *tydesc, *ptr)?;
-                        return Ok(Some(dest.to_value()));
-                    } else {
-                        // This path should be unreachable now that all function calls provide DPS destinations.
-                        panic!(
-                            "Unreachable: ResultErr early return without DPS destination in function '{}'",
-                            func.name(ctx.db).text(ctx.db)
-                        );
-                    }
+                    // DPS: write Err to caller's destination.
+                    write_result_err_to_dest(return_dest, *tydesc, *ptr)?;
+                    return Ok(Some(return_dest.to_value()));
                 }
             }
         }
@@ -1058,26 +1042,18 @@ fn eval_expression_frame<'db>(
 }
 
 /// Evaluate a return expression with destination from frame.
-///
-/// The frame must have a `return_dest`; all callers now provide one.
 fn eval_return_expression_frame<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
 ) -> Result<Value, InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
+    let return_dest = ctx.call_stack[frame_index].return_dest;
 
-    // Check if we have a return destination from caller.
-    if let Some(return_dest) = ctx.call_stack[frame_index].return_dest {
-        // Evaluate expression with DPS into return destination.
-        eval_expression_frame(ctx, expr, return_dest)?;
+    // Evaluate expression with DPS into return destination.
+    eval_expression_frame(ctx, expr, return_dest)?;
 
-        // Return value pointing to caller's destination memory.
-        return Ok(return_dest.to_value());
-    }
-
-    // No return_dest - this was the "script scope" fallback path.
-    // Script scope was removed; all callers now provide return_dest.
-    unreachable!("return_dest should always be Some - script scope was removed");
+    // Return value pointing to caller's destination memory.
+    Ok(return_dest.to_value())
 }
 
 /// Return unit `()` for void functions.
@@ -1088,9 +1064,7 @@ fn write_unit_to_return_dest<'db>(
     ctx: &mut InterpContext<'db>,
 ) -> Result<Value, InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
-
-    let return_dest = ctx.call_stack[frame_index].return_dest
-        .expect("return_dest should always be Some");
+    let return_dest = ctx.call_stack[frame_index].return_dest;
 
     // Unit is a ZST (size 0). Nothing to write.
     Ok(return_dest.to_value())

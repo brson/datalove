@@ -53,8 +53,8 @@ pub struct StackFrame<'db> {
     pub cfg: ControlFlowGraph<'db>,
     /// Analysis-computed cleanup points.
     pub drop_points: DropPoints<'db>,
-    /// Caller's return destination (None for void functions).
-    pub return_dest: Option<Destination>,
+    /// Caller's return destination (all functions return a value).
+    pub return_dest: Destination,
 }
 
 /// Set slot state in a slot_states vector (for use during frame construction).
