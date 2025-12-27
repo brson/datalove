@@ -156,7 +156,7 @@ pub(super) fn process_block_exit_drops<'db>(
         // For tracked slots (conditional init or move), check runtime state.
         // For non-tracked slots, static analysis guarantees correctness.
         if slot_info.needs_state_tracking(ctx.db) {
-            if ctx.call_stack[frame_index].slot_states[slot_index] != SlotState::Available {
+            if ctx.call_stack[frame_index].get_slot_state(slot_id) != SlotState::Available {
                 continue;
             }
         }
@@ -171,7 +171,7 @@ pub(super) fn process_block_exit_drops<'db>(
         destroy_value_contents_only(ctx, value);
 
         // Mark slot as Moved so cleanup_frame doesn't try to drop it again.
-        ctx.call_stack[frame_index].slot_states[slot_index] = SlotState::Moved;
+        ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Moved);
     }
 
     Ok(())
@@ -220,7 +220,7 @@ pub(super) fn cleanup_frame<'db>(
         // For tracked slots (conditional init or move), check runtime state.
         // For non-tracked slots, static analysis guarantees correctness.
         if slot_info.needs_state_tracking(ctx.db) {
-            if frame.slot_states[slot_index] != SlotState::Available {
+            if frame.get_slot_state(slot_id) != SlotState::Available {
                 continue;
             }
         }

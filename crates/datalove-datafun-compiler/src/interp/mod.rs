@@ -32,6 +32,7 @@
 //!
 //! Copy types (bool, fixed integers, f32) clone transparently. Linear types (int,
 //! string, collections) use move semantics. `SlotState` tracks each slot:
+//! - `Untracked`: Slot doesn't need tracking (release mode only)
 //! - `Uninitialized`: Not yet written; skip cleanup
 //! - `Available`: Valid data; needs cleanup if not moved
 //! - `Moved`: Ownership transferred; skip cleanup
@@ -82,7 +83,7 @@ pub mod tydesc;
 
 pub use value::{Value, Destination};
 pub use error::InterpError;
-pub use frame::{SlotState, StackFrame};
+pub use frame::{SlotState, StackFrame, set_slot_state_vec, get_slot_state_vec};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
 pub use context::{InterpContext, ModuleFunctionTableGraph};
 
@@ -214,7 +215,7 @@ pub fn execute_function_body<'db>(
                 } else {
                     // Non-copy types: check if they were moved (consumed by function).
                     let slot_id = slot_info.slot_id(db);
-                    if slot_states[slot_id.0 as usize] != SlotState::Moved {
+                    if get_slot_state_vec(slot_states, slot_id) != SlotState::Moved {
                         // Slot was never read/moved, so destroy the argument.
                         destroy_value(ctx, arg_value);
                     }
@@ -288,8 +289,8 @@ pub fn execute_function_body<'db>(
     // Allocate frame data.
     let mut frame_data = vec![0u8; total_size];
 
-    // Initialize slot states (all Uninitialized until written to).
-    let mut slot_states = vec![SlotState::Uninitialized; slots.len()];
+    // Initialize slot states based on tracking needs.
+    let mut slot_states = StackFrame::init_slot_states(slots, ctx.db);
 
     // Pre-compute tydescs for all slots (avoids repeated hash lookups during execution).
     let mut slot_tydescs = Vec::with_capacity(slots.len());
@@ -346,7 +347,7 @@ pub fn execute_function_body<'db>(
 
         // Mark parameter slot as Available (it now contains a valid pointer).
         let slot_id = slot_info.slot_id(ctx.db);
-        slot_states[slot_id.0 as usize] = SlotState::Available;
+        set_slot_state_vec(&mut slot_states, slot_id, SlotState::Available);
     }
 
     // Create and push the stack frame.
@@ -675,7 +676,7 @@ fn execute_let_statement_frame<'db>(
     eval_expression_frame(ctx, let_stmt.value(ctx.db), dest)?;
 
     // Mark slot as Available.
-    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
 
     Ok(())
 }
@@ -711,7 +712,7 @@ fn execute_var_statement_frame<'db>(
     eval_expression_frame(ctx, var_stmt.value(ctx.db), dest)?;
 
     // Mark slot as Available.
-    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
 
     Ok(())
 }
@@ -782,7 +783,7 @@ fn execute_set_statement_frame<'db>(
     }
 
     // Slot remains Available after set.
-    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
 
     Ok(())
 }
@@ -808,7 +809,7 @@ fn eval_expression_frame<'db>(
 
             // Check slot state (debug-only - static analysis catches use-after-move).
             #[cfg(debug_assertions)]
-            if ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] == SlotState::Moved {
+            if ctx.call_stack[frame_index].get_slot_state(slot_id) == SlotState::Moved {
                 return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
             }
 
@@ -832,7 +833,7 @@ fn eval_expression_frame<'db>(
                 } else {
                     // Move: shallow copy to dest, mark slot as moved.
                     move_value_to_dest(source_value, dest);
-                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
+                    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Moved);
                 }
                 Ok(())
             } else {
@@ -848,7 +849,7 @@ fn eval_expression_frame<'db>(
                     // For Move types, move to dest, then mark source as moved.
                     // The move does a shallow copy (memcpy), transferring heap ownership.
                     move_value_to_dest(source_value, dest);
-                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
+                    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Moved);
                 }
                 Ok(())
             }

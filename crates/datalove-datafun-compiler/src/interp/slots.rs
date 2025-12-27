@@ -46,7 +46,7 @@ pub(super) fn eval_operand<'db>(
 
             // Check slot state (debug-only).
             #[cfg(debug_assertions)]
-            if ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] == SlotState::Moved {
+            if ctx.call_stack[frame_index].get_slot_state(slot_id) == SlotState::Moved {
                 return Err(InterpError::UseAfterMove(name.text(ctx.db).to_string()));
             }
 
@@ -119,7 +119,7 @@ pub(super) fn mark_temp_slot_available<'db>(ctx: &mut InterpContext<'db>, expr: 
 
     if let Some(slot_info) = layout.get_temp_slot_for_expr(ctx.db, expr) {
         let slot_id = slot_info.slot_id(ctx.db);
-        ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+        ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
     }
 }
 
@@ -132,7 +132,7 @@ pub(super) fn mark_temp_slot_moved<'db>(ctx: &mut InterpContext<'db>, expr: crat
 
     if let Some(slot_info) = layout.get_temp_slot_for_expr(ctx.db, expr) {
         let slot_id = slot_info.slot_id(ctx.db);
-        ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Moved;
+        ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Moved);
     }
 }
 

@@ -63,7 +63,7 @@ pub(super) fn evaluate_branch_condition<'db>(
                     }
 
                     let slot_id = slot_info.slot_id(ctx.db);
-                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+                    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
                 }
             }
 
@@ -102,7 +102,7 @@ pub(super) fn evaluate_branch_condition<'db>(
                     }
 
                     let slot_id = slot_info.slot_id(ctx.db);
-                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+                    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
                 }
 
                 // Destroy the original Result (frees any heap data in the Ok payload).
@@ -152,7 +152,7 @@ pub(super) fn evaluate_branch_condition<'db>(
                     }
 
                     let slot_id = slot_info.slot_id(ctx.db);
-                    ctx.call_stack[frame_index].slot_states[slot_id.0 as usize] = SlotState::Available;
+                    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
                 }
 
                 // Destroy the original Result (frees the original Error's heap data).
