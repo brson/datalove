@@ -14,6 +14,7 @@ Then we'll add I/O to it &mdash; carefully.
 
 
 
+
 ---
 
 Datalove is built from three cleanly-scoped strict sublanguages of increasing power:
@@ -40,6 +41,24 @@ owned native pointers, and objects with identity.
 Filue extensions: `.dls` (scripts), `.dlm` (module)
 
 ---
+
+
+
+
+## The state of Datalove
+
+Datalove is a work in progress.
+This documentation describes Datalove as currently implemented.
+
+Current status:
+
+- Datalit: implemented.
+- Datafun modules: implemented.
+- Datafun scripts: implemented.
+- Datafun interpreter: implemented, analysis-driven. No JIT.
+
+---
+
 
 
 
