@@ -16,8 +16,20 @@ use datalove_datafun_pkg::package_load::{Package, PackageModule};
 #[serde(tag = "type")]
 pub enum SectionAnalysis {
     Module(ModuleAnalysis),
-    /// Script execution has been removed.
-    ScriptNotSupported { message: String },
+    ScriptFragment(ScriptFragmentAnalysis),
+    ScriptExpr(ScriptExprAnalysis),
+}
+
+/// Analysis of a script fragment section (statements).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ScriptFragmentAnalysis {
+    pub source: String,
+}
+
+/// Analysis of a script expression section.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ScriptExprAnalysis {
+    pub source: String,
 }
 
 /// Analysis of a module section.
@@ -95,20 +107,11 @@ pub fn analyze_worldfile(
             WorldfileSection::Module { library, package, module, source } => {
                 analyze_module_section(db, &library, &package, &module, &source)?
             }
-            WorldfileSection::ScriptUnit { .. } => {
-                SectionAnalysis::ScriptNotSupported {
-                    message: "scriptunit sections not supported - script interpreter removed".to_string()
-                }
+            WorldfileSection::ScriptFragment { source } => {
+                SectionAnalysis::ScriptFragment(ScriptFragmentAnalysis { source })
             }
-            WorldfileSection::Expr { .. } => {
-                SectionAnalysis::ScriptNotSupported {
-                    message: "expr sections not supported - script interpreter removed".to_string()
-                }
-            }
-            WorldfileSection::Script { .. } => {
-                SectionAnalysis::ScriptNotSupported {
-                    message: "script sections not supported - script interpreter removed".to_string()
-                }
+            WorldfileSection::ScriptExpr { source } => {
+                SectionAnalysis::ScriptExpr(ScriptExprAnalysis { source })
             }
         };
 

@@ -23,11 +23,17 @@ pub struct SlotId(pub u32);
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct BlockId(pub u32);
 
-/// Operand - either SSA value or mutable slot.
+/// Operand - either SSA value or mutable slot, local or from a previous script unit.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Operand {
+    /// Local SSA value.
     Value(ValueId),
+    /// Local mutable slot.
     Slot(SlotId),
+    /// SSA value from a previous script unit.
+    ExternalValue { unit: u32, value: ValueId },
+    /// Mutable slot from a previous script unit.
+    ExternalSlot { unit: u32, slot: SlotId },
 }
 
 /// Constant value that can be loaded.
@@ -223,8 +229,14 @@ pub enum Terminator {
     /// Return from function.
     Return { value: Option<Operand> },
 
-    /// Early return (from ? or checked operators).
+    /// Early return from function (from ? or checked operators).
     TryReturn { value: Option<Operand> },
+
+    /// End of script unit (normal completion).
+    UnitEnd { result: Option<Operand> },
+
+    /// Early return from script unit (from ? or checked operators).
+    UnitEarlyReturn { value: Operand },
 }
 
 /// A basic block - sequence of instructions followed by a terminator.
@@ -256,4 +268,32 @@ impl IrFunction {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IrModule {
     pub functions: Vec<IrFunction>,
+}
+
+/// What a script unit exports to subsequent units.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum ExportBinding {
+    /// An SSA value (from let binding).
+    Value(ValueId),
+    /// A mutable slot (from var binding).
+    Slot(SlotId),
+    /// A function defined in this unit.
+    Function(usize),
+}
+
+/// IR for a script unit.
+///
+/// Script units are executed sequentially and can reference values from
+/// previous units via ExternalValue/ExternalSlot operands.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct IrScriptUnit {
+    pub blocks: Vec<IrBlock>,
+    pub value_count: u32,
+    pub slot_count: u32,
+    /// Functions defined in this unit.
+    pub functions: Vec<IrFunction>,
+    /// Result value of this unit (for expression units in REPL).
+    pub result: Option<ValueId>,
+    /// Names exported to later units.
+    pub exports: Vec<(String, ExportBinding)>,
 }

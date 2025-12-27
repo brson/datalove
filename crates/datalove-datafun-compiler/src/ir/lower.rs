@@ -303,6 +303,13 @@ fn lower_expression<'db>(
                         ctx.emit(Instruction::SlotLoad { dest, slot: s });
                         Ok(dest)
                     }
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
+                        // External operands from previous script units.
+                        // Copy into a local value.
+                        let dest = ctx.fresh_value();
+                        ctx.emit(Instruction::Copy { dest, src: operand });
+                        Ok(dest)
+                    }
                 }
             } else {
                 Err(LowerError::VariableNotFound(name_str.to_string()))

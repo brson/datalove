@@ -26,6 +26,8 @@ impl fmt::Display for Operand {
         match self {
             Operand::Value(v) => write!(f, "{}", v),
             Operand::Slot(s) => write!(f, "{}", s),
+            Operand::ExternalValue { unit, value } => write!(f, "unit{}.{}", unit, value),
+            Operand::ExternalSlot { unit, slot } => write!(f, "unit{}.{}", unit, slot),
         }
     }
 }
@@ -236,6 +238,15 @@ impl fmt::Display for Terminator {
             Terminator::TryReturn { value: None } => {
                 write!(f, "try_return")
             }
+            Terminator::UnitEnd { result: Some(v) } => {
+                write!(f, "unit_end {}", v)
+            }
+            Terminator::UnitEnd { result: None } => {
+                write!(f, "unit_end")
+            }
+            Terminator::UnitEarlyReturn { value } => {
+                write!(f, "unit_early_return {}", value)
+            }
         }
     }
 }
@@ -274,6 +285,38 @@ impl fmt::Display for IrModule {
                 writeln!(f)?;
             }
             write!(f, "{}", func)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for ExportBinding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExportBinding::Value(v) => write!(f, "{}", v),
+            ExportBinding::Slot(s) => write!(f, "{}", s),
+            ExportBinding::Function(idx) => write!(f, "fn#{}", idx),
+        }
+    }
+}
+
+impl fmt::Display for IrScriptUnit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "scriptunit:")?;
+        for block in &self.blocks {
+            write!(f, "{}", block)?;
+        }
+        if !self.functions.is_empty() {
+            writeln!(f)?;
+            for func in &self.functions {
+                write!(f, "{}", func)?;
+            }
+        }
+        if !self.exports.is_empty() {
+            writeln!(f, "exports:")?;
+            for (name, binding) in &self.exports {
+                writeln!(f, "    {} = {}", name, binding)?;
+            }
         }
         Ok(())
     }

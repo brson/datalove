@@ -48,14 +48,11 @@ pub fn analyze_modules_worldfile(
     for section in &parsed.sections {
         match section {
             WorldfileSection::Module { .. } => {}
-            WorldfileSection::Script { .. } => {
-                bail!("script section not allowed in module-only worldfile");
+            WorldfileSection::ScriptFragment { .. } => {
+                bail!("scriptunit-fragment section not allowed in module-only worldfile");
             }
-            WorldfileSection::ScriptUnit { .. } => {
-                bail!("scriptunit section not allowed in module-only worldfile");
-            }
-            WorldfileSection::Expr { .. } => {
-                bail!("expr section not allowed in module-only worldfile");
+            WorldfileSection::ScriptExpr { .. } => {
+                bail!("scriptunit-expr section not allowed in module-only worldfile");
             }
         }
     }

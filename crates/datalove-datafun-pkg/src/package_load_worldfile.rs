@@ -19,13 +19,12 @@ pub enum WorldfileSection {
         module: String,
         source: String,
     },
-    ScriptUnit {
+    /// Script unit containing statements (let/var/fun declarations, control flow).
+    ScriptFragment {
         source: String,
     },
-    Expr {
-        source: String,
-    },
-    Script {
+    /// Script unit containing a single expression.
+    ScriptExpr {
         source: String,
     },
 }
@@ -203,12 +202,10 @@ fn parse_worldfile_to_sections(content: &str) -> AnyResult<Vec<WorldfileSection>
         let source = source_lines.join("\n");
 
         // Determine section type and create appropriate variant.
-        if header_line == "script" {
-            sections.push(WorldfileSection::Script { source });
-        } else if header_line == "scriptunit" {
-            sections.push(WorldfileSection::ScriptUnit { source });
-        } else if header_line == "expr" {
-            sections.push(WorldfileSection::Expr { source });
+        if header_line == "scriptunit-fragment" {
+            sections.push(WorldfileSection::ScriptFragment { source });
+        } else if header_line == "scriptunit-expr" {
+            sections.push(WorldfileSection::ScriptExpr { source });
         } else if let Some(path) = header_line.strip_prefix("module ") {
             let parts: Vec<&str> = path.split('/').collect();
             if parts.len() != 3 {
@@ -222,7 +219,7 @@ fn parse_worldfile_to_sections(content: &str) -> AnyResult<Vec<WorldfileSection>
                 source,
             });
         } else {
-            bail!("unknown section type '{header_line}' (expected 'module', 'scriptunit', 'expr', or 'script')");
+            bail!("unknown section type '{header_line}' (expected 'module', 'scriptunit-fragment', or 'scriptunit-expr')");
         }
     }
 
