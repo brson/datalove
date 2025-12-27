@@ -11,7 +11,7 @@ With core->runtime calls.
 
 # in progress
 
-- use cfg for early return branching
+- use a fully-cfgd ir
 - script/function unification semantics
 - move/clone semantics - moves-etc.md
 - argument modes - moves-etc.md
