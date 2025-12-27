@@ -11,7 +11,8 @@ for multi-arch compatibility.
 ## Unit
 
 `()`.
-Byte-sized.
+Zero-sized.
+TODO: In the runtime pointers to ZSTs are represented as ...
 
 
 

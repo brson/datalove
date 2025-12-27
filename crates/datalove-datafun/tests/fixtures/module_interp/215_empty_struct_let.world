@@ -1,0 +1,8 @@
+----------
+module local/test/main
+----------
+
+fun main(): @{}
+    let x: @{} = @{}
+    ret x
+end fun

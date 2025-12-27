@@ -1,0 +1,7 @@
+----------
+module local/test/main
+----------
+
+fun main(): @!@()
+    ret @ok @()
+end fun

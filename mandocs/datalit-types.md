@@ -48,8 +48,11 @@ Datalit structs and enums are structurally-typed.
 ## Unit
 
 Spelled `()`, which can also be considered a zero-element anonymous tuple.
+This is the implicit return type of void functions.
 
-It is byte-sized, not zero-sized.
+Note that `{}`, the empty anonymous struct,
+has identical representation,
+but is not used as the unit type.
 
 
 
