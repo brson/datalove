@@ -23,20 +23,6 @@ pub enum InterpError {
     IfOutsideFunction,
     /// Propagates return value up the call stack.
     FunctionReturn(Value),
-    /// Try operator (? or !) triggered early return.
-    EarlyReturn,
-
-    // Checked arithmetic errors.
-    Overflow,
-    DivisionByZero,
-
-    /// Optional operator overflow/error - return None.
-    OptionNone,
-    /// Result operator error - return Err with this payload.
-    ResultErr {
-        tydesc: *const datalove_rt::rtdt::TyDesc,
-        ptr: *mut u8,
-    },
 
     NoOutputVariable,
 }

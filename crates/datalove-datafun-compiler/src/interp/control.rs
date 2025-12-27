@@ -4,7 +4,7 @@
 //! - `eval_try_option`: The `?` operator (Option unwrap or early return)
 //! - `eval_try_result`: The `!` operator (Result unwrap or early return)
 
-use super::{InterpContext, InterpError, Value, SlotState};
+use super::{InterpContext, InterpError, Value, Destination, SlotState, EvalResult};
 use super::memory::destroy_value;
 use crate::ast::StmtIf;
 
@@ -172,12 +172,14 @@ pub(super) fn evaluate_branch_condition<'db>(
 
 /// Evaluate try-option operator (`val?`).
 ///
-/// Some: writes inner to dest. None: returns `InterpError::OptionNone`.
+/// Some: writes inner to dest, returns `EvalResult::Ok`.
+/// None: writes Option::None to return_dest, returns `EvalResult::EarlyReturn`.
 pub(super) fn eval_try_option<'db>(
     ctx: &mut InterpContext<'db>,
     operand_value: Value,
-    dest: super::Destination,
-) -> Result<(), InterpError> {
+    dest: Destination,
+    return_dest: Destination,
+) -> Result<EvalResult, InterpError> {
     use datalove_rt::rtdt::{TyDescRef, TyTag, OptionTag, layout::compute_option_layout};
 
     let tydesc_ref = unsafe { TyDescRef::from_ptr(operand_value.tydesc) };
@@ -193,7 +195,11 @@ pub(super) fn eval_try_option<'db>(
 
     if tag == OptionTag::None as u8 {
         destroy_value(ctx, operand_value);
-        return Err(InterpError::OptionNone);
+        // Write Option::None to return_dest and signal early return.
+        unsafe {
+            *(return_dest.ptr as *mut u8) = OptionTag::None as u8;
+        }
+        return Ok(EvalResult::EarlyReturn);
     }
 
     let layout = compute_option_layout(tydesc_ref);
@@ -205,18 +211,20 @@ pub(super) fn eval_try_option<'db>(
         std::ptr::copy_nonoverlapping(payload_ptr, dest.ptr, inner_size);
     }
 
-    Ok(())
+    Ok(EvalResult::Ok)
 }
 
 /// Evaluate try-result operator (`val!`).
 ///
-/// Ok: writes inner to dest. Err: returns `InterpError::ResultErr`.
+/// Ok: writes inner to dest, returns `EvalResult::Ok`.
+/// Err: writes Result::Err to return_dest, returns `EvalResult::EarlyReturn`.
 pub(super) fn eval_try_result<'db>(
     ctx: &mut InterpContext<'db>,
     operand_value: Value,
-    dest: super::Destination,
-) -> Result<(), InterpError> {
-    use datalove_rt::rtdt::{TyDescRef, TyTag, ResultTag, Data, layout::compute_result_layout};
+    dest: Destination,
+    return_dest: Destination,
+) -> Result<EvalResult, InterpError> {
+    use datalove_rt::rtdt::{TyDescRef, TyTag, ResultTag, layout::compute_result_layout};
 
     let tydesc_ref = unsafe { TyDescRef::from_ptr(operand_value.tydesc) };
 
@@ -233,37 +241,44 @@ pub(super) fn eval_try_result<'db>(
     let payload_ptr = unsafe { operand_value.ptr.add(layout.payload_offset as usize) };
 
     if tag == ResultTag::Err as u8 {
-        let error_data = unsafe { std::ptr::read(payload_ptr as *const Data) };
-        let err_tydesc = error_data.tydesc();
-        let err_value_ptr = error_data.value_ptr();
+        // Clone the Error to return_dest's error payload area.
+        let return_tydesc_ref = unsafe { TyDescRef::from_ptr(return_dest.tydesc) };
+        let return_layout = compute_result_layout(return_tydesc_ref);
 
-        let err_tydesc_ref = unsafe { TyDescRef::from_ptr(err_tydesc) };
-        let err_size = err_tydesc_ref.size() as usize;
-
-        let rt_handle = ctx.runtime.handle();
-        let cloned_err_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, err_tydesc, 1)
-        };
-
-        if !cloned_err_ptr.is_null() {
-            unsafe {
-                std::ptr::copy_nonoverlapping(err_value_ptr, cloned_err_ptr, err_size);
-            }
+        // Write Err tag to return_dest.
+        unsafe {
+            *(return_dest.ptr as *mut u8) = ResultTag::Err as u8;
         }
 
+        // Clone the Error (which is a Data structure) to the return_dest payload.
+        let return_payload_ptr = unsafe { return_dest.ptr.add(return_layout.payload_offset as usize) };
+
+        // Create a temporary tydesc for Error type to use with clone.
+        // Error has same structure as Data: (tydesc_ptr, value_ptr).
+        let error_tydesc = datalove_rt::rtdt::TyDesc {
+            type_tag: TyTag::Error,
+            size: std::mem::size_of::<datalove_rt::rtdt::Error>() as u32,
+            align: std::mem::align_of::<datalove_rt::rtdt::Error>() as u32,
+            type_info: datalove_rt::rtdt::TyInfo {
+                nothing: datalove_rt::rtdt::TyInfoNothing,
+            },
+        };
+
+        let rt_handle = ctx.runtime.handle();
         unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_local(
-                ctx.runtime.handle(),
-                err_tydesc,
-                1,
-                err_value_ptr as *mut u8,
+            datalove_rt::c::dtlv_rti_clone_local(
+                rt_handle,
+                payload_ptr,
+                &error_tydesc as *const datalove_rt::rtdt::TyDesc,
+                return_payload_ptr,
+                &error_tydesc as *const datalove_rt::rtdt::TyDesc,
             );
         }
 
-        return Err(InterpError::ResultErr {
-            tydesc: err_tydesc,
-            ptr: cloned_err_ptr,
-        });
+        // Destroy the original operand (which includes the original Error).
+        destroy_value(ctx, operand_value);
+
+        return Ok(EvalResult::EarlyReturn);
     }
 
     let ok_size = unsafe { (*dest.tydesc).size as usize };
@@ -272,5 +287,5 @@ pub(super) fn eval_try_result<'db>(
         std::ptr::copy_nonoverlapping(payload_ptr, dest.ptr, ok_size);
     }
 
-    Ok(())
+    Ok(EvalResult::Ok)
 }

@@ -454,15 +454,38 @@ impl<'db> CfgBuilder<'db> {
         (Some(current_block), true)
     }
 
-    /// Check if an expression may return early (contains ? or !).
+    /// Check if an expression may return early.
+    ///
+    /// Detects all early-return operators:
+    /// - Try operators: `expr?`, `expr!`
+    /// - Binary optional: `+?`, `-?`, `*?`, `/?`
+    /// - Binary checked: `+!`, `-!`, `*!`, `/!`
+    /// - Unary optional: `-?x`
+    /// - Unary result: `-!x`
     fn expr_may_return_early(&self, db: &'db dyn crate::Db, expr: ExprFun<'db>) -> bool {
+        use crate::ast::{BinOp, UnaryOp};
+
         match expr.expr(db) {
             ExprFunKind::TryOption(_) | ExprFunKind::TryResult(_) => true,
             ExprFunKind::BinOp(binop) => {
-                self.expr_may_return_early(db, binop.lhs(db))
+                // Check if this operator itself can cause early return.
+                let op_may_return = matches!(
+                    binop.op(db),
+                    BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional |
+                    BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked
+                );
+                op_may_return
+                    || self.expr_may_return_early(db, binop.lhs(db))
                     || self.expr_may_return_early(db, binop.rhs(db))
             }
-            ExprFunKind::UnaryOp(unary) => self.expr_may_return_early(db, unary.operand(db)),
+            ExprFunKind::UnaryOp(unary) => {
+                // Check if this operator itself can cause early return.
+                let op_may_return = matches!(
+                    unary.op(db),
+                    UnaryOp::NegOptional | UnaryOp::NegResult
+                );
+                op_may_return || self.expr_may_return_early(db, unary.operand(db))
+            }
             ExprFunKind::FunctionCall(call) => {
                 call.args(db).iter().any(|arg| self.expr_may_return_early(db, *arg))
             }

@@ -90,7 +90,7 @@ pub use context::{InterpContext, ModuleFunctionTableGraph};
 use control::{evaluate_branch_condition, eval_try_option, eval_try_result};
 use frame::CfgControl;
 use memory::{clone_value_to_dest, move_value_to_dest, cleanup_frame, process_block_exit_drops};
-use alloc::{write_result_err_to_dest, write_data_to_dest, write_error_to_dest};
+use alloc::{write_data_to_dest, write_error_to_dest};
 use collections::{eval_inline_list, eval_inline_set, eval_inline_map, eval_inline_anon_tuple, eval_inline_anon_struct};
 use literals::{
     write_inline_int_to_dest, write_option_none_to_dest,
@@ -105,6 +105,23 @@ use crate::module_graph::ModuleId;
 use crate::ast;
 use crate::function_analysis::{Terminator, BlockId};
 use crate::tycheck::is_unit_type;
+
+// ============================================================================
+// Early Return Control Flow
+// ============================================================================
+
+/// Result of expression evaluation with possible early return.
+///
+/// Replaces error-based propagation (`InterpError::OptionNone`, `InterpError::ResultErr`)
+/// with explicit control flow. Operators that can trigger early return (try operators,
+/// optional/result arithmetic) write to `return_dest` and return `EarlyReturn`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvalResult {
+    /// Normal completion - value written to dest.
+    Ok,
+    /// Early return triggered - value already written to return_dest.
+    EarlyReturn,
+}
 
 // ============================================================================
 // Main Entry Point
@@ -157,9 +174,17 @@ fn eval_function_call_frame<'db>(
             }
         };
         match eval_expression_frame(ctx, *arg_expr, arg_dest) {
-            Ok(()) => {
+            Ok(EvalResult::Ok) => {
                 // All values are now Borrowed (written to temp slots).
                 mark_temp_slot_available(ctx, *arg_expr);
+            }
+            Ok(EvalResult::EarlyReturn) => {
+                // Early return triggered during argument evaluation.
+                // Clean up previously evaluated arguments and propagate.
+                for val in arg_values {
+                    destroy_value(ctx, val);
+                }
+                return Ok(return_dest.to_value());
             }
             Err(e) => {
                 // Clean up previously evaluated arguments on error.
@@ -391,35 +416,8 @@ pub fn execute_function_body<'db>(
     // Restore previous module.
     restore_module_context(ctx, prev_module);
 
-    // Handle try-operator early returns (? and ! operators).
-    // Note: T→Option<T> coercion is handled during return expression evaluation via DPS,
-    // so we don't need to wrap Ok values here. We only handle try-operator errors.
-    use crate::datalit::ast::TypeHint;
-    let return_type = func.return_type(ctx.db);
-    match &result {
-        Err(InterpError::OptionNone) => {
-            // Early return via ? operator - create Option::None.
-            if let Some(ret_type) = return_type {
-                if matches!(ret_type.type_hint(ctx.db), TypeHint::Option(_)) {
-                    // DPS: write None to caller's destination.
-                    write_option_none_to_dest(return_dest)?;
-                    return Ok(return_dest.to_value());
-                }
-            }
-        }
-        Err(InterpError::ResultErr { tydesc, ptr }) => {
-            // Early return via ! operator - create Result::Err.
-            if let Some(ret_type) = return_type {
-                if matches!(ret_type.type_hint(ctx.db), TypeHint::Result(_)) {
-                    // DPS: write Err to caller's destination.
-                    write_result_err_to_dest(return_dest, *tydesc, *ptr)?;
-                    return Ok(return_dest.to_value());
-                }
-            }
-        }
-        _ => {}
-    }
-
+    // Early returns are now handled via EvalResult::EarlyReturn mechanism.
+    // The value is already written to return_dest by the operator that triggered the early return.
     result
 }
 
@@ -499,8 +497,15 @@ fn execute_function_body_with_frame<'db>(
                             Ok(d) => d,
                             Err(e) => return (Err(e), current_block_id),
                         };
-                        if let Err(e) = eval_expression_frame(ctx, condition_expr, condition_dest) {
-                            return (Err(e), current_block_id);
+                        match eval_expression_frame(ctx, condition_expr, condition_dest) {
+                            Ok(EvalResult::EarlyReturn) => {
+                                // Early return triggered in condition - return from function.
+                                let frame_index = ctx.call_stack.len() - 1;
+                                let return_value = ctx.call_stack[frame_index].return_dest.to_value();
+                                return (Ok(return_value), current_block_id);
+                            }
+                            Ok(EvalResult::Ok) => {}
+                            Err(e) => return (Err(e), current_block_id),
                         }
                         let condition_value = condition_dest.to_value();
 
@@ -515,10 +520,11 @@ fn execute_function_body_with_frame<'db>(
 
                         current_block_id = if is_true { *then_block } else { *else_block };
                     }
-                    ast::Statement::Let(_) | ast::Statement::Var(_) => {
-                        // Let/var-statement with try operator: branching decision already made.
-                        // If we reached this point, the try succeeded (otherwise an error
-                        // would have propagated). Go to then_block (continuation).
+                    ast::Statement::Let(_) | ast::Statement::Var(_) | ast::Statement::Set(_) => {
+                        // Let/var/set-statement with try or checked/optional operator:
+                        // branching decision already made via EvalResult.
+                        // If we reached this point, the operation succeeded (otherwise an
+                        // early return would have been triggered). Go to then_block (continuation).
                         current_block_id = *then_block;
                     }
                     _ => {
@@ -536,8 +542,11 @@ fn execute_function_body_with_frame<'db>(
                 current_block_id = *next_block;
             }
             Terminator::TryReturn => {
-                // Early return from ? operator - propagate.
-                return (Err(InterpError::EarlyReturn), current_block_id);
+                // Early return from try/checked/optional operator.
+                // Value is already written to return_dest by the operator.
+                let frame_index = ctx.call_stack.len() - 1;
+                let return_value = ctx.call_stack[frame_index].return_dest.to_value();
+                return (Ok(return_value), current_block_id);
             }
             Terminator::LoopContinue(header_block) => {
                 // Jump to loop header for next iteration.
@@ -563,18 +572,37 @@ fn execute_cfg_statement<'db>(
     match stmt {
         ast::Statement::Let(let_stmt) => {
             // Evaluate expression and store in frame slot.
-            execute_let_statement_frame(ctx, *let_stmt)?;
-            Ok(CfgControl::Continue)
+            match execute_let_statement_frame(ctx, *let_stmt)? {
+                EvalResult::Ok => Ok(CfgControl::Continue),
+                EvalResult::EarlyReturn => {
+                    // Early return triggered - value already written to return_dest.
+                    let frame_index = ctx.call_stack.len() - 1;
+                    let return_value = ctx.call_stack[frame_index].return_dest.to_value();
+                    Ok(CfgControl::Return(return_value))
+                }
+            }
         }
         ast::Statement::Var(var_stmt) => {
             // Same as let - evaluate expression and store in mutable slot.
-            execute_var_statement_frame(ctx, *var_stmt)?;
-            Ok(CfgControl::Continue)
+            match execute_var_statement_frame(ctx, *var_stmt)? {
+                EvalResult::Ok => Ok(CfgControl::Continue),
+                EvalResult::EarlyReturn => {
+                    let frame_index = ctx.call_stack.len() - 1;
+                    let return_value = ctx.call_stack[frame_index].return_dest.to_value();
+                    Ok(CfgControl::Return(return_value))
+                }
+            }
         }
         ast::Statement::Set(set_stmt) => {
             // Mutate existing mutable slot.
-            execute_set_statement_frame(ctx, *set_stmt)?;
-            Ok(CfgControl::Continue)
+            match execute_set_statement_frame(ctx, *set_stmt)? {
+                EvalResult::Ok => Ok(CfgControl::Continue),
+                EvalResult::EarlyReturn => {
+                    let frame_index = ctx.call_stack.len() - 1;
+                    let return_value = ctx.call_stack[frame_index].return_dest.to_value();
+                    Ok(CfgControl::Return(return_value))
+                }
+            }
         }
         ast::Statement::Ret(ret_stmt) => {
             // Handle bare ret (void function) vs ret with value.
@@ -582,7 +610,10 @@ fn execute_cfg_statement<'db>(
                 Some(expr) => {
                     // Evaluate the return expression (no dest - value escapes frame).
                     // Note: @none/@error in return position require typed context from function return type.
-                    let value = eval_return_expression_frame(ctx, expr)?;
+                    let (result, value) = eval_return_expression_frame(ctx, expr)?;
+                    // Whether it's a normal return or early return, we return.
+                    // (If early return happened, value is already written to return_dest.)
+                    let _ = result;
                     Ok(CfgControl::Return(value))
                 }
                 None => {
@@ -625,10 +656,12 @@ fn execute_cfg_statement<'db>(
 // ============================================================================
 
 /// Execute a let statement in frame-based mode.
+///
+/// Returns `EvalResult::EarlyReturn` if the expression triggered early return.
 fn execute_let_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
     let_stmt: ast::StmtLet<'db>,
-) -> Result<(), InterpError> {
+) -> Result<EvalResult, InterpError> {
     // Find destination slot using resolved slot ID.
     let frame_index = ctx.call_stack.len() - 1;
     let layout = ctx.call_stack[frame_index].layout;
@@ -651,21 +684,24 @@ fn execute_let_statement_frame<'db>(
 
     // Evaluate expression with DPS into slot.
     let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
-    eval_expression_frame(ctx, let_stmt.value(ctx.db), dest)?;
+    let result = eval_expression_frame(ctx, let_stmt.value(ctx.db), dest)?;
 
-    // Mark slot as Available.
-    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
+    // Only mark slot as Available if we didn't early return.
+    if result == EvalResult::Ok {
+        ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
+    }
 
-    Ok(())
+    Ok(result)
 }
 
 /// Execute a var statement in frame-based mode.
 ///
 /// Same as let, but allocates to a Mutable slot.
+/// Returns `EvalResult::EarlyReturn` if the expression triggered early return.
 fn execute_var_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
     var_stmt: ast::StmtVar<'db>,
-) -> Result<(), InterpError> {
+) -> Result<EvalResult, InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
     let layout = ctx.call_stack[frame_index].layout;
     let slot_info = match layout.get_slot_for_var_stmt(ctx.db, var_stmt) {
@@ -687,22 +723,25 @@ fn execute_var_statement_frame<'db>(
 
     // Evaluate expression with DPS into slot.
     let dest = Destination { ptr: dest_ptr, tydesc: dest_tydesc };
-    eval_expression_frame(ctx, var_stmt.value(ctx.db), dest)?;
+    let result = eval_expression_frame(ctx, var_stmt.value(ctx.db), dest)?;
 
-    // Mark slot as Available.
-    ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
+    // Only mark slot as Available if we didn't early return.
+    if result == EvalResult::Ok {
+        ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
+    }
 
-    Ok(())
+    Ok(result)
 }
 
 /// Execute a set statement in frame-based mode.
 ///
 /// Mutates an existing mutable slot. For linear types, destroys old value after
 /// evaluating RHS (to handle self-referential cases like `set x = x + x`).
+/// Returns `EvalResult::EarlyReturn` if the expression triggered early return.
 fn execute_set_statement_frame<'db>(
     ctx: &mut InterpContext<'db>,
     set_stmt: ast::StmtSet<'db>,
-) -> Result<(), InterpError> {
+) -> Result<EvalResult, InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
     let layout = ctx.call_stack[frame_index].layout;
     let slot_info = match layout.get_slot_for_set_stmt(ctx.db, set_stmt) {
@@ -726,7 +765,10 @@ fn execute_set_statement_frame<'db>(
         let offset = slot_info.offset(ctx.db) as usize;
         let dest_ptr = unsafe { ctx.call_stack[frame_index].frame_data.as_mut_ptr().add(offset) };
         let dest = Destination { ptr: dest_ptr, tydesc };
-        eval_expression_frame(ctx, set_stmt.value(ctx.db), dest)?;
+        let result = eval_expression_frame(ctx, set_stmt.value(ctx.db), dest)?;
+        if result == EvalResult::EarlyReturn {
+            return Ok(result);
+        }
     } else {
         // Linear type: must handle self-reference (e.g., `set x = x + x`).
         // 1. Evaluate RHS to a temp buffer (reads old x value).
@@ -743,7 +785,12 @@ fn execute_set_statement_frame<'db>(
 
         // Evaluate RHS into temp.
         let temp_dest = Destination { ptr: temp_ptr, tydesc };
-        eval_expression_frame(ctx, set_stmt.value(ctx.db), temp_dest)?;
+        let result = eval_expression_frame(ctx, set_stmt.value(ctx.db), temp_dest)?;
+        if result == EvalResult::EarlyReturn {
+            // Early return: don't destroy old value, don't move new value.
+            // Temp buffer may have partial data; just drop it.
+            return Ok(result);
+        }
 
         // Destroy old value in slot.
         let offset = slot_info.offset(ctx.db) as usize;
@@ -763,18 +810,20 @@ fn execute_set_statement_frame<'db>(
     // Slot remains Available after set.
     ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Available);
 
-    Ok(())
+    Ok(EvalResult::Ok)
 }
 
 /// Evaluate an expression in frame-based mode.
 ///
 /// The result is written directly to `dest`.
+/// Returns `EvalResult::EarlyReturn` if a try/checked/optional operator triggered early return.
 fn eval_expression_frame<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
     dest: Destination,
-) -> Result<(), InterpError> {
+) -> Result<EvalResult, InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
+    let return_dest = ctx.call_stack[frame_index].return_dest;
 
     match expr.expr(ctx.db) {
         ast::ExprFunKind::Name(name) => {
@@ -813,7 +862,7 @@ fn eval_expression_frame<'db>(
                     move_value_to_dest(source_value, dest);
                     ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Moved);
                 }
-                Ok(())
+                Ok(EvalResult::Ok)
             } else {
                 // Local/Temporary slot.
                 let offset = slot_info.offset(ctx.db) as usize;
@@ -829,7 +878,7 @@ fn eval_expression_frame<'db>(
                     move_value_to_dest(source_value, dest);
                     ctx.call_stack[frame_index].set_slot_state(slot_id, SlotState::Moved);
                 }
-                Ok(())
+                Ok(EvalResult::Ok)
             }
         }
 
@@ -847,25 +896,28 @@ fn eval_expression_frame<'db>(
                 }
             };
 
-            // Execute binop directly to dest.
+            // Execute binop directly to dest. May return EarlyReturn.
             // Aliasing (x = x + 1) is safe: arithmetic reads operands before writing.
-            if let Err(e) = execute_binop(ctx, binop_expr.op(ctx.db), &lhs.value, &rhs.value, dest) {
-                cleanup_operand(ctx, lhs);
-                cleanup_operand(ctx, rhs);
-                return Err(e);
-            }
+            let result = match execute_binop(ctx, binop_expr.op(ctx.db), &lhs.value, &rhs.value, dest, return_dest) {
+                Ok(r) => r,
+                Err(e) => {
+                    cleanup_operand(ctx, lhs);
+                    cleanup_operand(ctx, rhs);
+                    return Err(e);
+                }
+            };
 
             // Cleanup compound operands.
             cleanup_operand(ctx, lhs);
             cleanup_operand(ctx, rhs);
 
-            Ok(())
+            Ok(result)
         }
 
         ast::ExprFunKind::FunctionCall(call_expr) => {
             // All functions return a value (void functions return unit).
             eval_function_call_frame(ctx, call_expr, dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
 
         ast::ExprFunKind::UnaryOp(unary_expr) => {
@@ -874,16 +926,19 @@ fn eval_expression_frame<'db>(
             // Evaluate operand (reference for Name, temp for compound).
             let operand = eval_operand(ctx, operand_expr)?;
 
-            // Execute unop directly to dest.
-            if let Err(e) = execute_unop(ctx, unary_expr.op(ctx.db), &operand.value, dest) {
-                cleanup_operand(ctx, operand);
-                return Err(e);
-            }
+            // Execute unop directly to dest. May return EarlyReturn.
+            let result = match execute_unop(ctx, unary_expr.op(ctx.db), &operand.value, dest, return_dest) {
+                Ok(r) => r,
+                Err(e) => {
+                    cleanup_operand(ctx, operand);
+                    return Err(e);
+                }
+            };
 
             // Cleanup compound operand.
             cleanup_operand(ctx, operand);
 
-            Ok(())
+            Ok(result)
         }
 
         ast::ExprFunKind::Tuple(tuple_expr) => {
@@ -896,61 +951,68 @@ fn eval_expression_frame<'db>(
                 let field_dest = Destination { ptr: field_ptr, tydesc: field.tydesc().as_ptr() };
 
                 // Evaluate element directly to field destination.
-                eval_expression_frame(ctx, *elem_expr, field_dest)?;
+                // Propagate early return if element triggers one.
+                if eval_expression_frame(ctx, *elem_expr, field_dest)? == EvalResult::EarlyReturn {
+                    return Ok(EvalResult::EarlyReturn);
+                }
 
                 // Element used its own temp slot, it's been written to our field now.
                 // The element's temp slot is no longer needed.
                 mark_temp_slot_available(ctx, *elem_expr);
             }
 
-            Ok(())
+            Ok(EvalResult::Ok)
         }
 
         ast::ExprFunKind::TryOption(try_op) => {
             // Evaluate operand to its temp slot.
             let operand_expr = try_op.operand(ctx.db);
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
-            eval_expression_frame(ctx, operand_expr, operand_dest)?;
+            // Propagate early return from operand evaluation.
+            if eval_expression_frame(ctx, operand_expr, operand_dest)? == EvalResult::EarlyReturn {
+                return Ok(EvalResult::EarlyReturn);
+            }
             let operand = operand_dest.to_value();
-            // Apply try-option operator with DPS.
-            eval_try_option(ctx, operand, dest)?;
-            Ok(())
+            // Apply try-option operator with DPS. May return EarlyReturn.
+            eval_try_option(ctx, operand, dest, return_dest)
         }
 
         ast::ExprFunKind::TryResult(try_op) => {
             // Evaluate operand to its temp slot.
             let operand_expr = try_op.operand(ctx.db);
             let operand_dest = get_destination_for_expr(ctx, operand_expr)?;
-            eval_expression_frame(ctx, operand_expr, operand_dest)?;
+            // Propagate early return from operand evaluation.
+            if eval_expression_frame(ctx, operand_expr, operand_dest)? == EvalResult::EarlyReturn {
+                return Ok(EvalResult::EarlyReturn);
+            }
             let operand = operand_dest.to_value();
-            // Apply try-result operator with DPS.
-            eval_try_result(ctx, operand, dest)?;
-            Ok(())
+            // Apply try-result operator with DPS. May return EarlyReturn.
+            eval_try_result(ctx, operand, dest, return_dest)
         }
 
         // Inline literal variants - always write to dest.
         ast::ExprFunKind::True(_) => {
             write_bool_to_dest(dest, true);
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::False(_) => {
             write_bool_to_dest(dest, false);
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::None(_) => {
             write_option_none_to_dest(dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Int(int_expr) => {
             write_inline_int_to_dest(ctx, &int_expr, dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Float(float_expr) => {
             let value_str = float_expr.value(ctx.db).as_str(ctx.db);
             let value: f32 = value_str.parse()
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse float: {}", e)))?;
             write_f32_to_dest(dest, value);
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Hex(hex_expr) => {
             let value_str = hex_expr.value(ctx.db).as_str(ctx.db);
@@ -958,77 +1020,88 @@ fn eval_expression_frame<'db>(
             let value: u32 = u32::from_str_radix(hex_digits, 16)
                 .map_err(|e| InterpError::RuntimeError(format!("Failed to parse hex: {}", e)))?;
             write_u32_to_dest(dest, value);
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::String(string_expr) => {
             write_string_to_dest(ctx, &string_expr, dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::List(list_expr) => {
             eval_inline_list(ctx, expr, &list_expr, dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Set(set_expr) => {
             eval_inline_set(ctx, &set_expr, dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Map(map_expr) => {
             eval_inline_map(ctx, &map_expr, dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Tensor(_) => {
             Err(InterpError::InvalidExpression("Tensor not yet implemented".to_string()))
         }
         ast::ExprFunKind::AnonTuple(tuple_expr) => {
             eval_inline_anon_tuple(ctx, &tuple_expr, dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::AnonStruct(struct_expr) => {
             eval_inline_anon_struct(ctx, &struct_expr, dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::AnonEnum(_) => {
             Err(InterpError::InvalidExpression("Enum not yet implemented".to_string()))
         }
         ast::ExprFunKind::Some(some_expr) => {
-            eval_wrapper_payload_dps(ctx, WrapperKind::Some, dest, some_expr.payload(ctx.db))
+            eval_wrapper_payload_dps(ctx, WrapperKind::Some, dest, some_expr.payload(ctx.db))?;
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Ok(ok_expr) => {
-            eval_wrapper_payload_dps(ctx, WrapperKind::Ok, dest, ok_expr.payload(ctx.db))
+            eval_wrapper_payload_dps(ctx, WrapperKind::Ok, dest, ok_expr.payload(ctx.db))?;
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Er(er_expr) => {
             let payload_expr = er_expr.payload(ctx.db);
             let payload_dest = get_destination_for_expr(ctx, payload_expr)?;
-            eval_expression_frame(ctx, payload_expr, payload_dest)?;
+            // Propagate early return from payload evaluation.
+            if eval_expression_frame(ctx, payload_expr, payload_dest)? == EvalResult::EarlyReturn {
+                return Ok(EvalResult::EarlyReturn);
+            }
             let payload = payload_dest.to_value();
             literals::write_result_er_from_value(ctx, payload, dest)?;
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Data(data_expr) => {
             // Evaluate inner expression to its temp slot.
             let inner_expr = data_expr.value(ctx.db);
             let inner_dest = get_destination_for_expr(ctx, inner_expr)?;
-            eval_expression_frame(ctx, inner_expr, inner_dest)?;
+            // Propagate early return from inner evaluation.
+            if eval_expression_frame(ctx, inner_expr, inner_dest)? == EvalResult::EarlyReturn {
+                return Ok(EvalResult::EarlyReturn);
+            }
             let inner_value = inner_dest.to_value();
             // Wrap in Data (clones inner_value).
             write_data_to_dest(ctx, inner_value, dest)?;
             // We cloned inner for Data; destroy original and mark slot.
             destroy_value(ctx, inner_value);
             mark_temp_slot_moved(ctx, inner_expr);
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::Err(err_expr) => {
             // Evaluate inner expression to its temp slot.
             let inner_expr = err_expr.value(ctx.db);
             let inner_dest = get_destination_for_expr(ctx, inner_expr)?;
-            eval_expression_frame(ctx, inner_expr, inner_dest)?;
+            // Propagate early return from inner evaluation.
+            if eval_expression_frame(ctx, inner_expr, inner_dest)? == EvalResult::EarlyReturn {
+                return Ok(EvalResult::EarlyReturn);
+            }
             let inner_value = inner_dest.to_value();
             // Wrap in Error (clones inner_value).
             write_error_to_dest(ctx, inner_value, dest)?;
             // We cloned inner for Error; destroy original and mark slot.
             destroy_value(ctx, inner_value);
             mark_temp_slot_moved(ctx, inner_expr);
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         ast::ExprFunKind::ParseError(_) => {
             Err(InterpError::InvalidExpression("Parse error in expression".to_string()))
@@ -1037,18 +1110,20 @@ fn eval_expression_frame<'db>(
 }
 
 /// Evaluate a return expression with destination from frame.
+///
+/// Returns the EvalResult from expression evaluation, plus the return value.
 fn eval_return_expression_frame<'db>(
     ctx: &mut InterpContext<'db>,
     expr: ast::ExprFun<'db>,
-) -> Result<Value, InterpError> {
+) -> Result<(EvalResult, Value), InterpError> {
     let frame_index = ctx.call_stack.len() - 1;
     let return_dest = ctx.call_stack[frame_index].return_dest;
 
     // Evaluate expression with DPS into return destination.
-    eval_expression_frame(ctx, expr, return_dest)?;
+    let result = eval_expression_frame(ctx, expr, return_dest)?;
 
     // Return value pointing to caller's destination memory.
-    Ok(return_dest.to_value())
+    Ok((result, return_dest.to_value()))
 }
 
 /// Return unit `()` for void functions.

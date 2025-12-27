@@ -1,40 +1,8 @@
 //! DPS write functions for compound types.
 //!
-//! Write Result::Err, Int (widened from fixed-width), and Data wrappers
-//! to pre-allocated destinations.
+//! Write Int (widened from fixed-width) and Data wrappers to pre-allocated destinations.
 
 use super::{InterpContext, InterpError, Value, Destination};
-
-/// Write Result::Err to a destination.
-///
-/// Writes the Err tag and copies the error payload bytes.
-pub(super) fn write_result_err_to_dest(
-    dest: Destination,
-    err_tydesc: *const datalove_rt::rtdt::TyDesc,
-    err_ptr: *mut u8,
-) -> Result<(), InterpError> {
-    use datalove_rt::rtdt::{self, TyDescRef, TyTag};
-
-    let dest_tydesc_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
-
-    if dest_tydesc_ref.type_tag() != TyTag::Result {
-        return Err(InterpError::RuntimeError(
-            format!("write_result_err_to_dest requires Result destination, got {:?}",
-                    dest_tydesc_ref.type_tag())
-        ));
-    }
-
-    let layout = rtdt::layout::compute_result_layout(dest_tydesc_ref);
-
-    unsafe {
-        *dest.ptr = rtdt::ResultTag::Err as u8;
-        let err_payload_ptr = dest.ptr.add(layout.payload_offset as usize);
-        let err_size = (*err_tydesc).size as usize;
-        std::ptr::copy_nonoverlapping(err_ptr, err_payload_ptr, err_size);
-    }
-
-    Ok(())
-}
 
 /// Widen a fixed-width integer to Int at destination.
 ///

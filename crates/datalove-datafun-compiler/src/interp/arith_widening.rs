@@ -6,14 +6,14 @@
 use crate::ast::{BinOp, UnaryOp};
 use crate::datalit::tycheck::Type;
 
-use super::{InterpContext, InterpError, Value, Destination};
+use super::{InterpContext, InterpError, Value, Destination, EvalResult};
 use super::types::{is_int_value, is_f32_value, is_fixed_int_value, get_type_tag};
 use super::alloc::write_widened_int_to_dest;
 use super::arith::{
     write_f32_result,
     eval_add_checked, eval_sub_checked, eval_mul_checked, eval_div_checked,
     eval_add_optional, eval_sub_optional, eval_mul_optional, eval_div_optional,
-    eval_comparison,
+    eval_comparison, write_result_err_early_return,
 };
 
 /// Temporary Int for widening fixed-width operands.
@@ -481,50 +481,59 @@ pub(super) fn eval_div<'db>(
 }
 
 /// Execute a binary operation.
+///
+/// For checked/optional operators, returns `EvalResult` to signal early return.
+/// For bare and comparison operators, always returns `EvalResult::Ok`.
 pub(super) fn execute_binop<'db>(
     ctx: &mut InterpContext<'db>,
     op: BinOp,
     lhs: &Value,
     rhs: &Value,
     dest: Destination,
-) -> Result<(), InterpError> {
+    return_dest: Destination,
+) -> Result<EvalResult, InterpError> {
     match op {
-        // Bare operators: widen to Int.
-        BinOp::Add => eval_add(ctx, lhs, rhs, dest),
-        BinOp::Sub => eval_sub(ctx, lhs, rhs, dest),
-        BinOp::Mul => eval_mul(ctx, lhs, rhs, dest),
-        BinOp::Div => eval_div(ctx, lhs, rhs, dest),
+        // Bare operators: widen to Int. Never early-return.
+        BinOp::Add => { eval_add(ctx, lhs, rhs, dest)?; Ok(EvalResult::Ok) }
+        BinOp::Sub => { eval_sub(ctx, lhs, rhs, dest)?; Ok(EvalResult::Ok) }
+        BinOp::Mul => { eval_mul(ctx, lhs, rhs, dest)?; Ok(EvalResult::Ok) }
+        BinOp::Div => { eval_div(ctx, lhs, rhs, dest)?; Ok(EvalResult::Ok) }
 
-        // Checked operators: preserve type, early-return on overflow.
-        BinOp::AddChecked => eval_add_checked(ctx, lhs, rhs, dest),
-        BinOp::SubChecked => eval_sub_checked(ctx, lhs, rhs, dest),
-        BinOp::MulChecked => eval_mul_checked(ctx, lhs, rhs, dest),
-        BinOp::DivChecked => eval_div_checked(ctx, lhs, rhs, dest),
+        // Checked operators: preserve type, early-return Result::Err on overflow.
+        BinOp::AddChecked => eval_add_checked(ctx, lhs, rhs, dest, return_dest),
+        BinOp::SubChecked => eval_sub_checked(ctx, lhs, rhs, dest, return_dest),
+        BinOp::MulChecked => eval_mul_checked(ctx, lhs, rhs, dest, return_dest),
+        BinOp::DivChecked => eval_div_checked(ctx, lhs, rhs, dest, return_dest),
 
-        // Comparison operators.
+        // Comparison operators. Never early-return.
         BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
-            eval_comparison(ctx, op, lhs, rhs, dest)
+            eval_comparison(ctx, op, lhs, rhs, dest)?;
+            Ok(EvalResult::Ok)
         }
 
-        // Optional operators: preserve type, early-return on overflow/div0.
-        BinOp::AddOptional => eval_add_optional(ctx, lhs, rhs, dest),
-        BinOp::SubOptional => eval_sub_optional(ctx, lhs, rhs, dest),
-        BinOp::MulOptional => eval_mul_optional(ctx, lhs, rhs, dest),
-        BinOp::DivOptional => eval_div_optional(ctx, lhs, rhs, dest),
+        // Optional operators: preserve type, early-return Option::None on overflow/div0.
+        BinOp::AddOptional => eval_add_optional(ctx, lhs, rhs, dest, return_dest),
+        BinOp::SubOptional => eval_sub_optional(ctx, lhs, rhs, dest, return_dest),
+        BinOp::MulOptional => eval_mul_optional(ctx, lhs, rhs, dest, return_dest),
+        BinOp::DivOptional => eval_div_optional(ctx, lhs, rhs, dest, return_dest),
     }
 }
 
 /// Execute a unary operation.
+///
+/// For optional/result negation, returns `EvalResult` to signal early return.
+/// For bare negation, always returns `EvalResult::Ok`.
 pub(super) fn execute_unop<'db>(
     ctx: &mut InterpContext<'db>,
     op: UnaryOp,
     operand: &Value,
     dest: Destination,
-) -> Result<(), InterpError> {
+    return_dest: Destination,
+) -> Result<EvalResult, InterpError> {
     match op {
-        UnaryOp::Neg => eval_neg(ctx, operand, dest),
-        UnaryOp::NegOptional => eval_neg_optional(ctx, operand, dest),
-        UnaryOp::NegResult => eval_neg_result(ctx, operand, dest),
+        UnaryOp::Neg => { eval_neg(ctx, operand, dest)?; Ok(EvalResult::Ok) }
+        UnaryOp::NegOptional => eval_neg_optional(ctx, operand, dest, return_dest),
+        UnaryOp::NegResult => eval_neg_result(ctx, operand, dest, return_dest),
     }
 }
 
@@ -558,13 +567,14 @@ pub(super) fn eval_neg<'db>(
     }
 }
 
-/// Optional negation (-?x): OptionNone on overflow.
+/// Optional negation (-?x): early-return Option::None on overflow.
 pub(super) fn eval_neg_optional<'db>(
     _ctx: &mut InterpContext<'db>,
     operand: &Value,
     dest: Destination,
-) -> Result<(), InterpError> {
-    use datalove_rt::rtdt::TyTag;
+    return_dest: Destination,
+) -> Result<EvalResult, InterpError> {
+    use datalove_rt::rtdt::{TyTag, OptionTag};
 
     let type_tag = unsafe { (*operand.tydesc).type_tag };
 
@@ -574,9 +584,12 @@ pub(super) fn eval_neg_optional<'db>(
         return match val.checked_neg() {
             Some(r) => {
                 write_typed_int_result_64(r as u64, dest);
-                Ok(())
+                Ok(EvalResult::Ok)
             }
-            None => Err(InterpError::OptionNone),
+            None => {
+                unsafe { *(return_dest.ptr as *mut u8) = OptionTag::None as u8; }
+                Ok(EvalResult::EarlyReturn)
+            }
         };
     }
 
@@ -605,18 +618,22 @@ pub(super) fn eval_neg_optional<'db>(
     match negated_result {
         Some(result) => {
             write_typed_int_result(result, dest);
-            Ok(())
+            Ok(EvalResult::Ok)
         }
-        None => Err(InterpError::OptionNone),
+        None => {
+            unsafe { *(return_dest.ptr as *mut u8) = OptionTag::None as u8; }
+            Ok(EvalResult::EarlyReturn)
+        }
     }
 }
 
-/// Result negation (-!x): ResultErr("overflow") on overflow.
+/// Result negation (-!x): early-return Result::Err("overflow") on overflow.
 pub(super) fn eval_neg_result<'db>(
     ctx: &mut InterpContext<'db>,
     operand: &Value,
     dest: Destination,
-) -> Result<(), InterpError> {
+    return_dest: Destination,
+) -> Result<EvalResult, InterpError> {
     use datalove_rt::rtdt::TyTag;
 
     let type_tag = unsafe { (*operand.tydesc).type_tag };
@@ -628,11 +645,11 @@ pub(super) fn eval_neg_result<'db>(
             return match val.checked_neg() {
                 Some(r) => {
                     write_typed_int_result_64(r as u64, dest);
-                    Ok(())
+                    Ok(EvalResult::Ok)
                 }
                 None => {
-                    let (tydesc, ptr) = allocate_error_string(ctx, "overflow")?;
-                    Err(InterpError::ResultErr { tydesc, ptr })
+                    write_result_err_early_return(ctx, return_dest, "overflow")?;
+                    Ok(EvalResult::EarlyReturn)
                 }
             };
         }
@@ -641,11 +658,11 @@ pub(super) fn eval_neg_result<'db>(
             return match val.checked_neg() {
                 Some(r) => {
                     write_typed_int_result_64(r, dest);
-                    Ok(())
+                    Ok(EvalResult::Ok)
                 }
                 None => {
-                    let (tydesc, ptr) = allocate_error_string(ctx, "overflow")?;
-                    Err(InterpError::ResultErr { tydesc, ptr })
+                    write_result_err_early_return(ctx, return_dest, "overflow")?;
+                    Ok(EvalResult::EarlyReturn)
                 }
             };
         }
@@ -688,11 +705,11 @@ pub(super) fn eval_neg_result<'db>(
     match negated_result {
         Some(result) => {
             write_typed_int_result(result, dest);
-            Ok(())
+            Ok(EvalResult::Ok)
         }
         None => {
-            let (tydesc, ptr) = allocate_error_string(ctx, "overflow")?;
-            Err(InterpError::ResultErr { tydesc, ptr })
+            write_result_err_early_return(ctx, return_dest, "overflow")?;
+            Ok(EvalResult::EarlyReturn)
         }
     }
 }
@@ -703,53 +720,4 @@ fn write_typed_int_result(value: u32, dest: Destination) {
 
 fn write_typed_int_result_64(value: u64, dest: Destination) {
     unsafe { *(dest.ptr as *mut u64) = value; }
-}
-
-/// Allocate a String for ResultErr payload.
-fn allocate_error_string<'db>(
-    ctx: &mut InterpContext<'db>,
-    content: &str,
-) -> Result<(*const datalove_rt::rtdt::TyDesc, *mut u8), InterpError> {
-    use crate::datalit::tycheck::Type;
-
-    let tydesc_ptr = ctx.tydesc_table.get_or_create(&Type::String);
-
-    let rt_handle = ctx.runtime.handle();
-    let string_ptr = unsafe {
-        datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, tydesc_ptr, 1)
-    };
-
-    if string_ptr.is_null() {
-        return Err(InterpError::RuntimeError("Failed to allocate error string".to_string()));
-    }
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_create_local(
-            rt_handle,
-            string_ptr,
-            tydesc_ptr,
-        )
-    };
-
-    if status != datalove_rt::c::RtStatus::Ok {
-        return Err(InterpError::RuntimeError("Failed to create error string".to_string()));
-    }
-
-    if !content.is_empty() {
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_string_push_bytes_local(
-                rt_handle,
-                string_ptr,
-                tydesc_ptr,
-                content.as_ptr(),
-                content.len() as u32,
-            )
-        };
-
-        if status != datalove_rt::c::RtStatus::Ok {
-            return Err(InterpError::RuntimeError("Failed to push error string bytes".to_string()));
-        }
-    }
-
-    Ok((tydesc_ptr, string_ptr))
 }

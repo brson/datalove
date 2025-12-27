@@ -4,7 +4,7 @@
 //! - Inline evaluation: `eval_inline_*` for list, set, map, tuple, struct
 //! - Value construction: `write_*_from_values_to_dest` for building from Values
 
-use super::{InterpContext, InterpError, Value, Destination, eval_expression_frame};
+use super::{InterpContext, InterpError, Value, Destination, EvalResult, eval_expression_frame};
 use super::memory::{destroy_value, free_value_structure};
 use super::slots::get_destination_for_expr;
 use super::dps::{get_tuple_field_dest, get_struct_field_dest};
@@ -283,12 +283,21 @@ fn eval_list_with_element_tydesc<'db>(
         let elem_dest = Destination { ptr: elem_dest_ptr, tydesc: element_tydesc };
 
         match eval_expression_frame(ctx, *elem, elem_dest) {
-            Ok(()) => {
+            Ok(EvalResult::Ok) => {
                 // Update list size.
                 unsafe {
                     let list = list_ptr as *mut List;
                     (*list).size = (i + 1) as u32;
                 }
+            }
+            Ok(EvalResult::EarlyReturn) => {
+                // Early return during list construction - the caller needs to handle cleanup.
+                // For now, destroy what we have so far and the list structure.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_list_destroy_local(rt_handle, list_ptr, dest.tydesc);
+                }
+                // Return Ok so the caller can handle early return.
+                return Ok(());
             }
             Err(e) => {
                 // Destroy already-written elements and the list.
@@ -316,7 +325,14 @@ pub(super) fn eval_inline_set<'db>(
     for elem in elements {
         let elem_dest = get_destination_for_expr(ctx, *elem)?;
         match eval_expression_frame(ctx, *elem, elem_dest) {
-            Ok(()) => values.push(elem_dest.to_value()),
+            Ok(EvalResult::Ok) => values.push(elem_dest.to_value()),
+            Ok(EvalResult::EarlyReturn) => {
+                // Early return during set construction.
+                for v in values {
+                    destroy_value(ctx, v);
+                }
+                return Ok(());
+            }
             Err(e) => {
                 for v in values {
                     destroy_value(ctx, v);
@@ -341,24 +357,45 @@ pub(super) fn eval_inline_map<'db>(
     for entry in entries {
         let key_expr = entry.key(ctx.db);
         let key_dest = get_destination_for_expr(ctx, key_expr)?;
-        if let Err(e) = eval_expression_frame(ctx, key_expr, key_dest) {
-            for (k, v) in kv_pairs {
-                destroy_value(ctx, k);
-                destroy_value(ctx, v);
+        match eval_expression_frame(ctx, key_expr, key_dest) {
+            Ok(EvalResult::Ok) => {}
+            Ok(EvalResult::EarlyReturn) => {
+                for (k, v) in kv_pairs {
+                    destroy_value(ctx, k);
+                    destroy_value(ctx, v);
+                }
+                return Ok(());
             }
-            return Err(e);
+            Err(e) => {
+                for (k, v) in kv_pairs {
+                    destroy_value(ctx, k);
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
         }
         let key = key_dest.to_value();
 
         let value_expr = entry.value(ctx.db);
         let value_dest = get_destination_for_expr(ctx, value_expr)?;
-        if let Err(e) = eval_expression_frame(ctx, value_expr, value_dest) {
-            destroy_value(ctx, key);
-            for (k, v) in kv_pairs {
-                destroy_value(ctx, k);
-                destroy_value(ctx, v);
+        match eval_expression_frame(ctx, value_expr, value_dest) {
+            Ok(EvalResult::Ok) => {}
+            Ok(EvalResult::EarlyReturn) => {
+                destroy_value(ctx, key);
+                for (k, v) in kv_pairs {
+                    destroy_value(ctx, k);
+                    destroy_value(ctx, v);
+                }
+                return Ok(());
             }
-            return Err(e);
+            Err(e) => {
+                destroy_value(ctx, key);
+                for (k, v) in kv_pairs {
+                    destroy_value(ctx, k);
+                    destroy_value(ctx, v);
+                }
+                return Err(e);
+            }
         }
         let value = value_dest.to_value();
 
@@ -390,14 +427,26 @@ pub(super) fn eval_inline_anon_tuple<'db>(
                 let field_dest = get_tuple_field_dest(dest, i)
                     .expect("field index should be valid");
 
-                if let Err(e) = eval_expression_frame(ctx, *elem, field_dest) {
-                    // Clean up already-written fields.
-                    for j in 0..i {
-                        let written_field = get_tuple_field_dest(dest, j)
-                            .expect("field index should be valid");
-                        destroy_value(ctx, written_field.to_value());
+                match eval_expression_frame(ctx, *elem, field_dest) {
+                    Ok(EvalResult::Ok) => {}
+                    Ok(EvalResult::EarlyReturn) => {
+                        // Clean up already-written fields.
+                        for j in 0..i {
+                            let written_field = get_tuple_field_dest(dest, j)
+                                .expect("field index should be valid");
+                            destroy_value(ctx, written_field.to_value());
+                        }
+                        return Ok(());
                     }
-                    return Err(e);
+                    Err(e) => {
+                        // Clean up already-written fields.
+                        for j in 0..i {
+                            let written_field = get_tuple_field_dest(dest, j)
+                                .expect("field index should be valid");
+                            destroy_value(ctx, written_field.to_value());
+                        }
+                        return Err(e);
+                    }
                 }
             }
 
@@ -443,14 +492,26 @@ pub(super) fn eval_inline_anon_struct<'db>(
                 let field_dest = get_struct_field_dest(dest, canonical_idx)
                     .expect("field index should be valid");
 
-                if let Err(e) = eval_expression_frame(ctx, value_expr, field_dest) {
-                    // Clean up already-written fields.
-                    for j in 0..canonical_idx {
-                        let written_field = get_struct_field_dest(dest, j)
-                            .expect("field index should be valid");
-                        destroy_value(ctx, written_field.to_value());
+                match eval_expression_frame(ctx, value_expr, field_dest) {
+                    Ok(EvalResult::Ok) => {}
+                    Ok(EvalResult::EarlyReturn) => {
+                        // Clean up already-written fields.
+                        for j in 0..canonical_idx {
+                            let written_field = get_struct_field_dest(dest, j)
+                                .expect("field index should be valid");
+                            destroy_value(ctx, written_field.to_value());
+                        }
+                        return Ok(());
                     }
-                    return Err(e);
+                    Err(e) => {
+                        // Clean up already-written fields.
+                        for j in 0..canonical_idx {
+                            let written_field = get_struct_field_dest(dest, j)
+                                .expect("field index should be valid");
+                            destroy_value(ctx, written_field.to_value());
+                        }
+                        return Err(e);
+                    }
                 }
             }
 
