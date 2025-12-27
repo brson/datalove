@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+let x = 10
+
+----------
+scriptunit-expr
+----------
+x + 5

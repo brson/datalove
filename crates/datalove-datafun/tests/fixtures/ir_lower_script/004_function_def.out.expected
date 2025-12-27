@@ -1,0 +1,12 @@
+--- script unit 0 (fragment) ---
+scriptunit:
+block0:
+    unit_end
+
+fn double(v0):
+block0:
+    v1 = add v0, v0
+    return v1
+exports:
+    double = fn#0
+

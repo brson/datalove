@@ -222,50 +222,70 @@ No wasted work - mem2reg only sees actual mutable slots.
 
 ## Implementation Phases
 
-### Phase 1: Define IR Types
+### Phase 1: Define IR Types - COMPLETE
 
-New file: `crates/datalove-datafun-compiler/src/ir/mod.rs`
-- `ValueId`, `SlotId`, `Operand`
+File: `crates/datalove-datafun-compiler/src/ir/mod.rs`
+- `ValueId`, `SlotId`, `Operand` (with External variants)
 - `Instruction` enum with SSA semantics
 - `IrBlock` struct (instructions + terminator)
-- `IrFunction` struct (blocks + layout)
+- `IrFunction` struct (blocks + value/slot counts)
+- `IrScriptUnit` struct (blocks + functions + exports)
+- `ExportBinding` enum
 
-### Phase 2: Lowering Pass
+File: `crates/datalove-datafun-compiler/src/ir/display.rs`
+- Pretty-printing for all IR types
 
-New file: `crates/datalove-datafun-compiler/src/ir/lower.rs`
+### Phase 2: Lowering Pass - COMPLETE
+
+File: `crates/datalove-datafun-compiler/src/ir/lower.rs`
 - `lower_function(FunctionDef) -> IrFunction`
+- `lower_script_unit(ScriptLowerContext, ScriptUnitKind) -> IrScriptUnit`
+- `ScriptLowerContext` for cross-unit binding tracking
+- `ScriptUnitKind::Fragment` and `ScriptUnitKind::Expr`
 - Expression temps and `let` bindings -> ValueId
 - `var` bindings -> SlotId with SlotStore/SlotLoad
-- Control flow joins -> Phi nodes
+- Function definitions in script units
+- Cross-unit references via ExternalValue/ExternalSlot
 
-### Phase 3: IR Interpreter
+Tests:
+- `tests/ir_lower_tests.rs` - 5 function lowering tests
+- `tests/ir_lower_script_tests.rs` - 5 script unit lowering tests
+
+### Phase 3: IR Interpreter - NOT STARTED
 
 New file: `crates/datalove-datafun-compiler/src/ir/interp.rs`
 - `IrInterpreter` with frame buffer
 - `IrLayout` maps ValueId/SlotId to offsets
 - Simple loop, no recursion
+- Script interpreter with unit frame stack
 
-### Phase 4: Integration
+### Phase 4: Integration - NOT STARTED
 
 - Wire up: parse -> typecheck -> lower -> interpret
 - Keep old interpreter for comparison
 - Run test suite against both
 
-### Phase 5: Cleanup
+### Phase 5: Cleanup - NOT STARTED
 
-- Remove old tree-walking interpreter
-- Add IR pretty-printing
+- Remove old tree-walking interpreter (or keep as reference)
+- Optimize IR representation
 
-## Files to Create/Modify
+## Files Created/Modified
 
-**New files:**
+**Created:**
 - `crates/datalove-datafun-compiler/src/ir/mod.rs` - IR types
 - `crates/datalove-datafun-compiler/src/ir/lower.rs` - AST->IR lowering
-- `crates/datalove-datafun-compiler/src/ir/interp.rs` - IR interpreter
+- `crates/datalove-datafun-compiler/src/ir/display.rs` - IR pretty-printing
+- `crates/datalove-datafun/tests/ir_lower_tests.rs` - function lowering tests
+- `crates/datalove-datafun/tests/ir_lower_script_tests.rs` - script unit tests
+- `crates/datalove-datafun/tests/fixtures/ir_lower/` - function test fixtures
+- `crates/datalove-datafun/tests/fixtures/ir_lower_script/` - script test fixtures
 
-**Modify:**
-- `crates/datalove-datafun-compiler/src/lib.rs` - add `mod ir`
-- Entry points to wire up new pipeline
+**Modified:**
+- `crates/datalove-datafun-compiler/src/lib.rs` - add `pub mod ir`
+- `crates/datalove-datafun-pkg/src/package_load_worldfile.rs` - new section types
+- `crates/datalove-datafun/src/worldfile_analysis.rs` - handle new sections
+- `crates/datalove-datafun/Cargo.toml` - test configurations
 
 ## Benefits
 

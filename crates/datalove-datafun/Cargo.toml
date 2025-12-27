@@ -44,3 +44,8 @@ harness = false
 name = "ir_lower_tests"
 path = "tests/ir_lower_tests.rs"
 harness = false
+
+[[test]]
+name = "ir_lower_script_tests"
+path = "tests/ir_lower_script_tests.rs"
+harness = false

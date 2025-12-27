@@ -1,0 +1,13 @@
+--- script unit 0 (fragment) ---
+scriptunit:
+block0:
+    v0 = const 1i64
+    store s0, v0
+    v1 = load s0
+    v2 = const 1i64
+    v3 = add v1, v2
+    store s0, v3
+    unit_end
+exports:
+    x = s0
+

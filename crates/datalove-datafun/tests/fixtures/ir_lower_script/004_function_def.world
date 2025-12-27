@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+fun double(n: i64): i64
+    ret n + n
+end fun
