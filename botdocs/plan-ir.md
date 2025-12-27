@@ -282,3 +282,115 @@ New file: `crates/datalove-datafun-compiler/src/ir/interp.rs`
 3. **Interpreter uniformity**: Both map to frame offsets at runtime
 4. **Phi nodes**: Explicit merge at control flow join points
 5. **Migration**: Parallel execution for validation
+
+## Script Unit Support
+
+Scripts and REPL sessions are sequences of "units" executed sequentially.
+
+### Script Unit Kinds
+
+1. **Statement unit**: `Vec<Statement>` - let/var/fun declarations, control flow
+2. **Expression unit**: single `Expression` - evaluated, result kept for REPL
+
+Both lower to the same IR structure; difference is whether there's a result value.
+
+### Return Type Semantics
+
+Script units typecheck as-if they have return type `!()` ("result of unit"). This makes:
+- `ret expr` set the unit's result and end the unit
+- Early returns (`?`, `+?`, etc.) work naturally - propagating None/Err ends unit early
+
+### Extended Operand Type
+
+```rust
+pub enum Operand {
+    Value(ValueId),           // local SSA value
+    Slot(SlotId),             // local mutable slot
+    ExternalValue { unit: u32, value: ValueId },  // let binding from previous unit
+    ExternalSlot { unit: u32, slot: SlotId },     // var binding from previous unit
+}
+```
+
+### IrScriptUnit Structure
+
+```rust
+pub struct IrScriptUnit {
+    pub blocks: Vec<IrBlock>,
+    pub value_count: u32,
+    pub slot_count: u32,
+    /// Functions defined in this unit.
+    pub functions: Vec<IrFunction>,
+    /// Result value of this unit (for bare expressions in REPL).
+    pub result: Option<ValueId>,
+    /// Names exported to later units.
+    pub exports: Vec<(String, ExportBinding)>,
+}
+
+pub enum ExportBinding {
+    Value(ValueId),
+    Slot(SlotId),
+    Function(usize),
+}
+```
+
+### Terminator
+
+```rust
+pub enum Terminator {
+    Goto(BlockId),
+    Branch { cond: Operand, then_block: BlockId, else_block: BlockId },
+    Return { value: Option<Operand> },      // function return
+    TryReturn { value: Option<Operand> },   // early return (functions)
+    UnitEnd { result: Option<Operand> },    // end of script unit
+    UnitEarlyReturn { value: Operand },     // early return (script units)
+}
+```
+
+### Lowering Context
+
+```rust
+pub struct ScriptLowerContext {
+    pub values: HashMap<String, (u32, ValueId)>,    // let bindings
+    pub slots: HashMap<String, (u32, SlotId)>,      // var bindings
+    pub functions: HashMap<String, u32>,            // function defs
+}
+```
+
+### Interpreter: Unit Frame Stack
+
+```rust
+pub struct ScriptInterpreter {
+    unit_frames: Vec<UnitFrame>,  // kept alive for cross-unit refs
+}
+
+impl ScriptInterpreter {
+    fn read_operand(&self, current_unit: u32, op: Operand) -> Value {
+        match op {
+            Operand::Value(v) => self.unit_frames[current_unit].read_value(v),
+            Operand::Slot(s) => self.unit_frames[current_unit].read_slot(s),
+            Operand::ExternalValue { unit, value } =>
+                self.unit_frames[unit as usize].read_value(value),
+            Operand::ExternalSlot { unit, slot } =>
+                self.unit_frames[unit as usize].read_slot(slot),
+        }
+    }
+}
+```
+
+### Key Constraints
+
+- CFG never jumps between units
+- Loops/ifs must be complete within a single unit
+- Forward-only visibility: unit N sees units 0..N-1
+- Values persist across units until moved/dropped
+- Functions defined in unit N visible to units N+1..
+
+### Script vs Function
+
+| Aspect | IrFunction | IrScriptUnit |
+|--------|------------|--------------|
+| Parameters | Yes | None |
+| External refs | No | Yes |
+| Defines functions | No | Yes |
+| Terminator | Return | UnitEnd |
+| Frame lifetime | Transient | Persistent |
