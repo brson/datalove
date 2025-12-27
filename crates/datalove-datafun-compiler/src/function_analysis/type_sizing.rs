@@ -32,10 +32,6 @@ pub fn compute_datafun_type_layout<'db>(
             // For now treat as zero-sized.
             TypeLayout { size: 0, align: 1 }
         }
-        DatafunType::Void => {
-            // Void is zero-sized.
-            TypeLayout { size: 0, align: 1 }
-        }
     }
 }
 

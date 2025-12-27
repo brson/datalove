@@ -147,10 +147,9 @@ fn typeandheap_to_string(db: &dyn datalove_datafun::Db, tah: datalove_datafun::t
             let ret = typeandheap_to_string(db, func.return_type(db));
             format!("({}) -> {}", params.join(", "), ret)
         }
-        Type::Void => "void".to_string(),
     };
 
-    if matches!(tah.ty(db), Type::Void) || matches!(tah.ty(db), Type::Function(_)) {
+    if matches!(tah.ty(db), Type::Function(_)) {
         type_str
     } else {
         format!("{}{}", heap_prefix, type_str)

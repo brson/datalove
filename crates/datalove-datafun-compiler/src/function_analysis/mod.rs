@@ -34,6 +34,8 @@ pub use validation::*;
 #[salsa::tracked]
 pub struct FunctionAnalysis<'db> {
     pub function: StmtFun<'db>,
+    /// Typechecked return type (unit `()` for void functions).
+    pub return_type: crate::tycheck::TypeAndHeap<'db>,
     pub frame_layout: FrameLayout<'db>,
     pub live_ranges: LiveRanges<'db>,
     pub move_info: MoveInfo<'db>,
@@ -133,6 +135,15 @@ pub fn analyze_function<'db>(
     func: StmtFun<'db>,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> FunctionAnalysis<'db> {
+    // Get the function's return type (unit for void functions).
+    let return_type = match func.return_type(db) {
+        Some(type_hint) => {
+            crate::tycheck::convert_type_hint(db, type_hint)
+                .unwrap_or_else(|_| crate::tycheck::unit_type(db))
+        }
+        None => crate::tycheck::unit_type(db),
+    };
+
     // Phase 1: Build CFG.
     let control_flow = cfg::build_cfg(db, func);
 
@@ -191,6 +202,7 @@ pub fn analyze_function<'db>(
     FunctionAnalysis::new(
         db,
         func,
+        return_type,
         frame_layout,
         live_ranges,
         move_info,

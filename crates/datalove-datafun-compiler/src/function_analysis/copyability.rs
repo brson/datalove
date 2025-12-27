@@ -17,7 +17,6 @@ pub fn is_copy_type<'db>(
     match ty.ty(db) {
         Type::Datalit(datalit_ty) => is_datalit_copy(db, datalit_ty),
         Type::Function(_) => false,  // Functions are not copy.
-        Type::Void => true,           // Void is trivially copyable.
     }
 }
 

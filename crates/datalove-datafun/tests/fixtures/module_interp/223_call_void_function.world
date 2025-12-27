@@ -1,0 +1,10 @@
+----------
+module local/test/main
+----------
+
+fun do_nothing()
+end fun
+
+fun main(): ()
+    ret do_nothing()
+end fun

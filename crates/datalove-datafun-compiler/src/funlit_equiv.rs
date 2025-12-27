@@ -511,7 +511,6 @@ fn datafun_type_inner_to_serde<'db>(
     match ty {
         Type::Datalit(inner) => datalit_type_inner_to_serde(db, inner),
         Type::Function(_) => datafun_type_inner_to_serde_panic("Function"),
-        Type::Void => datafun_type_inner_to_serde_panic("Void"),
     }
 }
 

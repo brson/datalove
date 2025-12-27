@@ -4,7 +4,7 @@
 //! Slots are laid out by `function_analysis::FrameLayout` with computed offsets.
 
 use crate::function_analysis::{ControlFlowGraph, DropPoints, FrameLayout, SlotId};
-use crate::ast;
+use crate::tycheck::TypeAndHeap;
 use super::{Destination, Value};
 
 /// Slot lifecycle state for cleanup decisions.
@@ -24,7 +24,17 @@ pub enum SlotState {
 pub(super) enum CfgControl {
     Continue,
     Return(Value),
-    ReturnVoid,
+}
+
+/// Context for what's being executed in this frame.
+///
+/// Abstracts away function-specific details so the interpreter can later
+/// support script/REPL execution with the same frame-based model.
+pub struct FrameContext<'db> {
+    /// Name for error messages (function name, script unit name, etc).
+    pub context_name: bct::text::InternedText<'db>,
+    /// Return type (unit `()` for void functions, never None).
+    pub return_type: TypeAndHeap<'db>,
 }
 
 /// Stack frame for function execution.
@@ -35,8 +45,8 @@ pub struct StackFrame<'db> {
     pub(super) slot_states: Vec<SlotState>,
     /// Cached tydescs for each slot, indexed by SlotId.
     pub slot_tydescs: Vec<*const datalove_datalit::rtdt::TyDesc>,
-    /// Function being executed.
-    pub func: ast::StmtFun<'db>,
+    /// Context for what's being executed (function name, return type, etc).
+    pub context: FrameContext<'db>,
     /// Slot offsets and types.
     pub layout: FrameLayout<'db>,
     /// Control flow graph.

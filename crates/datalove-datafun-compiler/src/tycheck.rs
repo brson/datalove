@@ -14,8 +14,6 @@ pub enum Type<'db> {
     Datalit(datalit::tycheck::Type<'db>),
     /// Function type: (param_types) -> return_type.
     Function(TypeFunction<'db>),
-    /// Void/unit type for functions with no return value.
-    Void,
 }
 
 #[salsa::tracked]
@@ -128,6 +126,8 @@ pub struct TypeContext<'db> {
     function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<crate::module_graph::ModuleId>)>,
     /// Expected return type for current function (if inside a function).
     expected_return_type: Option<TypeAndHeap<'db>>,
+    /// Whether current function has no declared return type (void function).
+    is_void_function: bool,
     errors: Vec<TypeError>,
     /// Expression types, indexed by ExprFun ID.
     expr_types: Vec<Option<TypeAndHeap<'db>>>,
@@ -149,6 +149,7 @@ impl<'db> TypeContext<'db> {
             functions: HashMap::new(),
             function_asts: HashMap::new(),
             expected_return_type: None,
+            is_void_function: false,
             errors: Vec::new(),
             expr_types: Vec::new(),
             call_targets: Vec::new(),
@@ -804,8 +805,8 @@ pub fn collect_function_signature<'db>(
             }
         }
         None => {
-            // Functions without explicit return type default to void.
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, Type::Void)
+            // Functions without explicit return type return unit `()`.
+            unit_type(db)
         }
     };
 
@@ -952,6 +953,7 @@ fn check_statement<'db>(
             // Create new context for function body with parameters in scope.
             let saved_variables = ctx.variables.clone();
             let saved_return_type = ctx.expected_return_type;
+            let saved_is_void = ctx.is_void_function;
 
             // Add parameters to context.
             for (param, param_ty) in params.iter().zip(param_types.iter()) {
@@ -959,6 +961,7 @@ fn check_statement<'db>(
             }
 
             ctx.expected_return_type = Some(ret_ty);
+            ctx.is_void_function = stmt.return_type(db).is_none();
 
             // Check function body.
             for stmt in body {
@@ -968,6 +971,7 @@ fn check_statement<'db>(
             // Restore context.
             ctx.variables = saved_variables;
             ctx.expected_return_type = saved_return_type;
+            ctx.is_void_function = saved_is_void;
         }
 
         Statement::Ret(stmt) => {
@@ -976,8 +980,8 @@ fn check_statement<'db>(
 
             match (ret_value, expected_ty) {
                 (Some(value), Some(expected_ret_ty)) => {
-                    // Has value - check if void.
-                    if matches!(expected_ret_ty.ty(db), Type::Void) {
+                    // Has value - check if void (no declared return type).
+                    if ctx.is_void_function {
                         // Void function with value - ERROR.
                         ctx.add_error(TypeError::DatalitError(
                             "void function cannot return a value".to_string()
@@ -989,9 +993,9 @@ fn check_statement<'db>(
                         }
                     }
                 }
-                (None, Some(expected_ret_ty)) => {
-                    // Bare ret - check if void.
-                    if !matches!(expected_ret_ty.ty(db), Type::Void) {
+                (None, Some(_expected_ret_ty)) => {
+                    // Bare ret - check if void (no declared return type).
+                    if !ctx.is_void_function {
                         // Non-void function with bare ret - ERROR.
                         ctx.add_error(TypeError::DatalitError(
                             "function requires return value".to_string()
@@ -1951,7 +1955,6 @@ fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
             )
         }
         Type::Function(_) => false,
-        Type::Void => false,
     }
 }
 
@@ -2446,7 +2449,6 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             let ret = type_to_string(db, func.return_type(db).ty(db));
             format!("({}) -> {}", params.join(", "), ret)
         }
-        Type::Void => "void".to_string(),
     }
 }
 
@@ -2517,7 +2519,7 @@ fn collect_module_exports<'db>(
                 continue;
             }
 
-            // Convert return type (default to Void if not specified).
+            // Convert return type (default to unit if not specified).
             let ret_ty = match return_type {
                 Some(type_hint) => {
                     match convert_type_hint(db, type_hint) {
@@ -2526,8 +2528,8 @@ fn collect_module_exports<'db>(
                     }
                 }
                 None => {
-                    // Functions without explicit return type default to void.
-                    TypeAndHeap::new(db, datalit::ast::Heap::Omitted, Type::Void)
+                    // Functions without explicit return type return unit `()`.
+                    unit_type(db)
                 }
             };
 
@@ -3400,6 +3402,34 @@ fn check_enum_variant<'db>(
     }
 
     Ok(())
+}
+
+// ============================================================================
+// Unit Type Helpers
+// ============================================================================
+
+/// Create the unit type `()` (empty anonymous tuple).
+///
+/// Used as the implicit return type for void functions.
+/// Memoized to avoid creating tracked structs outside of tracked functions.
+#[salsa::tracked]
+pub fn unit_type<'db>(db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
+    let unit_tuple = datalit::tycheck::TypeAnonTuple::new(db, vec![]);
+    TypeAndHeap::new(
+        db,
+        datalit::ast::Heap::Omitted,
+        Type::Datalit(datalit::tycheck::Type::AnonTuple(unit_tuple)),
+    )
+}
+
+/// Check if a type is the unit type `()`.
+pub fn is_unit_type<'db>(db: &'db dyn crate::Db, ty: TypeAndHeap<'db>) -> bool {
+    match ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple)) => {
+            tuple.fields(db).is_empty()
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]

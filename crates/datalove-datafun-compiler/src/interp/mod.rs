@@ -83,7 +83,7 @@ pub mod tydesc;
 
 pub use value::{Value, Destination};
 pub use error::InterpError;
-pub use frame::{SlotState, StackFrame, set_slot_state_vec, get_slot_state_vec};
+pub use frame::{SlotState, StackFrame, FrameContext, set_slot_state_vec, get_slot_state_vec};
 pub use memory::{destroy_value, destroy_value_contents_only, free_value_structure};
 pub use context::{InterpContext, ModuleFunctionTableGraph};
 
@@ -104,6 +104,7 @@ use arith_widening::{execute_binop, execute_unop};
 use crate::module_graph::ModuleId;
 use crate::ast;
 use crate::function_analysis::{Terminator, BlockId};
+use crate::tycheck::is_unit_type;
 
 // ============================================================================
 // Main Entry Point
@@ -112,7 +113,7 @@ use crate::function_analysis::{Terminator, BlockId};
 /// Evaluate a function call from frame-based execution.
 ///
 /// The return value is written directly to `return_dest`.
-/// Returns `None` for void functions.
+/// All functions return a value (void functions return unit `()`).
 fn eval_function_call_frame<'db>(
     ctx: &mut InterpContext<'db>,
     call_expr: ast::ExprFunctionCall<'db>,
@@ -179,7 +180,7 @@ fn eval_function_call_frame<'db>(
 ///
 /// This uses frame-based execution with analysis-driven slot allocation.
 /// If `return_dest` is provided, return expressions write directly to caller's memory.
-/// Returns `None` for void functions.
+/// All functions return a value (void functions return unit `()`).
 pub fn execute_function_body<'db>(
     ctx: &mut InterpContext<'db>,
     func: ast::StmtFun<'db>,
@@ -350,12 +351,20 @@ pub fn execute_function_body<'db>(
         set_slot_state_vec(&mut slot_states, slot_id, SlotState::Available);
     }
 
+    // Build frame context from function metadata.
+    // Get return type from function analysis (unit for void functions).
+    let return_type = analysis.return_type(ctx.db);
+    let context = FrameContext {
+        context_name: func.name(ctx.db),
+        return_type,
+    };
+
     // Create and push the stack frame.
     let frame = StackFrame {
         frame_data,
         slot_states,
         slot_tydescs,
-        func,
+        context,
         layout,
         cfg,
         drop_points,
@@ -370,26 +379,12 @@ pub fn execute_function_body<'db>(
     let frame = ctx.call_stack.pop().unwrap();
     let final_slot_states = frame.slot_states.clone();
 
-    // Handle return value based on whether we have a return_dest.
+    // All functions return a value (void functions return unit).
+    // Return value was written directly to caller's memory via DPS.
     let result = match result {
-        Ok(Some(value)) if return_dest.is_some() => {
-            // Return value was written directly to caller's memory via DPS.
-            // No cloning needed - just return the value as-is.
-            Ok(Some(value))
-        }
-        Ok(Some(_value)) => {
-            // No return_dest but we got a return value.
-            // This should be unreachable - all function calls provide DPS destinations.
-            panic!(
-                "Unreachable: return value without DPS destination in function '{}'",
-                func.name(ctx.db).text(ctx.db)
-            );
-        }
-        Ok(None) => {
-            // Void function returned without value.
-            Ok(None)
-        }
-        other => other,
+        Ok(Some(value)) => Ok(Some(value)),
+        Ok(None) => unreachable!("all functions return a value (void returns unit)"),
+        Err(e) => Err(e),
     };
 
     // Clean up frame values before returning.
@@ -459,8 +454,9 @@ fn execute_function_body_with_frame<'db>(
     // Get the current frame (top of stack).
     let frame_index = ctx.call_stack.len() - 1;
 
-    // Get the function and CFG from the frame.
-    let func = ctx.call_stack[frame_index].func;
+    // Get context and CFG from the frame.
+    let context_name = ctx.call_stack[frame_index].context.context_name;
+    let return_type = ctx.call_stack[frame_index].context.return_type;
     let cfg = ctx.call_stack[frame_index].cfg;
 
     // Start at block 0 (entry block).
@@ -487,7 +483,6 @@ fn execute_function_body_with_frame<'db>(
             match execute_cfg_statement(ctx, stmt) {
                 Ok(CfgControl::Continue) => continue,
                 Ok(CfgControl::Return(value)) => return (Ok(Some(value)), current_block_id),
-                Ok(CfgControl::ReturnVoid) => return (Ok(None), current_block_id),
                 Err(e) => return (Err(e), current_block_id),
             }
         }
@@ -495,14 +490,17 @@ fn execute_function_body_with_frame<'db>(
         // Handle terminator.
         match &block.terminator {
             Terminator::Return => {
-                // For void functions, implicit return at end of function is OK.
-                if func.return_type(ctx.db).is_none() {
-                    return (Ok(None), current_block_id);
+                // For void functions (unit return type), implicit return is OK.
+                if is_unit_type(ctx.db, return_type) {
+                    match write_unit_to_return_dest(ctx) {
+                        Ok(value) => return (Ok(Some(value)), current_block_id),
+                        Err(e) => return (Err(e), current_block_id),
+                    }
                 }
                 // Non-void function reached end without ret - error.
                 return (Err(InterpError::RuntimeError(
                     format!("Function '{}' reached end without ret statement",
-                            func.name(ctx.db).text(ctx.db))
+                            context_name.text(ctx.db))
                 )), current_block_id);
             }
             Terminator::Branch { condition_stmt, then_block, else_block } => {
@@ -609,8 +607,9 @@ fn execute_cfg_statement<'db>(
                     Ok(CfgControl::Return(value))
                 }
                 None => {
-                    // Bare ret in void function.
-                    Ok(CfgControl::ReturnVoid)
+                    // Bare ret in void function - return unit `()`.
+                    let value = write_unit_to_return_dest(ctx)?;
+                    Ok(CfgControl::Return(value))
                 }
             }
         }
@@ -885,12 +884,8 @@ fn eval_expression_frame<'db>(
         }
 
         ast::ExprFunKind::FunctionCall(call_expr) => {
-            // Void functions can't be used in expression context (typechecker ensures this).
-            eval_function_call_frame(ctx, call_expr, dest)?
-                .ok_or_else(|| InterpError::RuntimeError(
-                    format!("Void function '{}' cannot be used in expression context",
-                            call_expr.name(ctx.db).text(ctx.db))
-                ))?;
+            // All functions return a value (void functions return unit).
+            eval_function_call_frame(ctx, call_expr, dest)?;
             Ok(())
         }
 
@@ -1083,5 +1078,21 @@ fn eval_return_expression_frame<'db>(
     // No return_dest - this was the "script scope" fallback path.
     // Script scope was removed; all callers now provide return_dest.
     unreachable!("return_dest should always be Some - script scope was removed");
+}
+
+/// Return unit `()` for void functions.
+///
+/// Void functions return unit type, so bare `ret` and implicit returns
+/// need to return a unit value. Unit is a ZST (size 0), so no bytes are written.
+fn write_unit_to_return_dest<'db>(
+    ctx: &mut InterpContext<'db>,
+) -> Result<Value, InterpError> {
+    let frame_index = ctx.call_stack.len() - 1;
+
+    let return_dest = ctx.call_stack[frame_index].return_dest
+        .expect("return_dest should always be Some");
+
+    // Unit is a ZST (size 0). Nothing to write.
+    Ok(return_dest.to_value())
 }
 
