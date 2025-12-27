@@ -11,7 +11,7 @@ With core->runtime calls.
 
 # in progress
 
-- unit type
+- use cfg for early return branching
 - script/function unification semantics
 - move/clone semantics - moves-etc.md
 - argument modes - moves-etc.md
