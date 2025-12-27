@@ -118,7 +118,7 @@ fn eval_function_call_frame<'db>(
     ctx: &mut InterpContext<'db>,
     call_expr: ast::ExprFunctionCall<'db>,
     return_dest: Destination,
-) -> Result<Option<Value>, InterpError> {
+) -> Result<Value, InterpError> {
     let arg_exprs = call_expr.args(ctx.db);
 
     // Use pre-resolved call target from typechecking.
@@ -187,7 +187,7 @@ pub fn execute_function_body<'db>(
     func_module: Option<ModuleId>,
     arg_values: Vec<Value>,
     return_dest: Destination,
-) -> Result<Option<Value>, InterpError> {
+) -> Result<Value, InterpError> {
     // Helper to clean up arguments on early error (before frame execution).
     // All arguments must be destroyed since they were never used.
     fn cleanup_args_on_error(ctx: &mut InterpContext<'_>, arg_values: Vec<Value>) {
@@ -381,11 +381,6 @@ pub fn execute_function_body<'db>(
 
     // All functions return a value (void functions return unit).
     // Return value was written directly to caller's memory via DPS.
-    let result = match result {
-        Ok(Some(value)) => Ok(Some(value)),
-        Ok(None) => unreachable!("all functions return a value (void returns unit)"),
-        Err(e) => Err(e),
-    };
 
     // Clean up frame values before returning.
     cleanup_frame(ctx, frame, exit_block_id);
@@ -408,7 +403,7 @@ pub fn execute_function_body<'db>(
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Option(_)) {
                     // DPS: write None to caller's destination.
                     write_option_none_to_dest(return_dest)?;
-                    return Ok(Some(return_dest.to_value()));
+                    return Ok(return_dest.to_value());
                 }
             }
         }
@@ -418,7 +413,7 @@ pub fn execute_function_body<'db>(
                 if matches!(ret_type.type_hint(ctx.db), TypeHint::Result(_)) {
                     // DPS: write Err to caller's destination.
                     write_result_err_to_dest(return_dest, *tydesc, *ptr)?;
-                    return Ok(Some(return_dest.to_value()));
+                    return Ok(return_dest.to_value());
                 }
             }
         }
@@ -434,7 +429,7 @@ pub fn execute_function_body<'db>(
 /// Returns (result, exit_block_id) where exit_block_id is the block that caused the return.
 fn execute_function_body_with_frame<'db>(
     ctx: &mut InterpContext<'db>,
-) -> (Result<Option<Value>, InterpError>, BlockId) {
+) -> (Result<Value, InterpError>, BlockId) {
     // Get the current frame (top of stack).
     let frame_index = ctx.call_stack.len() - 1;
 
@@ -466,7 +461,7 @@ fn execute_function_body_with_frame<'db>(
             // Execute statement.
             match execute_cfg_statement(ctx, stmt) {
                 Ok(CfgControl::Continue) => continue,
-                Ok(CfgControl::Return(value)) => return (Ok(Some(value)), current_block_id),
+                Ok(CfgControl::Return(value)) => return (Ok(value), current_block_id),
                 Err(e) => return (Err(e), current_block_id),
             }
         }
@@ -477,7 +472,7 @@ fn execute_function_body_with_frame<'db>(
                 // For void functions (unit return type), implicit return is OK.
                 if is_unit_type(ctx.db, return_type) {
                     match write_unit_to_return_dest(ctx) {
-                        Ok(value) => return (Ok(Some(value)), current_block_id),
+                        Ok(value) => return (Ok(value), current_block_id),
                         Err(e) => return (Err(e), current_block_id),
                     }
                 }

@@ -201,7 +201,7 @@ pub fn analyze_modules_worldfile(
     );
 
     let output = match result {
-        Ok(Some(value)) => {
+        Ok(value) => {
             // Pretty-print the return value.
             let output_str = interp_ctx.pretty_print_value(&value)
                 .unwrap_or_else(|e| format!("Error: {:?}", e));
@@ -214,10 +214,6 @@ pub fn analyze_modules_worldfile(
             }
 
             output_str
-        }
-        Ok(None) => {
-            // Void function - shouldn't happen since we checked return type.
-            "()".to_string()
         }
         Err(e) => {
             // Execution error.
