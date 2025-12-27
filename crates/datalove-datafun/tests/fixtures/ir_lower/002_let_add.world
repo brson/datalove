@@ -1,0 +1,10 @@
+----------
+module local/test/main
+----------
+
+fun main(): i64
+    let a = 1
+    let b = 2
+    let c = a + b
+    ret c
+end fun

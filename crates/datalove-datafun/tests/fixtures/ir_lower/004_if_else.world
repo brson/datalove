@@ -1,0 +1,12 @@
+----------
+module local/test/main
+----------
+
+fun main(): i64
+    let x = 10
+    if x > 5
+        ret 1
+    else
+        ret 0
+    end if
+end fun

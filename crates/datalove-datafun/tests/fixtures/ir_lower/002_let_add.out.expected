@@ -1,0 +1,7 @@
+fn main():
+block0:
+    v0 = const 1i64
+    v1 = const 2i64
+    v2 = add v0, v1
+    return v2
+

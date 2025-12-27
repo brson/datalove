@@ -14,6 +14,9 @@ pub mod funlit_equiv;
 // Interpreter module.
 pub mod interp;
 
+// SSA IR module.
+pub mod ir;
+
 // Module graph abstraction (core compiler uses this).
 pub mod module_graph;
 

@@ -1,0 +1,17 @@
+fn main():
+block0:
+    v0 = const 10i64
+    branch v0, block1, block2
+block1:
+    v1 = const 1i64
+    return v1
+block4:
+    goto block3
+block2:
+    v2 = const 0i64
+    return v2
+block5:
+    goto block3
+block3:
+    return
+
