@@ -109,6 +109,8 @@ pub struct SlotInfo<'db> {
     pub expr: Option<crate::ast::ExprFun<'db>>,  // For temporaries: the creating expression
     /// Precomputed: whether the type has copy semantics.
     pub is_copy: bool,
+    /// Whether runtime slot_states tracking is needed for cleanup decisions.
+    pub needs_state_tracking: bool,
 }
 
 impl<'db> FrameLayout<'db> {
@@ -185,6 +187,7 @@ impl<'db> FrameLayout<'db> {
         set_stmt_slots: Vec<SetStmtSlot<'db>>,
         if_binding_slots: Vec<IfBindingSlot<'db>>,
         struct_field_orders: Vec<StructFieldOrder<'db>>,
+        tracked_slots: &std::collections::HashSet<SlotId>,
     ) -> Self {
         use salsa::plumbing::AsId;
         use std::mem::{size_of, align_of};
@@ -212,8 +215,15 @@ impl<'db> FrameLayout<'db> {
             // Precompute copyability.
             let is_copy = super::is_copy_type(db, ty);
 
+            // Determine if runtime state tracking is needed.
+            // A slot needs tracking if:
+            // 1. It's in the tracked_slots set (conditional init/move), OR
+            // 2. It's a non-copy Reference slot (for argument cleanup).
+            let needs_state_tracking = tracked_slots.contains(&slot_id)
+                || (kind == SlotKind::Reference && !is_copy);
+
             // Create slot info.
-            let slot_info = SlotInfo::new(db, slot_id, name, kind, offset, ty, expr, is_copy);
+            let slot_info = SlotInfo::new(db, slot_id, name, kind, offset, ty, expr, is_copy, needs_state_tracking);
             slot_infos.push(slot_info);
 
             // Advance offset by slot size.

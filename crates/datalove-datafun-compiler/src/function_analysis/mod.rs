@@ -41,12 +41,6 @@ pub struct FunctionAnalysis<'db> {
     pub control_flow: ControlFlowGraph<'db>,
     #[returns(ref)]
     pub errors: Vec<AnalysisError>,
-    /// Slots that need runtime state tracking due to conditional moves.
-    ///
-    /// Only slots in this list have `Sometimes` move state and require
-    /// runtime checks to prevent double-drop or determine parameter consumption.
-    #[returns(ref)]
-    pub tracked_slots: Vec<SlotId>,
 }
 
 /// Unique identifier for a slot in the frame.
@@ -168,7 +162,8 @@ pub fn analyze_function<'db>(
     // - Local and Temporary slots with NormalCleanup (may need drop points)
     // Exclude:
     // - InlineDestroyed slots (destroyed inline by interpreter, no runtime tracking needed)
-    // - Reference (parameter) slots (static analysis sufficient)
+    // - Reference (parameter) slots (static analysis sufficient for drop points,
+    //   but non-copy Reference slots need tracking for argument cleanup).
     let mut tracked_set: std::collections::HashSet<SlotId> = std::collections::HashSet::new();
     tracked_set.extend(init_analysis.conditionally_initialized_slots(db));
     tracked_set.extend(moved_analysis.conditionally_moved_slots(db));
@@ -180,10 +175,10 @@ pub fn analyze_function<'db>(
             tracked_set.insert(slot.slot_id(db));
         }
     }
-    let tracked_slots: Vec<SlotId> = tracked_set.into_iter().collect();
 
     // Phase 7: Frame layout with types.
-    let frame_layout = build_frame_layout(db, func, slot_allocation, tycheck_result);
+    // Pass tracked_set so each SlotInfo can precompute needs_state_tracking.
+    let frame_layout = build_frame_layout(db, func, slot_allocation, tycheck_result, &tracked_set);
 
     // Phase 8: Validation.
     let mut errors = Vec::new();
@@ -202,7 +197,6 @@ pub fn analyze_function<'db>(
         drop_points,
         control_flow,
         errors,
-        tracked_slots,
     )
 }
 
@@ -212,6 +206,7 @@ fn build_frame_layout<'db>(
     func: StmtFun<'db>,
     slot_allocation: slot_allocation::SlotAllocation<'db>,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
+    tracked_slots: &std::collections::HashSet<SlotId>,
 ) -> FrameLayout<'db> {
     use salsa::plumbing::AsId;
 
@@ -289,6 +284,7 @@ fn build_frame_layout<'db>(
         slot_allocation.set_stmt_slots(db).clone(),
         slot_allocation.if_binding_slots(db).clone(),
         slot_allocation.struct_field_orders(db).clone(),
+        tracked_slots,
     )
 }
 

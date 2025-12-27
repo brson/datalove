@@ -3,7 +3,7 @@
 //! Each function call creates a `StackFrame` with a byte buffer for slot storage.
 //! Slots are laid out by `function_analysis::FrameLayout` with computed offsets.
 
-use crate::function_analysis::{ControlFlowGraph, DropPoints, FrameLayout, SlotId};
+use crate::function_analysis::{ControlFlowGraph, DropPoints, FrameLayout};
 use crate::ast;
 use super::{Destination, Value};
 
@@ -41,8 +41,6 @@ pub struct StackFrame<'db> {
     pub cfg: ControlFlowGraph<'db>,
     /// Analysis-computed cleanup points.
     pub drop_points: DropPoints<'db>,
-    /// Slots needing runtime state tracking.
-    pub tracked_slots: Vec<SlotId>,
     /// Caller's return destination (None for void functions).
     pub return_dest: Option<Destination>,
 }

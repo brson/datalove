@@ -139,7 +139,6 @@ pub(super) fn process_block_exit_drops<'db>(
     let frame_index = ctx.call_stack.len() - 1;
     let drop_points = ctx.call_stack[frame_index].drop_points;
     let layout = ctx.call_stack[frame_index].layout;
-    let tracked_slots = ctx.call_stack[frame_index].tracked_slots.clone();
     let slots = layout.slots(ctx.db);
 
     // Use pre-indexed BranchExit drops for this block (O(1) lookup).
@@ -156,7 +155,7 @@ pub(super) fn process_block_exit_drops<'db>(
 
         // For tracked slots (conditional init or move), check runtime state.
         // For non-tracked slots, static analysis guarantees correctness.
-        if tracked_slots.contains(&slot_id) {
+        if slot_info.needs_state_tracking(ctx.db) {
             if ctx.call_stack[frame_index].slot_states[slot_index] != SlotState::Available {
                 continue;
             }
@@ -197,7 +196,6 @@ pub(super) fn cleanup_frame<'db>(
     let layout = frame.layout;
     let slots = layout.slots(ctx.db);
     let drop_points = frame.drop_points;
-    let tracked_slots = &frame.tracked_slots;
 
     // Use pre-indexed function exit drops for this specific return block.
     for drop_point in drop_points.get_function_exit_drops(ctx.db, exit_block_id) {
@@ -221,7 +219,7 @@ pub(super) fn cleanup_frame<'db>(
 
         // For tracked slots (conditional init or move), check runtime state.
         // For non-tracked slots, static analysis guarantees correctness.
-        if tracked_slots.contains(&slot_id) {
+        if slot_info.needs_state_tracking(ctx.db) {
             if frame.slot_states[slot_index] != SlotState::Available {
                 continue;
             }

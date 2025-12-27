@@ -278,11 +278,10 @@ pub fn execute_function_body<'db>(
         ));
     }
 
-    // Get frame layout, CFG, drop points, and tracked slots.
+    // Get frame layout, CFG, and drop points.
     let layout = analysis.frame_layout(ctx.db);
     let cfg = analysis.control_flow(ctx.db);
     let drop_points = analysis.drop_points(ctx.db);
-    let tracked_slots = analysis.tracked_slots(ctx.db).clone();
     let total_size = layout.total_size(ctx.db) as usize;
     let slots = layout.slots(ctx.db);
 
@@ -359,7 +358,6 @@ pub fn execute_function_body<'db>(
         layout,
         cfg,
         drop_points,
-        tracked_slots,
         return_dest,
     };
     ctx.call_stack.push(frame);
