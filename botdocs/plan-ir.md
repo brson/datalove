@@ -251,6 +251,27 @@ Tests:
 - `tests/ir_lower_tests.rs` - 5 function lowering tests
 - `tests/ir_lower_script_tests.rs` - 5 script unit lowering tests
 
+#### Known Hacks to Fix
+
+1. **Expression parsing** - Tests wrap expressions in `ret {expr}` then extract since no `parse_expr` exists.
+   - Fix: Add `parse_expr` to parser.
+   - Files: `parser.rs`, `ir_lower_script_tests.rs`
+
+2. **Cross-unit slot assignment** - `SlotStore { slot: SlotId, ... }` loses unit info when storing to external slot (lower.rs:762-773). Will silently fail at runtime.
+   - Fix: Add `SlotDest` enum:
+     ```rust
+     pub enum SlotDest {
+         Local(SlotId),
+         External { unit: u32, slot: SlotId },
+     }
+     ```
+   - Update `SlotStore { dest: SlotDest, value: Operand }`
+   - Files: `ir/mod.rs`, `ir/lower.rs`, `ir/display.rs`
+
+3. **Type placeholders** - `Call { func: String }`, `Pack { ty: String }` use strings instead of proper IDs.
+   - Assessment: Low priority, string lookup works for interpreter.
+   - Decision: Defer.
+
 ### Phase 3: IR Interpreter - NOT STARTED
 
 New file: `crates/datalove-datafun-compiler/src/ir/interp.rs`
