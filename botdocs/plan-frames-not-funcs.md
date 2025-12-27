@@ -6,36 +6,34 @@ Divorce the interpreter from function-specific assumptions so it can later suppo
 
 ## Summary
 
-1. Add first-class unit type `()` with 1-byte size
+1. Make unit type `()` the implicit return type of void functions
 2. Replace `func: StmtFun` in StackFrame with abstracted context info
 3. Update interpreter to use context info instead of `func.xxx()` accessors
 
 ---
 
-## Part 1: First-Class Unit Type
+## Part 1: Unit Type as Implicit Return Type
 
-The unit type `()` (zero-element tuple) must be 1 byte, not zero-sized.
+The unit type `()` already works as a ZST (size 0, align 1). Void functions currently have `return_type: None`. We need to change this so all functions have an explicit return type, with void functions using `()`.
 
-### File: `crates/datalove-datafun-compiler/src/function_analysis/type_sizing.rs`
+### File: `crates/datalove-datafun-compiler/src/tycheck.rs` or new utility
 
-**Change `compute_tuple_layout`** (lines 129-154):
+Add helper to create the unit type:
 ```rust
-fn compute_tuple_layout<'db>(db, fields: &[TypeAndHeap<'db>]) -> TypeLayout {
-    // Unit type (empty tuple) is 1 byte, not zero-sized.
-    if fields.is_empty() {
-        return TypeLayout { size: 1, align: 1 };
-    }
-    // ... existing logic for non-empty tuples ...
+pub fn unit_type<'db>(db: &'db dyn Db) -> TypeAndHeap<'db> {
+    let unit_tuple = datalit::tycheck::TypeAnonTuple::new(db, vec![]);
+    TypeAndHeap::new(
+        db,
+        datalit::ast::Heap::Omitted,
+        Type::Datalit(datalit::tycheck::Type::AnonTuple(unit_tuple))
+    )
 }
 ```
 
-### File: `crates/datalove-rtdt/src/layout.rs`
+### Where to use unit type:
 
-**Check `compute_tuple_layout`** (line 42) for similar empty-tuple handling - ensure it returns size=1 for empty tuples.
-
-### File: `crates/datalove-datalit/src/tydesc_table.rs`
-
-Verify tydesc creation for empty tuples produces size=1.
+- When a function has no declared return type, use `()` instead of `None`
+- When creating script unit contexts (future)
 
 ---
 
@@ -49,7 +47,7 @@ Verify tydesc creation for empty tuples produces size=1.
 pub struct FrameContext<'db> {
     /// Name for error messages.
     pub context_name: bct::text::InternedText<'db>,
-    /// Return type (with first-class unit, never None).
+    /// Return type (unit for void functions, never None).
     pub return_type: crate::tycheck::TypeAndHeap<'db>,
 }
 ```
@@ -89,8 +87,8 @@ pub struct StackFrame<'db> {
 - Line 504 (error message)
 
 **Update all `func.return_type()` usages** - replace with `frame.context.return_type`:
-- Line 407 (try-operator Option wrapping)
-- Line 498 (implicit return check - with unit type this becomes: check if return_type is unit)
+- Line 407 (try-operator Option wrapping) - check if return type is `Option<T>` or `Result<T>`
+- Line 498 (implicit return check) - change from `if func.return_type().is_none()` to checking if return_type is unit `()`
 
 **Keep parameter handling unchanged** in `execute_function_body()`:
 - Parameter validation (line 134) still uses `func.params()`
@@ -99,35 +97,29 @@ pub struct StackFrame<'db> {
 
 ---
 
-## Part 4: Helper Function for Unit Type
+## Part 4: Helper for Checking Unit Type
 
-### File: `crates/datalove-datafun-compiler/src/tycheck.rs` or new utility
-
-Add helper to create the unit type:
+Add a helper to check if a type is the unit type:
 ```rust
-pub fn unit_type<'db>(db: &'db dyn Db) -> TypeAndHeap<'db> {
-    let unit_tuple = datalit::tycheck::TypeAnonTuple::new(db, vec![]);
-    TypeAndHeap::new(
-        db,
-        datalit::ast::Heap::Omitted,
-        Type::Datalit(datalit::tycheck::Type::AnonTuple(unit_tuple))
-    )
+pub fn is_unit_type<'db>(db: &'db dyn Db, ty: TypeAndHeap<'db>) -> bool {
+    match ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple)) => {
+            tuple.fields(db).is_empty()
+        }
+        _ => false,
+    }
 }
 ```
 
-Use this when:
-- A function has no declared return type (currently `None`)
-- Creating script unit contexts
+Use this at line 498 to check for implicit return (void functions).
 
 ---
 
 ## Files to Modify
 
-1. `crates/datalove-datafun-compiler/src/function_analysis/type_sizing.rs` - unit type size fix
-2. `crates/datalove-rtdt/src/layout.rs` - verify unit type size
-3. `crates/datalove-datafun-compiler/src/interp/frame.rs` - add FrameContext, modify StackFrame
-4. `crates/datalove-datafun-compiler/src/interp/mod.rs` - update all func.xxx() usages
-5. `crates/datalove-datafun-compiler/src/tycheck.rs` - add unit_type helper
+1. `crates/datalove-datafun-compiler/src/interp/frame.rs` - add FrameContext, modify StackFrame
+2. `crates/datalove-datafun-compiler/src/interp/mod.rs` - update all func.xxx() usages
+3. `crates/datalove-datafun-compiler/src/tycheck.rs` - add unit_type and is_unit_type helpers
 
 ---
 
@@ -144,6 +136,7 @@ The existing interpreter tests should pass unchanged since behavior is identical
 
 ## Notes
 
+- Unit type `()` is already implemented as ZST (size 0, align 1) - confirmed working
 - This refactoring does NOT add script execution, just prepares the interpreter for it
 - The `func` field is removed from StackFrame but function parameters are still handled at entry
 - Cross-frame bindings for scripts are deferred to a later task
