@@ -18,6 +18,7 @@ datalove-repl-term.path = "../datalove-repl-term"
 pulldown-cmark = "0.12"
 syntect = "5.2"
 comrak = "0.32"
+tera = "1.20"
 
 [[bin]]
 name = "datalove"

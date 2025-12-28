@@ -893,6 +893,7 @@ dependencies = [
  "pulldown-cmark",
  "rustmax",
  "syntect",
+ "tera",
 ]
 
 [[package]]

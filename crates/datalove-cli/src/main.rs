@@ -36,6 +36,8 @@ enum Command {
     Script(ScriptCommand),
     /// Typecheck the sys/std library and report errors.
     TypecheckStd(TypecheckStdCommand),
+    /// Generate HTML documentation from mandocs/.
+    Docs(DocsCommand),
 }
 
 #[derive(clap::Args)]
@@ -90,6 +92,10 @@ struct ScriptCommand {
 struct TypecheckStdCommand {
 }
 
+#[derive(clap::Args)]
+struct DocsCommand {
+}
+
 impl Cli {
     fn run(&self) -> AnyResult<()> {
         match &self.cmd {
@@ -100,6 +106,7 @@ impl Cli {
             Command::Repl(cmd) => cmd.run(&self.args),
             Command::Script(cmd) => cmd.run(&self.args),
             Command::TypecheckStd(cmd) => cmd.run(&self.args),
+            Command::Docs(cmd) => cmd.run(&self.args),
         }
     }
 }
@@ -362,5 +369,119 @@ impl TypecheckStdCommand {
             }
             bail!("Typecheck failed with {} error(s)", error_count);
         }
+    }
+}
+
+impl DocsCommand {
+    fn run(&self, _args: &Args) -> AnyResult<()> {
+        use rmx::std::fs;
+        use tera::{Tera, Context};
+
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_path = PathBuf::from(manifest_dir);
+        let project_root = manifest_path
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or_else(|| anyhow!("Failed to find project root"))?;
+
+        let input_dir = project_root.join("mandocs");
+        let output_dir = project_root.join("docs");
+
+        // Create output directory.
+        fs::create_dir_all(&output_dir)?;
+
+        // Load template.
+        let template_path = input_dir.join("template.html");
+        let template_content = fs::read_to_string(&template_path)
+            .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
+
+        let mut tera = Tera::default();
+        tera.add_raw_template("page", &template_content)?;
+
+        // Copy style.css and template.html.
+        let style_src = input_dir.join("style.css");
+        let style_dst = output_dir.join("style.css");
+        fs::copy(&style_src, &style_dst)
+            .with_context(|| format!("Failed to copy style.css"))?;
+        println!("Copied style.css");
+
+        let template_dst = output_dir.join("template.html");
+        fs::copy(&template_path, &template_dst)
+            .with_context(|| format!("Failed to copy template.html"))?;
+        println!("Copied template.html");
+
+        // Process all markdown files.
+        for entry in fs::read_dir(&input_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.extension().map(|e| e == "md").unwrap_or(false) {
+                let file_name = path.file_name().unwrap().to_string_lossy();
+
+                // Determine output filename.
+                let output_name = if file_name == "README.md" {
+                    "index.html".to_string()
+                } else {
+                    file_name.replace(".md", ".html")
+                };
+
+                // Read and convert markdown.
+                let markdown = fs::read_to_string(&path)?;
+
+                // Replace .md links with .html links.
+                let markdown = Self::rewrite_links(&markdown);
+
+                // Convert to HTML.
+                let html = comrak::markdown_to_html(&markdown, &comrak::Options::default());
+
+                // Extract title from first heading or filename.
+                let title = Self::extract_title(&markdown, &file_name);
+
+                // Render template.
+                let mut context = Context::new();
+                context.insert("title", &title);
+                context.insert("content", &html);
+                let rendered = tera.render("page", &context)?;
+
+                // Write output.
+                let output_path = output_dir.join(&output_name);
+                fs::write(&output_path, rendered)?;
+                println!("{} -> {}", file_name, output_name);
+            }
+        }
+
+        println!("Documentation generated in {}", output_dir.display());
+        Ok(())
+    }
+
+    fn rewrite_links(markdown: &str) -> String {
+        use rmx::regex::Regex;
+
+        // Match markdown links: [text](path.md) or [text](path.md#anchor)
+        // Also handle README.md -> index.html
+        let re = Regex::new(r"\]\(([^)]+)\.md(#[^)]*)?\)").unwrap();
+
+        re.replace_all(markdown, |caps: &rmx::regex::Captures| {
+            let path = &caps[1];
+            let anchor = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+
+            if path == "README" {
+                format!("](index.html{})", anchor)
+            } else {
+                format!("]({}.html{})", path, anchor)
+            }
+        }).into_owned()
+    }
+
+    fn extract_title(markdown: &str, filename: &str) -> String {
+        // Try to extract title from first # heading.
+        for line in markdown.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("# ") {
+                return trimmed[2..].trim().to_string();
+            }
+        }
+        // Fall back to filename without extension.
+        filename.trim_end_matches(".md").to_string()
     }
 }
