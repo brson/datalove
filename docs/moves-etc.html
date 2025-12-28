@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }} - Datalove</title>
+    <title>Move and clone and argument modes - Datalove</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
@@ -14,7 +14,16 @@
         <a href="index.html">♡</a>
     </nav>
     <main>
-        {{ content | safe }}
+        <h1>Move and clone and argument modes</h1>
+<h2>Argument modes and callee expressions</h2>
+<ul>
+<li><code>argument.clone</code></li>
+<li><code>argument.move</code></li>
+<li><code>argument.mut</code></li>
+</ul>
+<p>All binops and unary negation treat their arguments as <code>ref</code> arguments.
+They do not move.</p>
+
     </main>
 </body>
 </html>

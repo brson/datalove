@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>potential-changes - Datalove</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html">♡</a>
+    </nav>
+    <main>
+        <h2>map -&gt; dict?</h2>
+<p>just to free up the word map</p>
+<h2>Type hints</h2>
+<ul>
+<li><code>: type / expr</code> -&gt; <code>: type is expr</code>
+<ul>
+<li>or <code>: type = </code> &lt;---- this might be the one because</li>
+</ul>
+</li>
+</ul>
+<pre><code>struct Foo {
+  bar = 1,
+  baz: int = 2,
+}
+</code></pre>
+<p>vs</p>
+<pre><code>struct Foo {
+  bar = 1,
+  baz = : int is 2,
+}
+</code></pre>
+<p>tydec:</p>
+<pre><code>struct Foo {
+  bar: int,
+  baz: int,
+}
+</code></pre>
+<p>seems to be very orthogonal.
+can we say &quot;any <code>=</code> can be expanded to <code>: =</code>?</p>
+
+    </main>
+</body>
+</html>

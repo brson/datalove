@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>design-notes - Datalove</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html">♡</a>
+    </nav>
+    <main>
+        <h2>The Datalove Decree</h2>
+<p>Datalove on various language design topics.</p>
+<h3>Function return types</h3>
+<p>Functions with return types require <code>ret</code> with value.</p>
+<pre><code>fun choose(a: u32): bool
+  if a &lt; 10
+    ret true
+  else
+    ret false
+  end if
+end fun
+</code></pre>
+<p>Functions can have void return types
+and allow <code>ret</code> statements without values.</p>
+<pre><code>fun foo()
+  // no ret required
+end fun
+
+fun choose(a: u32)
+  if a &lt; 10
+    ret
+  end if
+end fun
+</code></pre>
+<h3>Option and result handling</h3>
+<p>The option and result types are prefixes like zig:</p>
+<pre><code>// option
+let a: ?u32 = ...
+let b: ?[u32] = ...
+// result
+let c: !u32 = ...
+let d: ![u32] = ...
+</code></pre>
+<p>Option and result construction
+is done with the <code>some</code>, <code>none</code>, <code>ok</code> and <code>er</code> keywords.
+Note the awkward <code>er error</code> construction which
+constructs an <code>er</code> <code>result</code> varriant out of an <code>error</code> value.</p>
+<pre><code>let a: ?u32 = some 3
+let b: ?u32 = some u32.min_value()
+let c: ?u32 = none
+
+let a: !u32 = ok 3
+let b: !u32 = ok u32.min_value()
+let c: ?u32 = er error &quot;oops&quot;
+</code></pre>
+<p>Destructuring option and result is like zig:</p>
+<pre><code>let a: ?u8 = 1
+
+var c: u8 = 0
+if a |value|
+  set c = value
+else
+  set c = 255
+end if
+</code></pre>
+<pre><code>let a: !u8 = 1
+
+var c: u8 = 0
+if a |value|
+  set c = value
+else |error|
+  ret error
+end if
+</code></pre>
+<p>Branching on error values is not like zig
+and uses reflection, not shown here.</p>
+<p>Early return with postfix <code>?</code> and <code>!</code>:</p>
+<pre><code>fun transform_option(val: ?u32): ?u32
+  let val = val? // early none return
+  ret val +? 1   // early none return on overflow
+end fun
+
+fun transform_result(val: !u32): !u32
+  let val = val! // early error return
+  ret val +! 1   // early error return on overflow
+end fun
+</code></pre>
+<h3>Math ops and error handling</h3>
+<p>Datalove is especially strict about overflow and error
+cases in machine-size integers and floats.</p>
+<p>Floats support all bare math ops,
+<code>+ - * /</code> and unary <code>-</code>.</p>
+<p>Bigints (<code>int</code>) support all but div:
+<code>+ - *</code> and unary <code>-</code>.
+For div we must use a checked variant to handle divide-by-zero.</p>
+<p>Fixed ints do not support any bare bath ops, not even unary <code>-</code>.</p>
+<p>Fixed ints support early-return varieties:</p>
+<pre><code>let a = 1 +? 1
+let a = 1 -? 1
+let a = 1 *? 1
+let a = 1 /? 1
+let a = -?a     // early-return negation
+
+let a = 1 +! 1
+let a = 1 -! 1
+let a = 1 *! 1
+let a = 1 /! 1
+let a = -!a
+</code></pre>
+<p><code>?</code> early-returns <code>?T</code> option types and <code>!</code> early-returns <code>!T</code> result types.</p>
+<p>These either result in the same type as the input types or early return -
+they do not result in option or result types. Their enclosing function
+must be the correct optionr/result type.</p>
+<p><code>-?</code> unary op is not defined for unsigned ints -
+it has a sensible semantic but is a pure footgun.</p>
+<p>Bigints support the early-return division but not the others.
+Floats don't support early-return math.</p>
+<p>If we decide to let funs panic we'll also add panicking variations.</p>
+<h3>Numeric widening</h3>
+<p>Fixed ints automatically widen, up to bigints:</p>
+<pre><code>let a: u8 = 1
+let b: u16 = a
+let c: int = b
+</code></pre>
+<p>Same for signed fixed ints:</p>
+<pre><code>let a: i8 = 1
+let b: i16 = a
+let c: int = b
+</code></pre>
+<p>Unsigned and signed ints never automatically coerce to each other.</p>
+<p>Widening also apllies to bare / unchecked math, which
+widens to <code>int</code>:</p>
+<pre><code>// this checks to `int` because the `*` binop,
+// forcing the literals to be int
+let a = 1 * 2
+// locals also get coercions
+let b: u32 = 1
+// another `int`
+let c = b * b
+</code></pre>
+<h3>† Pure functions + mutable-reference argument modes</h3>
+<p>Datalove at first does not look pure functional because
+it has mutable by-reference arguments:</p>
+<pre><code class="language-datalove"></code></pre>
+<p>etc.</p>
+<h3>Allocations</h3>
+<p>Besides encoding heaps in types,
+having local and global heaps,
+and enforcing a light syntax
+on allocating conversions,
+Datalove is not concerned with providing
+control over the allocator;
+but instead only with providing data access patterns
+and metadata with which the allocator can perform optimally.</p>
+<h3>Garbage collection</h3>
+<p>Datalit and Datafun do not require a GC.
+Datalove may experiment with interior pointers and GCs in the future.</p>
+<h3>Error handling</h3>
+<p>The result type is a language type,
+and is dedicated the <code>!</code> sigil —
+if you see <code>!</code> you are looking at error handling.</p>
+<p>The error type is a dynamic type that can hold
+any type (an existential type).</p>
+<h3>Panicking and exceptions</h3>
+<p>In the pure-functional sublanguage Datafun,
+functions are <em>total</em>,
+and there is no mechanism for panicking,
+exceptions or unwinding.</p>
+<p>These cases are handled with <code>?</code>.</p>
+<p>Full Datalove has panics, design TBD.</p>
+<h3>Threading and concurrency</h3>
+<p>For simplicity and OS-mechanical sympathy,
+Datalove is a multithreaded language;
+no lightweight tasks or async-await.
+We may experiment with callback-based
+asynchrony and Gleam-style inline continuation syntax.</p>
+<h3>Floats and total ordering</h3>
+<p>All pure data types support a total order,
+which is used for maps and sets.</p>
+<p>Floats use the typical ordering, like Rust's <code>total_cmp</code>:</p>
+<blockquote>
+<p>-NaN &lt; -Infinity &lt; -numbers &lt; -0.0 &lt; +0.0 &lt; +numbers &lt; +Infinity &lt; +NaN</p>
+</blockquote>
+<p>Equality, less than, greater than, etc. behave
+the standard way wrt float zeros and NaNs.</p>
+<h3>REPL</h3>
+<p>The script is REPL-first and intends to advance the
+state of the art in REPLs.
+With pure data statements and virtualized I/O the repl
+supports undo/redo and record-and-replay.</p>
+<p>The repl is a modern Ratatui application.
+The datafun interpreter runs on the web
+as a egui_ratatui application.</p>
+<h3>Trailing commas and separators</h3>
+<p>Allowed and optional in all sequence forms of course.</p>
+
+    </main>
+</body>
+</html>

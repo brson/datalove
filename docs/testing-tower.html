@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>testing-tower - Datalove</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html">♡</a>
+    </nav>
+    <main>
+        <h2>Core language test suites</h2>
+<p>Most features appear in all of these tests.</p>
+<ul>
+<li>datalove-datalit/tests/parser_tests</li>
+<li>datalove-datalit/tests/resolve_tests</li>
+<li>datalove-datalit/tests/tycheck_tests</li>
+<li>datalove-datalit/tests/pretty_tests</li>
+<li>datalove-datalit/tests/roundtrip_tests</li>
+<li>datalove-datafun-compiler/tests/parser_tests</li>
+<li>datalove-datafun-compiler/tests/tycheck_tests</li>
+<li>datalove-datafun/tests/tycheck_world_tests</li>
+<li>datalove-datafun/tests/interp_tests</li>
+<li>datalove-datafun/tests/std_tests</li>
+</ul>
+<h2>AST-gen tests</h2>
+<p>Generative tests driven by <code>ast_gen</code>.</p>
+<ul>
+<li>datalove-datalit/tests/ast_gen_tests -
+Tests of the AST generator.</li>
+<li>datalove-rt-tests/tests/clone_tests</li>
+<li>datalove-rt-tests/tests/cmp_tests</li>
+<li>datalove-rt-tests/tests/eq_tests</li>
+<li>datalove-rt-tests/tests/destroy_tests</li>
+<li>datalove-rt-tests/tests/cmp_total_tests -</li>
+<li>datalove-rt-tests/tests/eq_unique_tests -</li>
+<li>datalove-datafun-compiler/tests/funlit_equiv_tests -
+Checks that datalit expressions and type hints are
+parsed and typechecked the same by both datafun and datalit.</li>
+<li>datalove-datafun-compiler/tests/error_equiv_tests -
+Checks that datalit expressions and type hints with
+errors are parsed and typechecked the same by both datafun and datalit.</li>
+</ul>
+<h2>Runtime collections</h2>
+<ul>
+<li>datalove-rt-tests/tests/list_tests</li>
+<li>datalove-rt-tests/tests/btreemap_tests</li>
+<li>datalove-rt-tests/tests/btreemap_proptests</li>
+<li>datalove-rt-tests/tests/btreeset_tests</li>
+<li>datalove-rt-tests/tests/tensor_tests</li>
+</ul>
+<p>fixme: should have ast_gen collections tests too</p>
+<h2>Other test suites</h2>
+<ul>
+<li>datalove-rt-tests/tests/roundtrip_tests</li>
+<li>datalove-repl/tests/engine_tests</li>
+<li>datalove-cli/tests/script_tests</li>
+<li>datalove-cli/tests/error_tests</li>
+<li>datalove-cli/tests/type_error_tests</li>
+<li>datalove-datalit/tests/parser_panic_tests</li>
+</ul>
+<h2>Missing suites implied by datalit/datafun symmetry</h2>
+<ul>
+<li>datalove-datafun-compiler/tests/resolve_tests</li>
+<li>datalove-datafun-compiler/tests/pretty_tests</li>
+<li>datalove-datafun-compiler/tests/roundtrip_tests</li>
+</ul>
+<h2>Testing utilities</h2>
+<p>Various systems exist mostly to assist writing tests:</p>
+<ul>
+<li>datalove-datalit/src/ast_gen - property-based AST generation</li>
+<li>datalove-datalit/src/ast_serde - AST serialization for snapshot tests</li>
+<li>datalove-datafun-compiler/src/ast_serde - AST serialization for snapshot tests</li>
+<li>datalove-datafun-compiler/src/funlit_equiv - compare datafun/datalit parsing equivalence</li>
+</ul>
+
+    </main>
+</body>
+</html>

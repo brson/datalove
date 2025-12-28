@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>datalit-types - Datalove</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html">♡</a>
+    </nav>
+    <main>
+        <h2>The Datatypes of Datalit</h2>
+<p>Datalove's datatypes, their representation,
+and semantics are focused on correctness and completeness,
+particularly with regard to tricky corner cases related to subjects like overflow, NaNs, etc;
+and we take some difficult positions.</p>
+<p>Datalit types are subtypes of Datafun types,
+and have a dedicated declarative syntax suitable
+for serialization and configuration.</p>
+<p>Datalit types are:</p>
+<ul>
+<li><a href="#user-content-unit">Unit</a>,
+<code>()</code>, also a zero-element anonymous tuple.</li>
+<li><a href="#user-content-booleans">Booleans</a>,
+<code>bool</code> - <code>true</code> and <code>false</code></li>
+<li><a href="#user-content-fixed-integers">Fixed integers</a>,
+<code>u8</code>, <code>u16</code>, <code>u16</code>, <code>u32</code>, <code>u64</code>,
+<code>i8</code>, <code>i16</code>, <code>i16</code>, <code>i32</code>, <code>i64</code></li>
+<li><a href="#user-content-big-integers">Big integers</a>,
+<code>int</code></li>
+<li><a href="#user-content-floating-point-numbers">Floating point numbers</a>,
+<code>f32</code></li>
+<li><a href="#user-content-anynymous-tuples">Anynomous tuples</a></li>
+<li><a href="#user-content-anonymous-structs">Anonymous structs</a></li>
+<li><a href="#user-content-anonymous-enums">Anonymous enums (ADTs)</a></li>
+<li><a href="#user-content-lists">Lists</a>,
+<code>list&lt;T&gt;</code> - contiguous, growable, heap-allocated arrays</li>
+<li><a href="#user-content-maps-and-sets">Maps and Sets</a>
+<code>map&lt;K, V&gt;</code> and <code>set&lt;T&gt;</code></li>
+<li><a href="#user-content-tensors">Tensors</a>,
+<code>tensor&lt;T&gt;</code> - multidimensional arrays</li>
+<li><a href="#user-content-optional-types">Optional types</a>,
+<code>?T</code></li>
+<li><a href="#user-content-result-types">Result types</a>,
+<code>!T</code> - which may either hold <code>T</code> or <code>error</code></li>
+<li><a href="#user-content-existential-data-types">Existential data types</a>,
+<code>data</code> - dynamically-typed and pointer-packed version of any of the above</li>
+<li><a href="#user-content-existential-error-types">Existential error types</a>,
+<code>error</code> - dynamically-typed and pointer-packed version of any of the above</li>
+</ul>
+<p>Datalit types are value types and stored inline.
+Datalit structs and enums are structurally-typed.</p>
+<h2>Unit</h2>
+<p>Spelled <code>()</code>, which can also be considered a zero-element anonymous tuple.
+This is the implicit return type of void functions.</p>
+<p>Note that <code>{}</code>, the empty anonymous struct,
+has identical representation,
+but is not used as the unit type.</p>
+<h2>Booleans</h2>
+<p>The <code>bool</code> type has two values, <code>true</code> and <code>false</code>.</p>
+<pre><code class="language-datalove">let a: bool = true
+let b: bool = false
+</code></pre>
+<p>Booleans are used in <code>if</code> and <code>else if</code> conditions.</p>
+<pre><code class="language-datalove">require sys/core/debug
+
+let a = true
+let b = false
+if a
+  debug.print(&quot;a&quot;)
+else if b
+  debug.print(&quot;b&quot;)
+else
+  debug.print(&quot;other&quot;)
+end if
+</code></pre>
+<p>Booleans support logic operators <code>and</code>, <code>or</code>, <code>xor</code>, <code>implies</code> and <code>not</code>.</p>
+<pre><code class="language-datalove">let a = true
+let b = false
+let c = a or b
+let d = a and  b
+let e = a xor b
+let f = a implies b
+let g = not a
+</code></pre>
+<p><code>implies</code> being logical implication,
+rarely given a first-class operator but common in logic:</p>
+<p>| a     | b     | a implies b |
+|-------|-------|-------------|
+| false | false | true        |
+| false | true  | true        |
+| true  | false | false       |
+| true  | true  | true        |</p>
+<h2>Fixed integers</h2>
+<p>Standard fixed integers,
+<code>u8</code>, <code>u16</code>, <code>u16</code>, <code>u32</code>, <code>u64</code>,
+<code>i8</code>, <code>i16</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>;
+these are efficient and inlineable,
+but because Datalove cares insists on numerical correctness,
+must be used with checked operators to deal with overflow:</p>
+<pre><code class="language-datalove">fun add_result(a: u16, b: u16): !u16
+  let c = a +! b // early-return error on overflow
+  ret ok c
+end fun
+
+fun add_option(a: u16, b: u16): ?u16
+  let c = a +? b // early-return option on overflow
+  ret some c
+end fun
+</code></pre>
+<p>Unsigned fixed integers support
+<code>+?</code>, <code>-?</code>, <code>*?</code> and <code>/?</code> checked-option binops, and
+<code>+!</code>, <code>-!</code>, <code>*!</code> and <code>/!</code> checked-result binops.
+Signed fixed integers additionally support unary negation,
+<code>-?</code> and <code>-!</code>.</p>
+<p>The &quot;bare&quot; math ops are supported but widen to <code>int</code>.</p>
+<pre><code class="language-datalove">fun add(a: u16, b: u16): int
+  ret a + b
+end fun
+</code></pre>
+<p>This compromise allows for convenient but inefficient math in the repl and scripts,
+while modules are expected to be more careful with overflow.</p>
+<h2>Big integers</h2>
+<h2>Floating point numbers</h2>
+<h2>Anonymous tuples</h2>
+<h2>Anonymous structs</h2>
+<h2>Anonymous enums</h2>
+<h2>Lists</h2>
+<h2>Maps and sets</h2>
+<h2>Tensors</h2>
+<h2>Optional types</h2>
+<h2>Result types</h2>
+<h2>Existential data types</h2>
+<h2>Existential error types</h2>
+
+    </main>
+</body>
+</html>

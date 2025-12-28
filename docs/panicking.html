@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>panicking - Datalove</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html">♡</a>
+    </nav>
+    <main>
+        <p>We're going to try making all funs total,
+but if that doesn't work.</p>
+<h2>Panicking</h2>
+<p>Datafun supports limited panicking:
+the thread immediately halts,
+frees all local memory,
+and owned global memory,
+and returns control to the embedder or system.
+What happens to other threads in a multithreaded scenario is tbd.</p>
+<p><code>panic</code> is a statement:</p>
+<pre><code>fun expect(val: ?u32): u32
+  if val |val|
+    ret val
+  else |error|
+    panic #&quot;oops&quot;
+  end if
+end
+</code></pre>
+<p>Note that panic accepts any type on the global heap,
+and we can use <code>clone</code> to duplicate to the global heap:</p>
+<pre><code>fun expect(val: ?u32): u32
+  if val |val|
+    ret val
+  else |error|
+    panic error.clone
+  end if
+end
+</code></pre>
+<blockquote>
+<p><code>clone</code> is a dual-positon-op that works either prefix
+or as a <code>.clone</code> postfix.</p>
+</blockquote>
+<p>Panicking unwrap with the <code>.X</code> postfix operator:</p>
+<pre><code>fun expect(val: ?u32): u32
+  ret val.X
+end
+</code></pre>
+<p><code>panic</code> and <code>.X</code> are the only ways to panic.
+The type system does track which functions panic,
+but it is not exposed in the type signature.
+It is possible to assert non-panicking:</p>
+<pre><code>fun transform_option(val: ?u32): ?u32
+  let val = val?
+  ret val + 1
+end
+
+make transform_option total
+</code></pre>
+<h3>Panicking math ops</h3>
+<pre><code>
+</code></pre>
+
+    </main>
+</body>
+</html>

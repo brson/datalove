@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datalove script semantics - Datalove</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html">♡</a>
+    </nav>
+    <main>
+        <h1>Datalove script semantics</h1>
+<p>Datalove is REPL-first,
+and with its strong linear types and functional purity,
+plus virtualized I/O,
+we intend to make it do some sophisticated things like rewind and replay.</p>
+<p>The semantics of the REPL will be the semantics of scripts,
+with the exception that scripts are not interactive,
+so won't exercise as many features.</p>
+<p>Most of this document deals with representing scripts
+in a way that is repl-compatible.</p>
+<p>The semantics of scripts are going to be designed to
+such that the requirements of a modern repl map in an obvious way to
+salsa's incremental computation.</p>
+<p>Basic repl requirements:</p>
+<ul>
+<li>line/statement-orientation</li>
+<li>ability to interpret standalone expressions</li>
+<li>incremental compilation</li>
+<li>incremental execution</li>
+</ul>
+<p>For our purposes I don't think there's any technical reason
+why we need to limit input to single statements, so our underlying
+script input will be:</p>
+<ul>
+<li>The package world - normal modules</li>
+<li>A growable list of <em>script units</em> wich are either:
+<ul>
+<li>A <em>script fragment</em>, one or more statements,
+<code>let</code>, <code>fun</code> declarations, etc.</li>
+<li>A single bare expression</li>
+</ul>
+</li>
+</ul>
+<p>These units typechecked and interpreted in sequence
+form a dynamic repl session. The script interpreter when run in
+non-interactive mode can accept this same mixture of interleaved
+script fragments and expressions, though in practice they will
+usually recieve exactly one script fragment.</p>
+<p>They must be retained and re-typechecked together because
+our linear type system will move and invalidate old slots etc,
+so previously defined variables will be invalidated etc.
+Retypechecking will be cheap with memoization.</p>
+<p>We will make every script unit submitted a unit of parsing and typechecking,
+keep them all in either a vec,
+salsa will make sure the previous computations are memoized and fresh.
+The repl history is fully reactive, its compilation
+re-calculated (but memoized) every step.
+Intent is that execution will be memoized too for rewinding;
+this is relatively straightforword for pure functions (datafun <code>fun</code>s),
+requires virtualized I/O for non-pure functions (datalove <code>proc</code>s).</p>
+<p>Script units that fail typecheck or that have been rewound,
+will be maintained within the repl, but removed from the salsa input;
+this way they can be replayed later if needed. The interpreter
+doesn't need to worry about them though.</p>
+<p>For the purposes of this document,
+we are only considering datalit/datafun types,
+all of which can be cloned.
+We'll redesign for non-clonable types later.</p>
+<h2>Accepting repl input</h2>
+<p>This is just background about repl interaction with script.</p>
+<p>The repl frontend doesn't understand datalove.
+It just reads script units and sends them to the repl engine,
+which wraps the compiler and interpreter.
+The repl engine runs the script parser,
+and if it parses:</p>
+<ul>
+<li>if only whitespace tokens, no-op; UI input field reset</li>
+<li>if no statements parsed (only comments etc), error</li>
+</ul>
+<p>If the input didn't parse:</p>
+<ul>
+<li>it tokenizes the input and looks at the first non-whitespace/comment token</li>
+<li>if it <em>is not</em> a statement keyword the input is an expression</li>
+<li>if it <em>is</em> a statement keyword, report the parse error</li>
+</ul>
+<h2>Compilation</h2>
+<p>The script input to salsa consists of something like:</p>
+<pre><code>#[salsa::input]
+struct Script {
+    units: Vec&lt;ScriptUnit&gt;,  
+}
+
+#[salsa::input]
+enum ScriptUnit {
+    ScriptFragment(ScriptFragment),
+    ScriptExpression(ScriptExpression),
+}
+
+#[salsa::input]
+struct ScriptFragment {
+    statements: InternedText,
+}
+
+#[salsa::input]
+struct ScriptExpression {
+    statements: InternedText,
+}
+</code></pre>
+<h2>Script processing</h2>
+<p>NB: BELOW THIS IS OLD IDEAS</p>
+<hr />
+<h3>Name resolution - resolve function statements</h3>
+<p>Function statement resolution is bidirectional,
+supporting forward references. Functions can
+name other functions but that's it (for now).</p>
+<p>Algorithm:</p>
+<p>Remember this is all memoized, not expensive.</p>
+<ul>
+<li>filter out everything but function units</li>
+<li>for units in oldest to newest
+<ul>
+<li>create a candidate list of all previously &quot;green&quot; units</li>
+<li>append the current unit</li>
+<li>name resolve all candidate unit together</li>
+<li>if that succeeds this unit is green,
+append it to the list of green units.</li>
+<li>if not it is dead -
+we will never consider this unit for compilation in future steps
+(we could consider extensions to revive it, but not now for simplicity)</li>
+</ul>
+</li>
+<li>if the last unit passed resolution,
+then script resolution succeeded.</li>
+</ul>
+<p>There is a question of what to do about function redeclarations.
+For now we will consider that newer declarations win
+and will also have to filter out duplicates, tbd.</p>
+<h2>Name resolution: let statements</h2>
+<p>Let statements get to use the result of function resolution,
+resolved bidirectionally into the future (from old let statement's persective).
+Let statements <em>do not</em> do forward resolution on other let statements.</p>
+<p>So we're going to re-resolve and re-typecheck every let statement every step.
+Still, should be pretty fast.</p>
+<h2>Typecheck</h2>
+<p>tbd</p>
+
+    </main>
+</body>
+</html>
