@@ -52,6 +52,36 @@ pub fn parse<'db>(
     parse_bracer(db, bracer)
 }
 
+/// Parse a Source as a single expression.
+#[salsa::tracked]
+pub fn parse_expr<'db>(
+    db: &'db dyn crate::Db,
+    source: Source,
+) -> ast::ExprFun<'db> {
+    let chunk = source_map::basic_source_map(db, source);
+    let chunk_lex = lexer::lex_chunk(db, chunk);
+    let bracer = bracer::bracer(db, chunk_lex);
+    parse_bracer_expr(db, bracer)
+}
+
+fn parse_bracer_expr<'db>(
+    db: &'db dyn crate::Db,
+    bracer: Bracer<'db>,
+) -> ast::ExprFun<'db> {
+    let mut parser = Parser {
+        db,
+        bracer,
+    };
+
+    // Collect all tokens, filtering spaces but keeping the structure flat.
+    let tokens: Vec<TreeToken<'db>> = bracer.iter(db)
+        .filter_map(|token| token.without_space(db))
+        .collect();
+
+    let mut tokens_iter = tokens.into_iter().peekable();
+    parser.parse_expr_full(&mut tokens_iter)
+}
+
 fn parse_bracer<'db>(
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,

@@ -248,7 +248,7 @@ fn lower_statement<'db>(
             let slot = ctx.fresh_slot();
             let value_id = lower_expression(ctx, var_stmt.value(ctx.db))?;
             ctx.emit(Instruction::SlotStore {
-                slot,
+                dest: SlotDest::Local(slot),
                 value: Operand::Value(value_id),
             });
             ctx.bind_var(&name, Operand::Slot(slot));
@@ -259,7 +259,7 @@ fn lower_statement<'db>(
             let value_id = lower_expression(ctx, set_stmt.value(ctx.db))?;
             if let Some(Operand::Slot(slot)) = ctx.lookup_var(&name) {
                 ctx.emit(Instruction::SlotStore {
-                    slot,
+                    dest: SlotDest::Local(slot),
                     value: Operand::Value(value_id),
                 });
                 Ok(())
@@ -738,7 +738,7 @@ fn lower_statement_for_script<'db>(
             let slot = ctx.fresh_slot();
             let value_id = lower_expression(ctx, var_stmt.value(ctx.db))?;
             ctx.emit(Instruction::SlotStore {
-                slot,
+                dest: SlotDest::Local(slot),
                 value: Operand::Value(value_id),
             });
             ctx.bind_var(&name, Operand::Slot(slot));
@@ -754,22 +754,17 @@ fn lower_statement_for_script<'db>(
                 match operand {
                     Operand::Slot(slot) => {
                         ctx.emit(Instruction::SlotStore {
-                            slot,
+                            dest: SlotDest::Local(slot),
                             value: Operand::Value(value_id),
                         });
                         Ok(())
                     }
                     Operand::ExternalSlot { unit, slot } => {
-                        // Store to external slot.
+                        // Store to external slot in a previous unit.
                         ctx.emit(Instruction::SlotStore {
-                            slot,
+                            dest: SlotDest::External { unit, slot },
                             value: Operand::Value(value_id),
                         });
-                        // Note: we're storing to the same slot ID but the interpreter
-                        // will need to know it's in a different unit. For now, emit
-                        // a warning that this may not work correctly.
-                        // TODO: Handle cross-unit slot assignment properly.
-                        let _ = unit; // Suppress unused warning.
                         Ok(())
                     }
                     _ => Err(LowerError::VariableNotMutable(name)),

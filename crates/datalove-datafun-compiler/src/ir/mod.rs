@@ -36,6 +36,18 @@ pub enum Operand {
     ExternalSlot { unit: u32, slot: SlotId },
 }
 
+/// Destination for slot store operations.
+///
+/// Distinguishes between local slots (in current unit) and external slots
+/// (in a previous script unit).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum SlotDest {
+    /// Local slot in current unit.
+    Local(SlotId),
+    /// Slot in a previous script unit.
+    External { unit: u32, slot: SlotId },
+}
+
 /// Constant value that can be loaded.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ConstValue {
@@ -195,7 +207,7 @@ pub enum Instruction {
     },
 
     /// Store value to mutable slot.
-    SlotStore { slot: SlotId, value: Operand },
+    SlotStore { dest: SlotDest, value: Operand },
 
     /// Load value from mutable slot.
     SlotLoad { dest: ValueId, slot: SlotId },

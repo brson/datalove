@@ -2,9 +2,6 @@
 //!
 //! This test suite loads worldfiles with scriptunit-fragment sections,
 //! lowers them to IR, and outputs the serialized IR for snapshot testing.
-//!
-//! Note: scriptunit-expr sections are parsed as single-statement fragments
-//! with a `ret` wrapper for now.
 
 use rmx::prelude::*;
 use std::path::Path;
@@ -56,37 +53,23 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 unit_index += 1;
             }
             WorldfileSection::ScriptExpr { source } => {
-                // Parse the expression by wrapping in a ret statement.
-                let wrapped = format!("ret {}", source);
-                let source_obj = Source::new(&db, wrapped);
-                let parse_result = datalove_datafun_compiler::parser::parse(&db, source_obj);
-                let script_ast = parse_result.script(&db);
-                let stmts: Vec<Statement> = script_ast.statements(&db).to_vec();
+                // Parse the expression directly.
+                let source_obj = Source::new(&db, source.clone());
+                let expr = datalove_datafun_compiler::parser::parse_expr(&db, source_obj);
 
-                // Extract the expression from the ret statement.
-                if stmts.len() == 1 {
-                    if let Statement::Ret(ret_stmt) = &stmts[0] {
-                        if let Some(expr) = ret_stmt.value(&db) {
-                            output.push_str(&format!("--- script unit {} (expr) ---\n", unit_index));
+                output.push_str(&format!("--- script unit {} (expr) ---\n", unit_index));
 
-                            match ir::lower::lower_script_unit(&db, script_ctx.clone(), ScriptUnitKind::Expr(expr)) {
-                                Ok(ir_unit) => {
-                                    output.push_str(&format!("{}", ir_unit));
-                                    script_ctx.add_exports(unit_index, &ir_unit.exports);
-                                    script_ctx.current_unit = unit_index + 1;
-                                }
-                                Err(e) => {
-                                    output.push_str(&format!("Error: {}\n", e));
-                                }
-                            }
-                            output.push('\n');
-                            unit_index += 1;
-                            continue;
-                        }
+                match ir::lower::lower_script_unit(&db, script_ctx.clone(), ScriptUnitKind::Expr(expr)) {
+                    Ok(ir_unit) => {
+                        output.push_str(&format!("{}", ir_unit));
+                        script_ctx.add_exports(unit_index, &ir_unit.exports);
+                        script_ctx.current_unit = unit_index + 1;
+                    }
+                    Err(e) => {
+                        output.push_str(&format!("Error: {}\n", e));
                     }
                 }
-                output.push_str(&format!("--- script unit {} (expr) ---\n", unit_index));
-                output.push_str("Error: Failed to parse expression\n\n");
+                output.push('\n');
                 unit_index += 1;
             }
             WorldfileSection::Module { .. } => {

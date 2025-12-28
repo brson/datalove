@@ -32,6 +32,15 @@ impl fmt::Display for Operand {
     }
 }
 
+impl fmt::Display for SlotDest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SlotDest::Local(s) => write!(f, "{}", s),
+            SlotDest::External { unit, slot } => write!(f, "unit{}.{}", unit, slot),
+        }
+    }
+}
+
 impl fmt::Display for ConstValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -191,8 +200,8 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, "}}")
             }
-            Instruction::SlotStore { slot, value } => {
-                write!(f, "store {}, {}", slot, value)
+            Instruction::SlotStore { dest, value } => {
+                write!(f, "store {}, {}", dest, value)
             }
             Instruction::SlotLoad { dest, slot } => {
                 write!(f, "{} = load {}", dest, slot)
