@@ -10,7 +10,7 @@ use datalove_rt::rtdt::{self, TyDesc};
 
 use super::{
     IrFunction, IrType, Instruction, Terminator,
-    ValueId, SlotId, BlockId, FuncId, Operand, SlotDest,
+    ValueId, SlotId, BlockId, FuncId, FuncRef, Operand, SlotDest,
     ConstValue, BinOp, UnaryOp,
 };
 
@@ -574,10 +574,39 @@ impl Frame {
     }
 }
 
+/// Execution context holding available functions.
+pub struct ExecutionContext<'a> {
+    /// All functions available for calling.
+    functions: &'a [IrFunction],
+}
+
+impl<'a> ExecutionContext<'a> {
+    /// Create a new execution context with the given functions.
+    pub fn new(functions: &'a [IrFunction]) -> Self {
+        Self { functions }
+    }
+
+    /// Look up a function by reference.
+    fn get_function(&self, func_ref: &FuncRef) -> Result<&IrFunction, InterpError> {
+        match func_ref {
+            FuncRef::Local(id) => {
+                self.functions.iter()
+                    .find(|f| f.id == *id)
+                    .ok_or(InterpError::FunctionNotFound(*id))
+            }
+            FuncRef::External { .. } => {
+                Err(InterpError::ExternalNotSupported)
+            }
+        }
+    }
+}
+
 /// IR function interpreter.
 pub struct IrInterpreter {
     runtime: datalove_rt::rust::Runtime,
     tydesc_table: IrTyDescTable,
+    /// Storage for return values (to outlive callee frames).
+    return_storage: Vec<Vec<u8>>,
 }
 
 impl IrInterpreter {
@@ -585,14 +614,28 @@ impl IrInterpreter {
         Self {
             runtime: datalove_rt::rust::Runtime::new(),
             tydesc_table: IrTyDescTable::new(),
+            return_storage: Vec::new(),
         }
     }
 
-    /// Execute a function with arguments.
+    /// Execute a function with arguments (no other functions available for calls).
     pub fn call(
         &mut self,
         func: &IrFunction,
         args: Vec<Value>,
+    ) -> Result<Option<Value>, InterpError> {
+        // For single function execution, create a context with just this function.
+        let functions = [func.clone()];
+        let ctx = ExecutionContext::new(&functions);
+        self.call_in_context(func, args, &ctx)
+    }
+
+    /// Execute a function with arguments in a context with available functions.
+    pub fn call_in_context(
+        &mut self,
+        func: &IrFunction,
+        args: Vec<Value>,
+        ctx: &ExecutionContext,
     ) -> Result<Option<Value>, InterpError> {
         // Compute layout.
         let layout = IrLayout::compute(
@@ -617,13 +660,28 @@ impl IrInterpreter {
         }
 
         // Execute blocks starting from entry.
-        self.execute_blocks(func, &mut frame)
+        let result = self.execute_blocks(func, &mut frame, ctx)?;
+
+        // Copy return value to persistent storage before frame is dropped.
+        if let Some(val) = result {
+            let size = unsafe { (*val.tydesc).size as usize };
+            let mut storage = vec![0u8; size];
+            unsafe {
+                std::ptr::copy_nonoverlapping(val.ptr, storage.as_mut_ptr(), size);
+            }
+            self.return_storage.push(storage);
+            let ptr = self.return_storage.last().unwrap().as_ptr() as *mut u8;
+            Ok(Some(Value { ptr, tydesc: val.tydesc }))
+        } else {
+            Ok(None)
+        }
     }
 
     fn execute_blocks(
         &mut self,
         func: &IrFunction,
         frame: &mut Frame,
+        ctx: &ExecutionContext,
     ) -> Result<Option<Value>, InterpError> {
         let mut current_block = BlockId(0);
 
@@ -634,7 +692,7 @@ impl IrInterpreter {
 
             // Execute instructions.
             for instr in &block.instructions {
-                self.execute_instruction(instr, frame)?;
+                self.execute_instruction(instr, frame, ctx)?;
             }
 
             // Handle terminator.
@@ -680,6 +738,7 @@ impl IrInterpreter {
         &mut self,
         instr: &Instruction,
         frame: &mut Frame,
+        ctx: &ExecutionContext,
     ) -> Result<(), InterpError> {
         match instr {
             Instruction::Const { dest, value } => {
@@ -839,8 +898,24 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*is_ok);
             }
-            Instruction::Call { .. } => {
-                todo!("Call instruction not yet implemented")
+            Instruction::Call { dest, func, args } => {
+                // Look up the function.
+                let callee = ctx.get_function(func)?;
+
+                // Evaluate arguments.
+                let arg_vals: Vec<Value> = args.iter()
+                    .map(|op| self.read_operand(op, frame))
+                    .collect::<Result<_, _>>()?;
+
+                // Call the function recursively.
+                let result = self.call_in_context(callee, arg_vals, ctx)?;
+
+                // Copy return value to destination.
+                if let Some(ret_val) = result {
+                    let dest_slot = frame.value_dest(*dest)?;
+                    unsafe { self.copy_value(&ret_val, dest_slot)?; }
+                    frame.mark_value_initialized(*dest);
+                }
             }
             Instruction::ListNew { .. } => {
                 todo!("ListNew instruction not yet implemented")
@@ -1351,6 +1426,7 @@ impl IrInterpreter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ir::{IrBlock, Terminator, FuncRef, FuncId};
 
     #[test]
     fn test_tydesc_table_primitives() {
@@ -1384,5 +1460,175 @@ mod tests {
         assert_eq!(layout.value_offsets[2], 16);
         assert_eq!(layout.slot_offsets[0], 24);
         assert_eq!(layout.frame_size, 32);
+    }
+
+    /// Helper to create a simple function for testing.
+    fn make_add_function() -> IrFunction {
+        // fn add(a: i64, b: i64) -> i64 { a + b }
+        IrFunction {
+            id: FuncId(0),
+            name: "add".to_string(),
+            params: vec![ValueId(0), ValueId(1)],  // a, b
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::BinOp {
+                            dest: ValueId(2),
+                            op: BinOp::Add,
+                            lhs: Operand::Value(ValueId(0)),
+                            rhs: Operand::Value(ValueId(1)),
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        value: Some(Operand::Value(ValueId(2))),
+                    },
+                },
+            ],
+            value_count: 3,
+            slot_count: 0,
+            value_types: vec![IrType::I64, IrType::I64, IrType::I64],
+            slot_types: vec![],
+        }
+    }
+
+    #[test]
+    fn test_simple_function_call() {
+        // Create the add function.
+        let add_fn = make_add_function();
+
+        // Create main function that calls add(10, 20).
+        // fn main() -> i64 { add(10, 20) }
+        let main_fn = IrFunction {
+            id: FuncId(1),
+            name: "main".to_string(),
+            params: vec![],
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(0),
+                            value: ConstValue::I64(10),
+                        },
+                        Instruction::Const {
+                            dest: ValueId(1),
+                            value: ConstValue::I64(20),
+                        },
+                        Instruction::Call {
+                            dest: ValueId(2),
+                            func: FuncRef::Local(FuncId(0)),  // add function
+                            args: vec![
+                                Operand::Value(ValueId(0)),
+                                Operand::Value(ValueId(1)),
+                            ],
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        value: Some(Operand::Value(ValueId(2))),
+                    },
+                },
+            ],
+            value_count: 3,
+            slot_count: 0,
+            value_types: vec![IrType::I64, IrType::I64, IrType::I64],
+            slot_types: vec![],
+        };
+
+        // Create context with both functions.
+        let functions = vec![add_fn, main_fn.clone()];
+        let ctx = ExecutionContext::new(&functions);
+
+        // Execute main.
+        let mut interp = IrInterpreter::new();
+        let result = interp.call_in_context(&main_fn, vec![], &ctx).unwrap();
+
+        // Verify result is 30.
+        let val = result.expect("expected return value");
+        let result_i64 = unsafe { *(val.ptr as *const i64) };
+        assert_eq!(result_i64, 30);
+    }
+
+    #[test]
+    fn test_nested_function_calls() {
+        // fn double(x: i64) -> i64 { x + x }
+        let double_fn = IrFunction {
+            id: FuncId(0),
+            name: "double".to_string(),
+            params: vec![ValueId(0)],
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::BinOp {
+                            dest: ValueId(1),
+                            op: BinOp::Add,
+                            lhs: Operand::Value(ValueId(0)),
+                            rhs: Operand::Value(ValueId(0)),
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        value: Some(Operand::Value(ValueId(1))),
+                    },
+                },
+            ],
+            value_count: 2,
+            slot_count: 0,
+            value_types: vec![IrType::I64, IrType::I64],
+            slot_types: vec![],
+        };
+
+        // fn quadruple(x: i64) -> i64 { double(double(x)) }
+        let quadruple_fn = IrFunction {
+            id: FuncId(1),
+            name: "quadruple".to_string(),
+            params: vec![ValueId(0)],
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        // First call: double(x)
+                        Instruction::Call {
+                            dest: ValueId(1),
+                            func: FuncRef::Local(FuncId(0)),
+                            args: vec![Operand::Value(ValueId(0))],
+                        },
+                        // Second call: double(result)
+                        Instruction::Call {
+                            dest: ValueId(2),
+                            func: FuncRef::Local(FuncId(0)),
+                            args: vec![Operand::Value(ValueId(1))],
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        value: Some(Operand::Value(ValueId(2))),
+                    },
+                },
+            ],
+            value_count: 3,
+            slot_count: 0,
+            value_types: vec![IrType::I64, IrType::I64, IrType::I64],
+            slot_types: vec![],
+        };
+
+        // Create context with both functions.
+        let functions = vec![double_fn, quadruple_fn.clone()];
+        let ctx = ExecutionContext::new(&functions);
+
+        // Create argument value: 5.
+        let mut interp = IrInterpreter::new();
+        let mut arg_storage = 5i64;
+        let arg_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+        let arg = Value {
+            ptr: &mut arg_storage as *mut i64 as *mut u8,
+            tydesc: arg_tydesc,
+        };
+
+        let result = interp.call_in_context(&quadruple_fn, vec![arg], &ctx).unwrap();
+
+        // Verify result is 20 (5 * 2 * 2).
+        let val = result.expect("expected return value");
+        let result_i64 = unsafe { *(val.ptr as *const i64) };
+        assert_eq!(result_i64, 20);
     }
 }

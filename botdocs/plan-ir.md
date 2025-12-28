@@ -281,6 +281,7 @@ Implemented:
 - `IrTyDescTable` converts IrType to runtime TyDesc
 - `IrLayout` computes ValueId/SlotId -> byte offsets
 - `Frame` manages frame data with value/slot initialization tracking
+- `ExecutionContext` holds available functions for call resolution
 - `IrInterpreter` executes IrFunction:
   - Const, Copy, Move instructions
   - BinOp for all types: i8-i64, u8-u64, f32, bool (Add, Sub, Mul, Div, Mod, comparisons, BitAnd/Or/Xor, Shl, Shr)
@@ -292,14 +293,15 @@ Implemented:
   - TupleIndex, FieldAccess
   - WrapSome, WrapNone, UnwrapOption
   - WrapOk, WrapErr, UnwrapResult
+  - Call (function calls with nested call support)
   - All terminators: Branch, Goto, Return, TryReturn, UnitEnd, UnitEarlyReturn
 - Type tracking during lowering:
   - `fresh_value(ty: IrType)` pushes type to value_types
   - `fresh_slot(ty: IrType)` pushes type to slot_types
   - Expression types looked up from TypecheckResult via salsa IDs
+- Return value storage: return values copied to persistent storage to outlive callee frames
 
 TODO:
-- Call instruction (function calls)
 - ListNew, SetNew, MapNew (collection creation - requires runtime calls)
 - Phi node handling in CFG traversal
 - Drop instruction (destructors - requires runtime calls)
