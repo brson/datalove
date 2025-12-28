@@ -18,8 +18,8 @@ pub struct ScriptLowerContext {
     pub values: HashMap<String, (u32, ValueId)>,
     /// Available var bindings: name -> (unit_index, slot_id).
     pub slots: HashMap<String, (u32, SlotId)>,
-    /// Available functions: name -> unit_index.
-    pub functions: HashMap<String, u32>,
+    /// Available functions: name -> (unit_index, func_id).
+    pub functions: HashMap<String, (u32, FuncId)>,
     /// Current unit index.
     pub current_unit: u32,
 }
@@ -39,8 +39,8 @@ impl ScriptLowerContext {
                 ExportBinding::Slot(s) => {
                     self.slots.insert(name.clone(), (unit_index, *s));
                 }
-                ExportBinding::Function(_) => {
-                    self.functions.insert(name.clone(), unit_index);
+                ExportBinding::Function(func_id) => {
+                    self.functions.insert(name.clone(), (unit_index, *func_id));
                 }
             }
         }
@@ -78,6 +78,12 @@ pub struct LowerCtx<'db> {
     exports: Vec<(String, ExportBinding)>,
     /// Functions defined in this script unit.
     functions: Vec<IrFunction>,
+    /// Symbol table for function resolution.
+    symbols: SymbolTable,
+    /// Available functions: name -> FuncRef (for resolving calls).
+    func_scope: HashMap<String, FuncRef>,
+    /// Current unit index (for script units).
+    current_unit: u32,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -94,6 +100,9 @@ impl<'db> LowerCtx<'db> {
             script_ctx: None,
             exports: Vec::new(),
             functions: Vec::new(),
+            symbols: SymbolTable::new(),
+            func_scope: HashMap::new(),
+            current_unit: 0,
         }
     }
 
@@ -114,6 +123,17 @@ impl<'db> LowerCtx<'db> {
             });
         }
 
+        // Seed function scope with external functions.
+        let mut func_scope = HashMap::new();
+        for (name, (unit, func_id)) in &script_ctx.functions {
+            func_scope.insert(name.clone(), FuncRef::External {
+                unit: *unit,
+                func: *func_id,
+            });
+        }
+
+        let current_unit = script_ctx.current_unit;
+
         Self {
             db,
             next_value: 0,
@@ -126,7 +146,22 @@ impl<'db> LowerCtx<'db> {
             script_ctx: Some(script_ctx),
             exports: Vec::new(),
             functions: Vec::new(),
+            symbols: SymbolTable::new(),
+            func_scope,
+            current_unit,
         }
+    }
+
+    /// Define a function in the current scope.
+    fn define_func(&mut self, name: &str, param_count: usize) -> FuncId {
+        let func_id = self.symbols.define_func(name.to_string(), param_count);
+        self.func_scope.insert(name.to_string(), FuncRef::Local(func_id));
+        func_id
+    }
+
+    /// Look up a function by name.
+    fn lookup_func(&self, name: &str) -> Option<FuncRef> {
+        self.func_scope.get(name).copied()
     }
 
     /// Allocate a fresh SSA value.
@@ -184,28 +219,44 @@ impl<'db> LowerCtx<'db> {
 }
 
 /// Lower a function to IR.
+///
+/// For standalone function lowering (not in a script context).
 pub fn lower_function<'db>(
     db: &'db dyn Db,
     func: ast::StmtFun<'db>,
 ) -> Result<IrFunction, LowerError> {
     let mut ctx = LowerCtx::new(db);
-
     let name = func.name(db).text(db).to_string();
+    let param_count = func.params(db).len();
+
+    // Define the function in the symbol table.
+    let func_id = ctx.define_func(&name, param_count);
+
+    lower_function_body(&mut ctx, func_id, func)
+}
+
+/// Lower a function body given an already-allocated FuncId.
+fn lower_function_body<'db>(
+    ctx: &mut LowerCtx<'db>,
+    func_id: FuncId,
+    func: ast::StmtFun<'db>,
+) -> Result<IrFunction, LowerError> {
+    let name = func.name(ctx.db).text(ctx.db).to_string();
 
     // Allocate ValueIds for parameters.
-    let params: Vec<ValueId> = func.params(db)
+    let params: Vec<ValueId> = func.params(ctx.db)
         .iter()
         .map(|p| {
             let id = ctx.fresh_value();
-            let param_name = p.name(db).text(db).to_string();
+            let param_name = p.name(ctx.db).text(ctx.db).to_string();
             ctx.bind_var(&param_name, Operand::Value(id));
             id
         })
         .collect();
 
     // Lower the function body.
-    for stmt in func.body(db) {
-        lower_statement(&mut ctx, stmt)?;
+    for stmt in func.body(ctx.db) {
+        lower_statement(ctx, stmt)?;
     }
 
     // If no explicit return, add implicit return unit.
@@ -223,9 +274,10 @@ pub fn lower_function<'db>(
     }
 
     Ok(IrFunction {
+        id: func_id,
         name,
         params,
-        blocks: ctx.blocks,
+        blocks: std::mem::take(&mut ctx.blocks),
         value_count: ctx.next_value,
         slot_count: ctx.next_slot,
     })
@@ -544,9 +596,14 @@ fn lower_expression<'db>(
                 .map(|arg| lower_expression(ctx, *arg).map(|v| Operand::Value(v)))
                 .collect();
             let dest = ctx.fresh_value();
+
+            // Resolve function reference.
+            let func_ref = ctx.lookup_func(&func_name)
+                .ok_or_else(|| LowerError::FunctionNotFound(func_name))?;
+
             ctx.emit(Instruction::Call {
                 dest,
-                func: func_name,
+                func: func_ref,
                 args: args?,
             });
             Ok(dest)
@@ -607,11 +664,12 @@ fn lower_expression<'db>(
                 .iter()
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
+            let fields = elements?;
             let dest = ctx.fresh_value();
             ctx.emit(Instruction::Pack {
                 dest,
-                ty: "tuple".to_string(),
-                fields: elements?,
+                ty: TypeRef::Tuple(fields.len() as u32),
+                fields,
             });
             Ok(dest)
         }
@@ -620,11 +678,12 @@ fn lower_expression<'db>(
                 .iter()
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
+            let fields = elements?;
             let dest = ctx.fresh_value();
             ctx.emit(Instruction::Pack {
                 dest,
-                ty: "anon_tuple".to_string(),
-                fields: elements?,
+                ty: TypeRef::Tuple(fields.len() as u32),
+                fields,
             });
             Ok(dest)
         }
@@ -712,6 +771,7 @@ pub fn lower_script_unit<'db>(
         value_count: ctx.next_value,
         slot_count: ctx.next_slot,
         functions: ctx.functions,
+        symbols: ctx.symbols,
         result,
         exports: ctx.exports,
     })
@@ -793,13 +853,43 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Fun(fun_stmt) => {
-            // Lower the function and add to the unit's functions.
-            let func = lower_function(ctx.db, *fun_stmt)?;
-            let func_name = func.name.clone();
-            let func_idx = ctx.functions.len();
+            // Define the function in the symbol table first (allows recursion).
+            let func_name = fun_stmt.name(ctx.db).text(ctx.db).to_string();
+            let param_count = fun_stmt.params(ctx.db).len();
+            let func_id = ctx.define_func(&func_name, param_count);
+
+            // Save current lowering state.
+            let saved_blocks = std::mem::take(&mut ctx.blocks);
+            let saved_instructions = std::mem::take(&mut ctx.current_instructions);
+            let saved_current_block = ctx.current_block;
+            let saved_next_block = ctx.next_block;
+            let saved_next_value = ctx.next_value;
+            let saved_next_slot = ctx.next_slot;
+            let saved_variables = std::mem::take(&mut ctx.variables);
+
+            // Reset for function body.
+            ctx.current_block = BlockId(0);
+            ctx.next_block = 1;
+            ctx.next_value = 0;
+            ctx.next_slot = 0;
+
+            // Lower the function body.
+            let func = lower_function_body(ctx, func_id, *fun_stmt)?;
+
+            // Restore parent state.
+            ctx.blocks = saved_blocks;
+            ctx.current_instructions = saved_instructions;
+            ctx.current_block = saved_current_block;
+            ctx.next_block = saved_next_block;
+            ctx.next_value = saved_next_value;
+            ctx.next_slot = saved_next_slot;
+            ctx.variables = saved_variables;
+
+            // Add the function to the unit's functions.
             ctx.functions.push(func);
+
             // Export the function.
-            ctx.exports.push((func_name, ExportBinding::Function(func_idx)));
+            ctx.exports.push((func_name, ExportBinding::Function(func_id)));
             Ok(())
         }
         Statement::If(if_stmt) => {
@@ -829,6 +919,7 @@ fn lower_statement_for_script<'db>(
 pub enum LowerError {
     VariableNotFound(String),
     VariableNotMutable(String),
+    FunctionNotFound(String),
     InvalidLiteral(String),
     NotImplemented(String),
     ParseError,
@@ -839,6 +930,7 @@ impl std::fmt::Display for LowerError {
         match self {
             LowerError::VariableNotFound(name) => write!(f, "variable not found: {}", name),
             LowerError::VariableNotMutable(name) => write!(f, "variable not mutable: {}", name),
+            LowerError::FunctionNotFound(name) => write!(f, "function not found: {}", name),
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
             LowerError::NotImplemented(what) => write!(f, "not implemented: {}", what),
             LowerError::ParseError => write!(f, "parse error in source"),

@@ -8,5 +8,5 @@ block0:
     v1 = add v0, v0
     return v1
 exports:
-    double = fn#0
+    double = f0
 

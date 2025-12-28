@@ -251,7 +251,7 @@ Tests:
 - `tests/ir_lower_tests.rs` - 5 function lowering tests
 - `tests/ir_lower_script_tests.rs` - 5 script unit lowering tests
 
-#### Known Hacks - RESOLVED
+#### Known Hacks - ALL RESOLVED
 
 1. **Expression parsing** - FIXED. Added `parse_expr` to parser.
    - Files modified: `parser.rs`, `ir_lower_script_tests.rs`
@@ -259,9 +259,12 @@ Tests:
 2. **Cross-unit slot assignment** - FIXED. Added `SlotDest` enum with `Local` and `External` variants.
    - Files modified: `ir/mod.rs`, `ir/lower.rs`, `ir/display.rs`
 
-3. **Type placeholders** - `Call { func: String }`, `Pack { ty: String }` use strings instead of proper IDs.
-   - Assessment: Low priority, string lookup works for interpreter.
-   - Decision: Defer.
+3. **Type placeholders** - FIXED. Added proper symbol table with FuncId, TypeId, FuncRef, TypeRef.
+   - `Call { func: FuncRef }` - functions resolved via symbol table
+   - `Pack { ty: TypeRef }` - uses TypeRef enum for built-in and user-defined types
+   - `FieldAccess { field_index: u32 }` - uses index instead of string
+   - Added `SymbolTable` with function/type definitions and name resolution
+   - Files modified: `ir/mod.rs`, `ir/lower.rs`, `ir/display.rs`
 
 ### Phase 3: IR Interpreter - NOT STARTED
 

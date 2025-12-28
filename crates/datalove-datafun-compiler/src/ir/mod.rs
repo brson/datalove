@@ -7,6 +7,7 @@
 
 use rmx::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub mod lower;
 pub mod display;
@@ -22,6 +23,102 @@ pub struct SlotId(pub u32);
 /// Block identifier.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct BlockId(pub u32);
+
+/// Globally unique function identifier within a compilation context.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct FuncId(pub u32);
+
+/// Reference to a function.
+///
+/// Functions can be defined in the current unit or imported from previous units.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum FuncRef {
+    /// Function defined locally (in the current unit or module).
+    Local(FuncId),
+    /// Function from a previous script unit.
+    External { unit: u32, func: FuncId },
+}
+
+/// Reference to a type.
+///
+/// All compound types in datalove are structural (anonymous).
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum TypeRef {
+    /// Boolean type.
+    Bool,
+    /// Unsigned integers.
+    U8, U16, U32, U64,
+    /// Signed integers.
+    I8, I16, I32, I64,
+    /// Arbitrary-precision integer.
+    Int,
+    /// Tuple with N elements (0 = unit type).
+    Tuple(u32),
+    /// Anonymous struct with N fields.
+    AnonStruct(u32),
+    /// Option type.
+    Option,
+    /// Result type.
+    Result,
+    /// List type.
+    List,
+    /// Set type.
+    Set,
+    /// Map type.
+    Map,
+}
+
+/// Metadata about a function definition.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FuncDef {
+    pub id: FuncId,
+    pub name: String,
+    pub param_count: usize,
+}
+
+/// Symbol table for IR resolution.
+///
+/// Maps function IDs to their definitions and provides name lookup.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SymbolTable {
+    /// All function definitions, indexed by FuncId.
+    pub functions: Vec<FuncDef>,
+    /// Name to FuncId mapping for the current scope (lowering-time only).
+    #[serde(skip)]
+    name_to_func: HashMap<String, FuncId>,
+    /// Next FuncId to allocate.
+    next_func_id: u32,
+}
+
+impl SymbolTable {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Define a new function and return its ID.
+    pub fn define_func(&mut self, name: String, param_count: usize) -> FuncId {
+        let id = FuncId(self.next_func_id);
+        self.next_func_id += 1;
+        self.functions.push(FuncDef { id, name: name.clone(), param_count });
+        self.name_to_func.insert(name, id);
+        id
+    }
+
+    /// Look up a function by name.
+    pub fn lookup_func(&self, name: &str) -> Option<FuncId> {
+        self.name_to_func.get(name).copied()
+    }
+
+    /// Get function definition by ID.
+    pub fn get_func(&self, id: FuncId) -> Option<&FuncDef> {
+        self.functions.get(id.0 as usize)
+    }
+
+    /// Import a function from an external source into the current scope.
+    pub fn import_func(&mut self, name: String, id: FuncId) {
+        self.name_to_func.insert(name, id);
+    }
+}
 
 /// Operand - either SSA value or mutable slot, local or from a previous script unit.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -134,25 +231,25 @@ pub enum Instruction {
     /// Function call.
     Call {
         dest: ValueId,
-        func: String, // TODO: proper FuncId
+        func: FuncRef,
         args: Vec<Operand>,
     },
 
     /// Pack fields into a struct/tuple.
     Pack {
         dest: ValueId,
-        ty: String, // TODO: proper TypeId
+        ty: TypeRef,
         fields: Vec<Operand>,
     },
 
     /// Unpack struct/tuple into fields.
     Unpack { dests: Vec<ValueId>, src: Operand },
 
-    /// Access a field of a struct.
+    /// Access a field of a struct by index.
     FieldAccess {
         dest: ValueId,
         base: Operand,
-        field: String, // TODO: proper FieldId
+        field_index: u32,
     },
 
     /// Access a tuple element by index.
@@ -262,6 +359,7 @@ pub struct IrBlock {
 /// IR for a single function.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IrFunction {
+    pub id: FuncId,
     pub name: String,
     pub params: Vec<ValueId>,
     pub blocks: Vec<IrBlock>,
@@ -280,6 +378,7 @@ impl IrFunction {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IrModule {
     pub functions: Vec<IrFunction>,
+    pub symbols: SymbolTable,
 }
 
 /// What a script unit exports to subsequent units.
@@ -290,7 +389,7 @@ pub enum ExportBinding {
     /// A mutable slot (from var binding).
     Slot(SlotId),
     /// A function defined in this unit.
-    Function(usize),
+    Function(FuncId),
 }
 
 /// IR for a script unit.
@@ -304,6 +403,8 @@ pub struct IrScriptUnit {
     pub slot_count: u32,
     /// Functions defined in this unit.
     pub functions: Vec<IrFunction>,
+    /// Symbol table for this unit.
+    pub symbols: SymbolTable,
     /// Result value of this unit (for expression units in REPL).
     pub result: Option<ValueId>,
     /// Names exported to later units.

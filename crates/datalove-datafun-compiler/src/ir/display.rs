@@ -21,6 +21,46 @@ impl fmt::Display for BlockId {
     }
 }
 
+impl fmt::Display for FuncId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "f{}", self.0)
+    }
+}
+
+impl fmt::Display for FuncRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FuncRef::Local(id) => write!(f, "{}", id),
+            FuncRef::External { unit, func } => write!(f, "unit{}.{}", unit, func),
+        }
+    }
+}
+
+impl fmt::Display for TypeRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeRef::Bool => write!(f, "Bool"),
+            TypeRef::U8 => write!(f, "U8"),
+            TypeRef::U16 => write!(f, "U16"),
+            TypeRef::U32 => write!(f, "U32"),
+            TypeRef::U64 => write!(f, "U64"),
+            TypeRef::I8 => write!(f, "I8"),
+            TypeRef::I16 => write!(f, "I16"),
+            TypeRef::I32 => write!(f, "I32"),
+            TypeRef::I64 => write!(f, "I64"),
+            TypeRef::Int => write!(f, "Int"),
+            TypeRef::Tuple(0) => write!(f, "()"),
+            TypeRef::Tuple(n) => write!(f, "Tuple{}", n),
+            TypeRef::AnonStruct(n) => write!(f, "Struct{}", n),
+            TypeRef::Option => write!(f, "Option"),
+            TypeRef::Result => write!(f, "Result"),
+            TypeRef::List => write!(f, "List"),
+            TypeRef::Set => write!(f, "Set"),
+            TypeRef::Map => write!(f, "Map"),
+        }
+    }
+}
+
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -146,8 +186,8 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, ") = unpack {}", src)
             }
-            Instruction::FieldAccess { dest, base, field } => {
-                write!(f, "{} = {}.{}", dest, base, field)
+            Instruction::FieldAccess { dest, base, field_index } => {
+                write!(f, "{} = {}.field{}", dest, base, field_index)
             }
             Instruction::TupleIndex { dest, base, index } => {
                 write!(f, "{} = {}.{}", dest, base, index)
@@ -304,7 +344,7 @@ impl fmt::Display for ExportBinding {
         match self {
             ExportBinding::Value(v) => write!(f, "{}", v),
             ExportBinding::Slot(s) => write!(f, "{}", s),
-            ExportBinding::Function(idx) => write!(f, "fn#{}", idx),
+            ExportBinding::Function(id) => write!(f, "{}", id),
         }
     }
 }
