@@ -605,8 +605,6 @@ impl<'a> ExecutionContext<'a> {
 pub struct IrInterpreter {
     runtime: datalove_rt::rust::Runtime,
     tydesc_table: IrTyDescTable,
-    /// Storage for return values (to outlive callee frames).
-    return_storage: Vec<Vec<u8>>,
 }
 
 impl IrInterpreter {
@@ -614,20 +612,20 @@ impl IrInterpreter {
         Self {
             runtime: datalove_rt::rust::Runtime::new(),
             tydesc_table: IrTyDescTable::new(),
-            return_storage: Vec::new(),
         }
     }
 
-    /// Execute a function with arguments (no other functions available for calls).
+    /// Execute a function with arguments, writing result to destination.
     pub fn call(
         &mut self,
         func: &IrFunction,
         args: Vec<Value>,
-    ) -> Result<Option<Value>, InterpError> {
+        ret_dest: Destination,
+    ) -> Result<(), InterpError> {
         // For single function execution, create a context with just this function.
         let functions = [func.clone()];
         let ctx = ExecutionContext::new(&functions);
-        self.call_in_context(func, args, &ctx)
+        self.call_in_context(func, args, ret_dest, &ctx)
     }
 
     /// Execute a function with arguments in a context with available functions.
@@ -635,8 +633,9 @@ impl IrInterpreter {
         &mut self,
         func: &IrFunction,
         args: Vec<Value>,
+        ret_dest: Destination,
         ctx: &ExecutionContext,
-    ) -> Result<Option<Value>, InterpError> {
+    ) -> Result<(), InterpError> {
         // Compute layout.
         let layout = IrLayout::compute(
             &func.value_types,
@@ -659,30 +658,17 @@ impl IrInterpreter {
             }
         }
 
-        // Execute blocks starting from entry.
-        let result = self.execute_blocks(func, &mut frame, ctx)?;
-
-        // Copy return value to persistent storage before frame is dropped.
-        if let Some(val) = result {
-            let size = unsafe { (*val.tydesc).size as usize };
-            let mut storage = vec![0u8; size];
-            unsafe {
-                std::ptr::copy_nonoverlapping(val.ptr, storage.as_mut_ptr(), size);
-            }
-            self.return_storage.push(storage);
-            let ptr = self.return_storage.last().unwrap().as_ptr() as *mut u8;
-            Ok(Some(Value { ptr, tydesc: val.tydesc }))
-        } else {
-            Ok(None)
-        }
+        // Execute blocks, writing return value directly to ret_dest.
+        self.execute_blocks(func, &mut frame, ret_dest, ctx)
     }
 
     fn execute_blocks(
         &mut self,
         func: &IrFunction,
         frame: &mut Frame,
+        ret_dest: Destination,
         ctx: &ExecutionContext,
-    ) -> Result<Option<Value>, InterpError> {
+    ) -> Result<(), InterpError> {
         let mut current_block = BlockId(0);
 
         loop {
@@ -692,7 +678,7 @@ impl IrInterpreter {
 
             // Execute instructions.
             for instr in &block.instructions {
-                self.execute_instruction(instr, frame, ctx)?;
+                self.execute_instruction(instr, frame, ret_dest, ctx)?;
             }
 
             // Handle terminator.
@@ -708,27 +694,28 @@ impl IrInterpreter {
                 Terminator::Return { value } => {
                     if let Some(op) = value {
                         let val = self.read_operand(op, frame)?;
-                        return Ok(Some(val));
+                        unsafe { self.copy_value(&val, ret_dest)?; }
                     }
-                    return Ok(None);
+                    return Ok(());
                 }
                 Terminator::TryReturn { value } => {
                     if let Some(op) = value {
                         let val = self.read_operand(op, frame)?;
-                        return Ok(Some(val));
+                        unsafe { self.copy_value(&val, ret_dest)?; }
                     }
-                    return Ok(None);
+                    return Ok(());
                 }
                 Terminator::UnitEnd { result } => {
                     if let Some(op) = result {
                         let val = self.read_operand(op, frame)?;
-                        return Ok(Some(val));
+                        unsafe { self.copy_value(&val, ret_dest)?; }
                     }
-                    return Ok(None);
+                    return Ok(());
                 }
                 Terminator::UnitEarlyReturn { value } => {
                     let val = self.read_operand(value, frame)?;
-                    return Ok(Some(val));
+                    unsafe { self.copy_value(&val, ret_dest)?; }
+                    return Ok(());
                 }
             }
         }
@@ -738,6 +725,7 @@ impl IrInterpreter {
         &mut self,
         instr: &Instruction,
         frame: &mut Frame,
+        _ret_dest: Destination,
         ctx: &ExecutionContext,
     ) -> Result<(), InterpError> {
         match instr {
@@ -907,15 +895,12 @@ impl IrInterpreter {
                     .map(|op| self.read_operand(op, frame))
                     .collect::<Result<_, _>>()?;
 
-                // Call the function recursively.
-                let result = self.call_in_context(callee, arg_vals, ctx)?;
+                // Get destination for return value.
+                let dest_slot = frame.value_dest(*dest)?;
 
-                // Copy return value to destination.
-                if let Some(ret_val) = result {
-                    let dest_slot = frame.value_dest(*dest)?;
-                    unsafe { self.copy_value(&ret_val, dest_slot)?; }
-                    frame.mark_value_initialized(*dest);
-                }
+                // Call the function, writing result directly to destination.
+                self.call_in_context(callee, arg_vals, dest_slot, ctx)?;
+                frame.mark_value_initialized(*dest);
             }
             Instruction::ListNew { .. } => {
                 todo!("ListNew instruction not yet implemented")
@@ -1539,14 +1524,18 @@ mod tests {
         let functions = vec![add_fn, main_fn.clone()];
         let ctx = ExecutionContext::new(&functions);
 
-        // Execute main.
+        // Execute main, writing result to our storage.
         let mut interp = IrInterpreter::new();
-        let result = interp.call_in_context(&main_fn, vec![], &ctx).unwrap();
+        let mut result_storage: i64 = 0;
+        let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+        let ret_dest = Destination {
+            ptr: &mut result_storage as *mut i64 as *mut u8,
+            tydesc: ret_tydesc,
+        };
+        interp.call_in_context(&main_fn, vec![], ret_dest, &ctx).unwrap();
 
         // Verify result is 30.
-        let val = result.expect("expected return value");
-        let result_i64 = unsafe { *(val.ptr as *const i64) };
-        assert_eq!(result_i64, 30);
+        assert_eq!(result_storage, 30);
     }
 
     #[test]
@@ -1624,11 +1613,17 @@ mod tests {
             tydesc: arg_tydesc,
         };
 
-        let result = interp.call_in_context(&quadruple_fn, vec![arg], &ctx).unwrap();
+        // Create destination for result.
+        let mut result_storage: i64 = 0;
+        let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+        let ret_dest = Destination {
+            ptr: &mut result_storage as *mut i64 as *mut u8,
+            tydesc: ret_tydesc,
+        };
+
+        interp.call_in_context(&quadruple_fn, vec![arg], ret_dest, &ctx).unwrap();
 
         // Verify result is 20 (5 * 2 * 2).
-        let val = result.expect("expected return value");
-        let result_i64 = unsafe { *(val.ptr as *const i64) };
-        assert_eq!(result_i64, 20);
+        assert_eq!(result_storage, 20);
     }
 }
