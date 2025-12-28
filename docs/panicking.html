@@ -24,7 +24,7 @@ and owned global memory,
 and returns control to the embedder or system.
 What happens to other threads in a multithreaded scenario is tbd.</p>
 <p><code>panic</code> is a statement:</p>
-<pre><code>fun expect(val: ?u32): u32
+<pre><code class="language-datalove">fun expect(val: ?u32): u32
   if val |val|
     ret val
   else |error|
@@ -34,7 +34,7 @@ end
 </code></pre>
 <p>Note that panic accepts any type on the global heap,
 and we can use <code>clone</code> to duplicate to the global heap:</p>
-<pre><code>fun expect(val: ?u32): u32
+<pre><code class="language-datalove">fun expect(val: ?u32): u32
   if val |val|
     ret val
   else |error|
@@ -47,7 +47,7 @@ end
 or as a <code>.clone</code> postfix.</p>
 </blockquote>
 <p>Panicking unwrap with the <code>.X</code> postfix operator:</p>
-<pre><code>fun expect(val: ?u32): u32
+<pre><code class="language-datalove">fun expect(val: ?u32): u32
   ret val.X
 end
 </code></pre>
@@ -55,7 +55,7 @@ end
 The type system does track which functions panic,
 but it is not exposed in the type signature.
 It is possible to assert non-panicking:</p>
-<pre><code>fun transform_option(val: ?u32): ?u32
+<pre><code class="language-datalove">fun transform_option(val: ?u32): ?u32
   let val = val?
   ret val + 1
 end
@@ -63,9 +63,29 @@ end
 make transform_option total
 </code></pre>
 <h3>Panicking math ops</h3>
-<pre><code>
-</code></pre>
+<p>TODO</p>
 
     </main>
+    <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script>
+    Prism.languages.datalove = {
+        'comment': [
+            /\/\/.*/,
+            /\/\*[\s\S]*?\*\//
+        ],
+        'string': /"(?:[^"\\]|\\.)*"/,
+        'number': /\b\d+(?:\.\d+)?\b/,
+        'boolean': /\b(?:true|false)\b/,
+        'builtin': /\b(?:ok|er|some|none)\b/,
+        'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|int|f32|f64|list|map|set|tensor|data|error)\b/,
+        'keyword': /\b(?:let|fun|ret|if|else|end|require|import|break|continue|loop|module|in|out|mut|ref|struct|enum)\b/,
+        'operator': /\b(?:and|or|xor|implies|not)\b|[+\-*\/%!?<>=&|^~]+/,
+        'function': /\b[a-z_][a-z0-9_]*(?=\s*\()/,
+        'punctuation': /[{}()\[\];,.:]/
+    };
+    Prism.languages.datalit = Prism.languages.datalove;
+    Prism.languages.datafun = Prism.languages.datalove;
+    Prism.highlightAll();
+    </script>
 </body>
 </html>

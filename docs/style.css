@@ -6,6 +6,14 @@
     --accent: #e94560;
     --code-bg: #16213e;
     --link: #0f9b8e;
+    --syn-keyword: #e94560;
+    --syn-type: #0f9b8e;
+    --syn-string: #f9c74f;
+    --syn-number: #90be6d;
+    --syn-boolean: #f8961e;
+    --syn-comment: #6c7a89;
+    --syn-function: #43aa8b;
+    --syn-operator: #b8b8b8;
 }
 
 * {
@@ -84,3 +92,15 @@ ul, ol {
 li {
     margin: 0.5rem 0;
 }
+
+/* Syntax highlighting */
+.token.keyword { color: var(--syn-keyword); }
+.token.type-name { color: var(--syn-type); }
+.token.string { color: var(--syn-string); }
+.token.number { color: var(--syn-number); }
+.token.boolean { color: var(--syn-boolean); }
+.token.builtin { color: var(--syn-boolean); }
+.token.comment { color: var(--syn-comment); font-style: italic; }
+.token.function { color: var(--syn-function); }
+.token.operator { color: var(--syn-operator); }
+.token.punctuation { color: var(--fg); }

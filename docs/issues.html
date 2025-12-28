@@ -19,5 +19,26 @@
 and functions can only be called in expression position</p>
 
     </main>
+    <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script>
+    Prism.languages.datalove = {
+        'comment': [
+            /\/\/.*/,
+            /\/\*[\s\S]*?\*\//
+        ],
+        'string': /"(?:[^"\\]|\\.)*"/,
+        'number': /\b\d+(?:\.\d+)?\b/,
+        'boolean': /\b(?:true|false)\b/,
+        'builtin': /\b(?:ok|er|some|none)\b/,
+        'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|int|f32|f64|list|map|set|tensor|data|error)\b/,
+        'keyword': /\b(?:let|fun|ret|if|else|end|require|import|break|continue|loop|module|in|out|mut|ref|struct|enum)\b/,
+        'operator': /\b(?:and|or|xor|implies|not)\b|[+\-*\/%!?<>=&|^~]+/,
+        'function': /\b[a-z_][a-z0-9_]*(?=\s*\()/,
+        'punctuation': /[{}()\[\];,.:]/
+    };
+    Prism.languages.datalit = Prism.languages.datalove;
+    Prism.languages.datafun = Prism.languages.datalove;
+    Prism.highlightAll();
+    </script>
 </body>
 </html>

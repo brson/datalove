@@ -18,7 +18,7 @@
 <p>Datalove on various language design topics.</p>
 <h3>Function return types</h3>
 <p>Functions with return types require <code>ret</code> with value.</p>
-<pre><code>fun choose(a: u32): bool
+<pre><code class="language-datalove">fun choose(a: u32): bool
   if a &lt; 10
     ret true
   else
@@ -28,7 +28,7 @@ end fun
 </code></pre>
 <p>Functions can have void return types
 and allow <code>ret</code> statements without values.</p>
-<pre><code>fun foo()
+<pre><code class="language-datalove">fun foo()
   // no ret required
 end fun
 
@@ -40,7 +40,7 @@ end fun
 </code></pre>
 <h3>Option and result handling</h3>
 <p>The option and result types are prefixes like zig:</p>
-<pre><code>// option
+<pre><code class="language-datalove">// option
 let a: ?u32 = ...
 let b: ?[u32] = ...
 // result
@@ -51,7 +51,7 @@ let d: ![u32] = ...
 is done with the <code>some</code>, <code>none</code>, <code>ok</code> and <code>er</code> keywords.
 Note the awkward <code>er error</code> construction which
 constructs an <code>er</code> <code>result</code> varriant out of an <code>error</code> value.</p>
-<pre><code>let a: ?u32 = some 3
+<pre><code class="language-datalove">let a: ?u32 = some 3
 let b: ?u32 = some u32.min_value()
 let c: ?u32 = none
 
@@ -60,7 +60,7 @@ let b: !u32 = ok u32.min_value()
 let c: ?u32 = er error &quot;oops&quot;
 </code></pre>
 <p>Destructuring option and result is like zig:</p>
-<pre><code>let a: ?u8 = 1
+<pre><code class="language-datalove">let a: ?u8 = 1
 
 var c: u8 = 0
 if a |value|
@@ -69,7 +69,7 @@ else
   set c = 255
 end if
 </code></pre>
-<pre><code>let a: !u8 = 1
+<pre><code class="language-datalove">let a: !u8 = 1
 
 var c: u8 = 0
 if a |value|
@@ -81,7 +81,7 @@ end if
 <p>Branching on error values is not like zig
 and uses reflection, not shown here.</p>
 <p>Early return with postfix <code>?</code> and <code>!</code>:</p>
-<pre><code>fun transform_option(val: ?u32): ?u32
+<pre><code class="language-datalove">fun transform_option(val: ?u32): ?u32
   let val = val? // early none return
   ret val +? 1   // early none return on overflow
 end fun
@@ -101,7 +101,7 @@ cases in machine-size integers and floats.</p>
 For div we must use a checked variant to handle divide-by-zero.</p>
 <p>Fixed ints do not support any bare bath ops, not even unary <code>-</code>.</p>
 <p>Fixed ints support early-return varieties:</p>
-<pre><code>let a = 1 +? 1
+<pre><code class="language-datalove">let a = 1 +? 1
 let a = 1 -? 1
 let a = 1 *? 1
 let a = 1 /? 1
@@ -124,19 +124,19 @@ Floats don't support early-return math.</p>
 <p>If we decide to let funs panic we'll also add panicking variations.</p>
 <h3>Numeric widening</h3>
 <p>Fixed ints automatically widen, up to bigints:</p>
-<pre><code>let a: u8 = 1
+<pre><code class="language-datalove">let a: u8 = 1
 let b: u16 = a
 let c: int = b
 </code></pre>
 <p>Same for signed fixed ints:</p>
-<pre><code>let a: i8 = 1
+<pre><code class="language-datalove">let a: i8 = 1
 let b: i16 = a
 let c: int = b
 </code></pre>
 <p>Unsigned and signed ints never automatically coerce to each other.</p>
 <p>Widening also apllies to bare / unchecked math, which
 widens to <code>int</code>:</p>
-<pre><code>// this checks to `int` because the `*` binop,
+<pre><code class="language-datalove">// this checks to `int` because the `*` binop,
 // forcing the literals to be int
 let a = 1 * 2
 // locals also get coercions
@@ -201,5 +201,26 @@ as a egui_ratatui application.</p>
 <p>Allowed and optional in all sequence forms of course.</p>
 
     </main>
+    <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script>
+    Prism.languages.datalove = {
+        'comment': [
+            /\/\/.*/,
+            /\/\*[\s\S]*?\*\//
+        ],
+        'string': /"(?:[^"\\]|\\.)*"/,
+        'number': /\b\d+(?:\.\d+)?\b/,
+        'boolean': /\b(?:true|false)\b/,
+        'builtin': /\b(?:ok|er|some|none)\b/,
+        'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|int|f32|f64|list|map|set|tensor|data|error)\b/,
+        'keyword': /\b(?:let|fun|ret|if|else|end|require|import|break|continue|loop|module|in|out|mut|ref|struct|enum)\b/,
+        'operator': /\b(?:and|or|xor|implies|not)\b|[+\-*\/%!?<>=&|^~]+/,
+        'function': /\b[a-z_][a-z0-9_]*(?=\s*\()/,
+        'punctuation': /[{}()\[\];,.:]/
+    };
+    Prism.languages.datalit = Prism.languages.datalove;
+    Prism.languages.datafun = Prism.languages.datalove;
+    Prism.highlightAll();
+    </script>
 </body>
 </html>

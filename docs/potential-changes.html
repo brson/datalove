@@ -24,19 +24,19 @@
 </ul>
 </li>
 </ul>
-<pre><code>struct Foo {
+<pre><code class="language-datalove">struct Foo {
   bar = 1,
   baz: int = 2,
 }
 </code></pre>
 <p>vs</p>
-<pre><code>struct Foo {
+<pre><code class="language-datalove">struct Foo {
   bar = 1,
   baz = : int is 2,
 }
 </code></pre>
 <p>tydec:</p>
-<pre><code>struct Foo {
+<pre><code class="language-datalove">struct Foo {
   bar: int,
   baz: int,
 }
@@ -45,5 +45,26 @@
 can we say &quot;any <code>=</code> can be expanded to <code>: =</code>?</p>
 
     </main>
+    <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script>
+    Prism.languages.datalove = {
+        'comment': [
+            /\/\/.*/,
+            /\/\*[\s\S]*?\*\//
+        ],
+        'string': /"(?:[^"\\]|\\.)*"/,
+        'number': /\b\d+(?:\.\d+)?\b/,
+        'boolean': /\b(?:true|false)\b/,
+        'builtin': /\b(?:ok|er|some|none)\b/,
+        'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|int|f32|f64|list|map|set|tensor|data|error)\b/,
+        'keyword': /\b(?:let|fun|ret|if|else|end|require|import|break|continue|loop|module|in|out|mut|ref|struct|enum)\b/,
+        'operator': /\b(?:and|or|xor|implies|not)\b|[+\-*\/%!?<>=&|^~]+/,
+        'function': /\b[a-z_][a-z0-9_]*(?=\s*\()/,
+        'punctuation': /[{}()\[\];,.:]/
+    };
+    Prism.languages.datalit = Prism.languages.datalove;
+    Prism.languages.datafun = Prism.languages.datalove;
+    Prism.highlightAll();
+    </script>
 </body>
 </html>

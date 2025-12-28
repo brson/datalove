@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>features - Datalove</title>
+    <title>Syntax Highlighting Demo - Datalove</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
@@ -14,19 +14,79 @@
         <a href="index.html">♡</a>
     </nav>
     <main>
-        <h2>Features</h2>
-<h3>A massive and battle-tested standard library.</h3>
-<h3>Statically typed with ergonomic coercions and runtime reflection</h3>
-<p>Datalove is statically typed but feels flexible and fast
-like a dynamic scripting language.</p>
-<h3>Fast incremental compilation and execution with hot-reloading, rewind-and-replay, rewind-and-rewrite-history.</h3>
-<h3>Interpreted or compiled, JIT or AOT</h3>
-<h3>REPL-first design</h3>
-<h3>Fully WASM-compatible toolchain</h3>
-<h2>Aspirational features</h2>
-<h3>Interpreted and</h3>
-<h3>Incremental computation, memoized predicates, choice points, and logic programming.</h3>
-<h3>Virtualized I/O for simulation and record-and-replay.</h3>
+        <h1>Syntax Highlighting Demo</h1>
+<pre><code class="language-datalove">// This is a line comment
+
+/*
+  This is a block comment
+  spanning multiple lines
+*/
+
+require module sys/core/debug
+
+// Keywords and types
+let a: bool = true
+let b: bool = false
+let x: u32 = 42
+let y: i64 = -100
+let z: int = 9999999999999999999
+let f: f32 = 3.14
+let name: string = &quot;hello world&quot;
+let name: list&lt;u8&gt; = [1, 2, 3]
+
+// Option and result types with builtins
+let maybe: ?u32 = some 10
+let nothing: ?u32 = none
+let success: !u32 = ok 200
+let failure: !u32 = er error &quot;oops&quot;
+
+// Function definition
+fun calculate(a: u32, b: u32): !u32
+  // Checked operators
+  let sum = a +! b
+  let diff = a -? b
+  let prod = a *! b
+
+  // Boolean operators
+  let check = true and false or true
+  let logic = a .&lt; b implies b .&gt; 0
+  let neg = not check
+
+  // Control flow
+  if sum &gt; 100
+    ret ok sum
+  else if diff |val|
+    ret ok val
+  else
+    ret err error &quot;failed&quot;
+  end if
+end fun
+
+// Struct and enum
+struct Point {
+  x: f32,
+  y: f32,
+}
+
+enum Status {
+  Active,
+  Inactive,
+  Pending(u32),
+}
+
+// Container types
+let items: list&lt;u32&gt; = [1, 2, 3, 4, 5]
+let lookup: map&lt;u32, bool&gt; = { 1 = true, 2 = false }
+let unique: set&lt;u32&gt; = { 10, 20, 30 }
+
+// Function call
+let result = calculate(x, y)
+
+// Match expression
+match result |value|
+  debug.print(value)
+end match
+</code></pre>
 
     </main>
     <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
