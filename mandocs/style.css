@@ -13,7 +13,14 @@
     --syn-boolean: #f8961e;
     --syn-comment: #6c7a89;
     --syn-function: #43aa8b;
-    --syn-operator: #b8b8b8;
+    --syn-brace-curly: #e94560;
+    --syn-brace-paren: #f8961e;
+    --syn-brace-angle: #90be6d;
+    --syn-brace-square: #43aa8b;
+    --syn-op-cmp: #b8b8b8;
+    --syn-op-result: #f472b6;
+    --syn-op-option: #a78bfa;
+    --syn-type-colon: #0f9b8e;
 }
 
 * {
@@ -99,8 +106,15 @@ li {
 .token.string { color: var(--syn-string); }
 .token.number { color: var(--syn-number); }
 .token.boolean { color: var(--syn-boolean); }
-.token.builtin { color: var(--syn-boolean); }
+.token.variant { color: var(--syn-boolean); }
 .token.comment { color: var(--syn-comment); font-style: italic; }
 .token.function { color: var(--syn-function); }
-.token.operator { color: var(--syn-operator); }
+.token.brace-curly { color: var(--syn-brace-curly); }
+.token.brace-paren { color: var(--syn-brace-paren); }
+.token.brace-angle { color: var(--syn-brace-angle); }
+.token.brace-square { color: var(--syn-brace-square); }
+.token.op-cmp { color: var(--syn-op-cmp); }
+.token.op-result { color: var(--syn-op-result); }
+.token.op-option { color: var(--syn-op-option); }
+.token.type-colon { color: var(--syn-type-colon); }
 .token.punctuation { color: var(--fg); }

@@ -18,7 +18,7 @@ let y: i64 = -100
 let z: int = 9999999999999999999
 let f: f32 = 3.14
 let name: string = "hello world"
-let name: list<u8> = [1, 2, 3]
+let bytes: list<u8> = [1, 2, 3]
 
 // Option and result types with builtins
 let maybe: ?u32 = some 10
@@ -26,50 +26,58 @@ let nothing: ?u32 = none
 let success: !u32 = ok 200
 let failure: !u32 = er error "oops"
 
-// Function definition
+// Function definition with all brace types: { } ( ) < > [ ]
 fun calculate(a: u32, b: u32): !u32
-  // Checked operators
+  // Checked-result operators: +! -! *! /! !
   let sum = a +! b
-  let diff = a -? b
+  let neg = -!a
   let prod = a *! b
+  let div = a /! b
+  let unwrap = success!
 
-  // Boolean operators
-  let check = true and false or true
-  let logic = a .< b implies b .> 0
-  let neg = not check
+  // Checked-option operators: +? -? *? /? ?
+  let opt_sum = a +? b
+  let opt_neg = -?a
+  let opt_prod = a *? b
+  let opt_div = a /? b
+  let opt_unwrap = maybe?
 
-  // Control flow
-  if sum > 100
-    ret ok sum
-  else if diff |val|
-    ret ok val
-  else
-    ret err error "failed"
+  // Comparison operators: .< .> <= >= == !=
+  if a .< b
+    ret ok 1
+  else if a .> b
+    ret ok 2
+  else if a <= b
+    ret ok 3
+  else if a >= b
+    ret ok 4
+  else if a == b
+    ret ok 5
+  else if a != b
+    ret ok 6
   end if
+
+  ret ok sum
 end fun
 
-// Struct and enum
+// Struct with curly braces { }
 struct Point {
   x: f32,
   y: f32,
 }
 
+// Enum with parens ( ) and curlies { }
 enum Status {
   Active,
   Inactive,
   Pending(u32),
 }
 
-// Container types
+// Container types with angle < > and square [ ] braces
 let items: list<u32> = [1, 2, 3, 4, 5]
 let lookup: map<u32, bool> = { 1 = true, 2 = false }
 let unique: set<u32> = { 10, 20, 30 }
 
-// Function call
+// Function call with parens ( )
 let result = calculate(x, y)
-
-// Match expression
-match result |value|
-  debug.print(value)
-end match
 ```
