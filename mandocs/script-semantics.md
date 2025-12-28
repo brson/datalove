@@ -93,7 +93,7 @@ If the input didn't parse:
 
 The script input to salsa consists of something like:
 
-```
+```rust
 #[salsa::input]
 struct Script {
     units: Vec<ScriptUnit>,  

@@ -21,7 +21,7 @@ Interpreter, JIT and AOT.
 
 Optional type-hint prefixes for all expressions:
 
-```
+```datalove
 let foo = {
   a = : u8 / 100,
   b = [: int / 200, 300],

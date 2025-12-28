@@ -8,7 +8,7 @@ Datalove on various language design topics.
 
 Functions with return types require `ret` with value.
 
-```
+```datalove
 fun choose(a: u32): bool
   if a < 10
     ret true
@@ -21,7 +21,7 @@ end fun
 Functions can have void return types
 and allow `ret` statements without values.
 
-```
+```datalove
 fun foo()
   // no ret required
 end fun
@@ -40,7 +40,7 @@ end fun
 
 The option and result types are prefixes like zig:
 
-```
+```datalove
 // option
 let a: ?u32 = ...
 let b: ?[u32] = ...
@@ -54,7 +54,7 @@ is done with the `some`, `none`, `ok` and `er` keywords.
 Note the awkward `er error` construction which
 constructs an `er` `result` varriant out of an `error` value.
 
-```
+```datalove
 let a: ?u32 = some 3
 let b: ?u32 = some u32.min_value()
 let c: ?u32 = none
@@ -66,7 +66,7 @@ let c: ?u32 = er error "oops"
 
 Destructuring option and result is like zig:
 
-```
+```datalove
 let a: ?u8 = 1
 
 var c: u8 = 0
@@ -77,7 +77,7 @@ else
 end if
 ```
 
-```
+```datalove
 let a: !u8 = 1
 
 var c: u8 = 0
@@ -93,7 +93,7 @@ and uses reflection, not shown here.
 
 Early return with postfix `?` and `!`:
 
-```
+```datalove
 fun transform_option(val: ?u32): ?u32
   let val = val? // early none return
   ret val +? 1   // early none return on overflow
@@ -124,7 +124,7 @@ Fixed ints do not support any bare bath ops, not even unary `-`.
 
 Fixed ints support early-return varieties:
 
-```
+```datalove
 let a = 1 +? 1
 let a = 1 -? 1
 let a = 1 *? 1
@@ -159,7 +159,7 @@ If we decide to let funs panic we'll also add panicking variations.
 
 Fixed ints automatically widen, up to bigints:
 
-```
+```datalove
 let a: u8 = 1
 let b: u16 = a
 let c: int = b
@@ -167,7 +167,7 @@ let c: int = b
 
 Same for signed fixed ints:
 
-```
+```datalove
 let a: i8 = 1
 let b: i16 = a
 let c: int = b
@@ -178,7 +178,7 @@ Unsigned and signed ints never automatically coerce to each other.
 Widening also apllies to bare / unchecked math, which
 widens to `int`:
 
-```
+```datalove
 // this checks to `int` because the `*` binop,
 // forcing the literals to be int
 let a = 1 * 2

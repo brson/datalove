@@ -12,7 +12,7 @@ What happens to other threads in a multithreaded scenario is tbd.
 
 `panic` is a statement:
 
-```
+```datalove
 fun expect(val: ?u32): u32
   if val |val|
     ret val
@@ -25,7 +25,7 @@ end
 Note that panic accepts any type on the global heap,
 and we can use `clone` to duplicate to the global heap:
 
-```
+```datalove
 fun expect(val: ?u32): u32
   if val |val|
     ret val
@@ -40,7 +40,7 @@ end
 
 Panicking unwrap with the `.X` postfix operator:
 
-```
+```datalove
 fun expect(val: ?u32): u32
   ret val.X
 end
@@ -51,7 +51,7 @@ The type system does track which functions panic,
 but it is not exposed in the type signature.
 It is possible to assert non-panicking:
 
-```
+```datalove
 fun transform_option(val: ?u32): ?u32
   let val = val?
   ret val + 1
@@ -63,6 +63,4 @@ make transform_option total
 
 ### Panicking math ops
 
-```
-
-```
+TODO
