@@ -1,0 +1,10 @@
+ModulesIr3Analysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Success",
+        ir: "fn main():\nblock0:\n    v0 = const true\n    return v0\n",
+    ),
+    output: "true",
+)

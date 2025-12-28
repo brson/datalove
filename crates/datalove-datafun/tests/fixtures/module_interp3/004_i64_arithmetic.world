@@ -1,0 +1,9 @@
+----------
+module local/test/main
+----------
+
+fun main(): int
+    let a: @i64 = @100
+    let b: @i64 = @25
+    ret a - b
+end fun

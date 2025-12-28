@@ -112,6 +112,81 @@ impl IrType {
         }
     }
 
+    /// Convert from AST type hint to IR type.
+    pub fn from_type_hint<'db>(db: &'db dyn crate::Db, ty: &datalove_datalit::ast::TypeHintAndHeap<'db>) -> Self {
+        Self::from_type_hint_inner(db, &ty.type_hint(db))
+    }
+
+    /// Convert from AST TypeHint to IR type.
+    fn from_type_hint_inner<'db>(db: &'db dyn crate::Db, ty: &datalove_datalit::ast::TypeHint<'db>) -> Self {
+        use datalove_datalit::ast::TypeHint;
+
+        match ty {
+            TypeHint::Bool => IrType::Bool,
+            TypeHint::U8 => IrType::U8,
+            TypeHint::I8 => IrType::I8,
+            TypeHint::U16 => IrType::U16,
+            TypeHint::I16 => IrType::I16,
+            TypeHint::U32 => IrType::U32,
+            TypeHint::I32 => IrType::I32,
+            TypeHint::U64 => IrType::U64,
+            TypeHint::I64 => IrType::I64,
+            TypeHint::F32 => IrType::F32,
+            TypeHint::Int => IrType::Int,
+            TypeHint::String => IrType::String,
+            TypeHint::Data => IrType::Data,
+            TypeHint::Error => IrType::Error,
+            TypeHint::AnonTuple(tuple) => {
+                let fields: Vec<_> = tuple.fields(db)
+                    .iter()
+                    .map(|f| Self::from_type_hint(db, f))
+                    .collect();
+                if fields.is_empty() {
+                    IrType::Unit
+                } else {
+                    IrType::Tuple(fields)
+                }
+            }
+            TypeHint::AnonStruct(struct_) => {
+                let fields: Vec<_> = struct_.fields(db)
+                    .iter()
+                    .map(|f| (f.name(db).text(db).to_string(), Self::from_type_hint(db, &f.type_hint(db))))
+                    .collect();
+                IrType::Struct(fields)
+            }
+            TypeHint::AnonEnum(_) => {
+                todo!("anonymous enum types in IR")
+            }
+            TypeHint::List(list) => {
+                let elem = Self::from_type_hint(db, &list.element_type(db));
+                IrType::List(Box::new(elem))
+            }
+            TypeHint::Set(set) => {
+                let elem = Self::from_type_hint(db, &set.element_type(db));
+                IrType::Set(Box::new(elem))
+            }
+            TypeHint::Map(map) => {
+                let key = Self::from_type_hint(db, &map.key_type(db));
+                let val = Self::from_type_hint(db, &map.value_type(db));
+                IrType::Map(Box::new(key), Box::new(val))
+            }
+            TypeHint::Option(opt) => {
+                let inner = Self::from_type_hint(db, &opt.inner_type(db));
+                IrType::Option(Box::new(inner))
+            }
+            TypeHint::Result(res) => {
+                let ok = Self::from_type_hint(db, &res.inner_type(db));
+                IrType::Result(Box::new(ok))
+            }
+            TypeHint::Tensor(_) => {
+                todo!("tensor types in IR")
+            }
+            TypeHint::ParseError(_) => {
+                IrType::Error
+            }
+        }
+    }
+
     /// Convert from datalit TypeAndHeap to IR type.
     fn from_datalit_tyandheap<'db>(db: &'db dyn crate::Db, ty: &datalove_datalit::tycheck::TypeAndHeap<'db>) -> Self {
         Self::from_datalit(db, ty.ty(db))

@@ -306,11 +306,29 @@ TODO:
 - Phi node handling in CFG traversal
 - Drop instruction (destructors - requires runtime calls)
 
-### Phase 4: Integration - NOT STARTED
+### Phase 4: Integration - IN PROGRESS
 
-- Wire up: parse -> typecheck -> lower -> interpret
+Test suites created:
+- `module_interp3_tests` - modules only, runs nullary `main()` via IR interpreter
+- `interp3_tests` - modules + scriptunit-fragment + scriptunit-expr sections
+
+Files created:
+- `crates/datalove-datafun/src/worldfile_analysis_modules_ir3.rs` - module-only IR3 analysis
+- `crates/datalove-datafun/src/worldfile_analysis_ir3.rs` - full worldfile IR3 analysis
+- `crates/datalove-datafun/tests/module_interp3_tests.rs` - test harness
+- `crates/datalove-datafun/tests/interp3_tests.rs` - test harness
+- `crates/datalove-datafun/tests/fixtures/module_interp3/` - 5 initial worldfiles
+- `crates/datalove-datafun/tests/fixtures/interp3/` - 5 initial worldfiles
+
+Working:
+- Module-only execution: parse -> typecheck -> lower -> IR interpret -> pretty print
+- Script fragment lowering: parse -> typecheck -> lower script unit
+
+TODO:
+- scriptunit-expr lowering (needs proper expression typechecking integration)
+- Cross-unit references for script execution
 - Keep old interpreter for comparison
-- Run test suite against both
+- Run full test suite against both interpreters
 
 ### Phase 5: Cleanup - NOT STARTED
 

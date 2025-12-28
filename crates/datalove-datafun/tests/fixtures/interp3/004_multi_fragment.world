@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+let a = @1
+
+----------
+scriptunit-fragment
+----------
+
+let b = @2

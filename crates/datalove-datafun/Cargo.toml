@@ -49,3 +49,13 @@ harness = false
 name = "ir_lower_script_tests"
 path = "tests/ir_lower_script_tests.rs"
 harness = false
+
+[[test]]
+name = "module_interp3_tests"
+path = "tests/module_interp3_tests.rs"
+harness = false
+
+[[test]]
+name = "interp3_tests"
+path = "tests/interp3_tests.rs"
+harness = false
