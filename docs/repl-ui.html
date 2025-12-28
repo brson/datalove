@@ -64,12 +64,19 @@ at once after each eval.</p>
         'string': /"(?:[^"\\]|\\.)*"/,
         'number': /\b\d+(?:\.\d+)?\b/,
         'boolean': /\b(?:true|false)\b/,
-        'builtin': /\b(?:ok|er|some|none)\b/,
-        'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|int|f32|f64|list|map|set|tensor|data|error)\b/,
+        'variant': /\b(?:ok|er|some|none)\b/,
+        'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|int|f32|f64|string|list|map|set|tensor|data|error)\b/,
         'keyword': /\b(?:let|fun|ret|if|else|end|require|import|break|continue|loop|module|in|out|mut|ref|struct|enum)\b/,
-        'operator': /\b(?:and|or|xor|implies|not)\b|[+\-*\/%!?<>=&|^~]+/,
         'function': /\b[a-z_][a-z0-9_]*(?=\s*\()/,
-        'punctuation': /[{}()\[\];,.:]/
+        'op-result': /[+\-*\/]!|!/,
+        'op-option': /[+\-*\/]\?|\?/,
+        'op-cmp': /\.[<>]|[<>]=|[!=]=/,
+        'brace-curly': /[{}]/,
+        'brace-paren': /[()]/,
+        'brace-angle': /[<>]/,
+        'brace-square': /[\[\]]/,
+        'type-colon': /:/,
+        'punctuation': /[;,.]/
     };
     Prism.languages.datalit = Prism.languages.datalove;
     Prism.languages.datafun = Prism.languages.datalove;
