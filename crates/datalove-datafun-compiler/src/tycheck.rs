@@ -1,5 +1,6 @@
 use rmx::prelude::*;
 use bct::text::InternedText;
+use salsa::plumbing::AsId;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 use crate::ast::*;
@@ -112,6 +113,57 @@ pub struct TypecheckResult<'db> {
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     #[returns(ref)]
     pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+}
+
+/// Kind of script unit for batch typechecking.
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum ScriptUnitKind<'db> {
+    /// A fragment containing statements.
+    Fragment(Script<'db>),
+    /// A single expression.
+    Expr(ExprFun<'db>),
+}
+
+/// Input for batch script unit typechecking.
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub struct ScriptUnitInput<'db> {
+    /// Source text for this unit.
+    pub source: bct::input::Source,
+    /// Kind of unit (fragment or expression).
+    pub kind: ScriptUnitKind<'db>,
+}
+
+impl<'db> ScriptUnitInput<'db> {
+    pub fn new(_db: &'db dyn crate::Db, source: bct::input::Source, kind: ScriptUnitKind<'db>) -> Self {
+        Self { source, kind }
+    }
+}
+
+/// Interned batch of script units for typechecking.
+#[salsa::interned]
+pub struct ScriptUnitBatch<'db> {
+    #[returns(ref)]
+    pub units: Vec<ScriptUnitInput<'db>>,
+}
+
+/// Result of typechecking one script unit.
+#[salsa::tracked]
+pub struct UnitTypecheckResultTracked<'db> {
+    /// Type errors encountered.
+    pub errors: Vec<TypeErrorEntry<'db>>,
+    /// Expression types, indexed by ExprFun ID.
+    #[returns(ref)]
+    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    /// Resolved call targets, indexed by ExprFunctionCall ID.
+    #[returns(ref)]
+    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+}
+
+/// Result of typechecking multiple script units together.
+#[salsa::tracked]
+pub struct ScriptUnitsTypecheckResultTracked<'db> {
+    /// Per-unit results.
+    pub results: Vec<UnitTypecheckResultTracked<'db>>,
 }
 
 /// Context for typechecking.
@@ -473,6 +525,275 @@ pub fn type_check_expr<'db>(
         .collect();
 
     ExprTypecheckResult::new(db, errors, ctx.expr_types)
+}
+
+/// Typecheck multiple script units together, with bindings shared across units.
+///
+/// Units are processed in order. Bindings from earlier units (let/var/fn)
+/// are visible in subsequent units.
+#[salsa::tracked]
+pub fn type_check_script_units<'db>(
+    db: &'db dyn crate::Db,
+    batch: ScriptUnitBatch<'db>,
+) -> ScriptUnitsTypecheckResultTracked<'db> {
+    let units = batch.units(db);
+    let mut accumulated_vars: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
+    let mut accumulated_fns: HashMap<InternedText<'db>, TypeFunction<'db>> = HashMap::new();
+    let mut accumulated_fn_asts: HashMap<InternedText<'db>, StmtFun<'db>> = HashMap::new();
+    let mut results = Vec::new();
+
+    for unit in units {
+        let source = unit.source;
+        let mut ctx = TypeContext::new(db, source);
+
+        // Seed with accumulated bindings from prior units.
+        for (name, ty) in &accumulated_vars {
+            ctx.add_variable(*name, *ty);
+        }
+        for (name, func_ty) in &accumulated_fns {
+            ctx.add_function(*name, *func_ty);
+        }
+        for (name, func_ast) in &accumulated_fn_asts {
+            ctx.function_asts.insert(*name, (*func_ast, None));
+        }
+
+        // Typecheck this unit based on kind.
+        match &unit.kind {
+            ScriptUnitKind::Fragment(script) => {
+                // First pass: collect function signatures from this unit.
+                for statement in script.statements(db) {
+                    if let Statement::Fun(stmt) = statement {
+                        collect_function_signature(&mut ctx, stmt, None);
+                    }
+                }
+
+                // Second pass: typecheck all statements.
+                for statement in script.statements(db) {
+                    check_statement(&mut ctx, statement);
+                }
+
+                // Extract new bindings for subsequent units.
+                for stmt in script.statements(db) {
+                    match stmt {
+                        Statement::Let(let_stmt) => {
+                            let name = let_stmt.name(db);
+                            if let Some(ty) = ctx.variables.get(&name) {
+                                accumulated_vars.insert(name, *ty);
+                            }
+                        }
+                        Statement::Var(var_stmt) => {
+                            let name = var_stmt.name(db);
+                            if let Some(ty) = ctx.variables.get(&name) {
+                                accumulated_vars.insert(name, *ty);
+                            }
+                        }
+                        Statement::Fun(fun_stmt) => {
+                            let name = fun_stmt.name(db);
+                            if let Some(func_ty) = ctx.functions.get(&name) {
+                                accumulated_fns.insert(name, *func_ty);
+                                accumulated_fn_asts.insert(name, *fun_stmt);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            ScriptUnitKind::Expr(expr) => {
+                // Expression unit - just typecheck the expression.
+                let _ = ctx.synthesize_expr(*expr);
+            }
+        }
+
+        // Build result for this unit.
+        let errors = ctx.errors.into_iter()
+            .map(|e| TypeErrorEntry::new(db, e))
+            .collect();
+        let result = UnitTypecheckResultTracked::new(db, errors, ctx.expr_types, ctx.call_targets);
+        results.push(result);
+    }
+
+    ScriptUnitsTypecheckResultTracked::new(db, results)
+}
+
+/// Context for typechecking sequential script units.
+///
+/// Tracks bindings exported from previous units so subsequent units
+/// can reference them.
+#[derive(Clone, Default)]
+pub struct ScriptTypeContext<'db> {
+    /// Variable bindings from previous units: name -> type.
+    pub variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
+    /// Function signatures from previous units: name -> signature.
+    pub functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
+}
+
+impl<'db> ScriptTypeContext<'db> {
+    /// Create a new empty script type context.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add exported bindings from a typechecked script unit.
+    ///
+    /// Extracts let/var bindings and function definitions from the script
+    /// and adds them to the context for subsequent units.
+    pub fn add_script_exports(
+        &mut self,
+        db: &'db dyn crate::Db,
+        script: Script<'db>,
+        result: &ScriptTypecheckResultRaw<'db>,
+    ) {
+        // Extract let/var bindings and function definitions from the script.
+        for stmt in script.statements(db) {
+            match stmt {
+                Statement::Let(let_stmt) => {
+                    let name = let_stmt.name(db);
+                    // Look up the type from the expression via Salsa ID.
+                    let value_expr = let_stmt.value(db);
+                    let expr_id = value_expr.as_id().index() as usize;
+                    if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| *t) {
+                        self.variables.insert(name, ty);
+                    }
+                }
+                Statement::Var(var_stmt) => {
+                    let name = var_stmt.name(db);
+                    let value_expr = var_stmt.value(db);
+                    let expr_id = value_expr.as_id().index() as usize;
+                    if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| *t) {
+                        self.variables.insert(name, ty);
+                    }
+                }
+                Statement::Fun(fun_stmt) => {
+                    let name = fun_stmt.name(db);
+                    // Build the function type from the signature.
+                    if let Some(func_type) = build_function_type_from_stmt(db, *fun_stmt) {
+                        self.functions.insert(name, func_type);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Add exported bindings from a typechecked expression unit.
+    ///
+    /// Expression units don't export bindings, but we still need to track
+    /// them in the sequence for unit indexing.
+    pub fn add_expr_exports(&mut self) {
+        // Expression units don't export anything.
+    }
+}
+
+/// Build a TypeFunction from a function statement.
+fn build_function_type_from_stmt<'db>(
+    db: &'db dyn crate::Db,
+    stmt: StmtFun<'db>,
+) -> Option<TypeFunction<'db>> {
+    let params = stmt.params(db);
+    let return_type = stmt.return_type(db);
+
+    // Convert parameter types.
+    let mut param_types = Vec::new();
+    for param in params {
+        let ty = convert_type_hint(db, param.type_hint(db)).ok()?;
+        param_types.push(ty);
+    }
+
+    // Convert return type (default to unit if not specified).
+    let ret_ty = match return_type {
+        Some(type_hint) => convert_type_hint(db, type_hint).ok()?,
+        None => unit_type(db),
+    };
+
+    Some(TypeFunction::new(db, param_types, ret_ty))
+}
+
+/// Result of typechecking a script (non-salsa version for context-aware checking).
+pub struct ScriptTypecheckResultRaw<'db> {
+    /// The root script.
+    pub root_script: Script<'db>,
+    /// Type errors encountered.
+    pub errors: Vec<TypeError>,
+    /// Expression types, indexed by ExprFun ID.
+    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    /// Resolved call targets, indexed by ExprFunctionCall ID.
+    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+}
+
+/// Result of typechecking an expression (non-salsa version for context-aware checking).
+pub struct ExprTypecheckResultRaw<'db> {
+    /// Type errors encountered.
+    pub errors: Vec<TypeError>,
+    /// Expression types, indexed by ExprFun ID.
+    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+}
+
+/// Typecheck a script with prior bindings from previous units.
+///
+/// Non-salsa version that accepts a script type context.
+/// Returns raw results (not salsa-tracked) to allow use outside tracked functions.
+pub fn type_check_script_with_context<'db>(
+    db: &'db dyn crate::Db,
+    source: bct::input::Source,
+    script: Script<'db>,
+    prior_ctx: &ScriptTypeContext<'db>,
+) -> ScriptTypecheckResultRaw<'db> {
+    let mut ctx = TypeContext::new(db, source);
+
+    // Seed with prior bindings.
+    for (name, ty) in &prior_ctx.variables {
+        ctx.add_variable(*name, *ty);
+    }
+    for (name, func_ty) in &prior_ctx.functions {
+        ctx.add_function(*name, *func_ty);
+    }
+
+    // First pass: collect function signatures from this unit.
+    for statement in script.statements(db) {
+        if let Statement::Fun(stmt) = statement {
+            collect_function_signature(&mut ctx, stmt, None);
+        }
+    }
+
+    // Second pass: typecheck all statements.
+    for statement in script.statements(db) {
+        check_statement(&mut ctx, statement);
+    }
+
+    ScriptTypecheckResultRaw {
+        root_script: script,
+        errors: ctx.errors,
+        expr_types: ctx.expr_types,
+        call_targets: ctx.call_targets,
+    }
+}
+
+/// Typecheck an expression with prior bindings from previous units.
+///
+/// Non-salsa version that accepts a script type context.
+/// Returns raw results (not salsa-tracked) to allow use outside tracked functions.
+pub fn type_check_expr_with_context<'db>(
+    db: &'db dyn crate::Db,
+    source: bct::input::Source,
+    expr: ExprFun<'db>,
+    prior_ctx: &ScriptTypeContext<'db>,
+) -> ExprTypecheckResultRaw<'db> {
+    let mut ctx = TypeContext::new(db, source);
+
+    // Seed with prior bindings.
+    for (name, ty) in &prior_ctx.variables {
+        ctx.add_variable(*name, *ty);
+    }
+    for (name, func_ty) in &prior_ctx.functions {
+        ctx.add_function(*name, *func_ty);
+    }
+
+    let _ = ctx.synthesize_expr(expr);
+
+    ExprTypecheckResultRaw {
+        errors: ctx.errors,
+        expr_types: ctx.expr_types,
+    }
 }
 
 /// Typecheck a script with module graph support.

@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+let a = @5
+
+----------
+scriptunit-fragment
+----------
+
+let b = a + @3
+
+----------
+scriptunit-expr
+----------
+
+b

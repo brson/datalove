@@ -873,6 +873,39 @@ pub fn lower_script_unit<'db>(
     })
 }
 
+/// Lower a script fragment unit with raw expr_types.
+///
+/// Like `lower_script_unit` but takes expr_types directly instead of TypecheckResult.
+/// Used when typechecking with context (non-salsa version).
+pub fn lower_script_fragment_raw<'db>(
+    db: &'db dyn Db,
+    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    script_ctx: ScriptLowerContext,
+    stmts: Vec<crate::ast::Statement<'db>>,
+) -> Result<IrScriptUnit, LowerError> {
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, script_ctx);
+
+    // Lower all statements.
+    for stmt in &stmts {
+        lower_statement_for_script(&mut ctx, stmt)?;
+    }
+
+    // Fragment units have no result value.
+    ctx.finish_block(Terminator::UnitEnd { result: None });
+
+    Ok(IrScriptUnit {
+        blocks: ctx.blocks,
+        value_count: ctx.next_value,
+        slot_count: ctx.next_slot,
+        value_types: std::mem::take(&mut ctx.value_types),
+        slot_types: std::mem::take(&mut ctx.slot_types),
+        functions: ctx.functions,
+        symbols: ctx.symbols,
+        result: None,
+        exports: ctx.exports,
+    })
+}
+
 /// Lower a script expression unit.
 ///
 /// Like `lower_script_unit` but takes expr_types directly and an expression.

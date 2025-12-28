@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+let x = @42
+
+----------
+scriptunit-expr
+----------
+
+x

@@ -45,6 +45,8 @@ pub enum InterpError {
     TypeMismatch(String),
     /// External reference not supported yet.
     ExternalNotSupported,
+    /// External unit not found.
+    ExternalUnitNotFound(u32),
 }
 
 /// Readable value pointer with type descriptor.
@@ -574,9 +576,72 @@ impl Frame {
     }
 }
 
+/// Environment for sequential script unit execution.
+///
+/// Stores frames and functions from previously executed units so that
+/// subsequent units can reference them via ExternalValue/ExternalSlot/FuncRef::External.
+pub struct ScriptEnvironment {
+    /// Frames from executed units, indexed by unit number.
+    frames: Vec<Frame>,
+    /// Functions from each unit, indexed by unit number.
+    unit_functions: Vec<Vec<IrFunction>>,
+}
+
+impl ScriptEnvironment {
+    /// Create a new empty environment.
+    pub fn new() -> Self {
+        Self {
+            frames: Vec::new(),
+            unit_functions: Vec::new(),
+        }
+    }
+
+    /// Add a completed unit's frame and functions to the environment.
+    pub fn add_unit(&mut self, frame: Frame, functions: Vec<IrFunction>) {
+        self.frames.push(frame);
+        self.unit_functions.push(functions);
+    }
+
+    /// Read a value from a previous unit.
+    fn external_value(&self, unit: u32, value: ValueId) -> Result<Value, InterpError> {
+        let frame = self.frames.get(unit as usize)
+            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+        frame.value(value)
+    }
+
+    /// Read a slot from a previous unit.
+    fn external_slot(&self, unit: u32, slot: SlotId) -> Result<Value, InterpError> {
+        let frame = self.frames.get(unit as usize)
+            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+        frame.slot(slot)
+    }
+
+    /// Get slot destination in a previous unit (for writing).
+    fn external_slot_dest(&mut self, unit: u32, slot: SlotId) -> Result<Destination, InterpError> {
+        let frame = self.frames.get_mut(unit as usize)
+            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+        frame.slot_dest(slot)
+    }
+
+    /// Look up a function from a previous unit.
+    fn external_function(&self, unit: u32, func_id: FuncId) -> Result<&IrFunction, InterpError> {
+        let functions = self.unit_functions.get(unit as usize)
+            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+        functions.iter()
+            .find(|f| f.id == func_id)
+            .ok_or(InterpError::FunctionNotFound(func_id))
+    }
+}
+
+impl Default for ScriptEnvironment {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Execution context holding available functions.
 pub struct ExecutionContext<'a> {
-    /// All functions available for calling.
+    /// Local functions available for calling (from current unit).
     functions: &'a [IrFunction],
 }
 
@@ -587,15 +652,20 @@ impl<'a> ExecutionContext<'a> {
     }
 
     /// Look up a function by reference.
-    fn get_function(&self, func_ref: &FuncRef) -> Result<&IrFunction, InterpError> {
+    fn get_function<'b>(
+        &'b self,
+        func_ref: &FuncRef,
+        env: Option<&'b ScriptEnvironment>,
+    ) -> Result<&'b IrFunction, InterpError> {
         match func_ref {
             FuncRef::Local(id) => {
                 self.functions.iter()
                     .find(|f| f.id == *id)
                     .ok_or(InterpError::FunctionNotFound(*id))
             }
-            FuncRef::External { .. } => {
-                Err(InterpError::ExternalNotSupported)
+            FuncRef::External { unit, func } => {
+                env.ok_or(InterpError::ExternalNotSupported)?
+                    .external_function(*unit, *func)
             }
         }
     }
@@ -659,13 +729,15 @@ impl IrInterpreter {
         }
 
         // Execute blocks, writing return value directly to ret_dest.
-        self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx)
+        self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx, None)
     }
 
     /// Execute a script unit, optionally returning the result value.
     ///
-    /// For expression units, returns `Some(Value)` with the result.
-    /// For fragment units, returns `None`.
+    /// For expression units, the result is written to ret_dest.
+    /// For fragment units, nothing is written.
+    ///
+    /// Use this for standalone script units that don't reference previous units.
     pub fn execute_script_unit(
         &mut self,
         unit: &IrScriptUnit,
@@ -685,7 +757,39 @@ impl IrInterpreter {
         let ctx = ExecutionContext::new(&unit.functions);
 
         // Execute blocks.
-        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx)
+        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, None)
+    }
+
+    /// Execute a script unit with access to previous units' values.
+    ///
+    /// After execution, the unit's frame and functions are added to the environment
+    /// for subsequent units to reference.
+    pub fn execute_script_unit_in_env(
+        &mut self,
+        unit: &IrScriptUnit,
+        env: &mut ScriptEnvironment,
+        ret_dest: Destination,
+    ) -> Result<(), InterpError> {
+        // Compute layout.
+        let layout = IrLayout::compute(
+            &unit.value_types,
+            &unit.slot_types,
+            &mut self.tydesc_table,
+        );
+
+        // Create frame.
+        let mut frame = Frame::new(layout);
+
+        // Create execution context with local functions.
+        let ctx = ExecutionContext::new(&unit.functions);
+
+        // Execute blocks with environment for external lookups.
+        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, Some(env))?;
+
+        // Add this unit's frame and functions to the environment for future units.
+        env.add_unit(frame, unit.functions.clone());
+
+        Ok(())
     }
 
     fn execute_blocks(
@@ -694,6 +798,7 @@ impl IrInterpreter {
         frame: &mut Frame,
         ret_dest: Destination,
         ctx: &ExecutionContext,
+        env: Option<&mut ScriptEnvironment>,
     ) -> Result<(), InterpError> {
         let mut current_block = BlockId(0);
 
@@ -703,8 +808,9 @@ impl IrInterpreter {
                 .ok_or(InterpError::BlockNotFound(current_block))?;
 
             // Execute instructions.
+            // Note: we reborrow env immutably for instruction execution.
             for instr in &block.instructions {
-                self.execute_instruction(instr, frame, ret_dest, ctx)?;
+                self.execute_instruction(instr, frame, ret_dest, ctx, env.as_deref())?;
             }
 
             // Handle terminator.
@@ -713,33 +819,33 @@ impl IrInterpreter {
                     current_block = *target;
                 }
                 Terminator::Branch { cond, then_block, else_block } => {
-                    let cond_val = self.read_operand(cond, frame)?;
+                    let cond_val = self.read_operand(cond, frame, env.as_deref())?;
                     let cond_bool = unsafe { *(cond_val.ptr as *const bool) };
                     current_block = if cond_bool { *then_block } else { *else_block };
                 }
                 Terminator::Return { value } => {
                     if let Some(op) = value {
-                        let val = self.read_operand(op, frame)?;
+                        let val = self.read_operand(op, frame, env.as_deref())?;
                         unsafe { self.copy_value(&val, ret_dest)?; }
                     }
                     return Ok(());
                 }
                 Terminator::TryReturn { value } => {
                     if let Some(op) = value {
-                        let val = self.read_operand(op, frame)?;
+                        let val = self.read_operand(op, frame, env.as_deref())?;
                         unsafe { self.copy_value(&val, ret_dest)?; }
                     }
                     return Ok(());
                 }
                 Terminator::UnitEnd { result } => {
                     if let Some(op) = result {
-                        let val = self.read_operand(op, frame)?;
+                        let val = self.read_operand(op, frame, env.as_deref())?;
                         unsafe { self.copy_value(&val, ret_dest)?; }
                     }
                     return Ok(());
                 }
                 Terminator::UnitEarlyReturn { value } => {
-                    let val = self.read_operand(value, frame)?;
+                    let val = self.read_operand(value, frame, env.as_deref())?;
                     unsafe { self.copy_value(&val, ret_dest)?; }
                     return Ok(());
                 }
@@ -753,6 +859,7 @@ impl IrInterpreter {
         frame: &mut Frame,
         _ret_dest: Destination,
         ctx: &ExecutionContext,
+        env: Option<&ScriptEnvironment>,
     ) -> Result<(), InterpError> {
         match instr {
             Instruction::Const { dest, value } => {
@@ -761,40 +868,45 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Copy { dest, src } => {
-                let src_val = self.read_operand(src, frame)?;
+                let src_val = self.read_operand(src, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 unsafe { self.copy_value(&src_val, dest_slot)?; }
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Move { dest, src } => {
-                let src_val = self.read_operand(src, frame)?;
+                let src_val = self.read_operand(src, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 unsafe { self.move_value(&src_val, dest_slot)?; }
                 frame.mark_value_initialized(*dest);
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
-                let lhs_val = self.read_operand(lhs, frame)?;
-                let rhs_val = self.read_operand(rhs, frame)?;
+                let lhs_val = self.read_operand(lhs, frame, env)?;
+                let rhs_val = self.read_operand(rhs, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_binop(*op, &lhs_val, &rhs_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::UnaryOp { dest, op, operand } => {
-                let src_val = self.read_operand(operand, frame)?;
+                let src_val = self.read_operand(operand, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_unaryop(*op, &src_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::SlotStore { dest, value } => {
-                let src_val = self.read_operand(value, frame)?;
+                let src_val = self.read_operand(value, frame, env)?;
                 match dest {
                     SlotDest::Local(slot_id) => {
                         let dest_slot = frame.slot_dest(*slot_id)?;
                         unsafe { self.copy_value(&src_val, dest_slot)?; }
                         frame.mark_slot_initialized(*slot_id);
                     }
-                    SlotDest::External { .. } => {
-                        return Err(InterpError::ExternalNotSupported);
+                    SlotDest::External { unit, slot } => {
+                        // TODO: writing to external slots requires mutable env access.
+                        // For now, external slot reads work but writes are not supported.
+                        return Err(InterpError::TypeMismatch(format!(
+                            "Writing to external slot (unit={}, slot={:?}) not yet supported",
+                            unit, slot
+                        )));
                     }
                 }
             }
@@ -806,7 +918,7 @@ impl IrInterpreter {
             }
             Instruction::Pack { dest, ty: _, fields } => {
                 let field_vals: Vec<Value> = fields.iter()
-                    .map(|op| self.read_operand(op, frame))
+                    .map(|op| self.read_operand(op, frame, env))
                     .collect::<Result<_, _>>()?;
                 let dest_slot = frame.value_dest(*dest)?;
                 // Check type tag to determine if tuple or struct.
@@ -821,7 +933,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Unpack { dests, src } => {
-                let src_val = self.read_operand(src, frame)?;
+                let src_val = self.read_operand(src, frame, env)?;
                 let tag = unsafe { (*src_val.tydesc).type_tag };
                 match tag {
                     rtdt::TyTag::Tuple => {
@@ -852,21 +964,21 @@ impl IrInterpreter {
                 }
             }
             Instruction::TupleIndex { dest, base, index } => {
-                let base_val = self.read_operand(base, frame)?;
+                let base_val = self.read_operand(base, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_tuple_index(&base_val, *index, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::FieldAccess { dest, base, field_index } => {
-                let base_val = self.read_operand(base, frame)?;
+                let base_val = self.read_operand(base, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_field_access(&base_val, *field_index, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 // Execute checked arithmetic and set overflow flag.
-                let lhs_val = self.read_operand(lhs, frame)?;
-                let rhs_val = self.read_operand(rhs, frame)?;
+                let lhs_val = self.read_operand(lhs, frame, env)?;
+                let rhs_val = self.read_operand(rhs, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 let overflow_slot = frame.value_dest(*overflow)?;
                 self.execute_binop_checked(*op, &lhs_val, &rhs_val, dest_slot, overflow_slot)?;
@@ -874,7 +986,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*overflow);
             }
             Instruction::WrapSome { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame)?;
+                let inner_val = self.read_operand(inner, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_wrap_some(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
@@ -885,7 +997,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
             }
             Instruction::UnwrapOption { dest, is_some, src } => {
-                let src_val = self.read_operand(src, frame)?;
+                let src_val = self.read_operand(src, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 let is_some_slot = frame.value_dest(*is_some)?;
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot)?;
@@ -893,19 +1005,19 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*is_some);
             }
             Instruction::WrapOk { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame)?;
+                let inner_val = self.read_operand(inner, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_wrap_ok(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::WrapErr { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame)?;
+                let inner_val = self.read_operand(inner, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_wrap_err(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::UnwrapResult { dest, is_ok, src } => {
-                let src_val = self.read_operand(src, frame)?;
+                let src_val = self.read_operand(src, frame, env)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 let is_ok_slot = frame.value_dest(*is_ok)?;
                 self.execute_unwrap_result(&src_val, dest_slot, is_ok_slot)?;
@@ -914,11 +1026,11 @@ impl IrInterpreter {
             }
             Instruction::Call { dest, func, args } => {
                 // Look up the function.
-                let callee = ctx.get_function(func)?;
+                let callee = ctx.get_function(func, env)?;
 
                 // Evaluate arguments.
                 let arg_vals: Vec<Value> = args.iter()
-                    .map(|op| self.read_operand(op, frame))
+                    .map(|op| self.read_operand(op, frame, env))
                     .collect::<Result<_, _>>()?;
 
                 // Get destination for return value.
@@ -950,12 +1062,22 @@ impl IrInterpreter {
         Ok(())
     }
 
-    fn read_operand(&self, op: &Operand, frame: &Frame) -> Result<Value, InterpError> {
+    fn read_operand(
+        &self,
+        op: &Operand,
+        frame: &Frame,
+        env: Option<&ScriptEnvironment>,
+    ) -> Result<Value, InterpError> {
         match op {
             Operand::Value(id) => frame.value(*id),
             Operand::Slot(id) => frame.slot(*id),
-            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
-                Err(InterpError::ExternalNotSupported)
+            Operand::ExternalValue { unit, value } => {
+                env.ok_or(InterpError::ExternalNotSupported)?
+                    .external_value(*unit, *value)
+            }
+            Operand::ExternalSlot { unit, slot } => {
+                env.ok_or(InterpError::ExternalNotSupported)?
+                    .external_slot(*unit, *slot)
             }
         }
     }
@@ -3206,5 +3328,365 @@ mod tests {
         };
 
         assert_eq!(run_i64_function(&func), 30);
+    }
+
+    // ==========================================================================
+    // Cross-unit reference tests
+    // ==========================================================================
+
+    #[test]
+    fn test_crossunit_external_value() {
+        // Unit 0: let x = 42
+        let unit0 = IrScriptUnit {
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(0),
+                            value: ConstValue::I64(42),
+                        },
+                    ],
+                    terminator: Terminator::UnitEnd { result: None },
+                },
+            ],
+            value_count: 1,
+            slot_count: 0,
+            value_types: vec![IrType::I64],
+            slot_types: vec![],
+            functions: vec![],
+            symbols: crate::ir::SymbolTable::new(),
+            result: None,
+            exports: vec![("x".to_string(), crate::ir::ExportBinding::Value(ValueId(0)))],
+        };
+
+        // Unit 1: return x (from unit 0)
+        let unit1 = IrScriptUnit {
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        // Copy external value to local for return.
+                        Instruction::Copy {
+                            dest: ValueId(0),
+                            src: Operand::ExternalValue { unit: 0, value: ValueId(0) },
+                        },
+                    ],
+                    terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(0))) },
+                },
+            ],
+            value_count: 1,
+            slot_count: 0,
+            value_types: vec![IrType::I64],
+            slot_types: vec![],
+            functions: vec![],
+            symbols: crate::ir::SymbolTable::new(),
+            result: Some(ValueId(0)),
+            exports: vec![],
+        };
+
+        // Execute both units.
+        let mut interp = IrInterpreter::new();
+        let mut env = ScriptEnvironment::new();
+
+        // Execute unit 0 (no result).
+        let unit_tydesc = interp.tydesc_table.get_or_create(&IrType::Unit);
+        let mut dummy = [0u8; 0];
+        let dummy_dest = Destination { ptr: dummy.as_mut_ptr(), tydesc: unit_tydesc };
+        interp.execute_script_unit_in_env(&unit0, &mut env, dummy_dest).unwrap();
+
+        // Execute unit 1 (returns x).
+        let mut result: i64 = 0;
+        let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+        let ret_dest = Destination {
+            ptr: &mut result as *mut i64 as *mut u8,
+            tydesc: ret_tydesc,
+        };
+        interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest).unwrap();
+
+        assert_eq!(result, 42);
+    }
+
+    #[test]
+    fn test_crossunit_external_slot() {
+        // Unit 0: var y = 10
+        let unit0 = IrScriptUnit {
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(0),
+                            value: ConstValue::I64(10),
+                        },
+                        Instruction::SlotStore {
+                            dest: SlotDest::Local(SlotId(0)),
+                            value: Operand::Value(ValueId(0)),
+                        },
+                    ],
+                    terminator: Terminator::UnitEnd { result: None },
+                },
+            ],
+            value_count: 1,
+            slot_count: 1,
+            value_types: vec![IrType::I64],
+            slot_types: vec![IrType::I64],
+            functions: vec![],
+            symbols: crate::ir::SymbolTable::new(),
+            result: None,
+            exports: vec![("y".to_string(), crate::ir::ExportBinding::Slot(SlotId(0)))],
+        };
+
+        // Unit 1: return y (from unit 0's slot)
+        let unit1 = IrScriptUnit {
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        // Copy external slot to local value for return.
+                        Instruction::Copy {
+                            dest: ValueId(0),
+                            src: Operand::ExternalSlot { unit: 0, slot: SlotId(0) },
+                        },
+                    ],
+                    terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(0))) },
+                },
+            ],
+            value_count: 1,
+            slot_count: 0,
+            value_types: vec![IrType::I64],
+            slot_types: vec![],
+            functions: vec![],
+            symbols: crate::ir::SymbolTable::new(),
+            result: Some(ValueId(0)),
+            exports: vec![],
+        };
+
+        // Execute both units.
+        let mut interp = IrInterpreter::new();
+        let mut env = ScriptEnvironment::new();
+
+        // Execute unit 0.
+        let unit_tydesc = interp.tydesc_table.get_or_create(&IrType::Unit);
+        let mut dummy = [0u8; 0];
+        let dummy_dest = Destination { ptr: dummy.as_mut_ptr(), tydesc: unit_tydesc };
+        interp.execute_script_unit_in_env(&unit0, &mut env, dummy_dest).unwrap();
+
+        // Execute unit 1.
+        let mut result: i64 = 0;
+        let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+        let ret_dest = Destination {
+            ptr: &mut result as *mut i64 as *mut u8,
+            tydesc: ret_tydesc,
+        };
+        interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest).unwrap();
+
+        assert_eq!(result, 10);
+    }
+
+    #[test]
+    fn test_crossunit_external_function() {
+        // Unit 0: fn double(x: i64) -> i64 { x + x }
+        let double_fn = IrFunction {
+            id: FuncId(0),
+            name: "double".to_string(),
+            params: vec![ValueId(0)],
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::BinOp {
+                            dest: ValueId(1),
+                            op: BinOp::Add,
+                            lhs: Operand::Value(ValueId(0)),
+                            rhs: Operand::Value(ValueId(0)),
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        value: Some(Operand::Value(ValueId(1))),
+                    },
+                },
+            ],
+            value_count: 2,
+            slot_count: 0,
+            value_types: vec![IrType::I64, IrType::I64],
+            slot_types: vec![],
+        };
+
+        let unit0 = IrScriptUnit {
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![],
+                    terminator: Terminator::UnitEnd { result: None },
+                },
+            ],
+            value_count: 0,
+            slot_count: 0,
+            value_types: vec![],
+            slot_types: vec![],
+            functions: vec![double_fn],
+            symbols: crate::ir::SymbolTable::new(),
+            result: None,
+            exports: vec![("double".to_string(), crate::ir::ExportBinding::Function(FuncId(0)))],
+        };
+
+        // Unit 1: return double(7)
+        let unit1 = IrScriptUnit {
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(0),
+                            value: ConstValue::I64(7),
+                        },
+                        Instruction::Call {
+                            dest: ValueId(1),
+                            func: FuncRef::External { unit: 0, func: FuncId(0) },
+                            args: vec![Operand::Value(ValueId(0))],
+                        },
+                    ],
+                    terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(1))) },
+                },
+            ],
+            value_count: 2,
+            slot_count: 0,
+            value_types: vec![IrType::I64, IrType::I64],
+            slot_types: vec![],
+            functions: vec![],
+            symbols: crate::ir::SymbolTable::new(),
+            result: Some(ValueId(1)),
+            exports: vec![],
+        };
+
+        // Execute both units.
+        let mut interp = IrInterpreter::new();
+        let mut env = ScriptEnvironment::new();
+
+        // Execute unit 0.
+        let unit_tydesc = interp.tydesc_table.get_or_create(&IrType::Unit);
+        let mut dummy = [0u8; 0];
+        let dummy_dest = Destination { ptr: dummy.as_mut_ptr(), tydesc: unit_tydesc };
+        interp.execute_script_unit_in_env(&unit0, &mut env, dummy_dest).unwrap();
+
+        // Execute unit 1.
+        let mut result: i64 = 0;
+        let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+        let ret_dest = Destination {
+            ptr: &mut result as *mut i64 as *mut u8,
+            tydesc: ret_tydesc,
+        };
+        interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest).unwrap();
+
+        assert_eq!(result, 14);  // 7 + 7 = 14
+    }
+
+    #[test]
+    fn test_crossunit_chain() {
+        // Unit 0: let a = 5
+        let unit0 = IrScriptUnit {
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(0),
+                            value: ConstValue::I64(5),
+                        },
+                    ],
+                    terminator: Terminator::UnitEnd { result: None },
+                },
+            ],
+            value_count: 1,
+            slot_count: 0,
+            value_types: vec![IrType::I64],
+            slot_types: vec![],
+            functions: vec![],
+            symbols: crate::ir::SymbolTable::new(),
+            result: None,
+            exports: vec![("a".to_string(), crate::ir::ExportBinding::Value(ValueId(0)))],
+        };
+
+        // Unit 1: let b = a + 3
+        let unit1 = IrScriptUnit {
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        // Load a from unit 0.
+                        Instruction::Copy {
+                            dest: ValueId(0),
+                            src: Operand::ExternalValue { unit: 0, value: ValueId(0) },
+                        },
+                        Instruction::Const {
+                            dest: ValueId(1),
+                            value: ConstValue::I64(3),
+                        },
+                        Instruction::BinOp {
+                            dest: ValueId(2),
+                            op: BinOp::Add,
+                            lhs: Operand::Value(ValueId(0)),
+                            rhs: Operand::Value(ValueId(1)),
+                        },
+                    ],
+                    terminator: Terminator::UnitEnd { result: None },
+                },
+            ],
+            value_count: 3,
+            slot_count: 0,
+            value_types: vec![IrType::I64, IrType::I64, IrType::I64],
+            slot_types: vec![],
+            functions: vec![],
+            symbols: crate::ir::SymbolTable::new(),
+            result: None,
+            exports: vec![("b".to_string(), crate::ir::ExportBinding::Value(ValueId(2)))],
+        };
+
+        // Unit 2: return b
+        let unit2 = IrScriptUnit {
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        // Load b from unit 1.
+                        Instruction::Copy {
+                            dest: ValueId(0),
+                            src: Operand::ExternalValue { unit: 1, value: ValueId(2) },
+                        },
+                    ],
+                    terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(0))) },
+                },
+            ],
+            value_count: 1,
+            slot_count: 0,
+            value_types: vec![IrType::I64],
+            slot_types: vec![],
+            functions: vec![],
+            symbols: crate::ir::SymbolTable::new(),
+            result: Some(ValueId(0)),
+            exports: vec![],
+        };
+
+        // Execute all units.
+        let mut interp = IrInterpreter::new();
+        let mut env = ScriptEnvironment::new();
+
+        let unit_tydesc = interp.tydesc_table.get_or_create(&IrType::Unit);
+        let mut dummy = [0u8; 0];
+        let dummy_dest = Destination { ptr: dummy.as_mut_ptr(), tydesc: unit_tydesc };
+
+        interp.execute_script_unit_in_env(&unit0, &mut env, dummy_dest).unwrap();
+        interp.execute_script_unit_in_env(&unit1, &mut env, dummy_dest).unwrap();
+
+        let mut result: i64 = 0;
+        let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+        let ret_dest = Destination {
+            ptr: &mut result as *mut i64 as *mut u8,
+            tydesc: ret_tydesc,
+        };
+        interp.execute_script_unit_in_env(&unit2, &mut env, ret_dest).unwrap();
+
+        assert_eq!(result, 8);  // 5 + 3 = 8
     }
 }

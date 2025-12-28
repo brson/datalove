@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+var y = @10
+
+----------
+scriptunit-expr
+----------
+
+y
