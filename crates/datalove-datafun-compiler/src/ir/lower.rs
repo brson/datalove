@@ -873,6 +873,38 @@ pub fn lower_script_unit<'db>(
     })
 }
 
+/// Lower a script expression unit.
+///
+/// Like `lower_script_unit` but takes expr_types directly and an expression.
+pub fn lower_script_expr<'db>(
+    db: &'db dyn Db,
+    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    script_ctx: ScriptLowerContext,
+    expr: crate::ast::ExprFun<'db>,
+) -> Result<IrScriptUnit, LowerError> {
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, script_ctx);
+
+    // Lower the expression and capture the result.
+    let value_id = lower_expression(&mut ctx, expr)?;
+
+    // Finish the final block with UnitEnd.
+    ctx.finish_block(Terminator::UnitEnd {
+        result: Some(Operand::Value(value_id)),
+    });
+
+    Ok(IrScriptUnit {
+        blocks: ctx.blocks,
+        value_count: ctx.next_value,
+        slot_count: ctx.next_slot,
+        value_types: std::mem::take(&mut ctx.value_types),
+        slot_types: std::mem::take(&mut ctx.slot_types),
+        functions: ctx.functions,
+        symbols: ctx.symbols,
+        result: Some(value_id),
+        exports: ctx.exports,
+    })
+}
+
 /// Lower a statement in script unit context.
 ///
 /// This handles function definitions by lowering them and adding to the unit's functions.

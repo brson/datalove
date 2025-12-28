@@ -448,6 +448,33 @@ pub fn type_check_for_diagnostics<'db>(
     type_check(db, source, script)
 }
 
+/// Result of typechecking a single expression.
+#[salsa::tracked]
+pub struct ExprTypecheckResult<'db> {
+    /// Type errors encountered.
+    pub errors: Vec<TypeErrorEntry<'db>>,
+    /// Expression types, indexed by ExprFun ID.
+    #[returns(ref)]
+    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+}
+
+/// Typecheck a single expression.
+#[salsa::tracked]
+pub fn type_check_expr<'db>(
+    db: &'db dyn crate::Db,
+    source: bct::input::Source,
+    expr: ExprFun<'db>,
+) -> ExprTypecheckResult<'db> {
+    let mut ctx = TypeContext::new(db, source);
+    let _ = ctx.synthesize_expr(expr);
+
+    let errors = ctx.errors.into_iter()
+        .map(|e| TypeErrorEntry::new(db, e))
+        .collect();
+
+    ExprTypecheckResult::new(db, errors, ctx.expr_types)
+}
+
 /// Typecheck a script with module graph support.
 ///
 /// This version of type_check allows scripts to import functions from modules

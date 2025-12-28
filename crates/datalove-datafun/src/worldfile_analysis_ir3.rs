@@ -185,18 +185,56 @@ fn analyze_script_fragment(db: &dyn salsa::Database, source: &str) -> SectionRes
 }
 
 /// Analyze a scriptunit-expr section.
-fn analyze_script_expr(_db: &dyn salsa::Database, _source: &str) -> SectionResult {
-    // Expression typechecking/lowering requires proper integration that isn't
-    // implemented yet. The expression needs to be typechecked in context, and
-    // the expr_types need to be populated correctly.
-    // TODO: Implement proper expression typechecking and lowering.
+fn analyze_script_expr(db: &dyn salsa::Database, source: &str) -> SectionResult {
+    let src = bct::input::Source::new(db, source.to_string());
+
+    // Parse the expression.
+    let expr = datalove_datafun_compiler::parser::parse_expr(db, src);
+
+    // Typecheck.
+    let expr_result = datalove_datafun_compiler::tycheck::type_check_expr(db, src, expr);
+
+    // Check for typecheck errors.
+    let tycheck_errors: Vec<_> = expr_result.errors(db).into_iter()
+        .map(|e| format!("{:?}", e.error(db)))
+        .collect();
+    if !tycheck_errors.is_empty() {
+        return SectionResult {
+            section_type: "scriptunit-expr".to_string(),
+            name: None,
+            typecheck: TypecheckResult::Error { errors: tycheck_errors },
+            lowering: LoweringResult::Skipped,
+            output: String::new(),
+        };
+    }
+
+    // Lower the expression as a script unit.
+    let script_ctx = ir::lower::ScriptLowerContext::new();
+    let ir_unit = match ir::lower::lower_script_expr(
+        db,
+        expr_result.expr_types(db),
+        script_ctx,
+        expr,
+    ) {
+        Ok(unit) => unit,
+        Err(e) => {
+            return SectionResult {
+                section_type: "scriptunit-expr".to_string(),
+                name: None,
+                typecheck: TypecheckResult::Success,
+                lowering: LoweringResult::Error { message: format!("{}", e) },
+                output: String::new(),
+            };
+        }
+    };
+
+    let ir_dump = format!("{}", ir_unit);
+
     SectionResult {
         section_type: "scriptunit-expr".to_string(),
         name: None,
-        typecheck: TypecheckResult::Skipped,
-        lowering: LoweringResult::Error {
-            message: "scriptunit-expr lowering not yet implemented".to_string(),
-        },
-        output: String::new(),
+        typecheck: TypecheckResult::Success,
+        lowering: LoweringResult::Success { ir: ir_dump },
+        output: "(expr result pending)".to_string(),
     }
 }

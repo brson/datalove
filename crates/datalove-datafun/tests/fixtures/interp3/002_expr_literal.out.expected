@@ -4,13 +4,13 @@ Ir3Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "scriptunit-expr lowering not yet implemented",
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    unit_end v0\n",
             ),
-            output: "",
+            output: "(expr result pending)",
         ),
     ],
 )
