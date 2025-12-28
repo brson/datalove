@@ -266,13 +266,43 @@ Tests:
    - Added `SymbolTable` with function/type definitions and name resolution
    - Files modified: `ir/mod.rs`, `ir/lower.rs`, `ir/display.rs`
 
-### Phase 3: IR Interpreter - NOT STARTED
+### Phase 3: IR Interpreter - IN PROGRESS
 
-New file: `crates/datalove-datafun-compiler/src/ir/interp.rs`
-- `IrInterpreter` with frame buffer
-- `IrLayout` maps ValueId/SlotId to offsets
-- Simple loop, no recursion
-- Script interpreter with unit frame stack
+File: `crates/datalove-datafun-compiler/src/ir/interp.rs`
+
+Uses proper runtime model:
+- Frame = flat `Vec<u8>` byte buffer with computed offsets
+- Values = `Value { ptr: *mut u8, tydesc: *const TyDesc }` pairs
+- TyDesc from `datalove-rtdt` for size/align/type info
+- Operations via raw pointer reads/writes
+
+Implemented:
+- `IrType` enum in ir/mod.rs for full type info (unlike minimal `TypeRef`)
+- `IrTyDescTable` converts IrType to runtime TyDesc
+- `IrLayout` computes ValueId/SlotId -> byte offsets
+- `Frame` manages frame data with value/slot initialization tracking
+- `IrInterpreter` executes IrFunction:
+  - Const, Copy, Move instructions
+  - BinOp for all types: i8-i64, u8-u64, f32, bool (Add, Sub, Mul, Div, Mod, comparisons, BitAnd/Or/Xor, Shl, Shr)
+  - BinOpChecked for all integer types (Add, Sub, Mul with overflow flag)
+  - UnaryOp: Neg for signed ints and f32, BitNot for all ints, Not for bool
+  - SlotStore, SlotLoad
+  - Pack (tuple/struct construction)
+  - Unpack (tuple/struct destructuring)
+  - TupleIndex, FieldAccess
+  - WrapSome, WrapNone, UnwrapOption
+  - WrapOk, WrapErr, UnwrapResult
+  - All terminators: Branch, Goto, Return, TryReturn, UnitEnd, UnitEarlyReturn
+- Type tracking during lowering:
+  - `fresh_value(ty: IrType)` pushes type to value_types
+  - `fresh_slot(ty: IrType)` pushes type to slot_types
+  - Expression types looked up from TypecheckResult via salsa IDs
+
+TODO:
+- Call instruction (function calls)
+- ListNew, SetNew, MapNew (collection creation - requires runtime calls)
+- Phi node handling in CFG traversal
+- Drop instruction (destructors - requires runtime calls)
 
 ### Phase 4: Integration - NOT STARTED
 

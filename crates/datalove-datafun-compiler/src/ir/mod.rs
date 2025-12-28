@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 pub mod lower;
 pub mod display;
+pub mod interp;
 
 /// SSA value - defined exactly once, immutable.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -39,12 +40,34 @@ pub enum FuncRef {
     External { unit: u32, func: FuncId },
 }
 
-/// Reference to a type.
+/// Reference to a type (used in Pack instructions).
 ///
-/// All compound types in datalove are structural (anonymous).
+/// Lightweight type tag without inner type details.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum TypeRef {
-    /// Boolean type.
+    Bool,
+    U8, U16, U32, U64,
+    I8, I16, I32, I64,
+    Int,
+    Tuple(u32),
+    AnonStruct(u32),
+    Option,
+    Result,
+    List,
+    Set,
+    Map,
+}
+
+/// Full type information for IR values.
+///
+/// Self-contained type representation for frame layout computation
+/// and runtime TyDesc creation. Unlike salsa-interned types, this
+/// is serializable and database-independent.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum IrType {
+    /// Unit type (empty tuple).
+    Unit,
+    /// Boolean.
     Bool,
     /// Unsigned integers.
     U8, U16, U32, U64,
@@ -52,20 +75,114 @@ pub enum TypeRef {
     I8, I16, I32, I64,
     /// Arbitrary-precision integer.
     Int,
-    /// Tuple with N elements (0 = unit type).
-    Tuple(u32),
-    /// Anonymous struct with N fields.
-    AnonStruct(u32),
-    /// Option type.
-    Option,
-    /// Result type.
-    Result,
-    /// List type.
-    List,
-    /// Set type.
-    Set,
-    /// Map type.
-    Map,
+    /// 32-bit float.
+    F32,
+    /// UTF-8 string.
+    String,
+    /// Dynamic data value.
+    Data,
+    /// Error value.
+    Error,
+    /// Anonymous tuple with field types.
+    Tuple(Vec<IrType>),
+    /// Anonymous struct with named fields (sorted by name).
+    Struct(Vec<(String, IrType)>),
+    /// List with element type.
+    List(Box<IrType>),
+    /// Set with element type.
+    Set(Box<IrType>),
+    /// Map with key and value types.
+    Map(Box<IrType>, Box<IrType>),
+    /// Option with inner type.
+    Option(Box<IrType>),
+    /// Result with ok type.
+    Result(Box<IrType>),
+}
+
+impl IrType {
+    /// Convert from typechecker type to IR type.
+    pub fn from_tycheck<'db>(db: &'db dyn crate::Db, ty: &crate::tycheck::TypeAndHeap<'db>) -> Self {
+        use crate::tycheck::Type as TyType;
+
+        match ty.ty(db) {
+            TyType::Datalit(dl_ty) => Self::from_datalit(db, dl_ty),
+            TyType::Function(_) => {
+                todo!("function types in IR")
+            }
+        }
+    }
+
+    /// Convert from datalit TypeAndHeap to IR type.
+    fn from_datalit_tyandheap<'db>(db: &'db dyn crate::Db, ty: &datalove_datalit::tycheck::TypeAndHeap<'db>) -> Self {
+        Self::from_datalit(db, ty.ty(db))
+    }
+
+    /// Convert from datalit typechecker type to IR type.
+    pub fn from_datalit<'db>(db: &'db dyn crate::Db, ty: &datalove_datalit::tycheck::Type<'db>) -> Self {
+        use datalove_datalit::tycheck::Type as DlType;
+
+        match ty {
+            DlType::Bool => IrType::Bool,
+            DlType::U8 => IrType::U8,
+            DlType::I8 => IrType::I8,
+            DlType::U16 => IrType::U16,
+            DlType::I16 => IrType::I16,
+            DlType::U32 => IrType::U32,
+            DlType::I32 => IrType::I32,
+            DlType::U64 => IrType::U64,
+            DlType::I64 => IrType::I64,
+            DlType::F32 => IrType::F32,
+            DlType::Int => IrType::Int,
+            DlType::String => IrType::String,
+            DlType::Data => IrType::Data,
+            DlType::Error => IrType::Error,
+            DlType::AnonTuple(tuple) => {
+                let fields: Vec<_> = tuple.fields(db)
+                    .iter()
+                    .map(|f| Self::from_datalit_tyandheap(db, f))
+                    .collect();
+                if fields.is_empty() {
+                    IrType::Unit
+                } else {
+                    IrType::Tuple(fields)
+                }
+            }
+            DlType::AnonStruct(struct_) => {
+                let fields: Vec<_> = struct_.fields(db)
+                    .iter()
+                    .map(|f| (f.name(db).text(db).to_string(), Self::from_datalit_tyandheap(db, &f.ty(db))))
+                    .collect();
+                IrType::Struct(fields)
+            }
+            DlType::AnonEnum(_) => {
+                todo!("anonymous enum types in IR")
+            }
+            DlType::List(list) => {
+                let elem = Self::from_datalit_tyandheap(db, &list.element_type(db));
+                IrType::List(Box::new(elem))
+            }
+            DlType::Set(set) => {
+                let elem = Self::from_datalit_tyandheap(db, &set.element_type(db));
+                IrType::Set(Box::new(elem))
+            }
+            DlType::Map(map) => {
+                let key = Self::from_datalit_tyandheap(db, &map.key_type(db));
+                let val = Self::from_datalit_tyandheap(db, &map.value_type(db));
+                IrType::Map(Box::new(key), Box::new(val))
+            }
+            DlType::Option(opt) => {
+                let inner = Self::from_datalit_tyandheap(db, &opt.inner_type(db));
+                IrType::Option(Box::new(inner))
+            }
+            DlType::Result(res) => {
+                let ok = Self::from_datalit_tyandheap(db, &res.inner_type(db));
+                IrType::Result(Box::new(ok))
+            }
+            DlType::Tensor(_) => {
+                todo!("tensor types in IR")
+            }
+        }
+    }
 }
 
 /// Metadata about a function definition.
@@ -365,6 +482,10 @@ pub struct IrFunction {
     pub blocks: Vec<IrBlock>,
     pub value_count: u32,
     pub slot_count: u32,
+    /// Type for each ValueId (indexed by ValueId.0).
+    pub value_types: Vec<IrType>,
+    /// Type for each SlotId (indexed by SlotId.0).
+    pub slot_types: Vec<IrType>,
 }
 
 impl IrFunction {
@@ -401,6 +522,10 @@ pub struct IrScriptUnit {
     pub blocks: Vec<IrBlock>,
     pub value_count: u32,
     pub slot_count: u32,
+    /// Type for each ValueId (indexed by ValueId.0).
+    pub value_types: Vec<IrType>,
+    /// Type for each SlotId (indexed by SlotId.0).
+    pub slot_types: Vec<IrType>,
     /// Functions defined in this unit.
     pub functions: Vec<IrFunction>,
     /// Symbol table for this unit.

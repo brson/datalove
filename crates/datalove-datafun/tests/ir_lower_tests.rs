@@ -61,12 +61,15 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let parse_result = datalove_datafun_compiler::parser::parse(&db, source);
     let script_ast = parse_result.script(&db);
 
+    // Typecheck the script to get expression types.
+    let tycheck_result = datalove_datafun_compiler::tycheck::type_check(&db, source, script_ast);
+
     // Lower each function to IR.
     let mut output = String::new();
 
     for stmt in script_ast.statements(&db) {
         if let datalove_datafun_compiler::ast::Statement::Fun(func) = stmt {
-            match ir::lower::lower_function(&db, *func) {
+            match ir::lower::lower_function(&db, tycheck_result, *func) {
                 Ok(ir_func) => {
                     output.push_str(&format!("{}", ir_func));
                     output.push('\n');

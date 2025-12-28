@@ -5,9 +5,49 @@
 
 use rmx::prelude::*;
 use std::collections::HashMap;
+use salsa::plumbing::AsId;
 use crate::ast::{self, Statement, ExprFun, ExprFunKind};
+use crate::tycheck::TypecheckResult;
 use crate::Db;
 use super::*;
+
+/// Parse an integer literal into a ConstValue based on the target type.
+fn parse_int_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
+    match ty {
+        IrType::U8 => text.parse::<u8>().map(ConstValue::U8).map_err(|_| ()),
+        IrType::U16 => text.parse::<u16>().map(ConstValue::U16).map_err(|_| ()),
+        IrType::U32 => text.parse::<u32>().map(ConstValue::U32).map_err(|_| ()),
+        IrType::U64 => text.parse::<u64>().map(ConstValue::U64).map_err(|_| ()),
+        IrType::I8 => text.parse::<i8>().map(ConstValue::I8).map_err(|_| ()),
+        IrType::I16 => text.parse::<i16>().map(ConstValue::I16).map_err(|_| ()),
+        IrType::I32 => text.parse::<i32>().map(ConstValue::I32).map_err(|_| ()),
+        IrType::I64 => text.parse::<i64>().map(ConstValue::I64).map_err(|_| ()),
+        IrType::Int => {
+            // For now, parse as i64. TODO: Support bigint.
+            text.parse::<i64>().map(ConstValue::I64).map_err(|_| ())
+        }
+        _ => Err(()),
+    }
+}
+
+/// Parse a hex literal into a ConstValue based on the target type.
+fn parse_hex_const(hex_str: &str, ty: &IrType) -> Result<ConstValue, ()> {
+    match ty {
+        IrType::U8 => u8::from_str_radix(hex_str, 16).map(ConstValue::U8).map_err(|_| ()),
+        IrType::U16 => u16::from_str_radix(hex_str, 16).map(ConstValue::U16).map_err(|_| ()),
+        IrType::U32 => u32::from_str_radix(hex_str, 16).map(ConstValue::U32).map_err(|_| ()),
+        IrType::U64 => u64::from_str_radix(hex_str, 16).map(ConstValue::U64).map_err(|_| ()),
+        IrType::I8 => i8::from_str_radix(hex_str, 16).map(ConstValue::I8).map_err(|_| ()),
+        IrType::I16 => i16::from_str_radix(hex_str, 16).map(ConstValue::I16).map_err(|_| ()),
+        IrType::I32 => i32::from_str_radix(hex_str, 16).map(ConstValue::I32).map_err(|_| ()),
+        IrType::I64 => i64::from_str_radix(hex_str, 16).map(ConstValue::I64).map_err(|_| ()),
+        IrType::Int => {
+            // For now, parse as i64. TODO: Support bigint.
+            i64::from_str_radix(hex_str, 16).map(ConstValue::I64).map_err(|_| ())
+        }
+        _ => Err(()),
+    }
+}
 
 /// Context for lowering script units.
 ///
@@ -58,6 +98,8 @@ pub enum ScriptUnitKind<'db> {
 /// Context for lowering a single function or script unit.
 pub struct LowerCtx<'db> {
     db: &'db dyn Db,
+    /// Expression types from typechecker.
+    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
     /// Next ValueId to allocate.
     next_value: u32,
     /// Next SlotId to allocate.
@@ -84,12 +126,17 @@ pub struct LowerCtx<'db> {
     func_scope: HashMap<String, FuncRef>,
     /// Current unit index (for script units).
     current_unit: u32,
+    /// Type for each ValueId.
+    value_types: Vec<IrType>,
+    /// Type for each SlotId.
+    slot_types: Vec<IrType>,
 }
 
 impl<'db> LowerCtx<'db> {
-    pub fn new(db: &'db dyn Db) -> Self {
+    pub fn new(db: &'db dyn Db, expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>]) -> Self {
         Self {
             db,
+            expr_types,
             next_value: 0,
             next_slot: 0,
             next_block: 1, // Block 0 is entry
@@ -103,11 +150,30 @@ impl<'db> LowerCtx<'db> {
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
             current_unit: 0,
+            value_types: Vec::new(),
+            slot_types: Vec::new(),
+        }
+    }
+
+    /// Get the IrType for an expression from the typechecker.
+    fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
+        let expr_id = expr.as_id();
+        let index = expr_id.index() as usize;
+        match self.expr_types.get(index).copied().flatten() {
+            Some(ty) => IrType::from_tycheck(self.db, &ty),
+            None => panic!(
+                "Expression must have type from typechecker. Expression ID {} but expr_types.len() = {}",
+                index, self.expr_types.len()
+            ),
         }
     }
 
     /// Create a context for lowering a script unit.
-    pub fn new_for_script(db: &'db dyn Db, script_ctx: ScriptLowerContext) -> Self {
+    pub fn new_for_script(
+        db: &'db dyn Db,
+        expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+        script_ctx: ScriptLowerContext,
+    ) -> Self {
         // Seed variables with external bindings from previous units.
         let mut variables = HashMap::new();
         for (name, (unit, value)) in &script_ctx.values {
@@ -136,6 +202,7 @@ impl<'db> LowerCtx<'db> {
 
         Self {
             db,
+            expr_types,
             next_value: 0,
             next_slot: 0,
             next_block: 1,
@@ -149,6 +216,8 @@ impl<'db> LowerCtx<'db> {
             symbols: SymbolTable::new(),
             func_scope,
             current_unit,
+            value_types: Vec::new(),
+            slot_types: Vec::new(),
         }
     }
 
@@ -164,17 +233,19 @@ impl<'db> LowerCtx<'db> {
         self.func_scope.get(name).copied()
     }
 
-    /// Allocate a fresh SSA value.
-    fn fresh_value(&mut self) -> ValueId {
+    /// Allocate a fresh SSA value with known type.
+    fn fresh_value(&mut self, ty: IrType) -> ValueId {
         let id = ValueId(self.next_value);
         self.next_value += 1;
+        self.value_types.push(ty);
         id
     }
 
-    /// Allocate a fresh mutable slot.
-    fn fresh_slot(&mut self) -> SlotId {
+    /// Allocate a fresh mutable slot with known type.
+    fn fresh_slot(&mut self, ty: IrType) -> SlotId {
         let id = SlotId(self.next_slot);
         self.next_slot += 1;
+        self.slot_types.push(ty);
         id
     }
 
@@ -223,9 +294,10 @@ impl<'db> LowerCtx<'db> {
 /// For standalone function lowering (not in a script context).
 pub fn lower_function<'db>(
     db: &'db dyn Db,
+    tycheck_result: TypecheckResult<'db>,
     func: ast::StmtFun<'db>,
 ) -> Result<IrFunction, LowerError> {
-    let mut ctx = LowerCtx::new(db);
+    let mut ctx = LowerCtx::new(db, tycheck_result.expr_types(db));
     let name = func.name(db).text(db).to_string();
     let param_count = func.params(db).len();
 
@@ -244,11 +316,14 @@ fn lower_function_body<'db>(
     let name = func.name(ctx.db).text(ctx.db).to_string();
 
     // Allocate ValueIds for parameters.
+    // TODO: Get parameter types from TypecheckResult instead of re-converting.
+    // Currently we use Unit as a placeholder since convert_type_hint creates
+    // tracked structs that can't be called outside a tracked function.
     let params: Vec<ValueId> = func.params(ctx.db)
         .iter()
         .map(|p| {
-            let id = ctx.fresh_value();
             let param_name = p.name(ctx.db).text(ctx.db).to_string();
+            let id = ctx.fresh_value(IrType::Unit);  // TODO: Get actual param type
             ctx.bind_var(&param_name, Operand::Value(id));
             id
         })
@@ -280,6 +355,8 @@ fn lower_function_body<'db>(
         blocks: std::mem::take(&mut ctx.blocks),
         value_count: ctx.next_value,
         slot_count: ctx.next_slot,
+        value_types: std::mem::take(&mut ctx.value_types),
+        slot_types: std::mem::take(&mut ctx.slot_types),
     })
 }
 
@@ -297,8 +374,11 @@ fn lower_statement<'db>(
         }
         Statement::Var(var_stmt) => {
             let name = var_stmt.name(ctx.db).text(ctx.db).to_string();
-            let slot = ctx.fresh_slot();
-            let value_id = lower_expression(ctx, var_stmt.value(ctx.db))?;
+            // Get type from the initialization expression.
+            let init_expr = var_stmt.value(ctx.db);
+            let slot_type = ctx.expr_type(init_expr);
+            let slot = ctx.fresh_slot(slot_type);
+            let value_id = lower_expression(ctx, init_expr)?;
             ctx.emit(Instruction::SlotStore {
                 dest: SlotDest::Local(slot),
                 value: Operand::Value(value_id),
@@ -438,14 +518,16 @@ fn lower_expression<'db>(
                     }
                     Operand::Slot(s) => {
                         // For slots, emit a load.
-                        let dest = ctx.fresh_value();
+                        let slot_type = ctx.expr_type(expr);
+                        let dest = ctx.fresh_value(slot_type);
                         ctx.emit(Instruction::SlotLoad { dest, slot: s });
                         Ok(dest)
                     }
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                         // External operands from previous script units.
                         // Copy into a local value.
-                        let dest = ctx.fresh_value();
+                        let ext_type = ctx.expr_type(expr);
+                        let dest = ctx.fresh_value(ext_type);
                         ctx.emit(Instruction::Copy { dest, src: operand });
                         Ok(dest)
                     }
@@ -455,7 +537,7 @@ fn lower_expression<'db>(
             }
         }
         ExprFunKind::True(_) => {
-            let dest = ctx.fresh_value();
+            let dest = ctx.fresh_value(IrType::Bool);
             ctx.emit(Instruction::Const {
                 dest,
                 value: ConstValue::Bool(true),
@@ -463,7 +545,7 @@ fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::False(_) => {
-            let dest = ctx.fresh_value();
+            let dest = ctx.fresh_value(IrType::Bool);
             ctx.emit(Instruction::Const {
                 dest,
                 value: ConstValue::Bool(false),
@@ -471,40 +553,39 @@ fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::None(_) => {
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::WrapNone { dest });
             Ok(dest)
         }
         ExprFunKind::Int(lit) => {
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type.clone());
             let text = lit.value(ctx.db).text(ctx.db);
-            // Parse as i64 for now.
-            let value: i64 = text.parse().map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
-            ctx.emit(Instruction::Const {
-                dest,
-                value: ConstValue::I64(value),
-            });
+            let const_value = parse_int_const(text, &result_type)
+                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
+            ctx.emit(Instruction::Const { dest, value: const_value });
             Ok(dest)
         }
         ExprFunKind::Hex(lit) => {
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type.clone());
             let text = lit.value(ctx.db).text(ctx.db);
-            // Remove 0x prefix and parse.
             let hex_str = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")).unwrap_or(text);
-            let value = u64::from_str_radix(hex_str, 16)
+            let const_value = parse_hex_const(hex_str, &result_type)
                 .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
-            ctx.emit(Instruction::Const {
-                dest,
-                value: ConstValue::U64(value),
-            });
+            ctx.emit(Instruction::Const { dest, value: const_value });
             Ok(dest)
         }
         ExprFunKind::BinOp(binop) => {
             let lhs_id = lower_expression(ctx, binop.lhs(ctx.db))?;
             let rhs_id = lower_expression(ctx, binop.rhs(ctx.db))?;
-            let dest = ctx.fresh_value();
 
-            let op = match binop.op(ctx.db) {
+            let ast_op = binop.op(ctx.db);
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
+
+            let op = match ast_op {
                 ast::BinOp::Add => BinOp::Add,
                 ast::BinOp::Sub => BinOp::Sub,
                 ast::BinOp::Mul => BinOp::Mul,
@@ -517,7 +598,7 @@ fn lower_expression<'db>(
                 ast::BinOp::Ge => BinOp::Ge,
                 // Checked/optional ops - emit as checked for now.
                 ast::BinOp::AddChecked | ast::BinOp::AddOptional => {
-                    let overflow = ctx.fresh_value();
+                    let overflow = ctx.fresh_value(IrType::Bool);
                     ctx.emit(Instruction::BinOpChecked {
                         dest,
                         overflow,
@@ -528,7 +609,7 @@ fn lower_expression<'db>(
                     return Ok(dest);
                 }
                 ast::BinOp::SubChecked | ast::BinOp::SubOptional => {
-                    let overflow = ctx.fresh_value();
+                    let overflow = ctx.fresh_value(IrType::Bool);
                     ctx.emit(Instruction::BinOpChecked {
                         dest,
                         overflow,
@@ -539,7 +620,7 @@ fn lower_expression<'db>(
                     return Ok(dest);
                 }
                 ast::BinOp::MulChecked | ast::BinOp::MulOptional => {
-                    let overflow = ctx.fresh_value();
+                    let overflow = ctx.fresh_value(IrType::Bool);
                     ctx.emit(Instruction::BinOpChecked {
                         dest,
                         overflow,
@@ -550,7 +631,7 @@ fn lower_expression<'db>(
                     return Ok(dest);
                 }
                 ast::BinOp::DivChecked | ast::BinOp::DivOptional => {
-                    let overflow = ctx.fresh_value();
+                    let overflow = ctx.fresh_value(IrType::Bool);
                     ctx.emit(Instruction::BinOpChecked {
                         dest,
                         overflow,
@@ -572,7 +653,6 @@ fn lower_expression<'db>(
         }
         ExprFunKind::UnaryOp(unary) => {
             let operand_id = lower_expression(ctx, unary.operand(ctx.db))?;
-            let dest = ctx.fresh_value();
 
             let op = match unary.op(ctx.db) {
                 ast::UnaryOp::Neg => UnaryOp::Neg,
@@ -582,6 +662,8 @@ fn lower_expression<'db>(
                 }
             };
 
+            // TODO: Get actual operand type. For now assume I64 for arithmetic.
+            let dest = ctx.fresh_value(IrType::I64);
             ctx.emit(Instruction::UnaryOp {
                 dest,
                 op,
@@ -595,7 +677,8 @@ fn lower_expression<'db>(
                 .iter()
                 .map(|arg| lower_expression(ctx, *arg).map(|v| Operand::Value(v)))
                 .collect();
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
 
             // Resolve function reference.
             let func_ref = ctx.lookup_func(&func_name)
@@ -610,7 +693,8 @@ fn lower_expression<'db>(
         }
         ExprFunKind::Some(some_expr) => {
             let inner_id = lower_expression(ctx, some_expr.payload(ctx.db))?;
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::WrapSome {
                 dest,
                 inner: Operand::Value(inner_id),
@@ -619,7 +703,8 @@ fn lower_expression<'db>(
         }
         ExprFunKind::Ok(ok_expr) => {
             let inner_id = lower_expression(ctx, ok_expr.payload(ctx.db))?;
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::WrapOk {
                 dest,
                 inner: Operand::Value(inner_id),
@@ -628,7 +713,8 @@ fn lower_expression<'db>(
         }
         ExprFunKind::Er(er_expr) => {
             let inner_id = lower_expression(ctx, er_expr.payload(ctx.db))?;
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::WrapErr {
                 dest,
                 inner: Operand::Value(inner_id),
@@ -637,8 +723,9 @@ fn lower_expression<'db>(
         }
         ExprFunKind::TryOption(try_expr) => {
             let src_id = lower_expression(ctx, try_expr.operand(ctx.db))?;
-            let dest = ctx.fresh_value();
-            let is_some = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
+            let is_some = ctx.fresh_value(IrType::Bool);
             ctx.emit(Instruction::UnwrapOption {
                 dest,
                 is_some,
@@ -649,8 +736,9 @@ fn lower_expression<'db>(
         }
         ExprFunKind::TryResult(try_expr) => {
             let src_id = lower_expression(ctx, try_expr.operand(ctx.db))?;
-            let dest = ctx.fresh_value();
-            let is_ok = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
+            let is_ok = ctx.fresh_value(IrType::Bool);
             ctx.emit(Instruction::UnwrapResult {
                 dest,
                 is_ok,
@@ -665,7 +753,8 @@ fn lower_expression<'db>(
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
             let fields = elements?;
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::Pack {
                 dest,
                 ty: TypeRef::Tuple(fields.len() as u32),
@@ -679,7 +768,8 @@ fn lower_expression<'db>(
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
             let fields = elements?;
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::Pack {
                 dest,
                 ty: TypeRef::Tuple(fields.len() as u32),
@@ -692,7 +782,8 @@ fn lower_expression<'db>(
                 .iter()
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::ListNew {
                 dest,
                 elements: elements?,
@@ -704,7 +795,8 @@ fn lower_expression<'db>(
                 .iter()
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::SetNew {
                 dest,
                 elements: elements?,
@@ -720,7 +812,8 @@ fn lower_expression<'db>(
                     Ok((Operand::Value(k), Operand::Value(v)))
                 })
                 .collect();
-            let dest = ctx.fresh_value();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::MapNew {
                 dest,
                 entries: entries?,
@@ -740,10 +833,11 @@ fn lower_expression<'db>(
 /// They can reference values from previous units and export bindings to subsequent units.
 pub fn lower_script_unit<'db>(
     db: &'db dyn Db,
+    tycheck_result: TypecheckResult<'db>,
     script_ctx: ScriptLowerContext,
     kind: ScriptUnitKind<'db>,
 ) -> Result<IrScriptUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_script(db, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, tycheck_result.expr_types(db), script_ctx);
 
     let result = match kind {
         ScriptUnitKind::Fragment(stmts) => {
@@ -770,6 +864,8 @@ pub fn lower_script_unit<'db>(
         blocks: ctx.blocks,
         value_count: ctx.next_value,
         slot_count: ctx.next_slot,
+        value_types: std::mem::take(&mut ctx.value_types),
+        slot_types: std::mem::take(&mut ctx.slot_types),
         functions: ctx.functions,
         symbols: ctx.symbols,
         result,
@@ -795,8 +891,10 @@ fn lower_statement_for_script<'db>(
         }
         Statement::Var(var_stmt) => {
             let name = var_stmt.name(ctx.db).text(ctx.db).to_string();
-            let slot = ctx.fresh_slot();
-            let value_id = lower_expression(ctx, var_stmt.value(ctx.db))?;
+            let init_expr = var_stmt.value(ctx.db);
+            let slot_type = ctx.expr_type(init_expr);
+            let slot = ctx.fresh_slot(slot_type);
+            let value_id = lower_expression(ctx, init_expr)?;
             ctx.emit(Instruction::SlotStore {
                 dest: SlotDest::Local(slot),
                 value: Operand::Value(value_id),
@@ -839,7 +937,7 @@ fn lower_statement_for_script<'db>(
                 Operand::Value(lower_expression(ctx, expr)?)
             } else {
                 // Return unit value for bare `ret`.
-                let unit_val = ctx.fresh_value();
+                let unit_val = ctx.fresh_value(IrType::Unit);
                 ctx.emit(Instruction::Const {
                     dest: unit_val,
                     value: ConstValue::Unit,
