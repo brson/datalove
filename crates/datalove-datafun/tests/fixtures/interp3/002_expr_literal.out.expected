@@ -10,7 +10,7 @@ Ir3Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    unit_end v0\n",
             ),
-            output: "(expr result pending)",
+            output: "@100",
         ),
     ],
 )

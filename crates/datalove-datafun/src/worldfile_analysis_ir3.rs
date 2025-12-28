@@ -230,11 +230,106 @@ fn analyze_script_expr(db: &dyn salsa::Database, source: &str) -> SectionResult 
 
     let ir_dump = format!("{}", ir_unit);
 
+    // Execute the script unit if it has a result.
+    let output = if let Some(result_id) = ir_unit.result {
+        // Get result type from the unit's value_types.
+        let result_type = &ir_unit.value_types[result_id.0 as usize];
+
+        // Create tydesc table and get result tydesc.
+        let mut tydesc_table = ir::interp::IrTyDescTable::new();
+        let ret_tydesc = tydesc_table.get_or_create(result_type);
+        let ret_size = unsafe { (*ret_tydesc).size };
+
+        // Allocate return buffer.
+        let mut ret_buffer = vec![0u8; ret_size as usize];
+        let ret_dest = ir::interp::Destination {
+            ptr: ret_buffer.as_mut_ptr(),
+            tydesc: ret_tydesc,
+        };
+
+        // Execute the script unit.
+        let mut interp = ir::interp::IrInterpreter::new();
+        match interp.execute_script_unit(&ir_unit, ret_dest) {
+            Ok(()) => {
+                let value = ir::interp::Value {
+                    ptr: ret_buffer.as_mut_ptr(),
+                    tydesc: ret_tydesc,
+                };
+                pretty_print_value(&value)
+            }
+            Err(e) => format!("Error: {:?}", e),
+        }
+    } else {
+        "(fragment executed)".to_string()
+    };
+
     SectionResult {
         section_type: "scriptunit-expr".to_string(),
         name: None,
         typecheck: TypecheckResult::Success,
         lowering: LoweringResult::Success { ir: ir_dump },
-        output: "(expr result pending)".to_string(),
+        output,
+    }
+}
+
+/// Pretty-print a value based on its type descriptor.
+fn pretty_print_value(value: &ir::interp::Value) -> String {
+    use datalove_rt::rtdt::{TyTag, TyInfoTuple};
+
+    let tag = unsafe { (*value.tydesc).type_tag };
+    match tag {
+        TyTag::Tuple => {
+            let tuple_info: TyInfoTuple = unsafe { (*value.tydesc).type_info.tuple };
+            if tuple_info.num_fields == 0 {
+                "()".to_string()
+            } else {
+                format!("<tuple:{}>", tuple_info.num_fields)
+            }
+        }
+        TyTag::Bool => {
+            let v = unsafe { *(value.ptr as *const bool) };
+            if v { "true".to_string() } else { "false".to_string() }
+        }
+        TyTag::U8 => {
+            let v = unsafe { *(value.ptr as *const u8) };
+            format!("@{}", v)
+        }
+        TyTag::U16 => {
+            let v = unsafe { *(value.ptr as *const u16) };
+            format!("@{}", v)
+        }
+        TyTag::U32 => {
+            let v = unsafe { *(value.ptr as *const u32) };
+            format!("@{}", v)
+        }
+        TyTag::U64 => {
+            let v = unsafe { *(value.ptr as *const u64) };
+            format!("@{}", v)
+        }
+        TyTag::I8 => {
+            let v = unsafe { *(value.ptr as *const i8) };
+            format!("{}", v)
+        }
+        TyTag::I16 => {
+            let v = unsafe { *(value.ptr as *const i16) };
+            format!("{}", v)
+        }
+        TyTag::I32 => {
+            let v = unsafe { *(value.ptr as *const i32) };
+            format!("{}", v)
+        }
+        TyTag::I64 => {
+            let v = unsafe { *(value.ptr as *const i64) };
+            format!("{}", v)
+        }
+        TyTag::F32 => {
+            let v = unsafe { *(value.ptr as *const f32) };
+            format!("{}", v)
+        }
+        TyTag::F64 => {
+            let v = unsafe { *(value.ptr as *const f64) };
+            format!("{}", v)
+        }
+        _ => format!("<{:?}>", tag),
     }
 }

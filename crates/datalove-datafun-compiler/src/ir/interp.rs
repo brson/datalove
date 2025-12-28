@@ -9,7 +9,7 @@ use rmx::prelude::*;
 use datalove_rt::rtdt::{self, TyDesc};
 
 use super::{
-    IrFunction, IrType, Instruction, Terminator,
+    IrFunction, IrScriptUnit, IrBlock, IrType, Instruction, Terminator,
     ValueId, SlotId, BlockId, FuncId, FuncRef, Operand, SlotDest,
     ConstValue, BinOp, UnaryOp,
 };
@@ -659,12 +659,38 @@ impl IrInterpreter {
         }
 
         // Execute blocks, writing return value directly to ret_dest.
-        self.execute_blocks(func, &mut frame, ret_dest, ctx)
+        self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx)
+    }
+
+    /// Execute a script unit, optionally returning the result value.
+    ///
+    /// For expression units, returns `Some(Value)` with the result.
+    /// For fragment units, returns `None`.
+    pub fn execute_script_unit(
+        &mut self,
+        unit: &IrScriptUnit,
+        ret_dest: Destination,
+    ) -> Result<(), InterpError> {
+        // Compute layout.
+        let layout = IrLayout::compute(
+            &unit.value_types,
+            &unit.slot_types,
+            &mut self.tydesc_table,
+        );
+
+        // Create frame.
+        let mut frame = Frame::new(layout);
+
+        // Create execution context with functions defined in this unit.
+        let ctx = ExecutionContext::new(&unit.functions);
+
+        // Execute blocks.
+        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx)
     }
 
     fn execute_blocks(
         &mut self,
-        func: &IrFunction,
+        blocks: &[IrBlock],
         frame: &mut Frame,
         ret_dest: Destination,
         ctx: &ExecutionContext,
@@ -672,7 +698,7 @@ impl IrInterpreter {
         let mut current_block = BlockId(0);
 
         loop {
-            let block = func.blocks.iter()
+            let block = blocks.iter()
                 .find(|b| b.id == current_block)
                 .ok_or(InterpError::BlockNotFound(current_block))?;
 
