@@ -1,6 +1,15 @@
+## Not-equals has a bang in it
+
+Want ! to be reserved for error handling, but `!=` is unfortunate.
+
+
+
+
 ## map -> dict?
 
 just to free up the word map
+
+
 
 
 ## Type hints
