@@ -7,10 +7,11 @@
     --code-bg: #16213e;
     --link: #0f9b8e;
     --syn-keyword: #e94560;
-    --syn-type: #0f9b8e;
+    --syn-type-name: #0f9b8e;
     --syn-string: #f9c74f;
     --syn-number: #90be6d;
     --syn-boolean: #f8961e;
+    --syn-variant: #f8961e;
     --syn-comment: #6c7a89;
     --syn-function: #43aa8b;
     --syn-brace-curly: #e94560;
@@ -21,6 +22,7 @@
     --syn-op-result: #f472b6;
     --syn-op-option: #a78bfa;
     --syn-type-colon: #0f9b8e;
+    --syn-punctuation: #eaeaea;
 }
 
 * {
@@ -102,11 +104,11 @@ li {
 
 /* Syntax highlighting */
 .token.keyword { color: var(--syn-keyword); }
-.token.type-name { color: var(--syn-type); }
+.token.type-name { color: var(--syn-type-name); }
 .token.string { color: var(--syn-string); }
 .token.number { color: var(--syn-number); }
 .token.boolean { color: var(--syn-boolean); }
-.token.variant { color: var(--syn-boolean); }
+.token.variant { color: var(--syn-variant); }
 .token.comment { color: var(--syn-comment); font-style: italic; }
 .token.function { color: var(--syn-function); }
 .token.brace-curly { color: var(--syn-brace-curly); }
@@ -117,4 +119,4 @@ li {
 .token.op-result { color: var(--syn-op-result); }
 .token.op-option { color: var(--syn-op-option); }
 .token.type-colon { color: var(--syn-type-colon); }
-.token.punctuation { color: var(--fg); }
+.token.punctuation { color: var(--syn-punctuation); }
