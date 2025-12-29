@@ -751,7 +751,6 @@ proptest! {
     })]
 
     #[test]
-    #[ignore] // sometimes iloops
     fn proptest_clone_moderate_containers_depth3(seed in any::<u64>()) {
         let db = Database::default();
         let config = AstGenConfig {
@@ -812,7 +811,6 @@ proptest! {
     }
 
     #[test]
-    #[ignore] // sometimes iloops
     fn proptest_clone_moderate_containers_depth2(seed in any::<u64>()) {
         let db = Database::default();
         let config = AstGenConfig {
@@ -871,6 +869,25 @@ proptest! {
             datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), clone_buffer.as_mut_ptr(), inst.tydesc.as_ptr());
         }
     }
+}
+
+/// Regression test for field name exhaustion bug (max_collection_size > 80 structs).
+/// Seed 8551195423510586131 previously caused infinite loop in gen_field_name.
+#[test]
+fn test_gen_expr_regression_seed_8551195423510586131() {
+    let db = Database::default();
+    let config = AstGenConfig {
+        max_collection_size: 100,
+        max_depth: 2,
+        type_weights: TypeWeights {
+            named_tuple_type: 0,
+            named_struct_type: 0,
+            named_enum_type: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let _expr = gen_expr_full_seeded(&db, 8551195423510586131, config);
 }
 
 /// Regression test for clone leak detected with seed 980509222901775213.

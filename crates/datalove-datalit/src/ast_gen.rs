@@ -231,10 +231,14 @@ pub fn gen_identifier<R: Rng>(rng: &mut R) -> String {
     format!("{}{}{}", prefix, suffix, num)
 }
 
+/// Field name base strings for struct field generation.
+const FIELD_NAME_BASES: &[&str] = &["x", "y", "z", "name", "value", "data", "field", "item"];
+/// Maximum unique field names possible: 8 bases × 10 numbers.
+const MAX_UNIQUE_FIELD_NAMES: usize = FIELD_NAME_BASES.len() * 10;
+
 /// Generate a random field name.
 pub fn gen_field_name<R: Rng>(rng: &mut R) -> String {
-    let names = ["x", "y", "z", "name", "value", "data", "field", "item"];
-    let name = names[rng.gen_range(0..names.len())];
+    let name = FIELD_NAME_BASES[rng.gen_range(0..FIELD_NAME_BASES.len())];
     let num = rng.gen_range(0..10);
 
     format!("{}{}", name, num)
@@ -353,7 +357,9 @@ pub fn gen_type_hint<'db, R: Rng>(
             TypeHint::AnonTuple(TypeHintAnonTuple::new(db, fields))
         }
         19 => {
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
+            // Cap count to available unique field names to prevent infinite loops.
+            let max_count = config.max_collection_size.min(MAX_UNIQUE_FIELD_NAMES);
+            let count = rng.gen_range(config.min_collection_size..=max_count);
             let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
@@ -522,7 +528,9 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
             TypeHint::AnonTuple(TypeHintAnonTuple::new(db, fields))
         }
         19 => {
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
+            // Cap count to available unique field names to prevent infinite loops.
+            let max_count = config.max_collection_size.min(MAX_UNIQUE_FIELD_NAMES);
+            let count = rng.gen_range(config.min_collection_size..=max_count);
             let mut used_names = std::collections::HashSet::new();
             let fields: Vec<_> = (0..count)
                 .map(|_| {
