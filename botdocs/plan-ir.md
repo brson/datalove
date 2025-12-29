@@ -288,13 +288,14 @@ Implemented:
   - BinOp for all types: i8-i64, u8-u64, f32, bool (Add, Sub, Mul, Div, Mod, comparisons, BitAnd/Or/Xor, Shl, Shr)
   - BinOpChecked for all integer types (Add, Sub, Mul with overflow flag)
   - UnaryOp: Neg for signed ints and f32, BitNot for all ints, Not for bool
-  - SlotStore, SlotLoad
+  - SlotStore, SlotLoad (including cross-unit slot writes via SlotDest::External)
   - Pack (tuple/struct construction)
   - Unpack (tuple/struct destructuring)
   - TupleIndex, FieldAccess
   - WrapSome, WrapNone, UnwrapOption
   - WrapOk, WrapErr, UnwrapResult
   - Call (function calls with nested call support, including cross-unit calls)
+  - Phi nodes (single-pass execution with prev_block tracking)
   - All terminators: Branch, Goto, Return, TryReturn, UnitEnd, UnitEarlyReturn
 - Type tracking during lowering:
   - `fresh_value(ty: IrType)` pushes type to value_types
@@ -304,11 +305,16 @@ Implemented:
 - Cross-unit references:
   - `Operand::ExternalValue` - read let bindings from prior units
   - `Operand::ExternalSlot` - read var bindings from prior units
+  - `SlotDest::External` - write to var bindings from prior units
   - `FuncRef::External` - call functions from prior units
+- Loop/break/continue:
+  - `loop_stack` in LowerCtx tracks (continue_target, break_target) for nested loops
+  - `break` lowers to `Goto(loop_exit)`
+  - `continue` lowers to `Goto(loop_header)`
+  - Interpreter follows CFG via Goto terminators
 
 TODO:
 - ListNew, SetNew, MapNew (collection creation - requires runtime calls)
-- Phi node handling in CFG traversal
 - Drop instruction (destructors - requires runtime calls)
 
 ### Phase 4: Integration - MOSTLY COMPLETE
@@ -323,7 +329,7 @@ Files created:
 - `crates/datalove-datafun/tests/module_interp3_tests.rs` - test harness
 - `crates/datalove-datafun/tests/interp3_tests.rs` - test harness
 - `crates/datalove-datafun/tests/fixtures/module_interp3/` - 5 worldfiles
-- `crates/datalove-datafun/tests/fixtures/interp3/` - 13+ worldfiles (including cross-unit tests)
+- `crates/datalove-datafun/tests/fixtures/interp3/` - 22 worldfiles (cross-unit + loop tests)
 
 Working:
 - Module-only execution: parse -> typecheck -> lower -> IR interpret -> pretty print
@@ -333,11 +339,22 @@ Working:
 - Cross-unit lowering: ExternalValue/ExternalSlot/FuncRef::External references
 - Cross-unit execution: ScriptEnvironment tracks frames/functions across units
 
-Cross-unit test coverage (tests 010-013):
+Cross-unit test coverage (tests 010-018):
 - `010_crossunit_value.world` - let binding across units
 - `011_crossunit_slot.world` - var binding across units
 - `012_crossunit_function.world` - function call across units
 - `013_crossunit_chain.world` - chained cross-unit references
+- `014_sameunit_function.world` - function defined and called in same unit
+- `015_crossunit_function_chain.world` - function calling function across units
+- `016_module_function_call.world` - calling module function from script
+- `017_sameunit_var_mutation.world` - var mutation within same unit
+- `018_crossunit_var_mutation.world` - var mutation across units
+
+Loop test coverage (tests 019-022):
+- `019_loop_break_script.world` - loop with break in script unit
+- `020_loop_continue_script.world` - loop with continue in script unit
+- `021_loop_function_script.world` - loop in function defined in script
+- `022_loop_module_function.world` - loop in function defined in module
 
 TODO:
 - Keep old interpreter for comparison
