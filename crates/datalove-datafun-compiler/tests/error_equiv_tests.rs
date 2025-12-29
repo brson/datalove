@@ -339,12 +339,14 @@ fn make_mutation_config() -> AstGenConfig {
 }
 
 /// Statistics for a mutation type.
+#[cfg(feature = "slow_tests")]
 struct MutationStats {
     tested: usize,
     passed: usize,
     failed: usize,
 }
 
+#[cfg(feature = "slow_tests")]
 impl MutationStats {
     fn new() -> Self {
         MutationStats {
@@ -364,6 +366,7 @@ impl MutationStats {
 }
 
 /// Run a single mutation test, returning Some(true) if passed, Some(false) if failed, None if skipped.
+#[cfg(feature = "slow_tests")]
 fn run_single_mutation_test(
     mutation: Mutation,
     config: &AstGenConfig,
@@ -383,6 +386,7 @@ fn run_single_mutation_test(
 
 /// Run mutation tests for a given mutation type and return statistics.
 /// Note: Tests that panic are skipped to avoid salsa state corruption.
+#[cfg(feature = "slow_tests")]
 fn run_mutation_tests(
     mutation: Mutation,
     config: &AstGenConfig,

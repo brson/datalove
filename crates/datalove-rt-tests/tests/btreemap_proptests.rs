@@ -1,5 +1,7 @@
 //! Property-based tests for btreemap runtime functions.
 
+#![cfg(feature = "slow_tests")]
+
 use rmx::prelude::*;
 use datalove_rt::rtdt;
 use std::ptr;
@@ -105,7 +107,6 @@ unsafe fn create_runtime_string(
     }
 }
 
-#[cfg(feature = "slow_tests")]
 proptest! {
     /// Test inserting random u32 key-value pairs.
     #[test]
@@ -543,7 +544,6 @@ proptest! {
 
 // ==================== String property tests ====================
 
-#[cfg(feature = "slow_tests")]
 proptest! {
     /// Test inserting random String key-value pairs.
     #[test]
@@ -1016,7 +1016,6 @@ fn create_option_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
     (option_tydesc, inner_tydesc)
 }
 
-#[cfg(feature = "slow_tests")]
 proptest! {
     /// Test that get returns Some for all inserted keys.
     #[test]
