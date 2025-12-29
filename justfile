@@ -2,7 +2,7 @@ default:
     just --list
 
 test:
-    cargo test --all
+    cargo test --all --all-targets
 
 # Run slow tests (proptests, backtrace tests, etc).
 test-slow:
