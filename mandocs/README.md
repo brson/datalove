@@ -46,7 +46,7 @@ The complete language with I/O-bearing procedures,
 owned native pointers, objects with identity,
 and stack unwinding.
 
-Filue extensions: `.dls` (scripts), `.dlm` (module)
+File extensions: `.dls` (scripts), `.dlm` (module)
 
 ---
 
