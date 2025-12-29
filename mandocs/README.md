@@ -1,7 +1,7 @@
 # The Datalove Guide
 
 Datalove is
-a simple and expressive scripting language -
+a simple and expressive interactive scripting language -
 strongly and statically typed -
 for efficient data modeling and transformation.
 
@@ -11,6 +11,13 @@ for writing, typing, serializing, and transforming a variety
 of modern pure data types.
 Let's do that really well.
 Then we'll add I/O to it &mdash; carefully.
+
+As a Rust programmer who sometimes
+scripts and prototypes in Python,
+Datalove was born from my dissatisfaction with
+Python's weak typing and inconsistent
+facilities for expressing simple data structures.
+Datalove's is most usefully compared to Python, JavaScript, and Julia.
 
 
 
@@ -63,6 +70,8 @@ Current status:
 
 
 - [Features](features.md)
+- [Principles](principles.md)
+- [Datalove Compared To...](comparisons.md)
 - [Design Notes](design-notes.md)
 - [Novelties](novelties.md)
 - [Datalit Types](datalit-types.md)
