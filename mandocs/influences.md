@@ -2,18 +2,25 @@
 
 - Rust.
     General syntax, general mechanical sympathy concerns,
-    data structure definitions, float total_cmp.
-- Zig.
-    `?` / `!`, aspects of anonymous structs.
-- Mercury.
-  Argument modes and logic applications.
-- Visual Basic / Pascal, etc / Ada.
-    Line-oriented syntax tendencies.
-- Visual Basic.
-  Argument modes.
+    data struccture design.
+    Token trees.
+- Python.
+    Negative influence - inconvenient structs and ADTs.
 - JSON5.
-  Baseline markup language requirements.
+    Baseline data language requirements.
+- Zig.
+    `?` / `!`, aspects of anonymous structs, `if`-destructuring.
+- Visual Basic / Pascal (etc) / Ada.
+    Line-oriented syntax tendencies;
+    Statement-orientation.
+- Oberon.
+    Radical simplicity.
+- Visual Basic.
+    Argument modes.
+- Mercury.
+    Argument modes and logic applications.
 - Julia.
-  Multidimensional arrays.
+    Multidimensional arrays (tensors).
+    Modern REPL inspiration.
 - Polars / Pandas.
-  Tables.
+    Tables.
