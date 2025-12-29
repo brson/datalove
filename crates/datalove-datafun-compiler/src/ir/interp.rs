@@ -44,8 +44,6 @@ pub enum InterpError {
     RuntimeError(String),
     /// Type mismatch.
     TypeMismatch(String),
-    /// External reference not supported yet.
-    ExternalNotSupported,
     /// External unit not found.
     ExternalUnitNotFound(u32),
     /// Module function not found.
@@ -580,31 +578,33 @@ impl Frame {
 }
 
 /// Environment for sequential script unit execution.
+/// Registry of functions from modules and previous script units.
 ///
-/// Stores frames and functions from previously executed units so that
-/// subsequent units can reference them via ExternalValue/ExternalSlot/FuncRef::External.
-pub struct ScriptEnvironment {
-    /// Frames from executed units, indexed by unit number.
-    frames: Vec<Frame>,
+/// Immutable after setup - can be borrowed while frames are mutated.
+pub struct FunctionRegistry {
     /// Functions from each unit, indexed by unit number.
     unit_functions: Vec<Vec<IrFunction>>,
     /// Functions from modules, indexed by name.
     module_functions: HashMap<String, IrFunction>,
 }
 
-impl ScriptEnvironment {
-    /// Create a new empty environment.
+impl FunctionRegistry {
+    /// Create a new empty registry.
     pub fn new() -> Self {
         Self {
-            frames: Vec::new(),
             unit_functions: Vec::new(),
             module_functions: HashMap::new(),
         }
     }
 
-    /// Add a module function to the environment.
+    /// Add a module function.
     pub fn add_module_function(&mut self, name: String, func: IrFunction) {
         self.module_functions.insert(name, func);
+    }
+
+    /// Add functions from a completed unit.
+    pub fn add_unit_functions(&mut self, functions: Vec<IrFunction>) {
+        self.unit_functions.push(functions);
     }
 
     /// Get a module function by name.
@@ -612,40 +612,96 @@ impl ScriptEnvironment {
         self.module_functions.get(name)
     }
 
-    /// Add a completed unit's frame and functions to the environment.
-    pub fn add_unit(&mut self, frame: Frame, functions: Vec<IrFunction>) {
+    /// Look up a function from a previous unit.
+    pub fn external_function(&self, unit: u32, func_id: FuncId) -> Result<&IrFunction, InterpError> {
+        let functions = self.unit_functions.get(unit as usize)
+            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+        functions.iter()
+            .find(|f| f.id == func_id)
+            .ok_or(InterpError::FunctionNotFound(func_id))
+    }
+}
+
+impl Default for FunctionRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Mutable frame storage for script unit execution.
+///
+/// Stores frames from previously executed units for external value/slot access.
+pub struct FrameStore {
+    /// Frames from executed units, indexed by unit number.
+    frames: Vec<Frame>,
+}
+
+impl FrameStore {
+    /// Create a new empty frame store.
+    pub fn new() -> Self {
+        Self { frames: Vec::new() }
+    }
+
+    /// Add a completed unit's frame.
+    pub fn add_frame(&mut self, frame: Frame) {
         self.frames.push(frame);
-        self.unit_functions.push(functions);
     }
 
     /// Read a value from a previous unit.
-    fn external_value(&self, unit: u32, value: ValueId) -> Result<Value, InterpError> {
+    pub fn external_value(&self, unit: u32, value: ValueId) -> Result<Value, InterpError> {
         let frame = self.frames.get(unit as usize)
             .ok_or(InterpError::ExternalUnitNotFound(unit))?;
         frame.value(value)
     }
 
     /// Read a slot from a previous unit.
-    fn external_slot(&self, unit: u32, slot: SlotId) -> Result<Value, InterpError> {
+    pub fn external_slot(&self, unit: u32, slot: SlotId) -> Result<Value, InterpError> {
         let frame = self.frames.get(unit as usize)
             .ok_or(InterpError::ExternalUnitNotFound(unit))?;
         frame.slot(slot)
     }
 
-    /// Get slot destination in a previous unit (for writing).
-    fn external_slot_dest(&mut self, unit: u32, slot: SlotId) -> Result<Destination, InterpError> {
+    /// Write a value to a slot in a previous unit.
+    pub fn write_external_slot(&mut self, unit: u32, slot: SlotId, value: &Value) -> Result<(), InterpError> {
         let frame = self.frames.get_mut(unit as usize)
             .ok_or(InterpError::ExternalUnitNotFound(unit))?;
-        frame.slot_dest(slot)
+        let dest = frame.slot_dest(slot)?;
+        unsafe {
+            std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, (*value.tydesc).size as usize);
+        }
+        Ok(())
+    }
+}
+
+impl Default for FrameStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Combined environment for script execution (convenience wrapper).
+pub struct ScriptEnvironment {
+    pub registry: FunctionRegistry,
+    pub frames: FrameStore,
+}
+
+impl ScriptEnvironment {
+    pub fn new() -> Self {
+        Self {
+            registry: FunctionRegistry::new(),
+            frames: FrameStore::new(),
+        }
     }
 
-    /// Look up a function from a previous unit.
-    fn external_function(&self, unit: u32, func_id: FuncId) -> Result<&IrFunction, InterpError> {
-        let functions = self.unit_functions.get(unit as usize)
-            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
-        functions.iter()
-            .find(|f| f.id == func_id)
-            .ok_or(InterpError::FunctionNotFound(func_id))
+    /// Add a module function.
+    pub fn add_module_function(&mut self, name: String, func: IrFunction) {
+        self.registry.add_module_function(name, func);
+    }
+
+    /// Add a completed unit's frame and functions.
+    pub fn add_unit(&mut self, frame: Frame, functions: Vec<IrFunction>) {
+        self.frames.add_frame(frame);
+        self.registry.add_unit_functions(functions);
     }
 }
 
@@ -671,7 +727,7 @@ impl<'a> ExecutionContext<'a> {
     fn get_function<'b>(
         &'b self,
         func_ref: &FuncRef,
-        env: Option<&'b ScriptEnvironment>,
+        registry: &'b FunctionRegistry,
     ) -> Result<&'b IrFunction, InterpError> {
         match func_ref {
             FuncRef::Local(id) => {
@@ -680,12 +736,10 @@ impl<'a> ExecutionContext<'a> {
                     .ok_or(InterpError::FunctionNotFound(*id))
             }
             FuncRef::External { unit, func } => {
-                env.ok_or(InterpError::ExternalNotSupported)?
-                    .external_function(*unit, *func)
+                registry.external_function(*unit, *func)
             }
             FuncRef::Module { name } => {
-                env.ok_or(InterpError::ExternalNotSupported)?
-                    .get_module_function(name)
+                registry.get_module_function(name)
                     .ok_or(InterpError::ModuleFunctionNotFound(name.clone()))
             }
         }
@@ -716,7 +770,9 @@ impl IrInterpreter {
         // For single function execution, create a context with just this function.
         let functions = [func.clone()];
         let ctx = ExecutionContext::new(&functions);
-        self.call_in_context(func, args, ret_dest, &ctx, None)
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+        self.call_in_context(func, args, ret_dest, &ctx, &registry, &mut frames)
     }
 
     /// Execute a function with arguments in a context with available functions.
@@ -726,7 +782,8 @@ impl IrInterpreter {
         args: Vec<Value>,
         ret_dest: Destination,
         ctx: &ExecutionContext,
-        env: Option<&ScriptEnvironment>,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         // Compute layout.
         let layout = IrLayout::compute(
@@ -751,7 +808,7 @@ impl IrInterpreter {
         }
 
         // Execute blocks, writing return value directly to ret_dest.
-        self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx, env)
+        self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx, registry, frames)
     }
 
     /// Execute a script unit, optionally returning the result value.
@@ -778,8 +835,10 @@ impl IrInterpreter {
         // Create execution context with functions defined in this unit.
         let ctx = ExecutionContext::new(&unit.functions);
 
-        // Execute blocks.
-        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, None)
+        // Execute blocks with empty registry/frames (no external references).
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, &registry, &mut frames)
     }
 
     /// Execute a script unit with access to previous units' values.
@@ -805,9 +864,15 @@ impl IrInterpreter {
         // Create execution context with local functions.
         let ctx = ExecutionContext::new(&unit.functions);
 
-        // Execute blocks with environment for external lookups.
-        // Reborrow env immutably since execute_blocks only reads from it.
-        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, Some(&*env))?;
+        // Execute blocks with registry for function lookups and frames for slot access.
+        self.execute_blocks(
+            &unit.blocks,
+            &mut frame,
+            ret_dest,
+            &ctx,
+            &env.registry,
+            &mut env.frames,
+        )?;
 
         // Add this unit's frame and functions to the environment for future units.
         env.add_unit(frame, unit.functions.clone());
@@ -821,7 +886,8 @@ impl IrInterpreter {
         frame: &mut Frame,
         ret_dest: Destination,
         ctx: &ExecutionContext,
-        env: Option<&ScriptEnvironment>,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         let mut current_block = BlockId(0);
 
@@ -831,9 +897,8 @@ impl IrInterpreter {
                 .ok_or(InterpError::BlockNotFound(current_block))?;
 
             // Execute instructions.
-            // Note: we reborrow env immutably for instruction execution.
             for instr in &block.instructions {
-                self.execute_instruction(instr, frame, ret_dest, ctx, env)?;
+                self.execute_instruction(instr, frame, ret_dest, ctx, registry, frames)?;
             }
 
             // Handle terminator.
@@ -842,33 +907,33 @@ impl IrInterpreter {
                     current_block = *target;
                 }
                 Terminator::Branch { cond, then_block, else_block } => {
-                    let cond_val = self.read_operand(cond, frame, env)?;
+                    let cond_val = self.read_operand(cond, frame, frames)?;
                     let cond_bool = unsafe { *(cond_val.ptr as *const bool) };
                     current_block = if cond_bool { *then_block } else { *else_block };
                 }
                 Terminator::Return { value } => {
                     if let Some(op) = value {
-                        let val = self.read_operand(op, frame, env)?;
+                        let val = self.read_operand(op, frame, frames)?;
                         unsafe { self.copy_value(&val, ret_dest)?; }
                     }
                     return Ok(());
                 }
                 Terminator::TryReturn { value } => {
                     if let Some(op) = value {
-                        let val = self.read_operand(op, frame, env)?;
+                        let val = self.read_operand(op, frame, frames)?;
                         unsafe { self.copy_value(&val, ret_dest)?; }
                     }
                     return Ok(());
                 }
                 Terminator::UnitEnd { result } => {
                     if let Some(op) = result {
-                        let val = self.read_operand(op, frame, env)?;
+                        let val = self.read_operand(op, frame, frames)?;
                         unsafe { self.copy_value(&val, ret_dest)?; }
                     }
                     return Ok(());
                 }
                 Terminator::UnitEarlyReturn { value } => {
-                    let val = self.read_operand(value, frame, env)?;
+                    let val = self.read_operand(value, frame, frames)?;
                     unsafe { self.copy_value(&val, ret_dest)?; }
                     return Ok(());
                 }
@@ -882,7 +947,8 @@ impl IrInterpreter {
         frame: &mut Frame,
         _ret_dest: Destination,
         ctx: &ExecutionContext,
-        env: Option<&ScriptEnvironment>,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         match instr {
             Instruction::Const { dest, value } => {
@@ -891,32 +957,32 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Copy { dest, src } => {
-                let src_val = self.read_operand(src, frame, env)?;
+                let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 unsafe { self.copy_value(&src_val, dest_slot)?; }
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Move { dest, src } => {
-                let src_val = self.read_operand(src, frame, env)?;
+                let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 unsafe { self.move_value(&src_val, dest_slot)?; }
                 frame.mark_value_initialized(*dest);
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
-                let lhs_val = self.read_operand(lhs, frame, env)?;
-                let rhs_val = self.read_operand(rhs, frame, env)?;
+                let lhs_val = self.read_operand(lhs, frame, frames)?;
+                let rhs_val = self.read_operand(rhs, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_binop(*op, &lhs_val, &rhs_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::UnaryOp { dest, op, operand } => {
-                let src_val = self.read_operand(operand, frame, env)?;
+                let src_val = self.read_operand(operand, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_unaryop(*op, &src_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::SlotStore { dest, value } => {
-                let src_val = self.read_operand(value, frame, env)?;
+                let src_val = self.read_operand(value, frame, frames)?;
                 match dest {
                     SlotDest::Local(slot_id) => {
                         let dest_slot = frame.slot_dest(*slot_id)?;
@@ -924,12 +990,7 @@ impl IrInterpreter {
                         frame.mark_slot_initialized(*slot_id);
                     }
                     SlotDest::External { unit, slot } => {
-                        // TODO: writing to external slots requires mutable env access.
-                        // For now, external slot reads work but writes are not supported.
-                        return Err(InterpError::TypeMismatch(format!(
-                            "Writing to external slot (unit={}, slot={:?}) not yet supported",
-                            unit, slot
-                        )));
+                        frames.write_external_slot(*unit, *slot, &src_val)?;
                     }
                 }
             }
@@ -941,7 +1002,7 @@ impl IrInterpreter {
             }
             Instruction::Pack { dest, ty: _, fields } => {
                 let field_vals: Vec<Value> = fields.iter()
-                    .map(|op| self.read_operand(op, frame, env))
+                    .map(|op| self.read_operand(op, frame, frames))
                     .collect::<Result<_, _>>()?;
                 let dest_slot = frame.value_dest(*dest)?;
                 // Check type tag to determine if tuple or struct.
@@ -956,7 +1017,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Unpack { dests, src } => {
-                let src_val = self.read_operand(src, frame, env)?;
+                let src_val = self.read_operand(src, frame, frames)?;
                 let tag = unsafe { (*src_val.tydesc).type_tag };
                 match tag {
                     rtdt::TyTag::Tuple => {
@@ -987,21 +1048,21 @@ impl IrInterpreter {
                 }
             }
             Instruction::TupleIndex { dest, base, index } => {
-                let base_val = self.read_operand(base, frame, env)?;
+                let base_val = self.read_operand(base, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_tuple_index(&base_val, *index, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::FieldAccess { dest, base, field_index } => {
-                let base_val = self.read_operand(base, frame, env)?;
+                let base_val = self.read_operand(base, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_field_access(&base_val, *field_index, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 // Execute checked arithmetic and set overflow flag.
-                let lhs_val = self.read_operand(lhs, frame, env)?;
-                let rhs_val = self.read_operand(rhs, frame, env)?;
+                let lhs_val = self.read_operand(lhs, frame, frames)?;
+                let rhs_val = self.read_operand(rhs, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 let overflow_slot = frame.value_dest(*overflow)?;
                 self.execute_binop_checked(*op, &lhs_val, &rhs_val, dest_slot, overflow_slot)?;
@@ -1009,7 +1070,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*overflow);
             }
             Instruction::WrapSome { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, env)?;
+                let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_wrap_some(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
@@ -1020,7 +1081,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
             }
             Instruction::UnwrapOption { dest, is_some, src } => {
-                let src_val = self.read_operand(src, frame, env)?;
+                let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 let is_some_slot = frame.value_dest(*is_some)?;
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot)?;
@@ -1028,19 +1089,19 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*is_some);
             }
             Instruction::WrapOk { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, env)?;
+                let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_wrap_ok(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::WrapErr { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, env)?;
+                let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_wrap_err(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::UnwrapResult { dest, is_ok, src } => {
-                let src_val = self.read_operand(src, frame, env)?;
+                let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 let is_ok_slot = frame.value_dest(*is_ok)?;
                 self.execute_unwrap_result(&src_val, dest_slot, is_ok_slot)?;
@@ -1049,19 +1110,18 @@ impl IrInterpreter {
             }
             Instruction::Call { dest, func, args } => {
                 // Look up the function.
-                let callee = ctx.get_function(func, env)?;
+                let callee = ctx.get_function(func, registry)?;
 
                 // Evaluate arguments.
                 let arg_vals: Vec<Value> = args.iter()
-                    .map(|op| self.read_operand(op, frame, env))
+                    .map(|op| self.read_operand(op, frame, frames))
                     .collect::<Result<_, _>>()?;
 
                 // Get destination for return value.
                 let dest_slot = frame.value_dest(*dest)?;
 
                 // Call the function, writing result directly to destination.
-                // Pass env so nested calls can access external functions.
-                self.call_in_context(callee, arg_vals, dest_slot, ctx, env)?;
+                self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::ListNew { .. } => {
@@ -1090,18 +1150,16 @@ impl IrInterpreter {
         &self,
         op: &Operand,
         frame: &Frame,
-        env: Option<&ScriptEnvironment>,
+        frames: &FrameStore,
     ) -> Result<Value, InterpError> {
         match op {
             Operand::Value(id) => frame.value(*id),
             Operand::Slot(id) => frame.slot(*id),
             Operand::ExternalValue { unit, value } => {
-                env.ok_or(InterpError::ExternalNotSupported)?
-                    .external_value(*unit, *value)
+                frames.external_value(*unit, *value)
             }
             Operand::ExternalSlot { unit, slot } => {
-                env.ok_or(InterpError::ExternalNotSupported)?
-                    .external_slot(*unit, *slot)
+                frames.external_slot(*unit, *slot)
             }
         }
     }
@@ -1706,7 +1764,9 @@ mod tests {
             ptr: &mut result_storage as *mut i64 as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(&main_fn, vec![], ret_dest, &ctx, None).unwrap();
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+        interp.call_in_context(&main_fn, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
 
         // Verify result is 30.
         assert_eq!(result_storage, 30);
@@ -1795,7 +1855,9 @@ mod tests {
             tydesc: ret_tydesc,
         };
 
-        interp.call_in_context(&quadruple_fn, vec![arg], ret_dest, &ctx, None).unwrap();
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+        interp.call_in_context(&quadruple_fn, vec![arg], ret_dest, &ctx, &registry, &mut frames).unwrap();
 
         // Verify result is 20 (5 * 2 * 2).
         assert_eq!(result_storage, 20);
@@ -1812,7 +1874,9 @@ mod tests {
             ptr: &mut result as *mut i64 as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(func, vec![], ret_dest, &ctx, None).unwrap();
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+        interp.call_in_context(func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
         result
     }
 
@@ -1827,7 +1891,9 @@ mod tests {
             ptr: &mut result as *mut u32 as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(func, vec![], ret_dest, &ctx, None).unwrap();
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+        interp.call_in_context(func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
         result
     }
 
@@ -1842,7 +1908,9 @@ mod tests {
             ptr: &mut result as *mut bool as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(func, vec![], ret_dest, &ctx, None).unwrap();
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+        interp.call_in_context(func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
         result
     }
 
@@ -1885,7 +1953,9 @@ mod tests {
             ptr: &mut result as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(&func, vec![], ret_dest, &ctx, None).unwrap();
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+        interp.call_in_context(&func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
         assert_eq!(result, 42);
     }
 
@@ -1924,7 +1994,9 @@ mod tests {
             ptr: &mut result as *mut i32 as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(&func, vec![], ret_dest, &ctx, None).unwrap();
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+        interp.call_in_context(&func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
         assert_eq!(result, -12345);
     }
 
