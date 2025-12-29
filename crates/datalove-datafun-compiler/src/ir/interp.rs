@@ -1192,6 +1192,8 @@ impl IrInterpreter {
             int_binop!(U16, u16, lhs, rhs, dest, op);
             int_binop!(U32, u32, lhs, rhs, dest, op);
             int_binop!(U64, u64, lhs, rhs, dest, op);
+            // Int type currently stored as i64. TODO: Support bigint.
+            int_binop!(Int, i64, lhs, rhs, dest, op);
 
             // F32 operations.
             if tag == rtdt::TyTag::F32 {

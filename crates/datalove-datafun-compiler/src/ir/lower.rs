@@ -315,15 +315,13 @@ fn lower_function_body<'db>(
 ) -> Result<IrFunction, LowerError> {
     let name = func.name(ctx.db).text(ctx.db).to_string();
 
-    // Allocate ValueIds for parameters.
-    // TODO: Get parameter types from TypecheckResult instead of re-converting.
-    // Currently we use Unit as a placeholder since convert_type_hint creates
-    // tracked structs that can't be called outside a tracked function.
+    // Allocate ValueIds for parameters with correct types.
     let params: Vec<ValueId> = func.params(ctx.db)
         .iter()
         .map(|p| {
             let param_name = p.name(ctx.db).text(ctx.db).to_string();
-            let id = ctx.fresh_value(IrType::Unit);  // TODO: Get actual param type
+            let param_type = IrType::from_type_hint(ctx.db, &p.type_hint(ctx.db));
+            let id = ctx.fresh_value(param_type);
             ctx.bind_var(&param_name, Operand::Value(id));
             id
         })

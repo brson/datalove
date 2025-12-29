@@ -445,6 +445,11 @@ fn pretty_print_value(value: &ir::interp::Value) -> String {
             let v = unsafe { *(value.ptr as *const f64) };
             format!("{}", v)
         }
+        TyTag::Int => {
+            // Int currently stored as i64. TODO: Support bigint.
+            let v = unsafe { *(value.ptr as *const i64) };
+            format!("@{}", v)
+        }
         _ => format!("<{:?}>", tag),
     }
 }
