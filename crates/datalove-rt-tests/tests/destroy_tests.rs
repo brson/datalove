@@ -856,10 +856,9 @@ fn test_destroy_option_none() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // TODO: Implicit option wrapping doesn't work with strings
 fn test_destroy_option_some_string() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#": @?@string / @"test string""#)?;
+    let typechecked = compile_str(&db, r#": @?@string / some @"test string""#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -906,10 +905,9 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
 }
 
 #[test]
-#[ignore] // TODO: Implicit result wrapping doesn't work with strings
 fn test_destroy_result_ok_string() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#": @!@string / @"success""#)?;
+    let typechecked = compile_str(&db, r#": @!@string / ok @"success""#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
