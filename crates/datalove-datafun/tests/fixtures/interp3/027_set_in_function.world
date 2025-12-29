@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+fun make_set(): @set<@u32>
+    ret @set { @100, @200, @300 }
+end fun
+
+----------
+scriptunit-expr
+----------
+
+make_set()

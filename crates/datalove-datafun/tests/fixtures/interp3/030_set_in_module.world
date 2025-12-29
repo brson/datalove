@@ -1,0 +1,20 @@
+----------
+module local/test/setmod
+----------
+
+fun make_set(): @set<@u32>
+    ret @set { @100, @200, @300 }
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/setmod
+import setmod.make_set
+
+----------
+scriptunit-expr
+----------
+
+make_set()

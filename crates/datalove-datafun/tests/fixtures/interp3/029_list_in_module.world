@@ -1,0 +1,20 @@
+----------
+module local/test/listmod
+----------
+
+fun make_list(): [@u32]
+    ret @[@10, @20, @30]
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/listmod
+import listmod.make_list
+
+----------
+scriptunit-expr
+----------
+
+make_list()

@@ -1,0 +1,20 @@
+----------
+module local/test/mapmod
+----------
+
+fun make_map(): @map<@u32, @u32>
+    ret @map { @1 = @1000, @2 = @2000 }
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/mapmod
+import mapmod.make_map
+
+----------
+scriptunit-expr
+----------
+
+make_map()

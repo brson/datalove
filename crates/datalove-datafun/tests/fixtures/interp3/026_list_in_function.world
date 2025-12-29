@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+fun make_list(): [@u32]
+    ret @[@10, @20, @30]
+end fun
+
+----------
+scriptunit-expr
+----------
+
+make_list()
