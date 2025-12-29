@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+fun square(n: int): int
+    ret n * n
+end fun
+
+let result = square(@6)

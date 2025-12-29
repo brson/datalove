@@ -695,7 +695,7 @@ impl IrInterpreter {
         // For single function execution, create a context with just this function.
         let functions = [func.clone()];
         let ctx = ExecutionContext::new(&functions);
-        self.call_in_context(func, args, ret_dest, &ctx)
+        self.call_in_context(func, args, ret_dest, &ctx, None)
     }
 
     /// Execute a function with arguments in a context with available functions.
@@ -705,6 +705,7 @@ impl IrInterpreter {
         args: Vec<Value>,
         ret_dest: Destination,
         ctx: &ExecutionContext,
+        env: Option<&ScriptEnvironment>,
     ) -> Result<(), InterpError> {
         // Compute layout.
         let layout = IrLayout::compute(
@@ -729,7 +730,7 @@ impl IrInterpreter {
         }
 
         // Execute blocks, writing return value directly to ret_dest.
-        self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx, None)
+        self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx, env)
     }
 
     /// Execute a script unit, optionally returning the result value.
@@ -784,7 +785,8 @@ impl IrInterpreter {
         let ctx = ExecutionContext::new(&unit.functions);
 
         // Execute blocks with environment for external lookups.
-        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, Some(env))?;
+        // Reborrow env immutably since execute_blocks only reads from it.
+        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, Some(&*env))?;
 
         // Add this unit's frame and functions to the environment for future units.
         env.add_unit(frame, unit.functions.clone());
@@ -798,7 +800,7 @@ impl IrInterpreter {
         frame: &mut Frame,
         ret_dest: Destination,
         ctx: &ExecutionContext,
-        env: Option<&mut ScriptEnvironment>,
+        env: Option<&ScriptEnvironment>,
     ) -> Result<(), InterpError> {
         let mut current_block = BlockId(0);
 
@@ -810,7 +812,7 @@ impl IrInterpreter {
             // Execute instructions.
             // Note: we reborrow env immutably for instruction execution.
             for instr in &block.instructions {
-                self.execute_instruction(instr, frame, ret_dest, ctx, env.as_deref())?;
+                self.execute_instruction(instr, frame, ret_dest, ctx, env)?;
             }
 
             // Handle terminator.
@@ -819,33 +821,33 @@ impl IrInterpreter {
                     current_block = *target;
                 }
                 Terminator::Branch { cond, then_block, else_block } => {
-                    let cond_val = self.read_operand(cond, frame, env.as_deref())?;
+                    let cond_val = self.read_operand(cond, frame, env)?;
                     let cond_bool = unsafe { *(cond_val.ptr as *const bool) };
                     current_block = if cond_bool { *then_block } else { *else_block };
                 }
                 Terminator::Return { value } => {
                     if let Some(op) = value {
-                        let val = self.read_operand(op, frame, env.as_deref())?;
+                        let val = self.read_operand(op, frame, env)?;
                         unsafe { self.copy_value(&val, ret_dest)?; }
                     }
                     return Ok(());
                 }
                 Terminator::TryReturn { value } => {
                     if let Some(op) = value {
-                        let val = self.read_operand(op, frame, env.as_deref())?;
+                        let val = self.read_operand(op, frame, env)?;
                         unsafe { self.copy_value(&val, ret_dest)?; }
                     }
                     return Ok(());
                 }
                 Terminator::UnitEnd { result } => {
                     if let Some(op) = result {
-                        let val = self.read_operand(op, frame, env.as_deref())?;
+                        let val = self.read_operand(op, frame, env)?;
                         unsafe { self.copy_value(&val, ret_dest)?; }
                     }
                     return Ok(());
                 }
                 Terminator::UnitEarlyReturn { value } => {
-                    let val = self.read_operand(value, frame, env.as_deref())?;
+                    let val = self.read_operand(value, frame, env)?;
                     unsafe { self.copy_value(&val, ret_dest)?; }
                     return Ok(());
                 }
@@ -1037,7 +1039,8 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest)?;
 
                 // Call the function, writing result directly to destination.
-                self.call_in_context(callee, arg_vals, dest_slot, ctx)?;
+                // Pass env so nested calls can access external functions.
+                self.call_in_context(callee, arg_vals, dest_slot, ctx, env)?;
                 frame.mark_value_initialized(*dest);
             }
             Instruction::ListNew { .. } => {
@@ -1682,7 +1685,7 @@ mod tests {
             ptr: &mut result_storage as *mut i64 as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(&main_fn, vec![], ret_dest, &ctx).unwrap();
+        interp.call_in_context(&main_fn, vec![], ret_dest, &ctx, None).unwrap();
 
         // Verify result is 30.
         assert_eq!(result_storage, 30);
@@ -1771,7 +1774,7 @@ mod tests {
             tydesc: ret_tydesc,
         };
 
-        interp.call_in_context(&quadruple_fn, vec![arg], ret_dest, &ctx).unwrap();
+        interp.call_in_context(&quadruple_fn, vec![arg], ret_dest, &ctx, None).unwrap();
 
         // Verify result is 20 (5 * 2 * 2).
         assert_eq!(result_storage, 20);
@@ -1788,7 +1791,7 @@ mod tests {
             ptr: &mut result as *mut i64 as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(func, vec![], ret_dest, &ctx).unwrap();
+        interp.call_in_context(func, vec![], ret_dest, &ctx, None).unwrap();
         result
     }
 
@@ -1803,7 +1806,7 @@ mod tests {
             ptr: &mut result as *mut u32 as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(func, vec![], ret_dest, &ctx).unwrap();
+        interp.call_in_context(func, vec![], ret_dest, &ctx, None).unwrap();
         result
     }
 
@@ -1818,7 +1821,7 @@ mod tests {
             ptr: &mut result as *mut bool as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(func, vec![], ret_dest, &ctx).unwrap();
+        interp.call_in_context(func, vec![], ret_dest, &ctx, None).unwrap();
         result
     }
 
@@ -1861,7 +1864,7 @@ mod tests {
             ptr: &mut result as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(&func, vec![], ret_dest, &ctx).unwrap();
+        interp.call_in_context(&func, vec![], ret_dest, &ctx, None).unwrap();
         assert_eq!(result, 42);
     }
 
@@ -1900,7 +1903,7 @@ mod tests {
             ptr: &mut result as *mut i32 as *mut u8,
             tydesc: ret_tydesc,
         };
-        interp.call_in_context(&func, vec![], ret_dest, &ctx).unwrap();
+        interp.call_in_context(&func, vec![], ret_dest, &ctx, None).unwrap();
         assert_eq!(result, -12345);
     }
 

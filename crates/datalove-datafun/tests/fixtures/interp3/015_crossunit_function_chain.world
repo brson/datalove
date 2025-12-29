@@ -1,0 +1,21 @@
+----------
+scriptunit-fragment
+----------
+
+fun add_one(n: int): int
+    ret n + :int/@1
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+fun add_two(n: int): int
+    ret add_one(add_one(n))
+end fun
+
+----------
+scriptunit-expr
+----------
+
+add_two(:int/@10) + add_one(:int/@100)
