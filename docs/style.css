@@ -1,28 +1,46 @@
 :root {
+    /* Dune palette */
+    --dune-base00: #20201d;
+    --dune-base01: #292824;
+    --dune-base02: #6e6b5e;
+    --dune-base03: #7d7a68;
+    --dune-base04: #999580;
+    --dune-base05: #a6a28c;
+    --dune-base06: #e8e4cf;
+    --dune-base07: #fefbec;
+    --dune-red: #d73737;
+    --dune-orange: #b65611;
+    --dune-yellow: #ae9513;
+    --dune-green: #60ac39;
+    --dune-cyan: #1fad83;
+    --dune-blue: #6684e1;
+    --dune-violet: #b854d4;
+    --dune-magenta: #d43552;
+
     --font-text: 'Source Sans 3', system-ui, sans-serif;
     --font-code: 'Source Code Pro', monospace;
-    --bg: #1a1a2e;
-    --fg: #eaeaea;
-    --accent: #e94560;
-    --code-bg: #16213e;
-    --link: #0f9b8e;
-    --syn-keyword: #e94560;
-    --syn-type-name: #0f9b8e;
-    --syn-string: #f9c74f;
-    --syn-number: #90be6d;
-    --syn-boolean: #f8961e;
-    --syn-variant: #f8961e;
-    --syn-comment: #6c7a89;
-    --syn-function: #43aa8b;
-    --syn-brace-curly: #e94560;
-    --syn-brace-paren: #f8961e;
-    --syn-brace-angle: #90be6d;
-    --syn-brace-square: #43aa8b;
-    --syn-op-cmp: #b8b8b8;
-    --syn-op-result: #f472b6;
-    --syn-op-option: #a78bfa;
-    --syn-type-colon: #0f9b8e;
-    --syn-punctuation: #eaeaea;
+    --bg: var(--dune-base00);
+    --fg: var(--dune-base06);
+    --accent: var(--dune-red);
+    --code-bg: var(--dune-base01);
+    --link: var(--dune-cyan);
+    --syn-keyword: var(--dune-red);
+    --syn-type-name: var(--dune-cyan);
+    --syn-string: var(--dune-yellow);
+    --syn-number: var(--dune-green);
+    --syn-boolean: var(--dune-orange);
+    --syn-variant: var(--dune-orange);
+    --syn-comment: var(--dune-base03);
+    --syn-function: var(--dune-blue);
+    --syn-brace-curly: var(--dune-red);
+    --syn-brace-paren: var(--dune-orange);
+    --syn-brace-angle: var(--dune-green);
+    --syn-brace-square: var(--dune-cyan);
+    --syn-op-cmp: var(--dune-base05);
+    --syn-op-result: var(--dune-magenta);
+    --syn-op-option: var(--dune-violet);
+    --syn-type-colon: var(--dune-cyan);
+    --syn-punctuation: var(--dune-base05);
 }
 
 * {
