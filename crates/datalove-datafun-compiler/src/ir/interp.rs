@@ -582,6 +582,26 @@ impl Frame {
         }
     }
 
+    /// Mark value as dropped (uninitialized).
+    ///
+    /// Called after Drop instruction to prevent double-destroy.
+    pub fn mark_value_dropped(&mut self, id: ValueId) {
+        let idx = id.0 as usize;
+        if idx < self.value_initialized.len() {
+            self.value_initialized[idx] = false;
+        }
+    }
+
+    /// Mark slot as dropped (uninitialized).
+    ///
+    /// Called after Drop instruction to prevent double-destroy.
+    pub fn mark_slot_dropped(&mut self, id: SlotId) {
+        let idx = id.0 as usize;
+        if idx < self.slot_initialized.len() {
+            self.slot_initialized[idx] = false;
+        }
+    }
+
     /// Destroy all initialized values and slots.
     ///
     /// Calls the runtime destructor for each initialized value/slot.
@@ -1299,6 +1319,13 @@ impl IrInterpreter {
             Instruction::Drop { operand } => {
                 let val = self.read_operand(operand, frame, frames)?;
                 self.execute_drop(&val)?;
+                // Mark as dropped to prevent double-destroy in destroy_all.
+                match operand {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    // External values/slots are in other frames, handled separately.
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                }
             }
             Instruction::Nop => {}
         }

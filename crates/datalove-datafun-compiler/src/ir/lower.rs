@@ -11,6 +11,202 @@ use crate::tycheck::TypecheckResult;
 use crate::Db;
 use super::*;
 
+/// Check if an IR type has copy semantics.
+///
+/// Copy types can be bitwise copied without ownership tracking.
+/// Non-copy types require explicit drops.
+fn is_copy_type(ty: &IrType) -> bool {
+    match ty {
+        // Scalar primitives are always copy.
+        IrType::Unit | IrType::Bool => true,
+        IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 => true,
+        IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 => true,
+        IrType::F32 => true,
+        // Heap-allocated types are never copy.
+        IrType::Int | IrType::String | IrType::Data | IrType::Error => false,
+        IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) => false,
+        // Option is copy only if inner is copy.
+        IrType::Option(inner) => is_copy_type(inner),
+        // Result is never copy (conservative).
+        IrType::Result(_) => false,
+        // Tuple is copy only if all fields are copy.
+        IrType::Tuple(fields) => fields.iter().all(is_copy_type),
+        // Struct is copy only if all fields are copy.
+        IrType::Struct(fields) => fields.iter().all(|(_, ty)| is_copy_type(ty)),
+    }
+}
+
+/// What kind of scope we're tracking.
+#[derive(Clone, Debug)]
+enum ScopeKind {
+    /// Function body scope.
+    Function,
+    /// Script unit top-level scope (values are exported, not dropped at unit end).
+    ScriptUnit,
+    /// Loop body scope.
+    Loop { header: BlockId, exit: BlockId },
+    /// If-then branch scope.
+    IfThen { merge: BlockId },
+    /// If-else branch scope.
+    IfElse { merge: BlockId },
+}
+
+/// A binding tracked for drop purposes.
+#[derive(Clone, Debug)]
+struct TrackedBinding {
+    /// The operand (Value or Slot).
+    operand: Operand,
+    /// The type (for determining if drop is needed).
+    ty: IrType,
+    /// Whether this binding has been moved/consumed.
+    moved: bool,
+}
+
+/// A scope for tracking drops.
+#[derive(Clone, Debug)]
+struct Scope {
+    kind: ScopeKind,
+    /// Bindings created in this scope that may need dropping.
+    bindings: Vec<TrackedBinding>,
+}
+
+impl Scope {
+    fn new(kind: ScopeKind) -> Self {
+        Self {
+            kind,
+            bindings: Vec::new(),
+        }
+    }
+}
+
+/// Scope tracker for emitting drops at scope exits.
+#[derive(Clone, Debug, Default)]
+struct ScopeTracker {
+    scopes: Vec<Scope>,
+}
+
+impl ScopeTracker {
+    fn new() -> Self {
+        Self { scopes: Vec::new() }
+    }
+
+    /// Enter a new scope.
+    fn enter_scope(&mut self, kind: ScopeKind) {
+        self.scopes.push(Scope::new(kind));
+    }
+
+    /// Record a binding in the current scope.
+    fn record_binding(&mut self, operand: Operand, ty: IrType) {
+        if let Some(scope) = self.scopes.last_mut() {
+            // Only track non-copy types.
+            if !is_copy_type(&ty) {
+                scope.bindings.push(TrackedBinding {
+                    operand,
+                    ty,
+                    moved: false,
+                });
+            }
+        }
+    }
+
+    /// Mark an operand as moved (won't be dropped).
+    fn mark_moved(&mut self, operand: &Operand) {
+        // Search all scopes from innermost to outermost.
+        for scope in self.scopes.iter_mut().rev() {
+            for binding in &mut scope.bindings {
+                if &binding.operand == operand {
+                    binding.moved = true;
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Get the bindings that need dropping when exiting the current scope.
+    fn bindings_to_drop(&self) -> Vec<Operand> {
+        if let Some(scope) = self.scopes.last() {
+            // Don't drop script unit top-level bindings (they're exported).
+            if matches!(scope.kind, ScopeKind::ScriptUnit) {
+                return Vec::new();
+            }
+            scope.bindings.iter()
+                .filter(|b| !b.moved)
+                .map(|b| b.operand)
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Exit the current scope, returning bindings that need dropping.
+    fn exit_scope(&mut self) -> Vec<Operand> {
+        let drops = self.bindings_to_drop();
+        self.scopes.pop();
+        drops
+    }
+
+    /// Get bindings to drop for break (all scopes up to and including the loop).
+    fn bindings_to_drop_for_break(&self) -> Vec<Operand> {
+        let mut drops = Vec::new();
+        for scope in self.scopes.iter().rev() {
+            // Collect bindings from this scope.
+            for binding in &scope.bindings {
+                if !binding.moved && !is_copy_type(&binding.ty) {
+                    drops.push(binding.operand);
+                }
+            }
+            // Stop when we hit a loop scope.
+            if matches!(scope.kind, ScopeKind::Loop { .. }) {
+                break;
+            }
+        }
+        drops
+    }
+
+    /// Get bindings to drop for continue (only the current loop iteration).
+    fn bindings_to_drop_for_continue(&self) -> Vec<Operand> {
+        let mut drops = Vec::new();
+        for scope in self.scopes.iter().rev() {
+            // Collect bindings from this scope.
+            for binding in &scope.bindings {
+                if !binding.moved && !is_copy_type(&binding.ty) {
+                    drops.push(binding.operand);
+                }
+            }
+            // Stop when we hit a loop scope (include it, then stop).
+            if matches!(scope.kind, ScopeKind::Loop { .. }) {
+                break;
+            }
+        }
+        drops
+    }
+
+    /// Check if we're inside a function scope.
+    fn in_function(&self) -> bool {
+        self.scopes.iter().any(|s| matches!(s.kind, ScopeKind::Function))
+    }
+
+    /// Get all bindings to drop for a function return.
+    ///
+    /// Returns bindings from all scopes up to and including the function scope.
+    fn bindings_to_drop_for_return(&self) -> Vec<Operand> {
+        let mut drops = Vec::new();
+        for scope in self.scopes.iter().rev() {
+            // Collect bindings from this scope.
+            for binding in &scope.bindings {
+                if !binding.moved && !is_copy_type(&binding.ty) {
+                    drops.push(binding.operand);
+                }
+            }
+            // Stop when we hit a function scope.
+            if matches!(scope.kind, ScopeKind::Function) {
+                break;
+            }
+        }
+        drops
+    }
+}
+
 /// Parse an integer literal into a ConstValue based on the target type.
 fn parse_int_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
     match ty {
@@ -140,6 +336,8 @@ pub struct LowerCtx<'db> {
     slot_types: Vec<IrType>,
     /// Loop context stack: (continue_target, break_target) for each nested loop.
     loop_stack: Vec<(BlockId, BlockId)>,
+    /// Scope tracker for emitting drops at scope exits.
+    scope_tracker: ScopeTracker,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -163,6 +361,7 @@ impl<'db> LowerCtx<'db> {
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
+            scope_tracker: ScopeTracker::new(),
         }
     }
 
@@ -235,6 +434,7 @@ impl<'db> LowerCtx<'db> {
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
+            scope_tracker: ScopeTracker::new(),
         }
     }
 
@@ -304,6 +504,23 @@ impl<'db> LowerCtx<'db> {
     fn lookup_var(&self, name: &str) -> Option<Operand> {
         self.variables.get(name).copied()
     }
+
+    /// Emit Drop instructions for the given operands.
+    fn emit_drops(&mut self, operands: Vec<Operand>) {
+        for operand in operands {
+            self.emit(Instruction::Drop { operand });
+        }
+    }
+
+    /// Get the type for a value ID.
+    fn value_type(&self, id: ValueId) -> Option<&IrType> {
+        self.value_types.get(id.0 as usize)
+    }
+
+    /// Get the type for a slot ID.
+    fn slot_type(&self, id: SlotId) -> Option<&IrType> {
+        self.slot_types.get(id.0 as usize)
+    }
 }
 
 /// Lower a function to IR.
@@ -332,14 +549,19 @@ fn lower_function_body<'db>(
 ) -> Result<IrFunction, LowerError> {
     let name = func.name(ctx.db).text(ctx.db).to_string();
 
+    // Enter function scope for drop tracking.
+    ctx.scope_tracker.enter_scope(ScopeKind::Function);
+
     // Allocate ValueIds for parameters with correct types.
     let params: Vec<ValueId> = func.params(ctx.db)
         .iter()
         .map(|p| {
             let param_name = p.name(ctx.db).text(ctx.db).to_string();
             let param_type = IrType::from_type_hint(ctx.db, &p.type_hint(ctx.db));
-            let id = ctx.fresh_value(param_type);
+            let id = ctx.fresh_value(param_type.clone());
             ctx.bind_var(&param_name, Operand::Value(id));
+            // Record parameter for drop tracking.
+            ctx.scope_tracker.record_binding(Operand::Value(id), param_type);
             id
         })
         .collect();
@@ -350,17 +572,22 @@ fn lower_function_body<'db>(
     }
 
     // If no explicit return, add implicit return unit.
+    // Emit drops before the implicit return.
     if ctx.current_instructions.is_empty()
         || !matches!(ctx.blocks.last().map(|b| &b.terminator), Some(Terminator::Return { .. }))
     {
         // Check if we already have a return as the last instruction.
         let needs_return = ctx.blocks.is_empty()
             || !matches!(ctx.blocks.last().unwrap().terminator, Terminator::Return { .. });
-        if needs_return && ctx.current_instructions.len() > 0 {
-            ctx.finish_block(Terminator::Return { value: None });
-        } else if needs_return {
+        if needs_return {
+            // Emit drops before implicit return.
+            let drops = ctx.scope_tracker.exit_scope();
+            ctx.emit_drops(drops);
             ctx.finish_block(Terminator::Return { value: None });
         }
+    } else {
+        // Scope already exited by explicit return, just pop it.
+        ctx.scope_tracker.scopes.pop();
     }
 
     Ok(IrFunction {
@@ -383,8 +610,12 @@ fn lower_statement<'db>(
     match stmt {
         Statement::Let(let_stmt) => {
             let name = let_stmt.name(ctx.db).text(ctx.db).to_string();
-            let value_id = lower_expression(ctx, let_stmt.value(ctx.db))?;
+            let init_expr = let_stmt.value(ctx.db);
+            let value_type = ctx.expr_type(init_expr);
+            let value_id = lower_expression(ctx, init_expr)?;
             ctx.bind_var(&name, Operand::Value(value_id));
+            // Record binding for drop tracking.
+            ctx.scope_tracker.record_binding(Operand::Value(value_id), value_type);
             Ok(())
         }
         Statement::Var(var_stmt) => {
@@ -392,19 +623,27 @@ fn lower_statement<'db>(
             // Get type from the initialization expression.
             let init_expr = var_stmt.value(ctx.db);
             let slot_type = ctx.expr_type(init_expr);
-            let slot = ctx.fresh_slot(slot_type);
+            let slot = ctx.fresh_slot(slot_type.clone());
             let value_id = lower_expression(ctx, init_expr)?;
             ctx.emit(Instruction::SlotStore {
                 dest: SlotDest::Local(slot),
                 value: Operand::Value(value_id),
             });
             ctx.bind_var(&name, Operand::Slot(slot));
+            // Record slot for drop tracking.
+            ctx.scope_tracker.record_binding(Operand::Slot(slot), slot_type);
             Ok(())
         }
         Statement::Set(set_stmt) => {
             let name = set_stmt.name(ctx.db).text(ctx.db).to_string();
             let value_id = lower_expression(ctx, set_stmt.value(ctx.db))?;
             if let Some(Operand::Slot(slot)) = ctx.lookup_var(&name) {
+                // Drop old value before storing new one.
+                if let Some(slot_type) = ctx.slot_type(slot).cloned() {
+                    if !is_copy_type(&slot_type) {
+                        ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
+                    }
+                }
                 ctx.emit(Instruction::SlotStore {
                     dest: SlotDest::Local(slot),
                     value: Operand::Value(value_id),
@@ -416,10 +655,17 @@ fn lower_statement<'db>(
         }
         Statement::Ret(ret_stmt) => {
             let value = if let Some(expr) = ret_stmt.value(ctx.db) {
-                Some(Operand::Value(lower_expression(ctx, expr)?))
+                let value_id = lower_expression(ctx, expr)?;
+                let operand = Operand::Value(value_id);
+                // Mark return value as moved (not dropped).
+                ctx.scope_tracker.mark_moved(&operand);
+                Some(operand)
             } else {
                 None
             };
+            // Emit drops for all values in all scopes before return.
+            let drops = ctx.scope_tracker.bindings_to_drop_for_return();
+            ctx.emit_drops(drops);
             ctx.finish_block(Terminator::Return { value });
             // Start a new unreachable block (code after return).
             let new_block = ctx.fresh_block();
@@ -436,6 +682,9 @@ fn lower_statement<'db>(
             let (_, break_target) = ctx.loop_stack.last()
                 .ok_or(LowerError::BreakOutsideLoop)?;
             let break_target = *break_target;
+            // Emit drops for all scopes up to the loop.
+            let drops = ctx.scope_tracker.bindings_to_drop_for_break();
+            ctx.emit_drops(drops);
             ctx.finish_block(Terminator::Goto(break_target));
             // Start unreachable block for code after break.
             let dead_block = ctx.fresh_block();
@@ -446,6 +695,9 @@ fn lower_statement<'db>(
             let (continue_target, _) = ctx.loop_stack.last()
                 .ok_or(LowerError::ContinueOutsideLoop)?;
             let continue_target = *continue_target;
+            // Emit drops for current loop iteration.
+            let drops = ctx.scope_tracker.bindings_to_drop_for_continue();
+            ctx.emit_drops(drops);
             ctx.finish_block(Terminator::Goto(continue_target));
             // Start unreachable block for code after continue.
             let dead_block = ctx.fresh_block();
@@ -486,18 +738,26 @@ fn lower_if<'db>(
 
     // Lower then branch.
     ctx.start_block(then_block);
+    ctx.scope_tracker.enter_scope(ScopeKind::IfThen { merge: merge_block });
     for stmt in if_stmt.then_body(ctx.db) {
         lower_statement(ctx, stmt)?;
     }
+    // Exit scope and emit drops before Goto.
+    let drops = ctx.scope_tracker.exit_scope();
+    ctx.emit_drops(drops);
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // Lower else branch.
     ctx.start_block(else_block);
+    ctx.scope_tracker.enter_scope(ScopeKind::IfElse { merge: merge_block });
     if let Some(else_body) = if_stmt.else_body(ctx.db) {
         for stmt in else_body {
             lower_statement(ctx, stmt)?;
         }
     }
+    // Exit scope and emit drops before Goto.
+    let drops = ctx.scope_tracker.exit_scope();
+    ctx.emit_drops(drops);
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // Continue in merge block.
@@ -519,11 +779,22 @@ fn lower_loop<'db>(
     // Push loop context for break/continue.
     ctx.loop_stack.push((loop_header, loop_exit));
 
+    // Enter loop scope for drop tracking.
+    ctx.scope_tracker.enter_scope(ScopeKind::Loop {
+        header: loop_header,
+        exit: loop_exit,
+    });
+
     // Lower loop body.
     ctx.start_block(loop_header);
     for stmt in loop_stmt.body(ctx.db) {
         lower_statement(ctx, stmt)?;
     }
+
+    // Exit loop scope and emit drops before looping back.
+    let drops = ctx.scope_tracker.exit_scope();
+    ctx.emit_drops(drops);
+
     // Loop back to header.
     ctx.finish_block(Terminator::Goto(loop_header));
 
@@ -872,6 +1143,9 @@ pub fn lower_script_unit<'db>(
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, tycheck_result.expr_types(db), script_ctx);
 
+    // Enter script unit scope. Top-level bindings are exported, not dropped.
+    ctx.scope_tracker.enter_scope(ScopeKind::ScriptUnit);
+
     let result = match kind {
         ScriptUnitKind::Fragment(stmts) => {
             // Lower all statements.
@@ -887,6 +1161,9 @@ pub fn lower_script_unit<'db>(
             Some(value_id)
         }
     };
+
+    // Exit scope (no drops for ScriptUnit - bindings are exported).
+    ctx.scope_tracker.exit_scope();
 
     // Finish the final block with UnitEnd.
     ctx.finish_block(Terminator::UnitEnd {
@@ -918,10 +1195,16 @@ pub fn lower_script_fragment_raw<'db>(
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, script_ctx);
 
+    // Enter script unit scope. Top-level bindings are exported, not dropped.
+    ctx.scope_tracker.enter_scope(ScopeKind::ScriptUnit);
+
     // Lower all statements.
     for stmt in &stmts {
         lower_statement_for_script(&mut ctx, stmt)?;
     }
+
+    // Exit scope (no drops for ScriptUnit - bindings are exported).
+    ctx.scope_tracker.exit_scope();
 
     // Fragment units have no result value.
     ctx.finish_block(Terminator::UnitEnd { result: None });
@@ -981,8 +1264,13 @@ fn lower_statement_for_script<'db>(
     match stmt {
         Statement::Let(let_stmt) => {
             let name = let_stmt.name(ctx.db).text(ctx.db).to_string();
-            let value_id = lower_expression(ctx, let_stmt.value(ctx.db))?;
+            let init_expr = let_stmt.value(ctx.db);
+            let value_type = ctx.expr_type(init_expr);
+            let value_id = lower_expression(ctx, init_expr)?;
             ctx.bind_var(&name, Operand::Value(value_id));
+            // Record binding for drop tracking.
+            // Note: ScriptUnit scope bindings are exported, so they won't be dropped.
+            ctx.scope_tracker.record_binding(Operand::Value(value_id), value_type);
             // Export the binding.
             ctx.exports.push((name, ExportBinding::Value(value_id)));
             Ok(())
@@ -991,13 +1279,15 @@ fn lower_statement_for_script<'db>(
             let name = var_stmt.name(ctx.db).text(ctx.db).to_string();
             let init_expr = var_stmt.value(ctx.db);
             let slot_type = ctx.expr_type(init_expr);
-            let slot = ctx.fresh_slot(slot_type);
+            let slot = ctx.fresh_slot(slot_type.clone());
             let value_id = lower_expression(ctx, init_expr)?;
             ctx.emit(Instruction::SlotStore {
                 dest: SlotDest::Local(slot),
                 value: Operand::Value(value_id),
             });
             ctx.bind_var(&name, Operand::Slot(slot));
+            // Record slot for drop tracking.
+            ctx.scope_tracker.record_binding(Operand::Slot(slot), slot_type);
             // Export the binding.
             ctx.exports.push((name, ExportBinding::Slot(slot)));
             Ok(())
@@ -1009,6 +1299,12 @@ fn lower_statement_for_script<'db>(
             if let Some(operand) = ctx.lookup_var(&name) {
                 match operand {
                     Operand::Slot(slot) => {
+                        // Drop old value before storing new one.
+                        if let Some(slot_type) = ctx.slot_type(slot).cloned() {
+                            if !is_copy_type(&slot_type) {
+                                ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
+                            }
+                        }
                         ctx.emit(Instruction::SlotStore {
                             dest: SlotDest::Local(slot),
                             value: Operand::Value(value_id),
@@ -1016,7 +1312,8 @@ fn lower_statement_for_script<'db>(
                         Ok(())
                     }
                     Operand::ExternalSlot { unit, slot } => {
-                        // Store to external slot in a previous unit.
+                        // TODO: External slot drops need special handling.
+                        // For now, skip drop since we can't easily get the type.
                         ctx.emit(Instruction::SlotStore {
                             dest: SlotDest::External { unit, slot },
                             value: Operand::Value(value_id),
@@ -1042,6 +1339,8 @@ fn lower_statement_for_script<'db>(
                 });
                 Operand::Value(unit_val)
             };
+            // Note: Script unit early returns don't drop top-level bindings.
+            // Those are exported and cleaned up at script finalize.
             ctx.finish_block(Terminator::UnitEarlyReturn { value });
             // Start a new unreachable block.
             let new_block = ctx.fresh_block();
@@ -1062,12 +1361,14 @@ fn lower_statement_for_script<'db>(
             let saved_next_value = ctx.next_value;
             let saved_next_slot = ctx.next_slot;
             let saved_variables = std::mem::take(&mut ctx.variables);
+            let saved_scope_tracker = std::mem::take(&mut ctx.scope_tracker);
 
             // Reset for function body.
             ctx.current_block = BlockId(0);
             ctx.next_block = 1;
             ctx.next_value = 0;
             ctx.next_slot = 0;
+            ctx.scope_tracker = ScopeTracker::new();
 
             // Lower the function body.
             let func = lower_function_body(ctx, func_id, *fun_stmt)?;
@@ -1080,6 +1381,7 @@ fn lower_statement_for_script<'db>(
             ctx.next_value = saved_next_value;
             ctx.next_slot = saved_next_slot;
             ctx.variables = saved_variables;
+            ctx.scope_tracker = saved_scope_tracker;
 
             // Add the function to the unit's functions.
             ctx.functions.push(func);
@@ -1098,6 +1400,9 @@ fn lower_statement_for_script<'db>(
             let (_, break_target) = ctx.loop_stack.last()
                 .ok_or(LowerError::BreakOutsideLoop)?;
             let break_target = *break_target;
+            // Emit drops for all scopes up to the loop.
+            let drops = ctx.scope_tracker.bindings_to_drop_for_break();
+            ctx.emit_drops(drops);
             ctx.finish_block(Terminator::Goto(break_target));
             // Start unreachable block for code after break.
             let dead_block = ctx.fresh_block();
@@ -1108,6 +1413,9 @@ fn lower_statement_for_script<'db>(
             let (continue_target, _) = ctx.loop_stack.last()
                 .ok_or(LowerError::ContinueOutsideLoop)?;
             let continue_target = *continue_target;
+            // Emit drops for current loop iteration.
+            let drops = ctx.scope_tracker.bindings_to_drop_for_continue();
+            ctx.emit_drops(drops);
             ctx.finish_block(Terminator::Goto(continue_target));
             // Start unreachable block for code after continue.
             let dead_block = ctx.fresh_block();
