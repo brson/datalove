@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>influences - Datalove</title>
+    <title>Datalove Principles - Datalove</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
@@ -14,26 +14,20 @@
         <a href="index.html">♡</a>
     </nav>
     <main>
-        <h2><a href="#influences" aria-hidden="true" class="anchor" id="user-content-influences"></a>Influences</h2>
-<ul>
-<li>Rust.
-General syntax, general mechanical sympathy concerns,
-data structure definitions, float total_cmp.</li>
-<li>Zig.
-<code>?</code> / <code>!</code>, aspects of anonymous structs.</li>
-<li>Mercury.
-Argument modes and logic applications.</li>
-<li>Visual Basic / Pascal, etc / Ada.
-Line-oriented syntax tendencies.</li>
-<li>Visual Basic.
-Argument modes.</li>
-<li>JSON5.
-Baseline markup language requirements.</li>
-<li>Julia.
-Multidimensional arrays.</li>
-<li>Polars / Pandas.
-Tables.</li>
-</ul>
+        <h1><a href="#datalove-principles" aria-hidden="true" class="anchor" id="user-content-datalove-principles"></a>Datalove Principles</h1>
+<h2><a href="#modern-compiler-architecture" aria-hidden="true" class="anchor" id="user-content-modern-compiler-architecture"></a>Modern compiler architecture</h2>
+<p>Full memoization for efficient recompilation and compiler queries (LSPs).</p>
+<h2><a href="#implementation-simplicity" aria-hidden="true" class="anchor" id="user-content-implementation-simplicity"></a>Implementation simplicity</h2>
+<p>Given that we're already committed to
+some sophisticated architectural decisions,
+we also need to minimize the cognitive burden
+of maintaining the compiler and understand the language.</p>
+<h2><a href="#minimal-syntax-sugar" aria-hidden="true" class="anchor" id="user-content-minimal-syntax-sugar"></a>Minimal syntax sugar</h2>
+<p>Provide the core features necessary,
+avoid bloating the compiler with extra language features.</p>
+<h2><a href="#mechanical-sympathy" aria-hidden="true" class="anchor" id="user-content-mechanical-sympathy"></a>Mechanical sympathy</h2>
+<p>Threads are simple and directly supported by the OS:
+No green threads. No async/await state machines.</p>
 
     </main>
     <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>

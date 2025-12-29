@@ -14,7 +14,7 @@
         <a href="index.html">♡</a>
     </nav>
     <main>
-        <h2>The Datatypes of Datalit</h2>
+        <h2><a href="#the-datatypes-of-datalit" aria-hidden="true" class="anchor" id="user-content-the-datatypes-of-datalit"></a>The Datatypes of Datalit</h2>
 <p>Datalove's datatypes, their representation,
 and semantics are focused on correctness and completeness,
 particularly with regard to tricky corner cases related to subjects like overflow, NaNs, etc;
@@ -55,13 +55,13 @@ for serialization and configuration.</p>
 </ul>
 <p>Datalit types are value types and stored inline.
 Datalit structs and enums are structurally-typed.</p>
-<h2>Unit</h2>
+<h2><a href="#unit" aria-hidden="true" class="anchor" id="user-content-unit"></a>Unit</h2>
 <p>Spelled <code>()</code>, which can also be considered a zero-element anonymous tuple.
 This is the implicit return type of void functions.</p>
 <p>Note that <code>{}</code>, the empty anonymous struct,
 has identical representation,
 but is not used as the unit type.</p>
-<h2>Booleans</h2>
+<h2><a href="#booleans" aria-hidden="true" class="anchor" id="user-content-booleans"></a>Booleans</h2>
 <p>The <code>bool</code> type has two values, <code>true</code> and <code>false</code>.</p>
 <pre><code class="language-datalove">let a: bool = true
 let b: bool = false
@@ -90,13 +90,38 @@ let g = not a
 </code></pre>
 <p><code>implies</code> being logical implication,
 rarely given a first-class operator but common in logic:</p>
-<p>| a     | b     | a implies b |
-|-------|-------|-------------|
-| false | false | true        |
-| false | true  | true        |
-| true  | false | false       |
-| true  | true  | true        |</p>
-<h2>Fixed integers</h2>
+<table>
+<thead>
+<tr>
+<th>a</th>
+<th>b</th>
+<th>a implies b</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>false</td>
+<td>false</td>
+<td>true</td>
+</tr>
+<tr>
+<td>false</td>
+<td>true</td>
+<td>true</td>
+</tr>
+<tr>
+<td>true</td>
+<td>false</td>
+<td>false</td>
+</tr>
+<tr>
+<td>true</td>
+<td>true</td>
+<td>true</td>
+</tr>
+</tbody>
+</table>
+<h2><a href="#fixed-integers" aria-hidden="true" class="anchor" id="user-content-fixed-integers"></a>Fixed integers</h2>
 <p>Standard fixed integers,
 <code>u8</code>, <code>u16</code>, <code>u16</code>, <code>u32</code>, <code>u64</code>,
 <code>i8</code>, <code>i16</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>;
@@ -125,18 +150,18 @@ end fun
 </code></pre>
 <p>This compromise allows for convenient but inefficient math in the repl and scripts,
 while modules are expected to be more careful with overflow.</p>
-<h2>Big integers</h2>
-<h2>Floating point numbers</h2>
-<h2>Anonymous tuples</h2>
-<h2>Anonymous structs</h2>
-<h2>Anonymous enums</h2>
-<h2>Lists</h2>
-<h2>Maps and sets</h2>
-<h2>Tensors</h2>
-<h2>Optional types</h2>
-<h2>Result types</h2>
-<h2>Existential data types</h2>
-<h2>Existential error types</h2>
+<h2><a href="#big-integers" aria-hidden="true" class="anchor" id="user-content-big-integers"></a>Big integers</h2>
+<h2><a href="#floating-point-numbers" aria-hidden="true" class="anchor" id="user-content-floating-point-numbers"></a>Floating point numbers</h2>
+<h2><a href="#anonymous-tuples" aria-hidden="true" class="anchor" id="user-content-anonymous-tuples"></a>Anonymous tuples</h2>
+<h2><a href="#anonymous-structs" aria-hidden="true" class="anchor" id="user-content-anonymous-structs"></a>Anonymous structs</h2>
+<h2><a href="#anonymous-enums" aria-hidden="true" class="anchor" id="user-content-anonymous-enums"></a>Anonymous enums</h2>
+<h2><a href="#lists" aria-hidden="true" class="anchor" id="user-content-lists"></a>Lists</h2>
+<h2><a href="#maps-and-sets" aria-hidden="true" class="anchor" id="user-content-maps-and-sets"></a>Maps and sets</h2>
+<h2><a href="#tensors" aria-hidden="true" class="anchor" id="user-content-tensors"></a>Tensors</h2>
+<h2><a href="#optional-types" aria-hidden="true" class="anchor" id="user-content-optional-types"></a>Optional types</h2>
+<h2><a href="#result-types" aria-hidden="true" class="anchor" id="user-content-result-types"></a>Result types</h2>
+<h2><a href="#existential-data-types" aria-hidden="true" class="anchor" id="user-content-existential-data-types"></a>Existential data types</h2>
+<h2><a href="#existential-error-types" aria-hidden="true" class="anchor" id="user-content-existential-error-types"></a>Existential error types</h2>
 
     </main>
     <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>

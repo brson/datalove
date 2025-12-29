@@ -431,8 +431,13 @@ impl DocsCommand {
                 // Replace .md links with .html links.
                 let markdown = Self::rewrite_links(&markdown);
 
-                // Convert to HTML.
-                let html = comrak::markdown_to_html(&markdown, &comrak::Options::default());
+                // Convert to HTML with GFM extensions.
+                let mut options = comrak::Options::default();
+                options.extension.table = true;
+                options.extension.strikethrough = true;
+                options.extension.autolink = true;
+                options.extension.header_ids = Some("user-content-".to_string());
+                let html = comrak::markdown_to_html(&markdown, &options);
 
                 // Extract title from first heading or filename.
                 let title = Self::extract_title(&markdown, &file_name);

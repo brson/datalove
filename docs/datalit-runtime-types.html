@@ -14,21 +14,21 @@
         <a href="index.html">♡</a>
     </nav>
     <main>
-        <h1>Datalit runtime type representation</h1>
+        <h1><a href="#datalit-runtime-type-representation" aria-hidden="true" class="anchor" id="user-content-datalit-runtime-type-representation"></a>Datalit runtime type representation</h1>
 <p>Most datalit types are value types and stored inline.</p>
 <p>Datalit array sizes and capacities are limited to <code>u32</code>
 for multi-arch compatibility.</p>
-<h2>Unit</h2>
+<h2><a href="#unit" aria-hidden="true" class="anchor" id="user-content-unit"></a>Unit</h2>
 <p><code>()</code>.
 Zero-sized.
 TODO: In the runtime pointers to ZSTs are represented as ...</p>
-<h2>Scalars</h2>
+<h2><a href="#scalars" aria-hidden="true" class="anchor" id="user-content-scalars"></a>Scalars</h2>
 <p><code>bool</code>,
 <code>u8</code>, <code>u32</code>, <code>u64</code>, <code>u128</code>,
 <code>i8</code>, <code>i32</code>, <code>i64</code>, <code>i128</code>,
 and <code>f32</code>
 have their obvious machine representation.</p>
-<h2>Bigints</h2>
+<h2><a href="#bigints" aria-hidden="true" class="anchor" id="user-content-bigints"></a>Bigints</h2>
 <p>Int uses a simple gmp-inspired representation:
 a pointer to u32 &quot;limb&quot; data plus
 size, sign and capacity</p>

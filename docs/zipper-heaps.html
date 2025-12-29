@@ -14,7 +14,7 @@
         <a href="index.html">♡</a>
     </nav>
     <main>
-        <h1>Zipper Heaps</h1>
+        <h1><a href="#zipper-heaps" aria-hidden="true" class="anchor" id="user-content-zipper-heaps"></a>Zipper Heaps</h1>
 <p>For datafun we should be able to track dataflow very precisely,
 and there are are only a few types of allocations involved,
 for which we have strong type info.</p>
@@ -26,7 +26,7 @@ but it involves lots of buckets by type/size/alignment,
 and swapping their backing-buffers and owned pointers when scopes cross
 due to slot-clobbering, argument passing, or returning,
 treating the heap more like a shadow stack.</p>
-<h2>Zipper heaps for pow-growable buffers like vec/list/string</h2>
+<h2><a href="#zipper-heaps-for-pow-growable-buffers-like-vecliststring" aria-hidden="true" class="anchor" id="user-content-zipper-heaps-for-pow-growable-buffers-like-vecliststring"></a>Zipper heaps for pow-growable buffers like vec/list/string</h2>
 <p>You might not expect this to work for vector buffers
 but I think it can if we enforce that they e.g. always allocate powers of two elements,
 and those are our allocator buckets;
@@ -44,7 +44,7 @@ algorithm unclear but seems doable</p>
 <p>As a simplification we are going to limit size-buckets to powers of 2 size
 (or powers of 2 + some constant), but i don't see why it couldn't
 support others.</p>
-<h2>Strawman zipper-heap algorithm</h2>
+<h2><a href="#strawman-zipper-heap-algorithm" aria-hidden="true" class="anchor" id="user-content-strawman-zipper-heap-algorithm"></a>Strawman zipper-heap algorithm</h2>
 <p>The zipper heap is a type-directed allocator.
 It requires close co-design with the language and type system.
 The language must track all variable scopes
@@ -55,7 +55,7 @@ some of which may be already dead and waiting to &quot;GC&quot;
 are at the tip of their respective buckets and are simply popped</em>.</p>
 <p>The unzip algorithm is the novelty and what is primarily
 described here, needs to be fully designed and verified.</p>
-<h2>Terms, preconditions, and requirements:</h2>
+<h2><a href="#terms-preconditions-and-requirements" aria-hidden="true" class="anchor" id="user-content-terms-preconditions-and-requirements"></a>Terms, preconditions, and requirements:</h2>
 <p>All allocations are by known containers with constrained allocation patterns.
 Many possible uses of allocators would not be compatible.
 All allocating Datalit types are containers that should be compatible.</p>

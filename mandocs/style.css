@@ -78,6 +78,7 @@
     --fg: var(--cave-base06);
     --accent: var(--cave-red);
     --code-bg: var(--cave-base00);
+    --table-header-bg: var(--cave-base01);
     --link: var(--cave-cyan);
     --syn-keyword: var(--cave-magenta);
     --syn-type-name: var(--cave-cyan);
@@ -196,3 +197,19 @@ li {
 .token.op-option { color: var(--syn-op-option); }
 .token.type-colon { color: var(--syn-type-colon); }
 .token.punctuation { color: var(--syn-punctuation); }
+
+/* Tables */
+table {
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+th, td {
+    border: 1px solid var(--accent);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+th {
+    background: var(--table-header-bg);
+}

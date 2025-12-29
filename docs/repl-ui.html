@@ -14,7 +14,7 @@
         <a href="index.html">♡</a>
     </nav>
     <main>
-        <h1>Datalove REPL UI</h1>
+        <h1><a href="#datalove-repl-ui" aria-hidden="true" class="anchor" id="user-content-datalove-repl-ui"></a>Datalove REPL UI</h1>
 <p>The Datalove REPL has a rich UI model that
 can be implemented in the console or elsewhere
 (particularly via html/css + wasm).</p>
@@ -29,7 +29,7 @@ There are three panels, from top to bottom:</p>
 <p>Probably the middle panel has a border,
 and the other two don't directly,
 though each history entry probably has a visual divider between.</p>
-<h2>Repl history panel</h2>
+<h2><a href="#repl-history-panel" aria-hidden="true" class="anchor" id="user-content-repl-history-panel"></a>Repl history panel</h2>
 <p>Similar to the scrollback of a typical repl,
 but more interactive. New entries at bottom,
 scrollable.
@@ -37,17 +37,17 @@ Each entry is an input and eval.
 Every input has an entry, even if it's a repl command or blank,
 and different type of entries may have unique uis.
 Think of the history entries as interactive &quot;cards&quot; in material design terms.</p>
-<h2>Text input</h2>
+<h2><a href="#text-input" aria-hidden="true" class="anchor" id="user-content-text-input"></a>Text input</h2>
 <p>Starts as a full-width single line text entry.
 When the repl switches to multi-line mode,
 it becomes a multi-line scrollable text entry widget,
 where enter inserts newlines, and <em>shift+enter</em> executes
 (probably need visual indicator).
 Switches back after entry.</p>
-<h2>Bottom panel</h2>
+<h2><a href="#bottom-panel" aria-hidden="true" class="anchor" id="user-content-bottom-panel"></a>Bottom panel</h2>
 <p>Scrollable panel containing a table of:
 local variables; serialized values.</p>
-<h2>Other notes</h2>
+<h2><a href="#other-notes" aria-hidden="true" class="anchor" id="user-content-other-notes"></a>Other notes</h2>
 <p>Remember that the repl UI doesn't have direct access
 to the engine and needs to communicate to it through messages.
 For now we can maybe just query the entire UI model state from the engine

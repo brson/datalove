@@ -14,9 +14,9 @@
         <a href="index.html">♡</a>
     </nav>
     <main>
-        <h2>The Datalove Decree</h2>
+        <h2><a href="#the-datalove-decree" aria-hidden="true" class="anchor" id="user-content-the-datalove-decree"></a>The Datalove Decree</h2>
 <p>Datalove on various language design topics.</p>
-<h3>Function return types</h3>
+<h3><a href="#function-return-types" aria-hidden="true" class="anchor" id="user-content-function-return-types"></a>Function return types</h3>
 <p>Functions with return types require <code>ret</code> with value.</p>
 <pre><code class="language-datalove">fun choose(a: u32): bool
   if a &lt; 10
@@ -38,7 +38,7 @@ fun choose(a: u32)
   end if
 end fun
 </code></pre>
-<h3>Option and result handling</h3>
+<h3><a href="#option-and-result-handling" aria-hidden="true" class="anchor" id="user-content-option-and-result-handling"></a>Option and result handling</h3>
 <p>The option and result types are prefixes like zig:</p>
 <pre><code class="language-datalove">// option
 let a: ?u32 = ...
@@ -91,7 +91,7 @@ fun transform_result(val: !u32): !u32
   ret val +! 1   // early error return on overflow
 end fun
 </code></pre>
-<h3>Math ops and error handling</h3>
+<h3><a href="#math-ops-and-error-handling" aria-hidden="true" class="anchor" id="user-content-math-ops-and-error-handling"></a>Math ops and error handling</h3>
 <p>Datalove is especially strict about overflow and error
 cases in machine-size integers and floats.</p>
 <p>Floats support all bare math ops,
@@ -122,7 +122,7 @@ it has a sensible semantic but is a pure footgun.</p>
 <p>Bigints support the early-return division but not the others.
 Floats don't support early-return math.</p>
 <p>If we decide to let funs panic we'll also add panicking variations.</p>
-<h3>Numeric widening</h3>
+<h3><a href="#numeric-widening" aria-hidden="true" class="anchor" id="user-content-numeric-widening"></a>Numeric widening</h3>
 <p>Fixed ints automatically widen, up to bigints:</p>
 <pre><code class="language-datalove">let a: u8 = 1
 let b: u16 = a
@@ -144,12 +144,12 @@ let b: u32 = 1
 // another `int`
 let c = b * b
 </code></pre>
-<h3>† Pure functions + mutable-reference argument modes</h3>
+<h3><a href="#-pure-functions--mutable-reference-argument-modes" aria-hidden="true" class="anchor" id="user-content--pure-functions--mutable-reference-argument-modes"></a>† Pure functions + mutable-reference argument modes</h3>
 <p>Datalove at first does not look pure functional because
 it has mutable by-reference arguments:</p>
 <pre><code class="language-datalove"></code></pre>
 <p>etc.</p>
-<h3>Allocations</h3>
+<h3><a href="#allocations" aria-hidden="true" class="anchor" id="user-content-allocations"></a>Allocations</h3>
 <p>Besides encoding heaps in types,
 having local and global heaps,
 and enforcing a light syntax
@@ -158,29 +158,29 @@ Datalove is not concerned with providing
 control over the allocator;
 but instead only with providing data access patterns
 and metadata with which the allocator can perform optimally.</p>
-<h3>Garbage collection</h3>
+<h3><a href="#garbage-collection" aria-hidden="true" class="anchor" id="user-content-garbage-collection"></a>Garbage collection</h3>
 <p>Datalit and Datafun do not require a GC.
 Datalove may experiment with interior pointers and GCs in the future.</p>
-<h3>Error handling</h3>
+<h3><a href="#error-handling" aria-hidden="true" class="anchor" id="user-content-error-handling"></a>Error handling</h3>
 <p>The result type is a language type,
 and is dedicated the <code>!</code> sigil —
 if you see <code>!</code> you are looking at error handling.</p>
 <p>The error type is a dynamic type that can hold
 any type (an existential type).</p>
-<h3>Panicking and exceptions</h3>
+<h3><a href="#panicking-and-exceptions" aria-hidden="true" class="anchor" id="user-content-panicking-and-exceptions"></a>Panicking and exceptions</h3>
 <p>In the pure-functional sublanguage Datafun,
 functions are <em>total</em>,
 and there is no mechanism for panicking,
 exceptions or unwinding.</p>
 <p>These cases are handled with <code>?</code>.</p>
 <p>Full Datalove has panics, design TBD.</p>
-<h3>Threading and concurrency</h3>
+<h3><a href="#threading-and-concurrency" aria-hidden="true" class="anchor" id="user-content-threading-and-concurrency"></a>Threading and concurrency</h3>
 <p>For simplicity and OS-mechanical sympathy,
 Datalove is a multithreaded language;
 no lightweight tasks or async-await.
 We may experiment with callback-based
 asynchrony and Gleam-style inline continuation syntax.</p>
-<h3>Floats and total ordering</h3>
+<h3><a href="#floats-and-total-ordering" aria-hidden="true" class="anchor" id="user-content-floats-and-total-ordering"></a>Floats and total ordering</h3>
 <p>All pure data types support a total order,
 which is used for maps and sets.</p>
 <p>Floats use the typical ordering, like Rust's <code>total_cmp</code>:</p>
@@ -189,7 +189,7 @@ which is used for maps and sets.</p>
 </blockquote>
 <p>Equality, less than, greater than, etc. behave
 the standard way wrt float zeros and NaNs.</p>
-<h3>REPL</h3>
+<h3><a href="#repl" aria-hidden="true" class="anchor" id="user-content-repl"></a>REPL</h3>
 <p>The script is REPL-first and intends to advance the
 state of the art in REPLs.
 With pure data statements and virtualized I/O the repl
@@ -197,7 +197,7 @@ supports undo/redo and record-and-replay.</p>
 <p>The repl is a modern Ratatui application.
 The datafun interpreter runs on the web
 as a egui_ratatui application.</p>
-<h3>Trailing commas and separators</h3>
+<h3><a href="#trailing-commas-and-separators" aria-hidden="true" class="anchor" id="user-content-trailing-commas-and-separators"></a>Trailing commas and separators</h3>
 <p>Allowed and optional in all sequence forms of course.</p>
 
     </main>
