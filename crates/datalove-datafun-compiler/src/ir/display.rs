@@ -208,8 +208,8 @@ impl fmt::Display for Instruction {
             Instruction::UnwrapOption { dest, is_some, src } => {
                 write!(f, "{}, {} = unwrap_option {}", dest, is_some, src)
             }
-            Instruction::UnwrapResult { dest, is_ok, src } => {
-                write!(f, "{}, {} = unwrap_result {}", dest, is_ok, src)
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
+                write!(f, "{}, {}, {} = unwrap_result {}", ok_dest, err_dest, is_ok, src)
             }
             Instruction::ListNew { dest, elements } => {
                 write!(f, "{} = list [", dest)?;

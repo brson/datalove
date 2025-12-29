@@ -473,9 +473,13 @@ pub enum Instruction {
         src: Operand,
     },
 
-    /// Unwrap Result, producing (inner_value, is_ok).
+    /// Unwrap Result, producing (ok_value, err_value, is_ok).
+    ///
+    /// - ok_dest: receives Ok payload when is_ok=true
+    /// - err_dest: receives Error when is_ok=false
     UnwrapResult {
-        dest: ValueId,
+        ok_dest: ValueId,
+        err_dest: ValueId,
         is_ok: ValueId,
         src: Operand,
     },

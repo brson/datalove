@@ -213,7 +213,7 @@ pub fn analyze_modules_worldfile_ir3(
 
 /// Pretty-print a value based on its type descriptor.
 fn pretty_print_value(value: &ir::interp::Value) -> String {
-    use datalove_rt::rtdt::{TyTag, TyInfoTuple};
+    use datalove_rt::rtdt::{self, TyTag, TyInfoTuple, TyDescRef};
 
     let tag = unsafe { (*value.tydesc).type_tag };
     match tag {
@@ -274,6 +274,37 @@ fn pretty_print_value(value: &ir::interp::Value) -> String {
             // Int currently stored as i64. TODO: Support bigint.
             let v = unsafe { *(value.ptr as *const i64) };
             format!("@{}", v)
+        }
+        TyTag::Option => {
+            let option_tag = unsafe { *(value.ptr as *const u8) };
+            if option_tag == rtdt::OptionTag::None as u8 {
+                "@none".to_string()
+            } else {
+                // Some - extract and print the inner value.
+                let layout = unsafe {
+                    rtdt::layout::compute_option_layout(TyDescRef::from_ptr(value.tydesc))
+                };
+                let inner_tydesc = unsafe { (*value.tydesc).type_info.option.inner_tydesc };
+                let inner_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+                let inner_value = ir::interp::Value { ptr: inner_ptr, tydesc: inner_tydesc };
+                format!("some {}", pretty_print_value(&inner_value))
+            }
+        }
+        TyTag::Result => {
+            let result_tag = unsafe { *(value.ptr as *const u8) };
+            let layout = unsafe {
+                rtdt::layout::compute_result_layout(TyDescRef::from_ptr(value.tydesc))
+            };
+            let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
+            if result_tag == rtdt::ResultTag::Ok as u8 {
+                // Ok - extract and print the inner value.
+                let ok_tydesc = unsafe { (*value.tydesc).type_info.result.ok_tydesc };
+                let inner_value = ir::interp::Value { ptr: payload_ptr, tydesc: ok_tydesc };
+                format!("ok {}", pretty_print_value(&inner_value))
+            } else {
+                // Err - just indicate error.
+                "@error".to_string()
+            }
         }
         _ => format!("<{:?}>", tag),
     }

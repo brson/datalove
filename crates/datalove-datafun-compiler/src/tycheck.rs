@@ -585,6 +585,22 @@ pub fn type_check_script_units<'db>(
         let source = unit.source;
         let mut ctx = TypeContext::new(db, source);
 
+        // Script units have Result<()> return type for try operators.
+        // This allows `!` (try-result) but not `?` (try-option).
+        let unit_tuple_ty = datalit::tycheck::TypeAndHeap::new(
+            db,
+            datalit::ast::Heap::Omitted,
+            datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple::new(db, Vec::new())),
+        );
+        let result_unit_ty = datalit::tycheck::Type::Result(
+            datalit::tycheck::TypeResult::new(db, unit_tuple_ty)
+        );
+        ctx.expected_return_type = Some(TypeAndHeap::new(
+            db,
+            datalit::ast::Heap::Omitted,
+            Type::Datalit(result_unit_ty),
+        ));
+
         // Seed with accumulated bindings from prior units.
         for (name, ty) in &accumulated_vars {
             ctx.add_variable(*name, *ty);

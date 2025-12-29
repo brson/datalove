@@ -338,6 +338,10 @@ pub struct LowerCtx<'db> {
     loop_stack: Vec<(BlockId, BlockId)>,
     /// Scope tracker for emitting drops at scope exits.
     scope_tracker: ScopeTracker,
+    /// Return type for current function/script (for try operators).
+    return_type: Option<IrType>,
+    /// Whether we're in a script unit (vs function).
+    is_script_unit: bool,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -362,6 +366,8 @@ impl<'db> LowerCtx<'db> {
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
             scope_tracker: ScopeTracker::new(),
+            return_type: None,
+            is_script_unit: false,
         }
     }
 
@@ -435,6 +441,9 @@ impl<'db> LowerCtx<'db> {
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
             scope_tracker: ScopeTracker::new(),
+            // Script units have Result<()> return type for ! operator.
+            return_type: Some(IrType::Result(Box::new(IrType::Unit))),
+            is_script_unit: true,
         }
     }
 
@@ -549,6 +558,14 @@ fn lower_function_body<'db>(
 ) -> Result<IrFunction, LowerError> {
     let name = func.name(ctx.db).text(ctx.db).to_string();
 
+    // Save and set function context for try operators.
+    let saved_return_type = ctx.return_type.take();
+    let saved_is_script_unit = ctx.is_script_unit;
+    ctx.is_script_unit = false;
+
+    // Set return type from function signature.
+    ctx.return_type = func.return_type(ctx.db).map(|ty| IrType::from_type_hint(ctx.db, &ty));
+
     // Enter function scope for drop tracking.
     ctx.scope_tracker.enter_scope(ScopeKind::Function);
 
@@ -589,6 +606,10 @@ fn lower_function_body<'db>(
         // Scope already exited by explicit return, just pop it.
         ctx.scope_tracker.scopes.pop();
     }
+
+    // Restore saved context.
+    ctx.return_type = saved_return_type;
+    ctx.is_script_unit = saved_is_script_unit;
 
     Ok(IrFunction {
         id: func_id,
@@ -1028,28 +1049,91 @@ fn lower_expression<'db>(
         ExprFunKind::TryOption(try_expr) => {
             let src_id = lower_expression(ctx, try_expr.operand(ctx.db))?;
             let result_type = ctx.expr_type(expr);
-            let dest = ctx.fresh_value(result_type);
+            let dest = ctx.fresh_value(result_type.clone());
             let is_some = ctx.fresh_value(IrType::Bool);
             ctx.emit(Instruction::UnwrapOption {
                 dest,
                 is_some,
                 src: Operand::Value(src_id),
             });
-            // TODO: Branch on is_some for early return.
+
+            // Create early return and continue blocks.
+            let early_return_block = ctx.fresh_block();
+            let continue_block = ctx.fresh_block();
+
+            // Branch: if is_some, continue; else early return.
+            ctx.finish_block(Terminator::Branch {
+                cond: Operand::Value(is_some),
+                then_block: continue_block,
+                else_block: early_return_block,
+            });
+
+            // Early return block: wrap None and return.
+            ctx.start_block(early_return_block);
+            let return_type = ctx.return_type.clone()
+                .expect("try operator requires return type");
+            let none_value = ctx.fresh_value(return_type);
+            ctx.emit(Instruction::WrapNone { dest: none_value });
+            if ctx.is_script_unit {
+                ctx.finish_block(Terminator::UnitEarlyReturn {
+                    value: Operand::Value(none_value),
+                });
+            } else {
+                ctx.finish_block(Terminator::TryReturn {
+                    value: Some(Operand::Value(none_value)),
+                });
+            }
+
+            // Continue block: dest already has the unwrapped value.
+            ctx.start_block(continue_block);
             Ok(dest)
         }
         ExprFunKind::TryResult(try_expr) => {
             let src_id = lower_expression(ctx, try_expr.operand(ctx.db))?;
             let result_type = ctx.expr_type(expr);
-            let dest = ctx.fresh_value(result_type);
+            let ok_dest = ctx.fresh_value(result_type.clone());
+            let err_dest = ctx.fresh_value(IrType::Error);
             let is_ok = ctx.fresh_value(IrType::Bool);
             ctx.emit(Instruction::UnwrapResult {
-                dest,
+                ok_dest,
+                err_dest,
                 is_ok,
                 src: Operand::Value(src_id),
             });
-            // TODO: Branch on is_ok for early return.
-            Ok(dest)
+
+            // Create early return and continue blocks.
+            let early_return_block = ctx.fresh_block();
+            let continue_block = ctx.fresh_block();
+
+            // Branch: if is_ok, continue; else early return.
+            ctx.finish_block(Terminator::Branch {
+                cond: Operand::Value(is_ok),
+                then_block: continue_block,
+                else_block: early_return_block,
+            });
+
+            // Early return block: wrap error and return.
+            ctx.start_block(early_return_block);
+            let return_type = ctx.return_type.clone()
+                .expect("try operator requires return type");
+            let wrapped_err = ctx.fresh_value(return_type);
+            ctx.emit(Instruction::WrapErr {
+                dest: wrapped_err,
+                inner: Operand::Value(err_dest),
+            });
+            if ctx.is_script_unit {
+                ctx.finish_block(Terminator::UnitEarlyReturn {
+                    value: Operand::Value(wrapped_err),
+                });
+            } else {
+                ctx.finish_block(Terminator::TryReturn {
+                    value: Some(Operand::Value(wrapped_err)),
+                });
+            }
+
+            // Continue block: ok_dest has the unwrapped Ok value.
+            ctx.start_block(continue_block);
+            Ok(ok_dest)
         }
         ExprFunKind::Tuple(tuple) => {
             let elements: Result<Vec<_>, _> = tuple.elements(ctx.db)

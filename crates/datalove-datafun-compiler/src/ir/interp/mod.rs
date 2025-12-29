@@ -485,12 +485,14 @@ impl IrInterpreter {
                 self.execute_wrap_err(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
-            Instruction::UnwrapResult { dest, is_ok, src } => {
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
                 let src_val = self.read_operand(src, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest)?;
+                let ok_slot = frame.value_dest(*ok_dest)?;
+                let err_slot = frame.value_dest(*err_dest)?;
                 let is_ok_slot = frame.value_dest(*is_ok)?;
-                self.execute_unwrap_result(&src_val, dest_slot, is_ok_slot)?;
-                frame.mark_value_initialized(*dest);
+                self.execute_unwrap_result(&src_val, ok_slot, err_slot, is_ok_slot)?;
+                frame.mark_value_initialized(*ok_dest);
+                frame.mark_value_initialized(*err_dest);
                 frame.mark_value_initialized(*is_ok);
             }
             Instruction::Call { dest, func, args } => {
@@ -1009,11 +1011,15 @@ impl IrInterpreter {
         Ok(())
     }
 
-    /// Unwrap a Result, producing (inner_value, is_ok).
+    /// Unwrap a Result, producing (ok_value, err_value, is_ok).
+    ///
+    /// - ok_dest: receives Ok payload when is_ok=true
+    /// - err_dest: receives Error when is_ok=false
     fn execute_unwrap_result(
         &self,
         src: &Value,
-        dest: Destination,
+        ok_dest: Destination,
+        err_dest: Destination,
         is_ok_dest: Destination,
     ) -> Result<(), InterpError> {
         unsafe {
@@ -1023,17 +1029,22 @@ impl IrInterpreter {
             let tag = *(src.ptr as *const u8);
             let is_ok = tag == rtdt::ResultTag::Ok as u8;
             *(is_ok_dest.ptr as *mut bool) = is_ok;
-            // Copy payload (ok value or error).
-            let inner_size = if is_ok {
-                (*result_info.ok_tydesc).size as usize
+            // Copy payload to appropriate destination.
+            if is_ok {
+                let ok_size = (*result_info.ok_tydesc).size as usize;
+                std::ptr::copy_nonoverlapping(
+                    src.ptr.add(layout.payload_offset as usize),
+                    ok_dest.ptr,
+                    ok_size,
+                );
             } else {
-                std::mem::size_of::<rtdt::Error>()
-            };
-            std::ptr::copy_nonoverlapping(
-                src.ptr.add(layout.payload_offset as usize),
-                dest.ptr,
-                inner_size,
-            );
+                let err_size = std::mem::size_of::<rtdt::Error>();
+                std::ptr::copy_nonoverlapping(
+                    src.ptr.add(layout.payload_offset as usize),
+                    err_dest.ptr,
+                    err_size,
+                );
+            }
         }
         Ok(())
     }
