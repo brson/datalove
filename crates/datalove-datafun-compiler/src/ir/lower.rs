@@ -138,6 +138,8 @@ pub struct LowerCtx<'db> {
     value_types: Vec<IrType>,
     /// Type for each SlotId.
     slot_types: Vec<IrType>,
+    /// Loop context stack: (continue_target, break_target) for each nested loop.
+    loop_stack: Vec<(BlockId, BlockId)>,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -160,6 +162,7 @@ impl<'db> LowerCtx<'db> {
             current_unit: 0,
             value_types: Vec::new(),
             slot_types: Vec::new(),
+            loop_stack: Vec::new(),
         }
     }
 
@@ -231,6 +234,7 @@ impl<'db> LowerCtx<'db> {
             current_unit,
             value_types: Vec::new(),
             slot_types: Vec::new(),
+            loop_stack: Vec::new(),
         }
     }
 
@@ -429,12 +433,24 @@ fn lower_statement<'db>(
             lower_loop(ctx, *loop_stmt)
         }
         Statement::Break(_) => {
-            // TODO: Need loop context to know where to break to.
-            Err(LowerError::NotImplemented("break".to_string()))
+            let (_, break_target) = ctx.loop_stack.last()
+                .ok_or(LowerError::BreakOutsideLoop)?;
+            let break_target = *break_target;
+            ctx.finish_block(Terminator::Goto(break_target));
+            // Start unreachable block for code after break.
+            let dead_block = ctx.fresh_block();
+            ctx.start_block(dead_block);
+            Ok(())
         }
         Statement::Continue(_) => {
-            // TODO: Need loop context to know where to continue to.
-            Err(LowerError::NotImplemented("continue".to_string()))
+            let (continue_target, _) = ctx.loop_stack.last()
+                .ok_or(LowerError::ContinueOutsideLoop)?;
+            let continue_target = *continue_target;
+            ctx.finish_block(Terminator::Goto(continue_target));
+            // Start unreachable block for code after continue.
+            let dead_block = ctx.fresh_block();
+            ctx.start_block(dead_block);
+            Ok(())
         }
         Statement::Fun(_) => {
             // Nested functions not supported in IR yet.
@@ -500,6 +516,9 @@ fn lower_loop<'db>(
     // Jump to loop header.
     ctx.finish_block(Terminator::Goto(loop_header));
 
+    // Push loop context for break/continue.
+    ctx.loop_stack.push((loop_header, loop_exit));
+
     // Lower loop body.
     ctx.start_block(loop_header);
     for stmt in loop_stmt.body(ctx.db) {
@@ -508,7 +527,10 @@ fn lower_loop<'db>(
     // Loop back to header.
     ctx.finish_block(Terminator::Goto(loop_header));
 
-    // Continue after loop (unreachable unless break).
+    // Pop loop context.
+    ctx.loop_stack.pop();
+
+    // Continue after loop.
     ctx.start_block(loop_exit);
     Ok(())
 }
@@ -1073,10 +1095,24 @@ fn lower_statement_for_script<'db>(
             lower_loop(ctx, *loop_stmt)
         }
         Statement::Break(_) => {
-            Err(LowerError::NotImplemented("break".to_string()))
+            let (_, break_target) = ctx.loop_stack.last()
+                .ok_or(LowerError::BreakOutsideLoop)?;
+            let break_target = *break_target;
+            ctx.finish_block(Terminator::Goto(break_target));
+            // Start unreachable block for code after break.
+            let dead_block = ctx.fresh_block();
+            ctx.start_block(dead_block);
+            Ok(())
         }
         Statement::Continue(_) => {
-            Err(LowerError::NotImplemented("continue".to_string()))
+            let (continue_target, _) = ctx.loop_stack.last()
+                .ok_or(LowerError::ContinueOutsideLoop)?;
+            let continue_target = *continue_target;
+            ctx.finish_block(Terminator::Goto(continue_target));
+            // Start unreachable block for code after continue.
+            let dead_block = ctx.fresh_block();
+            ctx.start_block(dead_block);
+            Ok(())
         }
         Statement::Require(_) | Statement::Import(_) => {
             // Module-level, handled elsewhere.
@@ -1097,6 +1133,8 @@ pub enum LowerError {
     InvalidLiteral(String),
     NotImplemented(String),
     ParseError,
+    BreakOutsideLoop,
+    ContinueOutsideLoop,
 }
 
 impl std::fmt::Display for LowerError {
@@ -1108,6 +1146,8 @@ impl std::fmt::Display for LowerError {
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
             LowerError::NotImplemented(what) => write!(f, "not implemented: {}", what),
             LowerError::ParseError => write!(f, "parse error in source"),
+            LowerError::BreakOutsideLoop => write!(f, "break outside of loop"),
+            LowerError::ContinueOutsideLoop => write!(f, "continue outside of loop"),
         }
     }
 }

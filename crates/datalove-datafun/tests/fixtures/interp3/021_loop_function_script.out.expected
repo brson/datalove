@@ -1,0 +1,28 @@
+Ir3Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn count_to_n(v0):\nblock0:\n    v1 = const 0i64\n    store s0, v1\n    v2 = const 0i64\n    store s1, v2\n    goto block1\nblock1:\n    v3 = load s0\n    v4 = const 1i64\n    v5 = add v3, v4\n    store s0, v5\n    v6 = load s1\n    v7 = load s0\n    v8 = add v6, v7\n    store s1, v8\n    v9 = load s0\n    v10 = eq v9, v0\n    branch v10, block3, block4\nblock3:\n    goto block2\nblock6:\n    goto block5\nblock4:\n    goto block5\nblock5:\n    goto block1\nblock2:\n    v11 = load s1\n    return v11\nexports:\n    count_to_n = f0\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 4i64\n    v1 = call unit0.f0(v0)\n    unit_end v1\n",
+            ),
+            output: "@10",
+        ),
+    ],
+)
