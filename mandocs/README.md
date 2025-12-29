@@ -43,7 +43,8 @@ File extensions: `.dfs` (scripts), `.dfm` (modules)
 ### Datalove
 
 The complete language with I/O-bearing procedures,
-owned native pointers, and objects with identity.
+owned native pointers, objects with identity,
+and stack unwinding.
 
 Filue extensions: `.dls` (scripts), `.dlm` (module)
 
