@@ -99,3 +99,6 @@ loc:
     tokei
     echo
     fd -e dlt -e dfs -e dfm -e dls -e dlm -e world -e repl | xargs wc -l | tail -1
+
+doc:
+    cargo run -p datalove-cli -- docs
