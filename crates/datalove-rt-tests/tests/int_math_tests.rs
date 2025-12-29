@@ -664,6 +664,277 @@ fn test_int_div_zero_dividend() -> AnyResult<()> {
 }
 
 // ============================================================================
+// Multi-limb Division Tests (Knuth's Algorithm D)
+// ============================================================================
+
+#[test]
+fn test_int_div_multi_limb_divisor() -> AnyResult<()> {
+    // Tests the Knuth Algorithm D path (divisor has > 1 limb).
+    // 10^19 / 10^10 = 10^9
+    // 10^19 = 10000000000000000000 (3 limbs in base 2^32)
+    // 10^10 = 10000000000 (2 limbs in base 2^32)
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @10000000000000000000",
+            ": @int / @10000000000",
+            ": @int / @1000000000",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_multi_limb_exact() -> AnyResult<()> {
+    // 4294967297 * 3 = 12884901891
+    // 4294967297 = 2^32 + 1 (2 limbs)
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @12884901891",
+            ": @int / @4294967297",
+            ": @int / @3",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_multi_limb_with_remainder() -> AnyResult<()> {
+    // 12884901892 / 4294967297 = 3 (with remainder 1, truncated)
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @12884901892",
+            ": @int / @4294967297",
+            ": @int / @3",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_multi_limb_negative() -> AnyResult<()> {
+    // -12884901891 / 4294967297 = -3
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @-12884901891",
+            ": @int / @4294967297",
+            ": @int / @-3",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_dividend_smaller_than_divisor() -> AnyResult<()> {
+    // 100 / 4294967297 = 0 (quotient is zero when dividend < divisor)
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @100",
+            ": @int / @4294967297",
+            ": @int / @0",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_multi_limb_no_shift() -> AnyResult<()> {
+    // Test Knuth's Algorithm D when shift == 0 (divisor MSB already has high bit set).
+    // 2^31 = 2147483648 has high bit set in its low limb.
+    // 2^31 * 2^32 + 2^31 = 9223372039002259456 (3 limbs)
+    // 9223372039002259456 / (2^31 + 2^32) = 2147483648 / 6442450944 ...
+    // Actually, let me use simpler numbers:
+    // (2^31 + 1) = 2147483649 has bit 31 set.
+    // For a 2-limb divisor with high bit set in the second limb:
+    // 2^63 = 9223372036854775808 has [0, 2^31] as limbs (2 limbs, MSB=2^31, high bit set).
+    // Let's divide 2^64 / 2^63 = 2.
+    // 18446744073709551616 / 9223372036854775808 = 2
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @18446744073709551616",
+            ": @int / @9223372036854775808",
+            ": @int / @2",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Large Number Arithmetic Tests
+// ============================================================================
+
+#[test]
+fn test_int_add_very_large() -> AnyResult<()> {
+    // Addition that requires carry propagation across multiple limbs.
+    // 2^64 + 2^64 = 2^65
+    // 18446744073709551616 + 18446744073709551616 = 36893488147419103232
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @18446744073709551616",
+            ": @int / @18446744073709551616",
+            ": @int / @36893488147419103232",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_sub_very_large() -> AnyResult<()> {
+    // 36893488147419103232 - 18446744073709551616 = 18446744073709551616
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @36893488147419103232",
+            ": @int / @18446744073709551616",
+            ": @int / @18446744073709551616",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_sub(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_mul_very_large() -> AnyResult<()> {
+    // 2^32 * 2^32 = 2^64
+    // 4294967296 * 4294967296 = 18446744073709551616
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @4294967296",
+            ": @int / @4294967296",
+            ": @int / @18446744073709551616",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_mul(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_add_different_sign_b_larger() -> AnyResult<()> {
+    // Tests the path where |b| > |a| with different signs.
+    // 3 + (-8) = -5 (|b| > |a|, result has sign of b)
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @3", ": @int / @-8", ": @int / @-5",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_sub_a_is_zero() -> AnyResult<()> {
+    // 0 - 5 = -5
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @0", ": @int / @5", ": @int / @-5",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_sub(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_add_a_is_zero() -> AnyResult<()> {
+    // 0 + (-5) = -5
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @0", ": @int / @-5", ": @int / @-5",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+// ============================================================================
 // Property-based Tests
 // ============================================================================
 
