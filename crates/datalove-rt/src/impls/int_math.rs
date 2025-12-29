@@ -148,10 +148,9 @@ unsafe fn sub_magnitude(
 
     // Allocate and copy to runtime memory.
     let result_len = result_limbs.len();
-    if result_len == 1 && result_limbs[0] == 0 {
-        // Result is zero.
-        return (std::ptr::null(), 0);
-    }
+
+    // Sub_magnitude is only called when magnitudes differ (caller checks cmp != 0).
+    assert!(!(result_len == 1 && result_limbs[0] == 0), "sub_magnitude produced zero result");
 
     unsafe {
         let result_ptr = rt.alloc.alloc(4, 4, result_len as u32) as *mut u32;
@@ -415,10 +414,8 @@ unsafe fn div_magnitude(
     if n == 1 {
         let divisor = divisor_limbs[0] as u64;
 
-        // Defensive check for zero divisor (shouldn't happen if caller checks).
-        if divisor == 0 {
-            return (std::ptr::null(), 0);
-        }
+        // Caller must check for zero divisor before calling div_magnitude.
+        assert!(divisor != 0, "div_magnitude called with zero divisor");
 
         let mut quotient = Vec::with_capacity(m);
         let mut remainder: u64 = 0;
@@ -437,9 +434,9 @@ unsafe fn div_magnitude(
         }
 
         let q_len = quotient.len();
-        if q_len == 1 && quotient[0] == 0 {
-            return (std::ptr::null(), 0);
-        }
+
+        // Zero quotient is handled by early dividend < divisor check.
+        assert!(!(q_len == 1 && quotient[0] == 0), "single-limb division produced zero quotient");
 
         unsafe {
             let q_ptr = rt.alloc.alloc(4, 4, q_len as u32) as *mut u32;
@@ -539,9 +536,9 @@ unsafe fn div_magnitude(
         }
 
         let q_len = quotient.len();
-        if q_len == 1 && quotient[0] == 0 {
-            return (std::ptr::null(), 0);
-        }
+
+        // Zero quotient is handled by early dividend < divisor check.
+        assert!(!(q_len == 1 && quotient[0] == 0), "multi-limb division produced zero quotient");
 
         unsafe {
             let q_ptr = rt.alloc.alloc(4, 4, q_len as u32) as *mut u32;
@@ -580,11 +577,11 @@ pub(crate) unsafe fn int_div_checked_impl(
 
         let b_limbs = std::slice::from_raw_parts(b.data, b_abs_size);
 
-        // Additional check: if all limbs are zero, that's also division by zero.
-        let b_is_zero = b_limbs.iter().all(|&limb| limb == 0);
-        if b_is_zero {
-            return RtStatus::Error;
-        }
+        // Malformed Int: size_and_sign != 0 but all limbs are zero.
+        assert!(
+            !b_limbs.iter().all(|&limb| limb == 0),
+            "malformed Int: non-zero size but all limbs are zero"
+        );
 
         // Handle dividend = 0 case.
         if a_abs_size == 0 {
