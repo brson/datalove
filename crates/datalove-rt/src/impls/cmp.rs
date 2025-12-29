@@ -348,8 +348,13 @@ unsafe fn eq_value(
                     return false;
                 }
 
-                // Compare limbs.
+                // Handle zero case (no limbs, data can be null).
                 let num_limbs = int_a.size_and_sign.abs() as usize;
+                if num_limbs == 0 {
+                    return true;
+                }
+
+                // Compare limbs.
                 let limbs_a = std::slice::from_raw_parts(int_a.data, num_limbs);
                 let limbs_b = std::slice::from_raw_parts(int_b.data, num_limbs);
                 limbs_a == limbs_b

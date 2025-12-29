@@ -433,9 +433,7 @@ fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db,
         remaining >>= 32;
     }
 
-    if limbs.is_empty() {
-        limbs.push(0);
-    }
+    // Note: For zero, limbs stays empty. Canonical zero has size_and_sign=0, data=null.
 
     unsafe {
         // Allocate limbs array via runtime.
@@ -477,9 +475,7 @@ fn instantiate_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int
         remaining >>= 32;
     }
 
-    if limbs.is_empty() {
-        limbs.push(0);
-    }
+    // Note: For zero, limbs stays empty. Canonical zero has size_and_sign=0, data=null.
 
     unsafe {
         // Allocate limbs array via runtime using size=4, align=4, count=len.
@@ -1468,10 +1464,10 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Int);
             let int = &*(inst.ptr as *const rtdt::Int);
-            assert_eq!(int.size_and_sign, 1);
-            assert_eq!(int.capacity, 1);
-            let limbs = std::slice::from_raw_parts(int.data, 1);
-            assert_eq!(limbs[0], 0);
+            // Canonical zero: no limbs, size_and_sign=0, data=null.
+            assert_eq!(int.size_and_sign, 0);
+            assert_eq!(int.capacity, 0);
+            assert!(int.data.is_null());
         }
         Ok(())
     }
