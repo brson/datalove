@@ -31,7 +31,39 @@ Datalove is built from three cleanly-scoped strict sublanguages of increasing po
 The tiny and comprehensible foundation of Datalove, a strongly-typed and
 declarative pure-data language for expressing typical data structures.
 
+It includes booleans, fixed integers and bigints, floats;
+anonymous tuples, structs, and enums;
+strings, lists, maps and sets, tensors;
+option and result;
+existential runtime-typed data and error types.
+
 File extension: `.dlt`
+
+Datalit is a serialization format:
+
+```datalove
+// Personal info
+{
+  name = "Ada",
+  born = 1815,
+  interests = ["mathematics", "poetry", "music"],
+  address_book = set {
+    {
+      kind = enum Friend,
+      name = "Charles",
+    },
+    {
+      kind = enum Family,
+      name = "George",
+    },
+  },
+}
+```
+
+If you understand Datalit you understand 80% of Datalove.
+
+
+
 
 ### Datalove Functions ("Datafun")
 
@@ -39,6 +71,13 @@ A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
 
 File extensions: `.dfs` (scripts), `.dfm` (modules)
+
+TODO continue address-book example
+
+If you understand Datafun you understand 90% of Datalove.
+
+
+
 
 ### Datalove
 
@@ -48,22 +87,13 @@ and stack unwinding.
 
 File extensions: `.dls` (scripts), `.dlm` (module)
 
----
+TODO
+
+If you understand Datalove then objective achieved.
+It is a simple language.
 
 
 
-
-## The state of Datalove
-
-Datalove is a work in progress.
-This documentation describes Datalove as currently implemented.
-
-Current status:
-
-- Datalit: implemented.
-- Datafun modules: implemented.
-- Datafun scripts: implemented.
-- Datafun interpreter: implemented, analysis-driven. No JIT.
 
 ---
 
