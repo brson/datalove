@@ -313,9 +313,17 @@ Implemented:
   - `continue` lowers to `Goto(loop_header)`
   - Interpreter follows CFG via Goto terminators
 
-TODO:
-- ListNew, SetNew, MapNew (collection creation - requires runtime calls)
-- Drop instruction (destructors - requires runtime calls)
+- Collection creation:
+  - `ListNew` - creates list, reserves capacity, copies elements via runtime calls
+  - `SetNew` - sorts elements, builds B-tree via `dtlv_rti_btreeset_build_from_sorted_slice_local`
+  - `MapNew` - sorts by key, builds B-tree via `dtlv_rti_btreemap_build_from_sorted_slices_local`
+- Drop instruction:
+  - `execute_drop` calls `dtlv_rti_any_destroy_local`
+- Frame cleanup:
+  - `Frame::destroy_all` destroys all initialized values/slots
+  - `FrameStore::destroy_all` destroys all frames
+  - `ScriptEnvironment::destroy_all` called at end of worldfile analysis
+  - Prevents memory leaks for heap-allocated collections
 
 ### Phase 4: Integration - MOSTLY COMPLETE
 
@@ -329,7 +337,7 @@ Files created:
 - `crates/datalove-datafun/tests/module_interp3_tests.rs` - test harness
 - `crates/datalove-datafun/tests/interp3_tests.rs` - test harness
 - `crates/datalove-datafun/tests/fixtures/module_interp3/` - 5 worldfiles
-- `crates/datalove-datafun/tests/fixtures/interp3/` - 22 worldfiles (cross-unit + loop tests)
+- `crates/datalove-datafun/tests/fixtures/interp3/` - 25 worldfiles (cross-unit + loop + collection tests)
 
 Working:
 - Module-only execution: parse -> typecheck -> lower -> IR interpret -> pretty print
@@ -355,6 +363,11 @@ Loop test coverage (tests 019-022):
 - `020_loop_continue_script.world` - loop with continue in script unit
 - `021_loop_function_script.world` - loop in function defined in script
 - `022_loop_module_function.world` - loop in function defined in module
+
+Collection test coverage (tests 023-025):
+- `023_list_literal.world` - list creation `@[@1, @2, @3]` -> `[@1, @2, @3]`
+- `024_set_literal.world` - set creation `@set { @5, @10, @15 }` -> `{set len=3}`
+- `025_map_literal.world` - map creation `@map { @1 = @100, @2 = @200 }` -> `{map len=2}`
 
 TODO:
 - Keep old interpreter for comparison

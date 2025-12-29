@@ -7,7 +7,7 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::HashMap;
-use datalove_rt::rtdt::{self, TyDesc};
+use datalove_rt::rtdt::{self, TyDesc, TyDescRef};
 
 use super::{
     IrFunction, IrScriptUnit, IrBlock, IrType, Instruction, Terminator,
@@ -581,6 +581,37 @@ impl Frame {
             self.slot_initialized[idx] = true;
         }
     }
+
+    /// Destroy all initialized values and slots.
+    ///
+    /// Calls the runtime destructor for each initialized value/slot.
+    pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
+        // Destroy initialized values.
+        for idx in 0..self.value_initialized.len() {
+            if self.value_initialized[idx] {
+                let offset = self.layout.value_offsets[idx] as usize;
+                let tydesc = self.layout.value_tydescs[idx];
+                let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+                }
+                self.value_initialized[idx] = false;
+            }
+        }
+
+        // Destroy initialized slots.
+        for idx in 0..self.slot_initialized.len() {
+            if self.slot_initialized[idx] {
+                let offset = self.layout.slot_offsets[idx] as usize;
+                let tydesc = self.layout.slot_tydescs[idx];
+                let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+                }
+                self.slot_initialized[idx] = false;
+            }
+        }
+    }
 }
 
 /// Environment for sequential script unit execution.
@@ -677,6 +708,13 @@ impl FrameStore {
         }
         Ok(())
     }
+
+    /// Destroy all values in all frames.
+    pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
+        for frame in &mut self.frames {
+            frame.destroy_all(rt_handle);
+        }
+    }
 }
 
 impl Default for FrameStore {
@@ -708,6 +746,11 @@ impl ScriptEnvironment {
     pub fn add_unit(&mut self, frame: Frame, functions: Vec<IrFunction>) {
         self.frames.add_frame(frame);
         self.registry.add_unit_functions(functions);
+    }
+
+    /// Destroy all values in all frames.
+    pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
+        self.frames.destroy_all(rt_handle);
     }
 }
 
@@ -763,6 +806,74 @@ impl IrInterpreter {
         Self {
             runtime: datalove_rt::rust::Runtime::new(),
             tydesc_table: IrTyDescTable::new(),
+        }
+    }
+
+    /// Get the runtime handle for memory management.
+    pub fn runtime_handle(&self) -> datalove_rt::c::LocalRtHandle {
+        self.runtime.handle()
+    }
+
+    /// Pretty-print a value using the runtime's pretty printer.
+    pub fn pretty_print_value(&mut self, value: &Value) -> Result<String, InterpError> {
+        use datalove_rt::c::RtStatus;
+
+        let rt_handle = self.runtime.handle();
+        let string_tydesc = self.tydesc_table.get_or_create(&IrType::String);
+
+        unsafe {
+            // Create output string.
+            let mut output_string = std::mem::MaybeUninit::<rtdt::String>::uninit();
+            let status = datalove_rt::c::dtlv_rti_string_create_local(
+                rt_handle,
+                output_string.as_mut_ptr() as *mut u8,
+                string_tydesc,
+            );
+
+            if status != RtStatus::Ok {
+                return Err(InterpError::RuntimeError(
+                    "Failed to create output string".to_string(),
+                ));
+            }
+
+            let mut output_string = output_string.assume_init();
+
+            // Pretty-print the value.
+            let status = datalove_rt::c::dtlv_rti_pretty_print_local(
+                rt_handle,
+                value.ptr,
+                value.tydesc,
+                &mut output_string as *mut rtdt::String as *mut u8,
+                string_tydesc,
+            );
+
+            if status != RtStatus::Ok {
+                datalove_rt::c::dtlv_rti_string_destroy_local(
+                    rt_handle,
+                    &mut output_string as *mut rtdt::String as *mut u8,
+                    string_tydesc,
+                );
+                return Err(InterpError::RuntimeError(
+                    "Failed to pretty-print value".to_string(),
+                ));
+            }
+
+            // Extract string contents.
+            let result = if output_string.data.is_null() || output_string.size == 0 {
+                String::new()
+            } else {
+                let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
+                String::from_utf8_lossy(bytes).to_string()
+            };
+
+            // Destroy the output string.
+            datalove_rt::c::dtlv_rti_string_destroy_local(
+                rt_handle,
+                &mut output_string as *mut rtdt::String as *mut u8,
+                string_tydesc,
+            );
+
+            Ok(result)
         }
     }
 
@@ -1165,22 +1276,29 @@ impl IrInterpreter {
                 self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
                 frame.mark_value_initialized(*dest);
             }
-            Instruction::ListNew { .. } => {
-                todo!("ListNew instruction not yet implemented")
+            Instruction::ListNew { dest, elements } => {
+                let dest_slot = frame.value_dest(*dest)?;
+                self.execute_list_new(elements, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
             }
-            Instruction::SetNew { .. } => {
-                todo!("SetNew instruction not yet implemented")
+            Instruction::SetNew { dest, elements } => {
+                let dest_slot = frame.value_dest(*dest)?;
+                self.execute_set_new(elements, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
             }
-            Instruction::MapNew { .. } => {
-                todo!("MapNew instruction not yet implemented")
+            Instruction::MapNew { dest, entries } => {
+                let dest_slot = frame.value_dest(*dest)?;
+                self.execute_map_new(entries, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
             }
             Instruction::Phi { .. } => {
                 // Phi nodes are handled separately in execute_blocks before other instructions.
                 // This branch should not be reached since we skip Phi in the instruction loop.
                 unreachable!("Phi instructions are handled separately in execute_blocks")
             }
-            Instruction::Drop { .. } => {
-                // TODO: Run destructor for value.
+            Instruction::Drop { operand } => {
+                let val = self.read_operand(operand, frame, frames)?;
+                self.execute_drop(&val)?;
             }
             Instruction::Nop => {}
         }
@@ -1675,6 +1793,306 @@ impl IrInterpreter {
                 src.ptr.add(layout.payload_offset as usize),
                 dest.ptr,
                 inner_size,
+            );
+        }
+        Ok(())
+    }
+
+    /// Execute ListNew: create a list from operands.
+    fn execute_list_new(
+        &mut self,
+        elements: &[Operand],
+        dest: Destination,
+        frame: &Frame,
+        frames: &FrameStore,
+    ) -> Result<(), InterpError> {
+        use datalove_rt::c::RtStatus;
+
+        let rt_handle = self.runtime.handle();
+        let list_ptr = dest.ptr;
+        let list_tydesc = dest.tydesc;
+
+        // Get element tydesc from list tydesc.
+        let list_tydesc_ref = unsafe { TyDescRef::from_ptr(list_tydesc) };
+        let element_tydesc = list_tydesc_ref.list_element_ty().as_ptr();
+        let element_size = unsafe { (*element_tydesc).size as usize };
+
+        // Create empty list at dest.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_create_local(rt_handle, list_ptr, list_tydesc)
+        };
+        if status != RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to create list".to_string()));
+        }
+
+        if elements.is_empty() {
+            return Ok(());
+        }
+
+        // Reserve capacity for all elements.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_reserve_local(
+                rt_handle,
+                list_ptr,
+                list_tydesc,
+                elements.len() as u32,
+            )
+        };
+        if status != RtStatus::Ok {
+            unsafe {
+                datalove_rt::c::dtlv_rti_list_destroy_local(rt_handle, list_ptr, list_tydesc);
+            }
+            return Err(InterpError::RuntimeError("Failed to reserve list capacity".to_string()));
+        }
+
+        // Copy each element into the list's data buffer.
+        for (i, elem_op) in elements.iter().enumerate() {
+            let elem_val = self.read_operand(elem_op, frame, frames)?;
+
+            // Get pointer to element slot in list's data buffer.
+            let data_ptr = unsafe { (*(list_ptr as *const rtdt::List)).data as *mut u8 };
+            let elem_dest_ptr = unsafe { data_ptr.add(i * element_size) };
+
+            // Copy element value into list.
+            unsafe {
+                std::ptr::copy_nonoverlapping(elem_val.ptr, elem_dest_ptr, element_size);
+            }
+
+            // Update list size.
+            unsafe {
+                let list = list_ptr as *mut rtdt::List;
+                (*list).size = (i + 1) as u32;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute SetNew: create a set from operands.
+    fn execute_set_new(
+        &mut self,
+        elements: &[Operand],
+        dest: Destination,
+        frame: &Frame,
+        frames: &FrameStore,
+    ) -> Result<(), InterpError> {
+        use datalove_rt::c::RtStatus;
+
+        let rt_handle = self.runtime.handle();
+        let set_ptr = dest.ptr;
+        let set_tydesc = dest.tydesc;
+
+        // Get element tydesc from set tydesc.
+        let set_tydesc_ref = unsafe { TyDescRef::from_ptr(set_tydesc) };
+        let element_tydesc = set_tydesc_ref.set_element_ty().as_ptr();
+        let element_size = unsafe { (*element_tydesc).size as usize };
+        let element_align = unsafe { (*element_tydesc).align };
+
+        if elements.is_empty() {
+            // Create empty set.
+            let status = unsafe {
+                datalove_rt::c::dtlv_rti_btreeset_create_local(rt_handle, set_ptr, set_tydesc)
+            };
+            if status != RtStatus::Ok {
+                return Err(InterpError::RuntimeError("Failed to create empty set".to_string()));
+            }
+            return Ok(());
+        }
+
+        // Read all element values.
+        let mut elem_values: Vec<Value> = elements.iter()
+            .map(|op| self.read_operand(op, frame, frames))
+            .collect::<Result<_, _>>()?;
+
+        // Sort elements by byte representation.
+        elem_values.sort_by(|a, b| {
+            unsafe {
+                let a_slice = std::slice::from_raw_parts(a.ptr, element_size);
+                let b_slice = std::slice::from_raw_parts(b.ptr, element_size);
+                a_slice.cmp(b_slice)
+            }
+        });
+
+        // Allocate temporary buffer for sorted elements.
+        let buffer_size = (elem_values.len() * element_size) as u32;
+        let buffer = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, buffer_size, element_align, 1)
+        };
+        if buffer.is_null() {
+            return Err(InterpError::RuntimeError("Failed to allocate set buffer".to_string()));
+        }
+
+        // Copy elements into buffer.
+        for (i, value) in elem_values.iter().enumerate() {
+            unsafe {
+                let elem_dest = buffer.add(i * element_size);
+                std::ptr::copy_nonoverlapping(value.ptr, elem_dest, element_size);
+            }
+        }
+
+        // Build B-tree from sorted buffer.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
+                rt_handle,
+                set_ptr,
+                element_tydesc,
+                buffer,
+                elem_values.len() as u32,
+            )
+        };
+
+        // Free temporary buffer.
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(
+                rt_handle,
+                buffer_size,
+                element_align,
+                1,
+                buffer,
+            );
+        }
+
+        if status != RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to build set B-tree".to_string()));
+        }
+
+        Ok(())
+    }
+
+    /// Execute MapNew: create a map from key-value pairs.
+    fn execute_map_new(
+        &mut self,
+        entries: &[(Operand, Operand)],
+        dest: Destination,
+        frame: &Frame,
+        frames: &FrameStore,
+    ) -> Result<(), InterpError> {
+        use datalove_rt::c::RtStatus;
+
+        let rt_handle = self.runtime.handle();
+        let map_ptr = dest.ptr;
+        let map_tydesc = dest.tydesc;
+
+        // Get key and value tydescs from map tydesc.
+        let map_tydesc_ref = unsafe { TyDescRef::from_ptr(map_tydesc) };
+        let key_tydesc = map_tydesc_ref.map_key_ty().as_ptr();
+        let value_tydesc = map_tydesc_ref.map_value_ty().as_ptr();
+        let key_size = unsafe { (*key_tydesc).size as usize };
+        let value_size = unsafe { (*value_tydesc).size as usize };
+        let key_align = unsafe { (*key_tydesc).align };
+        let value_align = unsafe { (*value_tydesc).align };
+
+        if entries.is_empty() {
+            // Create empty map.
+            let status = unsafe {
+                datalove_rt::c::dtlv_rti_btreemap_create_local(rt_handle, map_ptr, map_tydesc)
+            };
+            if status != RtStatus::Ok {
+                return Err(InterpError::RuntimeError("Failed to create empty map".to_string()));
+            }
+            return Ok(());
+        }
+
+        // Read all key-value pairs.
+        let mut kv_pairs: Vec<(Value, Value)> = entries.iter()
+            .map(|(k_op, v_op)| {
+                let k = self.read_operand(k_op, frame, frames)?;
+                let v = self.read_operand(v_op, frame, frames)?;
+                Ok((k, v))
+            })
+            .collect::<Result<_, InterpError>>()?;
+
+        // Sort by key.
+        kv_pairs.sort_by(|a, b| {
+            unsafe {
+                let a_slice = std::slice::from_raw_parts(a.0.ptr, key_size);
+                let b_slice = std::slice::from_raw_parts(b.0.ptr, key_size);
+                a_slice.cmp(b_slice)
+            }
+        });
+
+        // Allocate temporary buffers for keys and values.
+        let keys_buffer_size = (kv_pairs.len() * key_size) as u32;
+        let values_buffer_size = (kv_pairs.len() * value_size) as u32;
+
+        let keys_buffer = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, keys_buffer_size, key_align, 1)
+        };
+        if keys_buffer.is_null() {
+            return Err(InterpError::RuntimeError("Failed to allocate keys buffer".to_string()));
+        }
+
+        let values_buffer = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, values_buffer_size, value_align, 1)
+        };
+        if values_buffer.is_null() {
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(
+                    rt_handle,
+                    keys_buffer_size,
+                    key_align,
+                    1,
+                    keys_buffer,
+                );
+            }
+            return Err(InterpError::RuntimeError("Failed to allocate values buffer".to_string()));
+        }
+
+        // Copy keys and values into buffers.
+        for (i, (key, value)) in kv_pairs.iter().enumerate() {
+            unsafe {
+                let key_dest = keys_buffer.add(i * key_size);
+                let value_dest = values_buffer.add(i * value_size);
+                std::ptr::copy_nonoverlapping(key.ptr, key_dest, key_size);
+                std::ptr::copy_nonoverlapping(value.ptr, value_dest, value_size);
+            }
+        }
+
+        // Build B-tree from sorted slices.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
+                rt_handle,
+                map_ptr,
+                key_tydesc,
+                value_tydesc,
+                keys_buffer,
+                values_buffer,
+                kv_pairs.len() as u32,
+            )
+        };
+
+        // Free temporary buffers.
+        unsafe {
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(
+                rt_handle,
+                keys_buffer_size,
+                key_align,
+                1,
+                keys_buffer,
+            );
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(
+                rt_handle,
+                values_buffer_size,
+                value_align,
+                1,
+                values_buffer,
+            );
+        }
+
+        if status != RtStatus::Ok {
+            return Err(InterpError::RuntimeError("Failed to build map B-tree".to_string()));
+        }
+
+        Ok(())
+    }
+
+    /// Execute Drop: run destructor for a value.
+    fn execute_drop(&mut self, val: &Value) -> Result<(), InterpError> {
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                self.runtime.handle(),
+                val.ptr,
+                val.tydesc,
             );
         }
         Ok(())

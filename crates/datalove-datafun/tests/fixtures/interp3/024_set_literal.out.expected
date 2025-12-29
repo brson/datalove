@@ -8,9 +8,9 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const true\n    unit_end v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = const 10u32\n    v2 = const 15u32\n    v3 = set {v0, v1, v2}\n    unit_end v3\n",
             ),
-            output: "@true",
+            output: "@set {@5, @10, @15}",
         ),
     ],
 )

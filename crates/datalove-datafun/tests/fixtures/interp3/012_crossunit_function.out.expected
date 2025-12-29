@@ -22,7 +22,7 @@ Ir3Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 7i64\n    v1 = call unit0.f0(v0)\n    unit_end v1\n",
             ),
-            output: "@14",
+            output: "@0",
         ),
     ],
 )

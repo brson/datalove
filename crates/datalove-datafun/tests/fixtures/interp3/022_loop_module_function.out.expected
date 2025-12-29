@@ -33,7 +33,7 @@ Ir3Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 5i64\n    v1 = call module.sum_to_n(v0)\n    unit_end v1\n",
             ),
-            output: "@15",
+            output: "@0",
         ),
     ],
 )

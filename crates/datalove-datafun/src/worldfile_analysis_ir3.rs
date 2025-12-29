@@ -253,6 +253,9 @@ pub fn analyze_worldfile_ir3(
         }
     }
 
+    // Cleanup: destroy all values in frames to prevent memory leaks.
+    env.destroy_all(interp.runtime_handle());
+
     Ok(Ir3Analysis { sections: results })
 }
 
@@ -407,7 +410,7 @@ fn process_expr<'db>(
                     ptr: ret_buffer.as_mut_ptr(),
                     tydesc: ret_tydesc,
                 };
-                pretty_print_value(&value)
+                interp.pretty_print_value(&value).unwrap_or_else(|e| format!("Error: {:?}", e))
             }
             Err(e) => format!("Error: {:?}", e),
         }
@@ -426,72 +429,5 @@ fn process_expr<'db>(
         typecheck: TypecheckResult::Success,
         lowering: LoweringResult::Success { ir: ir_dump },
         output,
-    }
-}
-
-/// Pretty-print a value based on its type descriptor.
-fn pretty_print_value(value: &ir::interp::Value) -> String {
-    use datalove_rt::rtdt::{TyTag, TyInfoTuple};
-
-    let tag = unsafe { (*value.tydesc).type_tag };
-    match tag {
-        TyTag::Tuple => {
-            let tuple_info: TyInfoTuple = unsafe { (*value.tydesc).type_info.tuple };
-            if tuple_info.num_fields == 0 {
-                "()".to_string()
-            } else {
-                format!("<tuple:{}>", tuple_info.num_fields)
-            }
-        }
-        TyTag::Bool => {
-            let v = unsafe { *(value.ptr as *const bool) };
-            if v { "true".to_string() } else { "false".to_string() }
-        }
-        TyTag::U8 => {
-            let v = unsafe { *(value.ptr as *const u8) };
-            format!("@{}", v)
-        }
-        TyTag::U16 => {
-            let v = unsafe { *(value.ptr as *const u16) };
-            format!("@{}", v)
-        }
-        TyTag::U32 => {
-            let v = unsafe { *(value.ptr as *const u32) };
-            format!("@{}", v)
-        }
-        TyTag::U64 => {
-            let v = unsafe { *(value.ptr as *const u64) };
-            format!("@{}", v)
-        }
-        TyTag::I8 => {
-            let v = unsafe { *(value.ptr as *const i8) };
-            format!("{}", v)
-        }
-        TyTag::I16 => {
-            let v = unsafe { *(value.ptr as *const i16) };
-            format!("{}", v)
-        }
-        TyTag::I32 => {
-            let v = unsafe { *(value.ptr as *const i32) };
-            format!("{}", v)
-        }
-        TyTag::I64 => {
-            let v = unsafe { *(value.ptr as *const i64) };
-            format!("{}", v)
-        }
-        TyTag::F32 => {
-            let v = unsafe { *(value.ptr as *const f32) };
-            format!("{}", v)
-        }
-        TyTag::F64 => {
-            let v = unsafe { *(value.ptr as *const f64) };
-            format!("{}", v)
-        }
-        TyTag::Int => {
-            // Int currently stored as i64. TODO: Support bigint.
-            let v = unsafe { *(value.ptr as *const i64) };
-            format!("@{}", v)
-        }
-        _ => format!("<{:?}>", tag),
     }
 }
