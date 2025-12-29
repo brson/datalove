@@ -17,7 +17,7 @@ scripts and prototypes in Python,
 Datalove was born from my dissatisfaction with
 Python's weak typing and inconsistent
 facilities for expressing simple data structures.
-Datalove's is most usefully compared to Python, JavaScript, and Julia.
+Datalove is most usefully compared to Python, JavaScript, and Julia.
 
 
 
