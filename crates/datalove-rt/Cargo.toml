@@ -5,6 +5,9 @@ license.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[features]
+slow_tests = []
+
 [dependencies]
 rmx.workspace = true
 datalove-rtdt.path = "../datalove-rtdt"

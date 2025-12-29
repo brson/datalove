@@ -863,6 +863,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "slow_tests")]
     proptest! {
         #[test]
         fn proptest_write_read_random_data(size in 1usize..8192, data in prop::collection::vec(any::<u8>(), 1..8192)) {
@@ -1094,6 +1095,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "slow_tests")]
     #[should_panic(expected = "DATALOVE RUNTIME LEAK DETECTED")]
     fn test_leak_detection_panic_with_backtrace_mode() {
         let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::PanicWithBacktrace);
@@ -1104,6 +1106,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "slow_tests")]
     fn test_leak_detection_panic_with_backtrace_includes_backtrace() {
         let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::PanicWithBacktrace);
         unsafe {

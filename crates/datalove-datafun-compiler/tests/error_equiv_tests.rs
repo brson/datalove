@@ -436,6 +436,7 @@ fn run_mutation_tests(
 /// This test runs all mutations and reports statistics on equivalence.
 /// It does NOT fail on discrepancies - use this to understand the current state.
 #[test]
+#[cfg(feature = "slow_tests")]
 fn test_error_equiv_discovery() {
     let config = make_mutation_config();
 

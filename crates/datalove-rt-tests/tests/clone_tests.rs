@@ -598,10 +598,12 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
 
 // ==================== Property-Based Tests ====================
 
+#[cfg(feature = "slow_tests")]
 use proptest::prelude::*;
 use datalove_datalit::ast_gen::*;
 use datalove_rt::rust::Runtime;
 
+#[cfg(feature = "slow_tests")]
 proptest! {
     #![proptest_config(ProptestConfig {
         max_shrink_iters: 0,
@@ -743,6 +745,7 @@ proptest! {
     }
 }
 
+#[cfg(feature = "slow_tests")]
 proptest! {
     #![proptest_config(ProptestConfig {
         cases: 5,

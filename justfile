@@ -4,6 +4,12 @@ default:
 test:
     cargo test --all
 
+# Run slow tests (proptests, backtrace tests, etc).
+test-slow:
+    cargo test -p datalove-rt --features slow_tests
+    cargo test -p datalove-rt-tests --features slow_tests
+    cargo test -p datalove-datafun-compiler --features slow_tests
+
 # Time all tests, showing only tests that take over 1 second.
 test-time:
     env RUST_TEST_TIME_UNIT=1000,10000 \

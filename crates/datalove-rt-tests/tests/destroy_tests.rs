@@ -1261,9 +1261,12 @@ fn test_destroy_map_large() -> AnyResult<()> {
 
 // ==================== Property-Based Tests ====================
 
+#[cfg(feature = "slow_tests")]
 use proptest::prelude::*;
+#[cfg(feature = "slow_tests")]
 use datalove_datalit::ast_gen::*;
 
+#[cfg(feature = "slow_tests")]
 proptest! {
     #![proptest_config(ProptestConfig {
         max_shrink_iters: 0,
