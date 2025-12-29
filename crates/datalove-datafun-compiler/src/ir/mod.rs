@@ -32,12 +32,15 @@ pub struct FuncId(pub u32);
 /// Reference to a function.
 ///
 /// Functions can be defined in the current unit or imported from previous units.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum FuncRef {
     /// Function defined locally (in the current unit or module).
     Local(FuncId),
     /// Function from a previous script unit.
     External { unit: u32, func: FuncId },
+    /// Function from a module, referenced by name.
+    /// The actual function is stored in ScriptEnvironment::module_functions.
+    Module { name: String },
 }
 
 /// Reference to a type (used in Pack instructions).

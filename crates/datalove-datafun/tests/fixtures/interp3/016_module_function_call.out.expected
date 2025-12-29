@@ -1,0 +1,39 @@
+Ir3Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/utils"),
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 7i64\n    v1 = call module.double(v0)\n    unit_end v1\n",
+            ),
+            output: "@14",
+        ),
+    ],
+)

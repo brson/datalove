@@ -139,11 +139,24 @@ impl<'db> ScriptUnitInput<'db> {
     }
 }
 
+/// Parsed module info for import resolution during script typechecking.
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub struct ModuleInfo<'db> {
+    /// Module path (e.g., "local/test/utils").
+    pub path: String,
+    /// Parsed script containing function definitions.
+    pub script: Script<'db>,
+    /// Source for the module.
+    pub source: bct::input::Source,
+}
+
 /// Interned batch of script units for typechecking.
 #[salsa::interned]
 pub struct ScriptUnitBatch<'db> {
     #[returns(ref)]
     pub units: Vec<ScriptUnitInput<'db>>,
+    #[returns(ref)]
+    pub modules: Vec<ModuleInfo<'db>>,
 }
 
 /// Result of typechecking one script unit.
@@ -537,6 +550,32 @@ pub fn type_check_script_units<'db>(
     batch: ScriptUnitBatch<'db>,
 ) -> ScriptUnitsTypecheckResultTracked<'db> {
     let units = batch.units(db);
+    let modules = batch.modules(db);
+
+    // Build module function info for import resolution.
+    // Map: module_path -> (function_name -> (signature, ast))
+    let mut module_functions: HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>> = HashMap::new();
+    for module_info in modules {
+        let mut funcs = HashMap::new();
+        // First pass: collect function signatures.
+        let mut temp_ctx = TypeContext::new(db, module_info.source);
+        for statement in module_info.script.statements(db) {
+            if let Statement::Fun(stmt) = statement {
+                collect_function_signature(&mut temp_ctx, stmt, None);
+            }
+        }
+        // Extract function info.
+        for statement in module_info.script.statements(db) {
+            if let Statement::Fun(stmt) = statement {
+                let name = stmt.name(db);
+                if let Some(func_ty) = temp_ctx.functions.get(&name) {
+                    funcs.insert(name, (*func_ty, *stmt));
+                }
+            }
+        }
+        module_functions.insert(module_info.path.clone(), funcs);
+    }
+
     let mut accumulated_vars: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
     let mut accumulated_fns: HashMap<InternedText<'db>, TypeFunction<'db>> = HashMap::new();
     let mut accumulated_fn_asts: HashMap<InternedText<'db>, StmtFun<'db>> = HashMap::new();
@@ -564,6 +603,55 @@ pub fn type_check_script_units<'db>(
                 for statement in script.statements(db) {
                     if let Statement::Fun(stmt) = statement {
                         collect_function_signature(&mut ctx, stmt, None);
+                    }
+                }
+
+                // Build alias map from require statements.
+                // Maps module alias (e.g., "utils") to full path (e.g., "local/test/utils").
+                let mut alias_to_path: HashMap<InternedText<'db>, String> = HashMap::new();
+                for statement in script.statements(db) {
+                    if let Statement::Require(crate::ast::StmtRequire::Module(req)) = statement {
+                        let import_space = req.import_space(db);
+                        let package_alias = req.package_alias(db);
+                        let module_alias = req.module_alias(db);
+                        let full_path = format!(
+                            "{}/{}/{}",
+                            import_space.as_str(db),
+                            package_alias.as_str(db),
+                            module_alias.as_str(db)
+                        );
+                        alias_to_path.insert(module_alias, full_path);
+                    }
+                }
+
+                // Process import statements.
+                for statement in script.statements(db) {
+                    if let Statement::Import(import) = statement {
+                        let module_alias = import.module_name(db);
+                        let item_name = import.item_name(db);
+
+                        // Look up the full path from the alias.
+                        let module_path = alias_to_path.get(&module_alias)
+                            .map(|s| s.as_str())
+                            .unwrap_or(module_alias.as_str(db));
+
+                        if let Some(funcs) = module_functions.get(module_path) {
+                            if let Some((func_ty, func_ast)) = funcs.get(&item_name) {
+                                ctx.add_function(item_name, *func_ty);
+                                ctx.function_asts.insert(item_name, (*func_ast, None));
+                                // Also add to accumulated so subsequent units can use it.
+                                accumulated_fns.insert(item_name, *func_ty);
+                                accumulated_fn_asts.insert(item_name, *func_ast);
+                            } else {
+                                ctx.add_error(TypeError::UnresolvedName(
+                                    format!("{}.{}", module_path, item_name.as_str(db))
+                                ));
+                            }
+                        } else {
+                            ctx.add_error(TypeError::UnresolvedName(
+                                format!("module {}", module_path)
+                            ));
+                        }
                     }
                 }
 
@@ -600,7 +688,9 @@ pub fn type_check_script_units<'db>(
             }
             ScriptUnitKind::Expr(expr) => {
                 // Expression unit - just typecheck the expression.
-                let _ = ctx.synthesize_expr(*expr);
+                if let Err(e) = ctx.synthesize_expr(*expr) {
+                    ctx.add_error(e);
+                }
             }
         }
 

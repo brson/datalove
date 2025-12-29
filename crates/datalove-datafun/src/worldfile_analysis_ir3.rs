@@ -16,7 +16,7 @@ use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
 use datalove_datafun_compiler::tycheck::{
     ScriptUnitInput, ScriptUnitKind, ScriptUnitBatch, type_check_script_units,
-    UnitTypecheckResultTracked,
+    UnitTypecheckResultTracked, ModuleInfo,
 };
 use ir::interp::ScriptEnvironment;
 
@@ -121,6 +121,22 @@ pub fn analyze_worldfile_ir3(
         }
     }
 
+    // Parse all modules for import resolution.
+    let mut module_infos: Vec<ModuleInfo> = Vec::new();
+    for section in &parsed.sections {
+        if let WorldfileSection::Module { library, package, module, source } = section {
+            let module_path = format!("{}/{}/{}", library, package, module);
+            let src = bct::input::Source::new(db, source.to_string());
+            let parse_result = datalove_datafun_compiler::parser::parse(db, src);
+            let script = parse_result.script(db);
+            module_infos.push(ModuleInfo {
+                path: module_path,
+                script,
+                source: src,
+            });
+        }
+    }
+
     // Collect and parse all script units.
     let mut parsed_units: Vec<ParsedUnit> = Vec::new();
     let mut unit_inputs: Vec<ScriptUnitInput> = Vec::new();
@@ -128,7 +144,7 @@ pub fn analyze_worldfile_ir3(
     for section in &parsed.sections {
         match section {
             WorldfileSection::Module { .. } => {
-                // Modules are recorded separately.
+                // Modules are handled above.
             }
             WorldfileSection::ScriptFragment { source } => {
                 let src = bct::input::Source::new(db, source.to_string());
@@ -153,7 +169,7 @@ pub fn analyze_worldfile_ir3(
     }
 
     // Typecheck all units together (bindings shared across units).
-    let batch = ScriptUnitBatch::new(db, unit_inputs);
+    let batch = ScriptUnitBatch::new(db, unit_inputs, module_infos.clone());
     let typecheck_results = type_check_script_units(db, batch);
     let unit_results = typecheck_results.results(db);
 
@@ -161,6 +177,32 @@ pub fn analyze_worldfile_ir3(
     let mut script_ctx = ir::lower::ScriptLowerContext::new();
     let mut env = ScriptEnvironment::new();
     let mut interp = ir::interp::IrInterpreter::new();
+
+    // Lower module functions and add to script context.
+    for module_info in &module_infos {
+        // Typecheck the module.
+        let module_tycheck = datalove_datafun_compiler::tycheck::type_check(
+            db, module_info.source, module_info.script
+        );
+
+        // Lower each function in the module.
+        for statement in module_info.script.statements(db) {
+            if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
+                let func_name = func.name(db).text(db).to_string();
+
+                // Lower the function.
+                match ir::lower::lower_function(db, module_tycheck, *func) {
+                    Ok(ir_func) => {
+                        script_ctx.add_module_function(func_name.clone(), ir_func.clone());
+                        env.add_module_function(func_name, ir_func);
+                    }
+                    Err(_e) => {
+                        // Skip functions that fail to lower.
+                    }
+                }
+            }
+        }
+    }
 
     // Process each section, using the pre-computed typecheck results.
     let mut unit_idx = 0;

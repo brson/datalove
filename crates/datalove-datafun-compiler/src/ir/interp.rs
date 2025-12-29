@@ -6,6 +6,7 @@
 //! - Operations via datalove-rt runtime calls
 
 use rmx::prelude::*;
+use rmx::std::collections::HashMap;
 use datalove_rt::rtdt::{self, TyDesc};
 
 use super::{
@@ -47,6 +48,8 @@ pub enum InterpError {
     ExternalNotSupported,
     /// External unit not found.
     ExternalUnitNotFound(u32),
+    /// Module function not found.
+    ModuleFunctionNotFound(String),
 }
 
 /// Readable value pointer with type descriptor.
@@ -585,6 +588,8 @@ pub struct ScriptEnvironment {
     frames: Vec<Frame>,
     /// Functions from each unit, indexed by unit number.
     unit_functions: Vec<Vec<IrFunction>>,
+    /// Functions from modules, indexed by name.
+    module_functions: HashMap<String, IrFunction>,
 }
 
 impl ScriptEnvironment {
@@ -593,7 +598,18 @@ impl ScriptEnvironment {
         Self {
             frames: Vec::new(),
             unit_functions: Vec::new(),
+            module_functions: HashMap::new(),
         }
+    }
+
+    /// Add a module function to the environment.
+    pub fn add_module_function(&mut self, name: String, func: IrFunction) {
+        self.module_functions.insert(name, func);
+    }
+
+    /// Get a module function by name.
+    pub fn get_module_function(&self, name: &str) -> Option<&IrFunction> {
+        self.module_functions.get(name)
     }
 
     /// Add a completed unit's frame and functions to the environment.
@@ -666,6 +682,11 @@ impl<'a> ExecutionContext<'a> {
             FuncRef::External { unit, func } => {
                 env.ok_or(InterpError::ExternalNotSupported)?
                     .external_function(*unit, *func)
+            }
+            FuncRef::Module { name } => {
+                env.ok_or(InterpError::ExternalNotSupported)?
+                    .get_module_function(name)
+                    .ok_or(InterpError::ModuleFunctionNotFound(name.clone()))
             }
         }
     }

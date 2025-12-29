@@ -32,6 +32,7 @@ impl fmt::Display for FuncRef {
         match self {
             FuncRef::Local(id) => write!(f, "{}", id),
             FuncRef::External { unit, func } => write!(f, "unit{}.{}", unit, func),
+            FuncRef::Module { name } => write!(f, "module.{}", name),
         }
     }
 }

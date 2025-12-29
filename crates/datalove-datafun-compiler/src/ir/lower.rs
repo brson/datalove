@@ -60,6 +60,9 @@ pub struct ScriptLowerContext {
     pub slots: HashMap<String, (u32, SlotId)>,
     /// Available functions: name -> (unit_index, func_id).
     pub functions: HashMap<String, (u32, FuncId)>,
+    /// Module functions: name -> lowered IR function.
+    /// These are functions imported from modules.
+    pub module_functions: HashMap<String, IrFunction>,
     /// Current unit index.
     pub current_unit: u32,
 }
@@ -84,6 +87,11 @@ impl ScriptLowerContext {
                 }
             }
         }
+    }
+
+    /// Add a lowered module function to the context.
+    pub fn add_module_function(&mut self, name: String, func: IrFunction) {
+        self.module_functions.insert(name, func);
     }
 }
 
@@ -189,13 +197,18 @@ impl<'db> LowerCtx<'db> {
             });
         }
 
-        // Seed function scope with external functions.
+        // Seed function scope with external functions from previous units.
         let mut func_scope = HashMap::new();
         for (name, (unit, func_id)) in &script_ctx.functions {
             func_scope.insert(name.clone(), FuncRef::External {
                 unit: *unit,
                 func: *func_id,
             });
+        }
+
+        // Add module functions (imported from modules).
+        for (name, _func) in &script_ctx.module_functions {
+            func_scope.insert(name.clone(), FuncRef::Module { name: name.clone() });
         }
 
         let current_unit = script_ctx.current_unit;
@@ -230,7 +243,7 @@ impl<'db> LowerCtx<'db> {
 
     /// Look up a function by name.
     fn lookup_func(&self, name: &str) -> Option<FuncRef> {
-        self.func_scope.get(name).copied()
+        self.func_scope.get(name).cloned()
     }
 
     /// Allocate a fresh SSA value with known type.
