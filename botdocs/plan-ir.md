@@ -317,7 +317,7 @@ Implemented:
   - `ListNew` - creates list, reserves capacity, copies elements via runtime calls
   - `SetNew` - sorts elements, builds B-tree via `dtlv_rti_btreeset_build_from_sorted_slice_local`
   - `MapNew` - sorts by key, builds B-tree via `dtlv_rti_btreemap_build_from_sorted_slices_local`
-- Precise drop points (see `plan-ir-drop.md` for details):
+- Precise drop points:
   - IR lowering emits `Drop` instructions at scope exits via `ScopeTracker`
   - `is_copy_type()` determines if a type needs dropping
   - Scope kinds: `Function`, `ScriptUnit`, `Loop`, `IfThen`, `IfElse`
@@ -336,6 +336,11 @@ Implemented:
   - `ScriptEnvironment::destroy_all` called at end of worldfile analysis
   - Function frames: no destroy_all needed (precise drops handle cleanup)
   - Script unit frames: destroy_all cleans up exported bindings at script end
+- Drop tracking TODO:
+  - **Function call args not marked as moved** - could cause redundant drops (safe due to mark_dropped)
+  - **Let/var init source not marked as moved** - same as above
+  - **Branch convergence** - values moved in one if branch but not other should be dropped in non-moving branch (potential memory leak)
+  - **If-bindings** - deferred until IR supports if-bindings (runtime conditional drops needed)
 
 ### Phase 4: Integration - MOSTLY COMPLETE
 
@@ -384,6 +389,72 @@ Collection test coverage (tests 023-025):
 TODO:
 - Keep old interpreter for comparison
 - Run full test suite against both interpreters
+
+### Feature Gap Analysis (vs Old Interpreter)
+
+**Missing Features (HIGH priority):**
+
+1. **If-Bindings** - Option/Result destructuring in if conditions
+   - Old: `if option |value| ... end if` extracts Some payload
+   - IR: Branch only handles bool conditions
+   - Lowering: `UnwrapOption` + `Branch(is_some, then, else)` with binding in then_block
+
+2. **String Literals**
+   - Old: Full string literal support
+   - IR: `IrType::String` exists but `ConstValue` lacks `String` variant
+
+3. **Widening Arithmetic**
+   - Old: Bare `+`, `-`, `*` on fixed ints widen both operands to Int
+   - IR: Not documented/verified
+
+**Missing Features (MEDIUM priority):**
+
+4. **Optional Arithmetic (+?, -?, *?, /?)**
+   - Old: Returns `Option<T>`, None on overflow/div-zero
+   - IR: `BinOpChecked` returns `(value, overflow_flag)` - needs Option wrapping
+
+5. **Checked Arithmetic Result (+!, -!, *!, /!)**
+   - Old: Returns `Result<T, Error>`, Err on overflow/div-zero
+   - IR: `BinOpChecked` needs Result wrapping
+
+6. **Try Operators (?, !)**
+   - Old: `expr?` early-returns None, `expr!` early-returns Err
+   - IR: Plan shows `?` example; needs verification/tests
+
+**Missing Features (LOW priority):**
+
+7. **Unary Checked/Optional (-?, -!)**
+   - Old: `NegOptional`, `NegResult` for checked negation
+   - IR: `UnaryOp` only has `Neg`, `BitNot`, `Not`
+
+8. **Data Type (@data)**
+   - Old: `data(value)` coercion wrapper
+   - IR: `IrType::Data` exists, no creation instruction
+
+9. **Hex Literals** - May already parse to int values
+
+**Test Coverage Gap:**
+
+Old interpreter: 197+ tests
+IR interpreter: 31 tests
+
+Missing test categories:
+- All int types (i8, u8, i16, u16, i32, u32, i64, u64)
+- Checked/optional arithmetic
+- Try operators
+- If-bindings
+- Comparisons (all ops)
+- Float operations (f32)
+- Recursion (factorial, fibonacci, mutual)
+- Structs, tuples
+- Nested if/else-if chains
+
+Test matrix (each feature should be tested in):
+- expr unit
+- script fragment
+- cross-unit references
+- function in script fragment
+- function in module
 
 ### Phase 5: Cleanup - NOT STARTED
 
