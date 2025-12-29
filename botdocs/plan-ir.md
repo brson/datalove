@@ -266,7 +266,7 @@ Tests:
    - Added `SymbolTable` with function/type definitions and name resolution
    - Files modified: `ir/mod.rs`, `ir/lower.rs`, `ir/display.rs`
 
-### Phase 3: IR Interpreter - IN PROGRESS
+### Phase 3: IR Interpreter - MOSTLY COMPLETE
 
 File: `crates/datalove-datafun-compiler/src/ir/interp.rs`
 
@@ -282,6 +282,7 @@ Implemented:
 - `IrLayout` computes ValueId/SlotId -> byte offsets
 - `Frame` manages frame data with value/slot initialization tracking
 - `ExecutionContext` holds available functions for call resolution
+- `ScriptEnvironment` holds frames/functions from previous units for cross-unit execution
 - `IrInterpreter` executes IrFunction:
   - Const, Copy, Move instructions
   - BinOp for all types: i8-i64, u8-u64, f32, bool (Add, Sub, Mul, Div, Mod, comparisons, BitAnd/Or/Xor, Shl, Shr)
@@ -293,20 +294,24 @@ Implemented:
   - TupleIndex, FieldAccess
   - WrapSome, WrapNone, UnwrapOption
   - WrapOk, WrapErr, UnwrapResult
-  - Call (function calls with nested call support)
+  - Call (function calls with nested call support, including cross-unit calls)
   - All terminators: Branch, Goto, Return, TryReturn, UnitEnd, UnitEarlyReturn
 - Type tracking during lowering:
   - `fresh_value(ty: IrType)` pushes type to value_types
   - `fresh_slot(ty: IrType)` pushes type to slot_types
   - Expression types looked up from TypecheckResult via salsa IDs
 - Return value storage: return values copied to persistent storage to outlive callee frames
+- Cross-unit references:
+  - `Operand::ExternalValue` - read let bindings from prior units
+  - `Operand::ExternalSlot` - read var bindings from prior units
+  - `FuncRef::External` - call functions from prior units
 
 TODO:
 - ListNew, SetNew, MapNew (collection creation - requires runtime calls)
 - Phi node handling in CFG traversal
 - Drop instruction (destructors - requires runtime calls)
 
-### Phase 4: Integration - IN PROGRESS
+### Phase 4: Integration - MOSTLY COMPLETE
 
 Test suites created:
 - `module_interp3_tests` - modules only, runs nullary `main()` via IR interpreter
@@ -317,16 +322,24 @@ Files created:
 - `crates/datalove-datafun/src/worldfile_analysis_ir3.rs` - full worldfile IR3 analysis
 - `crates/datalove-datafun/tests/module_interp3_tests.rs` - test harness
 - `crates/datalove-datafun/tests/interp3_tests.rs` - test harness
-- `crates/datalove-datafun/tests/fixtures/module_interp3/` - 5 initial worldfiles
-- `crates/datalove-datafun/tests/fixtures/interp3/` - 5 initial worldfiles
+- `crates/datalove-datafun/tests/fixtures/module_interp3/` - 5 worldfiles
+- `crates/datalove-datafun/tests/fixtures/interp3/` - 13+ worldfiles (including cross-unit tests)
 
 Working:
 - Module-only execution: parse -> typecheck -> lower -> IR interpret -> pretty print
 - Script fragment lowering: parse -> typecheck -> lower script unit
+- Script expression lowering: parse -> typecheck expr -> lower script unit
+- Cross-unit typechecking: bindings from prior units visible in later units
+- Cross-unit lowering: ExternalValue/ExternalSlot/FuncRef::External references
+- Cross-unit execution: ScriptEnvironment tracks frames/functions across units
+
+Cross-unit test coverage (tests 010-013):
+- `010_crossunit_value.world` - let binding across units
+- `011_crossunit_slot.world` - var binding across units
+- `012_crossunit_function.world` - function call across units
+- `013_crossunit_chain.world` - chained cross-unit references
 
 TODO:
-- scriptunit-expr lowering (needs proper expression typechecking integration)
-- Cross-unit references for script execution
 - Keep old interpreter for comparison
 - Run full test suite against both interpreters
 
@@ -341,13 +354,21 @@ TODO:
 - `crates/datalove-datafun-compiler/src/ir/mod.rs` - IR types
 - `crates/datalove-datafun-compiler/src/ir/lower.rs` - AST->IR lowering
 - `crates/datalove-datafun-compiler/src/ir/display.rs` - IR pretty-printing
+- `crates/datalove-datafun-compiler/src/ir/interp.rs` - IR interpreter
 - `crates/datalove-datafun/tests/ir_lower_tests.rs` - function lowering tests
 - `crates/datalove-datafun/tests/ir_lower_script_tests.rs` - script unit tests
+- `crates/datalove-datafun/tests/module_interp3_tests.rs` - module-only IR3 tests
+- `crates/datalove-datafun/tests/interp3_tests.rs` - full worldfile IR3 tests
+- `crates/datalove-datafun/src/worldfile_analysis_modules_ir3.rs` - module-only IR3 analysis
+- `crates/datalove-datafun/src/worldfile_analysis_ir3.rs` - full worldfile IR3 analysis
 - `crates/datalove-datafun/tests/fixtures/ir_lower/` - function test fixtures
 - `crates/datalove-datafun/tests/fixtures/ir_lower_script/` - script test fixtures
+- `crates/datalove-datafun/tests/fixtures/module_interp3/` - module-only worldfiles
+- `crates/datalove-datafun/tests/fixtures/interp3/` - full worldfiles (incl. cross-unit tests)
 
 **Modified:**
 - `crates/datalove-datafun-compiler/src/lib.rs` - add `pub mod ir`
+- `crates/datalove-datafun-compiler/src/tycheck.rs` - batch typechecking types and `type_check_script_units`
 - `crates/datalove-datafun-pkg/src/package_load_worldfile.rs` - new section types
 - `crates/datalove-datafun/src/worldfile_analysis.rs` - handle new sections
 - `crates/datalove-datafun/Cargo.toml` - test configurations
@@ -367,6 +388,71 @@ TODO:
 3. **Interpreter uniformity**: Both map to frame offsets at runtime
 4. **Phi nodes**: Explicit merge at control flow join points
 5. **Migration**: Parallel execution for validation
+
+## Cross-Unit Typechecking (Salsa Integration)
+
+Worldfile tests have multiple script units that share bindings. To properly typecheck cross-unit references, all units are processed together in a single salsa-tracked function.
+
+### Types (in `tycheck.rs`)
+
+```rust
+/// Kind of script unit for batch typechecking.
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum ScriptUnitKind<'db> {
+    Fragment(Script<'db>),
+    Expr(ExprFun<'db>),
+}
+
+/// Input for batch script unit typechecking.
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub struct ScriptUnitInput<'db> {
+    pub source: bct::input::Source,
+    pub kind: ScriptUnitKind<'db>,
+}
+
+/// Interned batch of script units for typechecking.
+#[salsa::interned]
+pub struct ScriptUnitBatch<'db> {
+    #[returns(ref)]
+    pub units: Vec<ScriptUnitInput<'db>>,
+}
+
+/// Result of typechecking one script unit.
+#[salsa::tracked]
+pub struct UnitTypecheckResultTracked<'db> {
+    pub errors: Vec<TypeErrorEntry<'db>>,
+    #[returns(ref)]
+    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    #[returns(ref)]
+    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+}
+
+/// Result of typechecking multiple script units together.
+#[salsa::tracked]
+pub struct ScriptUnitsTypecheckResultTracked<'db> {
+    pub results: Vec<UnitTypecheckResultTracked<'db>>,
+}
+```
+
+### Entry Point
+
+```rust
+#[salsa::tracked]
+pub fn type_check_script_units<'db>(
+    db: &'db dyn crate::Db,
+    batch: ScriptUnitBatch<'db>,
+) -> ScriptUnitsTypecheckResultTracked<'db>
+```
+
+The function processes units sequentially, accumulating let/var/fn bindings. Prior units' bindings are seeded into each unit's TypeContext. Salsa memoizes the entire batch.
+
+### Accumulated Bindings
+
+- `accumulated_vars: HashMap<InternedText, TypeAndHeap>` - let bindings
+- `accumulated_fns: HashMap<InternedText, TypeFunction>` - function types
+- `accumulated_fn_asts: HashMap<InternedText, StmtFun>` - function ASTs for call checking
+
+After typechecking each Fragment unit, new let/var/fn bindings are extracted and added to the accumulated maps for use by subsequent units.
 
 ## Script Unit Support
 
