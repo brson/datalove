@@ -48,6 +48,12 @@ pub enum InterpError {
     ExternalUnitNotFound(u32),
     /// Module function not found.
     ModuleFunctionNotFound(String),
+    /// Phi node missing predecessor.
+    PhiMissingPredecessor {
+        dest: ValueId,
+        pred: BlockId,
+        available: Vec<BlockId>,
+    },
 }
 
 /// Readable value pointer with type descriptor.
@@ -890,6 +896,7 @@ impl IrInterpreter {
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         let mut current_block = BlockId(0);
+        let mut prev_block: Option<BlockId> = None;
 
         loop {
             let block = blocks.iter()
@@ -898,10 +905,19 @@ impl IrInterpreter {
 
             // Execute instructions.
             for instr in &block.instructions {
-                self.execute_instruction(instr, frame, ret_dest, ctx, registry, frames)?;
+                match instr {
+                    Instruction::Phi { dest, incoming } => {
+                        let pred = prev_block.expect("phi in entry block");
+                        self.execute_phi(*dest, incoming, pred, frame, frames)?;
+                    }
+                    _ => {
+                        self.execute_instruction(instr, frame, ret_dest, ctx, registry, frames)?;
+                    }
+                }
             }
 
             // Handle terminator.
+            prev_block = Some(current_block);
             match &block.terminator {
                 Terminator::Goto(target) => {
                     current_block = *target;
@@ -939,6 +955,31 @@ impl IrInterpreter {
                 }
             }
         }
+    }
+
+    fn execute_phi(
+        &mut self,
+        dest: ValueId,
+        incoming: &[(BlockId, Operand)],
+        pred: BlockId,
+        frame: &mut Frame,
+        frames: &FrameStore,
+    ) -> Result<(), InterpError> {
+        // Find the operand corresponding to the predecessor block.
+        let operand = incoming.iter()
+            .find(|(block, _)| *block == pred)
+            .map(|(_, op)| op)
+            .ok_or_else(|| InterpError::PhiMissingPredecessor {
+                dest,
+                pred,
+                available: incoming.iter().map(|(b, _)| *b).collect(),
+            })?;
+
+        let src_val = self.read_operand(operand, frame, frames)?;
+        let dest_slot = frame.value_dest(dest)?;
+        unsafe { self.copy_value(&src_val, dest_slot)?; }
+        frame.mark_value_initialized(dest);
+        Ok(())
     }
 
     fn execute_instruction(
@@ -1134,9 +1175,9 @@ impl IrInterpreter {
                 todo!("MapNew instruction not yet implemented")
             }
             Instruction::Phi { .. } => {
-                // Phi nodes are handled by the terminator jump logic.
-                // This should not be reached during normal execution.
-                todo!("Phi instruction should be handled by CFG traversal")
+                // Phi nodes are handled separately in execute_blocks before other instructions.
+                // This branch should not be reached since we skip Phi in the instruction loop.
+                unreachable!("Phi instructions are handled separately in execute_blocks")
             }
             Instruction::Drop { .. } => {
                 // TODO: Run destructor for value.
@@ -3786,5 +3827,291 @@ mod tests {
         interp.execute_script_unit_in_env(&unit2, &mut env, ret_dest).unwrap();
 
         assert_eq!(result, 8);  // 5 + 3 = 8
+    }
+
+    // =========================================================================
+    // Phi node tests
+    // =========================================================================
+
+    #[test]
+    fn test_phi_true_branch() {
+        // Test: if true { 10 } else { 20 }
+        // Expected: 10
+        //
+        // block0:
+        //     v0 = const true
+        //     branch v0, block1, block2
+        // block1:
+        //     v1 = const 10
+        //     goto block3
+        // block2:
+        //     v2 = const 20
+        //     goto block3
+        // block3:
+        //     v3 = phi [(block1, v1), (block2, v2)]
+        //     return v3
+        let func = IrFunction {
+            id: FuncId(0),
+            name: "test_phi_true".to_string(),
+            params: vec![],
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(0),
+                            value: ConstValue::Bool(true),
+                        },
+                    ],
+                    terminator: Terminator::Branch {
+                        cond: Operand::Value(ValueId(0)),
+                        then_block: BlockId(1),
+                        else_block: BlockId(2),
+                    },
+                },
+                IrBlock {
+                    id: BlockId(1),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(1),
+                            value: ConstValue::I64(10),
+                        },
+                    ],
+                    terminator: Terminator::Goto(BlockId(3)),
+                },
+                IrBlock {
+                    id: BlockId(2),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(2),
+                            value: ConstValue::I64(20),
+                        },
+                    ],
+                    terminator: Terminator::Goto(BlockId(3)),
+                },
+                IrBlock {
+                    id: BlockId(3),
+                    instructions: vec![
+                        Instruction::Phi {
+                            dest: ValueId(3),
+                            incoming: vec![
+                                (BlockId(1), Operand::Value(ValueId(1))),
+                                (BlockId(2), Operand::Value(ValueId(2))),
+                            ],
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        value: Some(Operand::Value(ValueId(3))),
+                    },
+                },
+            ],
+            value_count: 4,
+            slot_count: 0,
+            value_types: vec![IrType::Bool, IrType::I64, IrType::I64, IrType::I64],
+            slot_types: vec![],
+        };
+
+        let result = run_i64_function(&func);
+        assert_eq!(result, 10);
+    }
+
+    #[test]
+    fn test_phi_false_branch() {
+        // Test: if false { 10 } else { 20 }
+        // Expected: 20
+        let func = IrFunction {
+            id: FuncId(0),
+            name: "test_phi_false".to_string(),
+            params: vec![],
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(0),
+                            value: ConstValue::Bool(false),
+                        },
+                    ],
+                    terminator: Terminator::Branch {
+                        cond: Operand::Value(ValueId(0)),
+                        then_block: BlockId(1),
+                        else_block: BlockId(2),
+                    },
+                },
+                IrBlock {
+                    id: BlockId(1),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(1),
+                            value: ConstValue::I64(10),
+                        },
+                    ],
+                    terminator: Terminator::Goto(BlockId(3)),
+                },
+                IrBlock {
+                    id: BlockId(2),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(2),
+                            value: ConstValue::I64(20),
+                        },
+                    ],
+                    terminator: Terminator::Goto(BlockId(3)),
+                },
+                IrBlock {
+                    id: BlockId(3),
+                    instructions: vec![
+                        Instruction::Phi {
+                            dest: ValueId(3),
+                            incoming: vec![
+                                (BlockId(1), Operand::Value(ValueId(1))),
+                                (BlockId(2), Operand::Value(ValueId(2))),
+                            ],
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        value: Some(Operand::Value(ValueId(3))),
+                    },
+                },
+            ],
+            value_count: 4,
+            slot_count: 0,
+            value_types: vec![IrType::Bool, IrType::I64, IrType::I64, IrType::I64],
+            slot_types: vec![],
+        };
+
+        let result = run_i64_function(&func);
+        assert_eq!(result, 20);
+    }
+
+    #[test]
+    fn test_phi_nested_if() {
+        // Test: if true { if false { 1 } else { 2 } } else { 3 }
+        // Expected: 2
+        //
+        // block0:
+        //     v0 = const true
+        //     branch v0, block1, block4
+        // block1:
+        //     v1 = const false
+        //     branch v1, block2, block3
+        // block2:
+        //     v2 = const 1
+        //     goto block5
+        // block3:
+        //     v3 = const 2
+        //     goto block5
+        // block4:
+        //     v4 = const 3
+        //     goto block6
+        // block5:
+        //     v5 = phi [(block2, v2), (block3, v3)]
+        //     goto block6
+        // block6:
+        //     v6 = phi [(block5, v5), (block4, v4)]
+        //     return v6
+        let func = IrFunction {
+            id: FuncId(0),
+            name: "test_phi_nested".to_string(),
+            params: vec![],
+            blocks: vec![
+                IrBlock {
+                    id: BlockId(0),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(0),
+                            value: ConstValue::Bool(true),
+                        },
+                    ],
+                    terminator: Terminator::Branch {
+                        cond: Operand::Value(ValueId(0)),
+                        then_block: BlockId(1),
+                        else_block: BlockId(4),
+                    },
+                },
+                IrBlock {
+                    id: BlockId(1),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(1),
+                            value: ConstValue::Bool(false),
+                        },
+                    ],
+                    terminator: Terminator::Branch {
+                        cond: Operand::Value(ValueId(1)),
+                        then_block: BlockId(2),
+                        else_block: BlockId(3),
+                    },
+                },
+                IrBlock {
+                    id: BlockId(2),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(2),
+                            value: ConstValue::I64(1),
+                        },
+                    ],
+                    terminator: Terminator::Goto(BlockId(5)),
+                },
+                IrBlock {
+                    id: BlockId(3),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(3),
+                            value: ConstValue::I64(2),
+                        },
+                    ],
+                    terminator: Terminator::Goto(BlockId(5)),
+                },
+                IrBlock {
+                    id: BlockId(4),
+                    instructions: vec![
+                        Instruction::Const {
+                            dest: ValueId(4),
+                            value: ConstValue::I64(3),
+                        },
+                    ],
+                    terminator: Terminator::Goto(BlockId(6)),
+                },
+                IrBlock {
+                    id: BlockId(5),
+                    instructions: vec![
+                        Instruction::Phi {
+                            dest: ValueId(5),
+                            incoming: vec![
+                                (BlockId(2), Operand::Value(ValueId(2))),
+                                (BlockId(3), Operand::Value(ValueId(3))),
+                            ],
+                        },
+                    ],
+                    terminator: Terminator::Goto(BlockId(6)),
+                },
+                IrBlock {
+                    id: BlockId(6),
+                    instructions: vec![
+                        Instruction::Phi {
+                            dest: ValueId(6),
+                            incoming: vec![
+                                (BlockId(5), Operand::Value(ValueId(5))),
+                                (BlockId(4), Operand::Value(ValueId(4))),
+                            ],
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        value: Some(Operand::Value(ValueId(6))),
+                    },
+                },
+            ],
+            value_count: 7,
+            slot_count: 0,
+            value_types: vec![
+                IrType::Bool, IrType::Bool,
+                IrType::I64, IrType::I64, IrType::I64, IrType::I64, IrType::I64,
+            ],
+            slot_types: vec![],
+        };
+
+        let result = run_i64_function(&func);
+        assert_eq!(result, 2);
     }
 }
