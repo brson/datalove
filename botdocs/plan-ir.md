@@ -317,13 +317,25 @@ Implemented:
   - `ListNew` - creates list, reserves capacity, copies elements via runtime calls
   - `SetNew` - sorts elements, builds B-tree via `dtlv_rti_btreeset_build_from_sorted_slice_local`
   - `MapNew` - sorts by key, builds B-tree via `dtlv_rti_btreemap_build_from_sorted_slices_local`
-- Drop instruction:
+- Precise drop points (see `plan-ir-drop.md` for details):
+  - IR lowering emits `Drop` instructions at scope exits via `ScopeTracker`
+  - `is_copy_type()` determines if a type needs dropping
+  - Scope kinds: `Function`, `ScriptUnit`, `Loop`, `IfThen`, `IfElse`
+  - Functions: drops emitted before returns, at scope exits
+  - Loops: drops before loop-back and break/continue
+  - If blocks: drops before Goto(merge) in each branch
+  - Set statements: drop old slot value before store (non-copy types)
+  - Return values marked as moved (not dropped)
+  - Script unit top-level: NOT dropped (exported, cleaned at finalize)
+- Drop instruction execution:
   - `execute_drop` calls `dtlv_rti_any_destroy_local`
-- Frame cleanup:
-  - `Frame::destroy_all` destroys all initialized values/slots
-  - `FrameStore::destroy_all` destroys all frames
+  - `mark_value_dropped`/`mark_slot_dropped` prevent double-destroy
+- Frame cleanup (script finalize only):
+  - `Frame::destroy_all` destroys remaining initialized values/slots
+  - `FrameStore::destroy_all` destroys all script unit frames
   - `ScriptEnvironment::destroy_all` called at end of worldfile analysis
-  - Prevents memory leaks for heap-allocated collections
+  - Function frames: no destroy_all needed (precise drops handle cleanup)
+  - Script unit frames: destroy_all cleans up exported bindings at script end
 
 ### Phase 4: Integration - MOSTLY COMPLETE
 

@@ -1,5 +1,7 @@
 # Plan: Precise Drop Points in IR Lowering
 
+**Status: MOSTLY COMPLETE** (see bottom for remaining items)
+
 ## Problem
 
 The IR interpreter uses `destroy_all()` at script end, which hides drop bugs. We need precise drops emitted during IR lowering.
@@ -160,3 +162,25 @@ File: `crates/datalove-datafun-compiler/src/ir/lower.rs`
 6. Set statement - verify old value dropped before store
 7. Script unit exports - verify NOT dropped at unit end
 8. Nested scopes - verify correct drop order (LIFO)
+
+## Implementation Status
+
+### Completed
+
+- Steps 1-8: ScopeTracker, scope entry/exit for functions/loops/if, record bindings, set statement drops, script unit handling
+- Return values marked as moved (not dropped)
+- Interpreter marks values/slots as dropped after Drop instruction to prevent double-destroy
+- 27 test fixtures blessed with new Drop instructions in IR output
+
+### Not Implemented / Deferred
+
+1. **Function call arguments not marked as moved** - Could cause redundant drops, but safe due to mark_dropped
+2. **Let/var init source not marked as moved** - Same as above
+3. **Branch convergence** - Values moved in one branch but not other should be dropped in the non-moving branch. Currently not tracked.
+4. **Rename destroy_all to finalize()** - Kept original name
+5. **If-bindings** - Deferred (IR doesn't support if-bindings yet anyway)
+
+### Potential Issues
+
+- **Redundant drops**: Without move tracking for call args and let/var init, we may emit drops for already-consumed values. Safe because `mark_value_dropped`/`mark_slot_dropped` prevents double-destroy at runtime.
+- **Branch convergence leaks**: If a value is moved in one if branch but not the other, the non-moving branch should drop it before merge. Currently not implemented - could leak memory.
