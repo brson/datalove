@@ -2069,3 +2069,1115 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
 
     Ok(())
 }
+
+// ============================================================================
+// Set (Replace) Tests
+// ============================================================================
+
+/// Test set element at valid index.
+#[test]
+fn test_list_set_valid() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push [10, 20, 30].
+    for i in 1u32..=3 {
+        let mut value = i * 10;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    // Set index 1 to 999.
+    let mut new_value = 999u32;
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_set_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            1,
+            &mut new_value as *mut u32 as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Verify list is [10, 999, 30].
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+
+    for (idx, expected) in [(0, 10), (1, 999), (2, 30)] {
+        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_get_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                idx,
+                option_buffer.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        let tag = option_buffer[0];
+        assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+        let value_ptr = unsafe {
+            option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+        };
+        let retrieved_value = unsafe { *value_ptr };
+        assert_eq!(retrieved_value, expected);
+    }
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test set element at out of bounds index returns error.
+#[test]
+fn test_list_set_out_of_bounds() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push 2 elements.
+    for i in 0u32..2 {
+        let mut value = i * 10;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    // Try to set at index 5 (out of bounds).
+    let mut new_value = 999u32;
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_set_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            5,
+            &mut new_value as *mut u32 as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test set String element.
+#[test]
+fn test_list_set_string() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_string_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push ["first", "second", "third"].
+    for s in &["first", "second", "third"] {
+        unsafe {
+            let mut string_val = create_runtime_string(rt, s, &*element_tydesc);
+            let status = datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut string_val as *mut rtdt::String as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            );
+            assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        }
+    }
+
+    // Set index 1 to "REPLACED".
+    unsafe {
+        let mut new_string = create_runtime_string(rt, "REPLACED", &*element_tydesc);
+        let status = datalove_rt::c::dtlv_rti_list_set_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            1,
+            &mut new_string as *mut rtdt::String as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        );
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    assert_eq!(list.size, 3);
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+// ============================================================================
+// Create From Slice Tests
+// ============================================================================
+
+/// Test create list from empty slice.
+#[test]
+fn test_list_create_from_slice_empty() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    // Create from empty slice (use a non-null but empty slice).
+    let slice: [u32; 0] = [];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_from_slice_local(
+            rt,
+            slice.as_ptr() as *const u8,
+            0,
+            &*element_tydesc as *const rtdt::TyDesc,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    assert_eq!(list.size, 0);
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test create list from slice with multiple elements.
+#[test]
+fn test_list_create_from_slice_multiple() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let slice: [u32; 5] = [10, 20, 30, 40, 50];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_from_slice_local(
+            rt,
+            slice.as_ptr() as *const u8,
+            5,
+            &*element_tydesc as *const rtdt::TyDesc,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    assert_eq!(list.size, 5);
+    assert!(list.capacity >= 5);
+
+    // Verify all elements.
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+
+    for (idx, expected) in slice.iter().enumerate() {
+        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_get_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                idx as u32,
+                option_buffer.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        let tag = option_buffer[0];
+        assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+        let value_ptr = unsafe {
+            option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+        };
+        let retrieved_value = unsafe { *value_ptr };
+        assert_eq!(retrieved_value, *expected);
+    }
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+// ============================================================================
+// Extend From Slice Tests
+// ============================================================================
+
+/// Test extend empty list from slice.
+#[test]
+fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Extend with [10, 20, 30].
+    let slice: [u32; 3] = [10, 20, 30];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            slice.as_ptr() as *const u8,
+            3,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    assert_eq!(list.size, 3);
+
+    // Verify all elements.
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+
+    for (idx, expected) in slice.iter().enumerate() {
+        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_get_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                idx as u32,
+                option_buffer.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        let value_ptr = unsafe {
+            option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+        };
+        let retrieved_value = unsafe { *value_ptr };
+        assert_eq!(retrieved_value, *expected);
+    }
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test extend non-empty list from slice.
+#[test]
+fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push initial elements [1, 2].
+    for i in 1u32..=2 {
+        let mut value = i;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    assert_eq!(list.size, 2);
+
+    // Extend with [3, 4, 5].
+    let slice: [u32; 3] = [3, 4, 5];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            slice.as_ptr() as *const u8,
+            3,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    assert_eq!(list.size, 5);
+
+    // Verify all elements [1, 2, 3, 4, 5].
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let expected: [u32; 5] = [1, 2, 3, 4, 5];
+
+    for (idx, exp) in expected.iter().enumerate() {
+        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_get_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                idx as u32,
+                option_buffer.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        let value_ptr = unsafe {
+            option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+        };
+        let retrieved_value = unsafe { *value_ptr };
+        assert_eq!(retrieved_value, *exp);
+    }
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test extend with empty slice (no-op).
+#[test]
+fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push initial elements.
+    for i in 0u32..3 {
+        let mut value = i;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    let size_before = list.size;
+
+    // Extend with empty slice.
+    let slice: [u32; 0] = [];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            slice.as_ptr() as *const u8,
+            0,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Size should be unchanged.
+    assert_eq!(list.size, size_before);
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+// ============================================================================
+// Edge Case Tests
+// ============================================================================
+
+/// Test shrink_to_fit on empty list with capacity frees the buffer.
+#[test]
+fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, _element_tydesc) = create_list_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Reserve capacity.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_reserve_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            50,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    assert!(list.capacity >= 50);
+    assert!(!list.data.is_null());
+    assert_eq!(list.size, 0);
+
+    // Shrink to fit on empty list should free the buffer.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_shrink_to_fit_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    assert_eq!(list.capacity, 0);
+    assert!(list.data.is_null());
+    assert_eq!(list.size, 0);
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test insert at end (equivalent to push).
+#[test]
+fn test_list_insert_at_end() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push [10, 20].
+    for i in 1u32..=2 {
+        let mut value = i * 10;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    // Insert 30 at end (index == size).
+    let mut value = 30u32;
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_insert_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            2, // index == size
+            &mut value as *mut u32 as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    assert_eq!(list.size, 3);
+
+    // Verify [10, 20, 30].
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+
+    for (idx, expected) in [(0, 10), (1, 20), (2, 30)] {
+        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_get_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                idx,
+                option_buffer.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        let value_ptr = unsafe {
+            option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+        };
+        let retrieved_value = unsafe { *value_ptr };
+        assert_eq!(retrieved_value, expected);
+    }
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test insert beyond end returns error.
+#[test]
+fn test_list_insert_beyond_end() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push 2 elements.
+    for i in 0u32..2 {
+        let mut value = i;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    // Try to insert at index 5 (beyond end).
+    let mut value = 999u32;
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_insert_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            5,
+            &mut value as *mut u32 as *mut u8,
+            &*element_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
+
+    // Size should be unchanged.
+    assert_eq!(list.size, 2);
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test remove last element (no shifting needed).
+#[test]
+fn test_list_remove_last() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push [10, 20, 30].
+    for i in 1u32..=3 {
+        let mut value = i * 10;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    // Remove last element (index 2).
+    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let mut option_buffer = vec![0u8; option_layout.size as usize];
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_remove_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            2, // last index
+            option_buffer.as_mut_ptr(),
+            &*option_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let tag = option_buffer[0];
+    assert_eq!(tag, rtdt::OptionTag::Some as u8);
+
+    let value_ptr = unsafe {
+        option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+    };
+    let removed_value = unsafe { *value_ptr };
+    assert_eq!(removed_value, 30);
+
+    assert_eq!(list.size, 2);
+
+    // Verify remaining elements [10, 20].
+    for (idx, expected) in [(0, 10), (1, 20)] {
+        let mut opt_buf = vec![0u8; option_layout.size as usize];
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_get_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                idx,
+                opt_buf.as_mut_ptr(),
+                &*option_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        let val_ptr = unsafe {
+            opt_buf.as_ptr().add(option_layout.payload_offset as usize) as *const u32
+        };
+        let val = unsafe { *val_ptr };
+        assert_eq!(val, expected);
+    }
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test clear non-empty list.
+#[test]
+fn test_list_clear_nonempty() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push elements.
+    for i in 0u32..5 {
+        let mut value = i;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    assert_eq!(list.size, 5);
+    let capacity_before = list.capacity;
+
+    // Clear the list.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_clear_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Size should be 0, capacity should be preserved.
+    assert_eq!(list.size, 0);
+    assert_eq!(list.capacity, capacity_before);
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test reserve when capacity is already sufficient (no-op).
+#[test]
+fn test_list_reserve_already_sufficient() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc();
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: 0,
+        capacity: 0,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_create_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Reserve 20.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_reserve_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            20,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let capacity_after_first = list.capacity;
+    assert!(capacity_after_first >= 20);
+
+    // Push some elements.
+    for i in 0u32..5 {
+        let mut value = i;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt,
+                list_ptr,
+                &*list_tydesc as *const rtdt::TyDesc,
+                &mut value as *mut u32 as *mut u8,
+                &*element_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    // Reserve 10 (less than available).
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_reserve_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+            10,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Capacity should be unchanged.
+    assert_eq!(list.capacity, capacity_after_first);
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_destroy_local(
+            rt,
+            list_ptr,
+            &*list_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
