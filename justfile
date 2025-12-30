@@ -92,47 +92,47 @@ test-san-cfi *ARGS='':
 # Skips proptests (too slow under Miri's interpreter).
 # Takes ~10 minutes.
 test-miri-rt *ARGS='':
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt --lib -- --skip proptest {{ARGS}}
 
 # Run Miri on a specific test (useful for debugging).
 test-miri-rt-one TEST:
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt --lib {{TEST}}
 
 # Run Miri on rt-tests integration tests.
 # Tests 533 tests across 13 test files. Takes ~45 minutes.
 test-miri-rt-tests *ARGS='':
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test int_math_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test eq_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test string_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test cmp_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test rust_api_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test anypack_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test pretty_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test eq_unique_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test cmp_total_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test list_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test tensor_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test btreeset_tests {{ARGS}}
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test btreemap_tests {{ARGS}}
 
 # Run Miri on a specific rt-tests test file (useful for debugging).
 test-miri-rt-tests-one TEST_FILE *ARGS='':
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test {{TEST_FILE}} {{ARGS}}
 
 check:
