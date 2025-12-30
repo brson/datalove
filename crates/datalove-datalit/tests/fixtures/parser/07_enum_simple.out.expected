@@ -1,12 +1,15 @@
 {
-  "type_hint": null,
-  "expr": {
-    "heap": "Local",
+  "ast": {
     "expr": {
-      "AnonEnum": {
-        "variant_name": "Foo",
-        "payload": null
-      }
-    }
-  }
+      "expr": {
+        "AnonEnum": {
+          "payload": null,
+          "variant_name": "Foo"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
 }

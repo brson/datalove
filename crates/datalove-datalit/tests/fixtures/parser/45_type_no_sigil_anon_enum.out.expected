@@ -1,41 +1,44 @@
 {
-  "type_hint": {
-    "heap": "Omitted",
-    "type_hint": {
-      "AnonEnum": {
-        "variants": [
-          {
-            "name": "Ok",
-            "payload": {
-              "heap": "Local",
-              "type_hint": "U32"
-            }
-          },
-          {
-            "name": "Err",
-            "payload": null
-          }
-        ]
-      }
-    }
-  },
-  "expr": {
-    "heap": "Local",
+  "ast": {
     "expr": {
-      "AnonEnum": {
-        "variant_name": "Ok",
-        "payload": {
-          "type_hint": null,
-          "expr": {
-            "heap": "Local",
+      "expr": {
+        "AnonEnum": {
+          "payload": {
             "expr": {
-              "Int": {
-                "value": "42"
+              "expr": {
+                "Int": {
+                  "value": "42"
+                }
+              },
+              "heap": "Local"
+            },
+            "type_hint": null
+          },
+          "variant_name": "Ok"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "AnonEnum": {
+          "variants": [
+            {
+              "name": "Ok",
+              "payload": {
+                "heap": "Local",
+                "type_hint": "U32"
               }
+            },
+            {
+              "name": "Err",
+              "payload": null
             }
-          }
+          ]
         }
       }
     }
-  }
+  },
+  "diagnostics": []
 }

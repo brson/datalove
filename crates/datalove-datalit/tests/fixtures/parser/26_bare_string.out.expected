@@ -1,14 +1,17 @@
 {
-  "type_hint": {
-    "heap": "Local",
-    "type_hint": "String"
-  },
-  "expr": {
-    "heap": "Omitted",
+  "ast": {
     "expr": {
-      "String": {
-        "value": "\"hello\""
-      }
+      "expr": {
+        "String": {
+          "value": "\"hello\""
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "String"
     }
-  }
+  },
+  "diagnostics": []
 }

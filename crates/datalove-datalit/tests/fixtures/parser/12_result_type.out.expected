@@ -1,21 +1,24 @@
 {
-  "type_hint": {
-    "heap": "Local",
+  "ast": {
+    "expr": {
+      "expr": {
+        "String": {
+          "value": "\"hello\""
+        }
+      },
+      "heap": "Local"
+    },
     "type_hint": {
-      "Result": {
-        "inner_type": {
-          "heap": "Local",
-          "type_hint": "String"
+      "heap": "Local",
+      "type_hint": {
+        "Result": {
+          "inner_type": {
+            "heap": "Local",
+            "type_hint": "String"
+          }
         }
       }
     }
   },
-  "expr": {
-    "heap": "Local",
-    "expr": {
-      "String": {
-        "value": "\"hello\""
-      }
-    }
-  }
+  "diagnostics": []
 }

@@ -1,196 +1,199 @@
 {
-  "type_hint": {
-    "heap": "Omitted",
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonTuple": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "1"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "-1"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "100"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "-100"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "1000"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "-1000"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "10000"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "-10000"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Float": {
+                    "value": "3.14"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "999999"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "String": {
+                    "value": "\"test\""
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": "True",
+                "heap": "Local"
+              },
+              "type_hint": null
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
     "type_hint": {
-      "AnonTuple": {
-        "fields": [
-          {
-            "heap": "Omitted",
-            "type_hint": "U8"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "I8"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "U16"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "I16"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "I32"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "U64"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "I64"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "F32"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "Int"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "String"
-          },
-          {
-            "heap": "Omitted",
-            "type_hint": "Bool"
-          }
-        ]
+      "heap": "Omitted",
+      "type_hint": {
+        "AnonTuple": {
+          "fields": [
+            {
+              "heap": "Omitted",
+              "type_hint": "U8"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "I8"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "U16"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "I16"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "U32"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "I32"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "U64"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "I64"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "F32"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "Int"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "String"
+            },
+            {
+              "heap": "Omitted",
+              "type_hint": "Bool"
+            }
+          ]
+        }
       }
     }
   },
-  "expr": {
-    "heap": "Local",
-    "expr": {
-      "AnonTuple": {
-        "elements": [
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "1"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "-1"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "100"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "-100"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "1000"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "-1000"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "10000"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "-10000"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Float": {
-                  "value": "3.14"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "Int": {
-                  "value": "999999"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": {
-                "String": {
-                  "value": "\"test\""
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": "True"
-            }
-          }
-        ]
-      }
-    }
-  }
+  "diagnostics": []
 }

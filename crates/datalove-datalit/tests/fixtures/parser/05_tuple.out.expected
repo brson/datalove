@@ -1,41 +1,44 @@
 {
-  "type_hint": null,
-  "expr": {
-    "heap": "Local",
+  "ast": {
     "expr": {
-      "AnonTuple": {
-        "elements": [
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
-              "expr": "True"
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
+      "expr": {
+        "AnonTuple": {
+          "elements": [
+            {
               "expr": {
-                "Int": {
-                  "value": "42"
-                }
-              }
-            }
-          },
-          {
-            "type_hint": null,
-            "expr": {
-              "heap": "Local",
+                "expr": "True",
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
               "expr": {
-                "Float": {
-                  "value": "3.14"
-                }
-              }
+                "expr": {
+                  "Int": {
+                    "value": "42"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Float": {
+                    "value": "3.14"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
             }
-          }
-        ]
-      }
-    }
-  }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
 }

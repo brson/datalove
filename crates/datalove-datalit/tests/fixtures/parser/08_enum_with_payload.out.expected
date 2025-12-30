@@ -1,22 +1,25 @@
 {
-  "type_hint": null,
-  "expr": {
-    "heap": "Local",
+  "ast": {
     "expr": {
-      "AnonEnum": {
-        "variant_name": "Bar",
-        "payload": {
-          "type_hint": null,
-          "expr": {
-            "heap": "Local",
+      "expr": {
+        "AnonEnum": {
+          "payload": {
             "expr": {
-              "Int": {
-                "value": "42"
-              }
-            }
-          }
+              "expr": {
+                "Int": {
+                  "value": "42"
+                }
+              },
+              "heap": "Local"
+            },
+            "type_hint": null
+          },
+          "variant_name": "Bar"
         }
-      }
-    }
-  }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
 }

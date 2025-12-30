@@ -1,11 +1,14 @@
 {
-  "type_hint": null,
-  "expr": {
-    "heap": "Omitted",
+  "ast": {
     "expr": {
-      "Int": {
-        "value": "42"
-      }
-    }
-  }
+      "expr": {
+        "Int": {
+          "value": "42"
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
 }

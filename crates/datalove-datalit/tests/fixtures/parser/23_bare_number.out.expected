@@ -1,14 +1,17 @@
 {
-  "type_hint": {
-    "heap": "Local",
-    "type_hint": "U32"
-  },
-  "expr": {
-    "heap": "Omitted",
+  "ast": {
     "expr": {
-      "Int": {
-        "value": "42"
-      }
+      "expr": {
+        "Int": {
+          "value": "42"
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "U32"
     }
-  }
+  },
+  "diagnostics": []
 }

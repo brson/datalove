@@ -1,27 +1,30 @@
 {
-  "type_hint": {
-    "heap": "Local",
-    "type_hint": "Error"
-  },
-  "expr": {
-    "heap": "Local",
+  "ast": {
     "expr": {
-      "Err": {
-        "value": {
-          "type_hint": {
-            "heap": "Local",
-            "type_hint": "Int"
-          },
-          "expr": {
-            "heap": "Omitted",
+      "expr": {
+        "Err": {
+          "value": {
             "expr": {
-              "Int": {
-                "value": "1"
-              }
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
+              },
+              "heap": "Omitted"
+            },
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "Int"
             }
           }
         }
-      }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "Error"
     }
-  }
+  },
+  "diagnostics": []
 }

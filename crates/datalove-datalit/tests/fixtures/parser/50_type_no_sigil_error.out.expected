@@ -1,24 +1,27 @@
 {
-  "type_hint": {
-    "heap": "Omitted",
-    "type_hint": "Error"
-  },
-  "expr": {
-    "heap": "Local",
+  "ast": {
     "expr": {
-      "Err": {
-        "value": {
-          "type_hint": null,
-          "expr": {
-            "heap": "Local",
+      "expr": {
+        "Err": {
+          "value": {
             "expr": {
-              "String": {
-                "value": "\"failed\""
-              }
-            }
+              "expr": {
+                "String": {
+                  "value": "\"failed\""
+                }
+              },
+              "heap": "Local"
+            },
+            "type_hint": null
           }
         }
-      }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": "Error"
     }
-  }
+  },
+  "diagnostics": []
 }

@@ -1,25 +1,28 @@
 {
-  "type_hint": {
-    "heap": "Local",
+  "ast": {
+    "expr": {
+      "expr": {
+        "Map": {
+          "entries": []
+        }
+      },
+      "heap": "Local"
+    },
     "type_hint": {
-      "Map": {
-        "key_type": {
-          "heap": "Local",
-          "type_hint": "U32"
-        },
-        "value_type": {
-          "heap": "Local",
-          "type_hint": "String"
+      "heap": "Local",
+      "type_hint": {
+        "Map": {
+          "key_type": {
+            "heap": "Local",
+            "type_hint": "U32"
+          },
+          "value_type": {
+            "heap": "Local",
+            "type_hint": "String"
+          }
         }
       }
     }
   },
-  "expr": {
-    "heap": "Local",
-    "expr": {
-      "Map": {
-        "entries": []
-      }
-    }
-  }
+  "diagnostics": []
 }

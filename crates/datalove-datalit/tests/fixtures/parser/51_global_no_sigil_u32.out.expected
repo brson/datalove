@@ -1,14 +1,17 @@
 {
-  "type_hint": {
-    "heap": "Global",
-    "type_hint": "U32"
-  },
-  "expr": {
-    "heap": "Global",
+  "ast": {
     "expr": {
-      "Int": {
-        "value": "42"
-      }
+      "expr": {
+        "Int": {
+          "value": "42"
+        }
+      },
+      "heap": "Global"
+    },
+    "type_hint": {
+      "heap": "Global",
+      "type_hint": "U32"
     }
-  }
+  },
+  "diagnostics": []
 }

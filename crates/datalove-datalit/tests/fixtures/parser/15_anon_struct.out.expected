@@ -1,82 +1,85 @@
 {
-  "type_hint": {
-    "heap": "Local",
-    "type_hint": {
-      "AnonStruct": {
-        "fields": [
-          {
-            "name": "field1",
-            "type_hint": {
-              "heap": "Local",
-              "type_hint": "Bool"
-            }
-          },
-          {
-            "name": "field2",
-            "type_hint": {
-              "heap": "Local",
-              "type_hint": "U32"
-            }
-          },
-          {
-            "name": "field3",
-            "type_hint": {
-              "heap": "Local",
-              "type_hint": "U32"
-            }
-          }
-        ]
-      }
-    }
-  },
-  "expr": {
-    "heap": "Local",
+  "ast": {
     "expr": {
-      "AnonStruct": {
-        "fields": [
-          {
-            "name": "field1",
-            "value": {
-              "type_hint": null,
-              "expr": {
-                "heap": "Local",
-                "expr": "True"
-              }
-            }
-          },
-          {
-            "name": "field2",
-            "value": {
-              "type_hint": null,
-              "expr": {
-                "heap": "Local",
+      "expr": {
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "field1",
+              "value": {
                 "expr": {
-                  "Int": {
-                    "value": "42"
-                  }
+                  "expr": "True",
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "name": "field2",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "42"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "name": "field3",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": {
+                  "heap": "Local",
+                  "type_hint": "U32"
                 }
               }
             }
-          },
-          {
-            "name": "field3",
-            "value": {
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "field1",
+              "type_hint": {
+                "heap": "Local",
+                "type_hint": "Bool"
+              }
+            },
+            {
+              "name": "field2",
               "type_hint": {
                 "heap": "Local",
                 "type_hint": "U32"
-              },
-              "expr": {
+              }
+            },
+            {
+              "name": "field3",
+              "type_hint": {
                 "heap": "Local",
-                "expr": {
-                  "Int": {
-                    "value": "2"
-                  }
-                }
+                "type_hint": "U32"
               }
             }
-          }
-        ]
+          ]
+        }
       }
     }
-  }
+  },
+  "diagnostics": []
 }

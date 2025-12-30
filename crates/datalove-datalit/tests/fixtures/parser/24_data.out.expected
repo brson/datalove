@@ -1,24 +1,27 @@
 {
-  "type_hint": {
-    "heap": "Local",
-    "type_hint": "Data"
-  },
-  "expr": {
-    "heap": "Local",
+  "ast": {
     "expr": {
-      "Data": {
-        "value": {
-          "type_hint": null,
-          "expr": {
-            "heap": "Omitted",
+      "expr": {
+        "Data": {
+          "value": {
             "expr": {
-              "String": {
-                "value": "\"payload\""
-              }
-            }
+              "expr": {
+                "String": {
+                  "value": "\"payload\""
+                }
+              },
+              "heap": "Omitted"
+            },
+            "type_hint": null
           }
         }
-      }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "Data"
     }
-  }
+  },
+  "diagnostics": []
 }

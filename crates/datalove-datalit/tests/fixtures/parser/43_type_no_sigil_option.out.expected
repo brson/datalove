@@ -1,21 +1,24 @@
 {
-  "type_hint": {
-    "heap": "Omitted",
+  "ast": {
+    "expr": {
+      "expr": {
+        "Int": {
+          "value": "42"
+        }
+      },
+      "heap": "Local"
+    },
     "type_hint": {
-      "Option": {
-        "inner_type": {
-          "heap": "Omitted",
-          "type_hint": "U32"
+      "heap": "Omitted",
+      "type_hint": {
+        "Option": {
+          "inner_type": {
+            "heap": "Omitted",
+            "type_hint": "U32"
+          }
         }
       }
     }
   },
-  "expr": {
-    "heap": "Local",
-    "expr": {
-      "Int": {
-        "value": "42"
-      }
-    }
-  }
+  "diagnostics": []
 }

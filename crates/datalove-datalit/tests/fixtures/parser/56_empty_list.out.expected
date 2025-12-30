@@ -1,21 +1,24 @@
 {
-  "type_hint": {
-    "heap": "Local",
+  "ast": {
+    "expr": {
+      "expr": {
+        "List": {
+          "elements": []
+        }
+      },
+      "heap": "Local"
+    },
     "type_hint": {
-      "List": {
-        "element_type": {
-          "heap": "Local",
-          "type_hint": "U32"
+      "heap": "Local",
+      "type_hint": {
+        "List": {
+          "element_type": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
         }
       }
     }
   },
-  "expr": {
-    "heap": "Local",
-    "expr": {
-      "List": {
-        "elements": []
-      }
-    }
-  }
+  "diagnostics": []
 }

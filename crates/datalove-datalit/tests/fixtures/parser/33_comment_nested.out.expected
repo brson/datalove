@@ -1,7 +1,10 @@
 {
-  "type_hint": null,
-  "expr": {
-    "heap": "Local",
-    "expr": "True"
-  }
+  "ast": {
+    "expr": {
+      "expr": "True",
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
 }

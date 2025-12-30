@@ -1,18 +1,50 @@
 {
-  "type_hint": {
-    "heap": "Local",
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "expected '/' after type hint"
+        }
+      },
+      "heap": "Omitted"
+    },
     "type_hint": {
-      "ParseError": {
-        "message": "expected {} after enum keyword"
+      "heap": "Local",
+      "type_hint": {
+        "ParseError": {
+          "message": "expected {} after enum keyword"
+        }
       }
     }
   },
-  "expr": {
-    "heap": "Omitted",
-    "expr": {
-      "ParseError": {
-        "message": "expected '/' after type hint"
-      }
+  "diagnostics": [
+    {
+      "code": "D003",
+      "labels": [
+        {
+          "message": "expected '{' after 'enum'",
+          "span": [
+            3,
+            7
+          ],
+          "text": "enum"
+        }
+      ],
+      "message": "expected {} after enum keyword"
+    },
+    {
+      "code": "D012",
+      "labels": [
+        {
+          "message": "expected '/' separator between type hint and expression",
+          "span": [
+            8,
+            14
+          ],
+          "text": "Result"
+        }
+      ],
+      "message": "expected '/' after type hint"
     }
-  }
+  ]
 }

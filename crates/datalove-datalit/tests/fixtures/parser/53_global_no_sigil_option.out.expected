@@ -1,21 +1,24 @@
 {
-  "type_hint": {
-    "heap": "Global",
+  "ast": {
+    "expr": {
+      "expr": {
+        "Int": {
+          "value": "42"
+        }
+      },
+      "heap": "Global"
+    },
     "type_hint": {
-      "Option": {
-        "inner_type": {
-          "heap": "Omitted",
-          "type_hint": "U32"
+      "heap": "Global",
+      "type_hint": {
+        "Option": {
+          "inner_type": {
+            "heap": "Omitted",
+            "type_hint": "U32"
+          }
         }
       }
     }
   },
-  "expr": {
-    "heap": "Global",
-    "expr": {
-      "Int": {
-        "value": "42"
-      }
-    }
-  }
+  "diagnostics": []
 }
