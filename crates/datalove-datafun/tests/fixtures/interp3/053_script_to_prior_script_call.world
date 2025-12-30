@@ -1,0 +1,24 @@
+----------
+scriptunit-fragment
+----------
+
+// First script unit defines a function.
+// Using int type to avoid fixed-width integer widening issues.
+fun add_one(x: int): int
+    ret x + :int/@1
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+// Second script unit can call function from first unit.
+fun add_two(x: int): int
+    ret add_one(add_one(x))
+end fun
+
+----------
+scriptunit-expr
+----------
+
+add_two(:int/@5)

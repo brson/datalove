@@ -4,10 +4,11 @@ Ir3Analysis(
             section_type: "module",
             name: Some("local/test/mapmod"),
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "fn make_map():\nblock0:\n    v0 = const 1u32\n    v1 = const 1000u32\n    v2 = const 2u32\n    v3 = const 2000u32\n    v4 = map {v0: v1, v2: v3}\n    return v4\n",
             ),
             output: "",
         ),

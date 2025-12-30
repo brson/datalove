@@ -2,13 +2,13 @@ Ir3Analysis(
     sections: [
         SectionResult(
             section_type: "module",
-            name: Some("local/test/utils"),
+            name: Some("local/test/helper"),
             typecheck: TypecheckResult(
                 status: "Success",
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn double(v0):\nblock0:\n    v1 = add v0, v0\n    drop v0\n    return v1\n",
+                ir: "fn add_one(v0):\nblock0:\n    v1 = const 1int\n    v2 = add v0, v1\n    drop v0\n    return v2\n",
             ),
             output: "",
         ),
@@ -25,6 +25,18 @@ Ir3Analysis(
             output: "(fragment executed)",
         ),
         SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn add_three(v0):\nblock0:\n    v1 = call module.add_one(v0)\n    v2 = call module.add_one(v1)\n    v3 = call module.add_one(v2)\n    drop v0\n    return v3\nexports:\n    add_three = f0\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
@@ -32,9 +44,9 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 7int\n    v1 = call module.double(v0)\n    unit_end v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = call unit1.f0(v0)\n    unit_end v1\n",
             ),
-            output: "@14",
+            output: "@13",
         ),
     ],
 )

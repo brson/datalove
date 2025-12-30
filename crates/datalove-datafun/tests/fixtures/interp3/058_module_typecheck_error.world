@@ -1,0 +1,23 @@
+----------
+module local/test/bad_module
+----------
+
+// This function has a type error: u32 + u32 returns int, not u32.
+fun bad_add(x: u32): u32
+    ret x + x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+// Should fail to import because module has typecheck errors.
+require module local/test/bad_module
+import bad_module.bad_add
+
+----------
+scriptunit-expr
+----------
+
+// Can't call bad_add due to module error.
+bad_add(@5)

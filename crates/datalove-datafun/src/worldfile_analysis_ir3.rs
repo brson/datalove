@@ -16,8 +16,9 @@ use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
 use datalove_datafun_compiler::tycheck::{
     ScriptUnitInput, ScriptUnitKind, ScriptUnitBatch, type_check_script_units,
-    UnitTypecheckResultTracked, ModuleInfo,
+    UnitTypecheckResultTracked, ModuleInfo, typecheck_module_graph,
 };
+use datalove_datafun_compiler::module_graph::ModuleGraphBuilder;
 use ir::interp::{ScriptEnvironment, UnitCompletion};
 
 /// Result of analyzing a worldfile with IR interpreter.
@@ -178,30 +179,82 @@ pub fn analyze_worldfile_ir3(
     let mut env = ScriptEnvironment::new();
     let mut interp = ir::interp::IrInterpreter::new();
 
-    // Lower module functions and add to script context.
+    // Build ModuleGraph and typecheck all modules together.
+    // This handles module-to-module imports properly.
+    let mut builder = ModuleGraphBuilder::new(db);
     for module_info in &module_infos {
-        // Typecheck the module.
-        let module_tycheck = datalove_datafun_compiler::tycheck::type_check(
-            db, module_info.source, module_info.script
-        );
+        builder.add_module(module_info.path.clone(), module_info.source);
+    }
+    let module_graph = builder.build();
+
+    // Typecheck all modules together (handles inter-module imports).
+    let graph_typecheck = typecheck_module_graph(db, module_graph.clone());
+    let combined_expr_types = graph_typecheck.expr_types(db);
+
+    // Build map from module path to typecheck errors.
+    let module_errors = graph_typecheck.module_errors(db);
+    let mut path_to_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (module_id, errors) in module_errors {
+        let path = module_id.path(db).clone();
+        let error_strings: Vec<String> = errors.iter()
+            .map(|e| format!("{:?}", e))
+            .collect();
+        path_to_errors.insert(path, error_strings);
+    }
+
+    // First pass: collect all module function names.
+    // These will be available when lowering any module function.
+    let mut all_module_functions: Vec<String> = Vec::new();
+    for module in module_graph.iter_modules(db) {
+        let module_source = module.source(db);
+        let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
+        let script = parse_result.script(db);
+        for statement in script.statements(db) {
+            if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
+                all_module_functions.push(func.name(db).text(db).to_string());
+            }
+        }
+    }
+
+    // Second pass: lower module functions with all function names available.
+    // Track lowering results per module path.
+    let mut module_lowering_results: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for module in module_graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let module_path = module_id.path(db).clone();
+
+        // Skip lowering if module has typecheck errors.
+        if path_to_errors.get(&module_path).map_or(false, |e| !e.is_empty()) {
+            continue;
+        }
+
+        let module_source = module.source(db);
+        let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
+        let script = parse_result.script(db);
+
+        let mut ir_dumps = Vec::new();
 
         // Lower each function in the module.
-        for statement in module_info.script.statements(db) {
+        for statement in script.statements(db) {
             if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
                 let func_name = func.name(db).text(db).to_string();
 
-                // Lower the function.
-                match ir::lower::lower_function(db, module_tycheck, *func) {
+                // Lower the function with all module functions available.
+                match ir::lower::lower_function_for_module(
+                    db, combined_expr_types, &all_module_functions, *func
+                ) {
                     Ok(ir_func) => {
+                        ir_dumps.push(format!("{}", ir_func));
                         script_ctx.add_module_function(func_name.clone(), ir_func.clone());
                         env.add_module_function(func_name, ir_func);
                     }
-                    Err(_e) => {
-                        // Skip functions that fail to lower.
+                    Err(e) => {
+                        ir_dumps.push(format!("Error lowering {}: {}", func_name, e));
                     }
                 }
             }
         }
+        module_lowering_results.insert(module_path, ir_dumps);
     }
 
     // Process each section, using the pre-computed typecheck results.
@@ -209,12 +262,41 @@ pub fn analyze_worldfile_ir3(
     for section in &parsed.sections {
         match section {
             WorldfileSection::Module { library, package, module, .. } => {
-                // For modules, just record that they exist.
+                let module_path = format!("{}/{}/{}", library, package, module);
+
+                // Look up typecheck errors for this module.
+                let typecheck = match path_to_errors.get(&module_path) {
+                    Some(errors) if !errors.is_empty() => {
+                        TypecheckResult::Error { errors: errors.clone() }
+                    }
+                    _ => TypecheckResult::Success,
+                };
+
+                // Look up lowering results for this module.
+                let lowering = match &typecheck {
+                    TypecheckResult::Error { .. } => LoweringResult::Skipped,
+                    _ => match module_lowering_results.get(&module_path) {
+                        Some(ir_dumps) => {
+                            let has_errors = ir_dumps.iter().any(|s| s.starts_with("Error"));
+                            if has_errors {
+                                let errors: Vec<_> = ir_dumps.iter()
+                                    .filter(|s| s.starts_with("Error"))
+                                    .cloned()
+                                    .collect();
+                                LoweringResult::Error { message: errors.join("\n") }
+                            } else {
+                                LoweringResult::Success { ir: ir_dumps.join("\n") }
+                            }
+                        }
+                        None => LoweringResult::Skipped,
+                    },
+                };
+
                 results.push(SectionResult {
                     section_type: "module".to_string(),
-                    name: Some(format!("{}/{}/{}", library, package, module)),
-                    typecheck: TypecheckResult::Skipped,
-                    lowering: LoweringResult::Skipped,
+                    name: Some(module_path),
+                    typecheck,
+                    lowering,
                     output: String::new(),
                 });
             }
@@ -286,6 +368,26 @@ fn process_fragment<'db>(
         ParsedUnitKind::Fragment(s) => *s,
         _ => unreachable!(),
     };
+
+    // Process require/import statements to populate import tracking.
+    for statement in script.statements(db) {
+        match statement {
+            datalove_datafun_compiler::ast::Statement::Require(
+                datalove_datafun_compiler::ast::StmtRequire::Module(req)
+            ) => {
+                let import_space = req.import_space(db).text(db).to_string();
+                let package_alias = req.package_alias(db).text(db).to_string();
+                let module_alias = req.module_alias(db).text(db).to_string();
+                let full_path = format!("{}/{}/{}", import_space, package_alias, module_alias);
+                script_ctx.add_module_alias(module_alias, full_path);
+            }
+            datalove_datafun_compiler::ast::Statement::Import(import) => {
+                let item_name = import.item_name(db).text(db).to_string();
+                script_ctx.import_module_function(item_name);
+            }
+            _ => {}
+        }
+    }
 
     // Lower using the typecheck result's expr_types.
     let ir_unit = match ir::lower::lower_script_fragment_raw(

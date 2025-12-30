@@ -4,10 +4,11 @@ Ir3Analysis(
             section_type: "module",
             name: Some("local/test/utils"),
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "fn double(v0):\nblock0:\n    v1 = add v0, v0\n    return v1\n",
             ),
             output: "",
         ),

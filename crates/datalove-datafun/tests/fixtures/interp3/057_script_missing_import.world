@@ -1,0 +1,21 @@
+----------
+module local/test/helper
+----------
+
+fun add_one(x: int): int
+    ret x + @1
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+// Has require but missing import.
+require module local/test/helper
+
+----------
+scriptunit-expr
+----------
+
+// Should fail - add_one not imported.
+add_one(@5)

@@ -1,0 +1,31 @@
+----------
+module local/test/helper
+----------
+
+// Using int type to avoid fixed-width integer widening issues.
+fun add_one(x: int): int
+    ret x + :int/@1
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+// Unit 1 does require and import.
+require module local/test/helper
+import helper.add_one
+
+----------
+scriptunit-fragment
+----------
+
+// Unit 2 can use the import from unit 1.
+fun add_three(x: int): int
+    ret add_one(add_one(add_one(x)))
+end fun
+
+----------
+scriptunit-expr
+----------
+
+add_three(:int/@10)

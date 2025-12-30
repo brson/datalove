@@ -1,0 +1,31 @@
+----------
+module local/test/base
+----------
+
+fun double(x: int): int
+    ret x + x
+end fun
+
+----------
+module local/test/derived
+----------
+
+// Try to import from base without require.
+import base.double
+
+fun quad(x: int): int
+    ret double(double(x))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/derived
+import derived.quad
+
+----------
+scriptunit-expr
+----------
+
+quad(@3)

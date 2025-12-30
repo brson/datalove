@@ -2,13 +2,28 @@ Ir3Analysis(
     sections: [
         SectionResult(
             section_type: "module",
-            name: Some("local/test/utils"),
+            name: Some("local/test/base"),
             typecheck: TypecheckResult(
                 status: "Success",
             ),
             lowering: LoweringResult(
                 status: "Success",
                 ir: "fn double(v0):\nblock0:\n    v1 = add v0, v0\n    drop v0\n    return v1\n",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/derived"),
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"module base (not required)\")",
+                    "UnresolvedName(\"double\")",
+                ],
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
             ),
             output: "",
         ),
@@ -31,10 +46,10 @@ Ir3Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 7int\n    v1 = call module.double(v0)\n    unit_end v1\n",
+                status: "Error",
+                message: "function not found: quad",
             ),
-            output: "@14",
+            output: "",
         ),
     ],
 )

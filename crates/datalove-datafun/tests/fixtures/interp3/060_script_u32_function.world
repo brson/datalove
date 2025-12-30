@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Using int type to avoid fixed-width integer widening issues.
+fun add_one(x: int): int
+    ret x + :int/@1
+end fun
+
+----------
+scriptunit-expr
+----------
+
+add_one(:int/@5)

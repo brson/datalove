@@ -729,8 +729,8 @@ impl IrInterpreter {
                 }
             }
             Instruction::Call { dest, func, args } => {
-                // Look up the function.
-                let callee = ctx.get_function(func, registry)?;
+                // Look up the function and determine the correct context for the callee.
+                let (callee, callee_unit) = ctx.get_function_with_context(func, registry)?;
 
                 // Evaluate arguments.
                 let arg_vals: Vec<Value> = args.iter()
@@ -750,8 +750,19 @@ impl IrInterpreter {
                     }
                 }
 
-                // Call the function, writing result directly to destination.
-                self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
+                // Call the function with appropriate context.
+                // For external functions, use the callee's unit's context.
+                // For local/module functions, use the current context.
+                if let Some(unit) = callee_unit {
+                    // External function - create context with callee's unit functions.
+                    let unit_funcs = registry.unit_functions(unit)
+                        .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+                    let callee_ctx = ExecutionContext::new(unit_funcs);
+                    self.call_in_context(callee, arg_vals, dest_slot, &callee_ctx, registry, frames)?;
+                } else {
+                    // Local or module function - use current context.
+                    self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
+                }
                 frame.mark_value_initialized(*dest);
             }
             Instruction::ListNew { dest, elements } => {

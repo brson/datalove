@@ -2,13 +2,15 @@ Ir3Analysis(
     sections: [
         SectionResult(
             section_type: "module",
-            name: Some("local/test/utils"),
+            name: Some("local/test/bad_module"),
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "TypeMismatch { expected: \"u32\", actual: \"int\" }",
+                ],
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: "fn double(v0):\nblock0:\n    v1 = add v0, v0\n    drop v0\n    return v1\n",
+                status: "Skipped",
             ),
             output: "",
         ),
@@ -31,10 +33,10 @@ Ir3Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 7int\n    v1 = call module.double(v0)\n    unit_end v1\n",
+                status: "Error",
+                message: "function not found: bad_add",
             ),
-            output: "@14",
+            output: "",
         ),
     ],
 )

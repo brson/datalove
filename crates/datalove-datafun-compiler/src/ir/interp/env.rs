@@ -47,6 +47,11 @@ impl FunctionRegistry {
             .find(|f| f.id == func_id)
             .ok_or(InterpError::FunctionNotFound(func_id))
     }
+
+    /// Get all functions from a unit.
+    pub fn unit_functions(&self, unit: u32) -> Option<&[IrFunction]> {
+        self.unit_functions.get(unit as usize).map(|v| v.as_slice())
+    }
 }
 
 impl Default for FunctionRegistry {
@@ -122,6 +127,34 @@ impl<'a> ExecutionContext<'a> {
             FuncRef::Module { name } => {
                 registry.get_module_function(name)
                     .ok_or(InterpError::ModuleFunctionNotFound(name.clone()))
+            }
+        }
+    }
+
+    /// Look up a function and get the appropriate context for calling it.
+    ///
+    /// For local and module functions, returns the current context.
+    /// For external functions, returns a context with that unit's functions.
+    pub fn get_function_with_context<'b>(
+        &'b self,
+        func_ref: &FuncRef,
+        registry: &'b FunctionRegistry,
+    ) -> Result<(&'b IrFunction, Option<u32>), InterpError> {
+        match func_ref {
+            FuncRef::Local(id) => {
+                let func = self.functions.iter()
+                    .find(|f| f.id == *id)
+                    .ok_or(InterpError::FunctionNotFound(*id))?;
+                Ok((func, None)) // Use current context.
+            }
+            FuncRef::External { unit, func } => {
+                let callee = registry.external_function(*unit, *func)?;
+                Ok((callee, Some(*unit))) // Need context from this unit.
+            }
+            FuncRef::Module { name } => {
+                let callee = registry.get_module_function(name)
+                    .ok_or(InterpError::ModuleFunctionNotFound(name.clone()))?;
+                Ok((callee, None)) // Module functions don't have local calls.
             }
         }
     }

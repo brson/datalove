@@ -4,7 +4,7 @@
 //! interpretation and codegen.
 
 use rmx::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use salsa::plumbing::AsId;
 use crate::ast::{self, Statement, ExprFun, ExprFunKind};
 use crate::tycheck::TypecheckResult;
@@ -340,8 +340,14 @@ pub struct ScriptLowerContext {
     /// Available functions: name -> (unit_index, func_id).
     pub functions: HashMap<String, (u32, FuncId)>,
     /// Module functions: name -> lowered IR function.
-    /// These are functions imported from modules.
+    /// These are all functions available from modules.
     pub module_functions: HashMap<String, IrFunction>,
+    /// Imported module function names.
+    /// Only functions in this set are accessible to the current unit.
+    pub imported_module_functions: HashSet<String>,
+    /// Module aliases: alias -> full path.
+    /// Built from require statements.
+    pub module_aliases: HashMap<String, String>,
     /// Current unit index.
     pub current_unit: u32,
 }
@@ -371,6 +377,16 @@ impl ScriptLowerContext {
     /// Add a lowered module function to the context.
     pub fn add_module_function(&mut self, name: String, func: IrFunction) {
         self.module_functions.insert(name, func);
+    }
+
+    /// Add a module alias from a require statement.
+    pub fn add_module_alias(&mut self, alias: String, full_path: String) {
+        self.module_aliases.insert(alias, full_path);
+    }
+
+    /// Mark a module function as imported.
+    pub fn import_module_function(&mut self, name: String) {
+        self.imported_module_functions.insert(name);
     }
 }
 
@@ -454,6 +470,43 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Create a context for lowering module functions with imported functions available.
+    pub fn new_for_module(
+        db: &'db dyn Db,
+        expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+        available_functions: &[String],
+    ) -> Self {
+        // Seed func_scope with available module functions.
+        let mut func_scope = HashMap::new();
+        for name in available_functions {
+            func_scope.insert(name.clone(), FuncRef::Module { name: name.clone() });
+        }
+
+        Self {
+            db,
+            expr_types,
+            next_value: 0,
+            next_slot: 0,
+            next_block: 1,
+            blocks: Vec::new(),
+            current_block: BlockId(0),
+            current_instructions: Vec::new(),
+            variables: HashMap::new(),
+            script_ctx: None,
+            exports: Vec::new(),
+            functions: Vec::new(),
+            symbols: SymbolTable::new(),
+            func_scope,
+            current_unit: 0,
+            value_types: Vec::new(),
+            slot_types: Vec::new(),
+            loop_stack: Vec::new(),
+            scope_tracker: ScopeTracker::new(),
+            return_type: None,
+            is_script_unit: false,
+        }
+    }
+
     /// Get the IrType for an expression from the typechecker.
     fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let expr_id = expr.as_id();
@@ -497,9 +550,11 @@ impl<'db> LowerCtx<'db> {
             });
         }
 
-        // Add module functions (imported from modules).
+        // Add module functions - only those that have been imported.
         for (name, _func) in &script_ctx.module_functions {
-            func_scope.insert(name.clone(), FuncRef::Module { name: name.clone() });
+            if script_ctx.imported_module_functions.contains(name) {
+                func_scope.insert(name.clone(), FuncRef::Module { name: name.clone() });
+            }
         }
 
         let current_unit = script_ctx.current_unit;
@@ -623,7 +678,32 @@ pub fn lower_function<'db>(
     tycheck_result: TypecheckResult<'db>,
     func: ast::StmtFun<'db>,
 ) -> Result<IrFunction, LowerError> {
-    let mut ctx = LowerCtx::new(db, tycheck_result.expr_types(db));
+    lower_function_with_expr_types(db, tycheck_result.expr_types(db), func)
+}
+
+/// Lower a function to IR using pre-computed expr_types.
+///
+/// This variant is useful when lowering functions from a module graph
+/// where expr_types are combined across all modules.
+pub fn lower_function_with_expr_types<'db>(
+    db: &'db dyn Db,
+    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    func: ast::StmtFun<'db>,
+) -> Result<IrFunction, LowerError> {
+    lower_function_for_module(db, expr_types, &[], func)
+}
+
+/// Lower a function to IR with available module functions in scope.
+///
+/// This variant is used when lowering module functions that may call
+/// other module functions (imported from other modules).
+pub fn lower_function_for_module<'db>(
+    db: &'db dyn Db,
+    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    available_functions: &[String],
+    func: ast::StmtFun<'db>,
+) -> Result<IrFunction, LowerError> {
+    let mut ctx = LowerCtx::new_for_module(db, expr_types, available_functions);
     let name = func.name(db).text(db).to_string();
     let param_count = func.params(db).len();
 

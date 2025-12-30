@@ -4,10 +4,11 @@ Ir3Analysis(
             section_type: "module",
             name: Some("local/test/listmod"),
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "fn make_list():\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = const 30u32\n    v3 = list [v0, v1, v2]\n    return v3\n",
             ),
             output: "",
         ),
