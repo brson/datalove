@@ -3,6 +3,7 @@
 - Rust.
     General syntax, general mechanical sympathy concerns,
     data struccture design.
+    Linear type system design, copy/clone/move, etc.
     Token trees.
 - Python.
     Negative influence - inconvenient structs and ADTs.
