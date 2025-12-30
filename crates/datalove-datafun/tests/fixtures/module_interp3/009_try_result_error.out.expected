@@ -1,0 +1,13 @@
+ModulesIr3Analysis(
+    typecheck: TypecheckResult(
+        status: "Error",
+        errors: [
+            "CannotSynthesize",
+            "UnresolvedName(\"x\")",
+        ],
+    ),
+    lowering: LoweringResult(
+        status: "Skipped",
+    ),
+    output: "",
+)

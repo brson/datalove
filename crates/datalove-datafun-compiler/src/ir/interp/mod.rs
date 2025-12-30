@@ -607,6 +607,12 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_wrap_some(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
+                // Mark source as moved (linear semantics - consumes inner value).
+                match inner {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                }
             }
             Instruction::WrapNone { dest } => {
                 let dest_slot = frame.value_dest(*dest)?;
@@ -626,12 +632,24 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_wrap_ok(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
+                // Mark source as moved (linear semantics - consumes inner value).
+                match inner {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                }
             }
             Instruction::WrapErr { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_wrap_err(&inner_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
+                // Mark source as moved (linear semantics - consumes inner Error).
+                match inner {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                }
             }
             Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
                 let src_val = self.read_operand(src, frame, frames)?;
@@ -642,6 +660,30 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*ok_dest);
                 frame.mark_value_initialized(*err_dest);
                 frame.mark_value_initialized(*is_ok);
+            }
+            Instruction::ErrorFrom { dest, inner } => {
+                let inner_val = self.read_operand(inner, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest)?;
+                self.execute_error_from(&inner_val, dest_slot)?;
+                frame.mark_value_initialized(*dest);
+                // Mark source as moved (linear semantics - consumes inner).
+                match inner {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                }
+            }
+            Instruction::DataFrom { dest, inner } => {
+                let inner_val = self.read_operand(inner, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest)?;
+                self.execute_data_from(&inner_val, dest_slot)?;
+                frame.mark_value_initialized(*dest);
+                // Mark source as moved (linear semantics - consumes inner).
+                match inner {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                }
             }
             Instruction::Call { dest, func, args } => {
                 // Look up the function.
@@ -1343,6 +1385,76 @@ impl IrInterpreter {
                 );
             }
         }
+        Ok(())
+    }
+
+    /// Create Error from any value (consumes inner - linear semantics).
+    fn execute_error_from(
+        &self,
+        inner: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        let rt_handle = self.runtime.handle();
+        let inner_size = unsafe { (*inner.tydesc).size as usize };
+
+        // Allocate heap storage for the inner value.
+        let moved_ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner.tydesc, 1)
+        };
+        if moved_ptr.is_null() {
+            return Err(InterpError::RuntimeError(
+                "Failed to allocate Error inner storage".to_string()
+            ));
+        }
+
+        // Move inner value to heap storage (bitwise copy).
+        unsafe {
+            std::ptr::copy_nonoverlapping(inner.ptr, moved_ptr, inner_size);
+        }
+
+        // Write Error struct to destination.
+        // Error has same layout as Data, so we use Data::from_pointers and transmute.
+        unsafe {
+            let data = rtdt::Data::from_pointers(inner.tydesc, moved_ptr);
+            std::ptr::write(
+                dest.ptr as *mut rtdt::Error,
+                std::mem::transmute(data)
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Create Data from any value (consumes inner - linear semantics).
+    fn execute_data_from(
+        &self,
+        inner: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        let rt_handle = self.runtime.handle();
+        let inner_size = unsafe { (*inner.tydesc).size as usize };
+
+        // Allocate heap storage for the inner value.
+        let moved_ptr = unsafe {
+            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner.tydesc, 1)
+        };
+        if moved_ptr.is_null() {
+            return Err(InterpError::RuntimeError(
+                "Failed to allocate Data inner storage".to_string()
+            ));
+        }
+
+        // Move inner value to heap storage (bitwise copy).
+        unsafe {
+            std::ptr::copy_nonoverlapping(inner.ptr, moved_ptr, inner_size);
+        }
+
+        // Write Data struct to destination.
+        unsafe {
+            let data = rtdt::Data::from_pointers(inner.tydesc, moved_ptr);
+            std::ptr::write(dest.ptr as *mut rtdt::Data, data);
+        }
+
         Ok(())
     }
 

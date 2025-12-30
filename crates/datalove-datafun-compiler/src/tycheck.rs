@@ -1917,19 +1917,36 @@ fn synthesize_expr<'db>(
         ExprFunKind::Er(er_expr) => {
             // Er requires type hint to determine the Ok type of the Result.
             if let Some(type_hint) = er_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                // Check payload against Error type.
+                let error_ty = TypeAndHeap::new(
+                    db,
+                    datalit::ast::Heap::Omitted,
+                    Type::Datalit(datalit::tycheck::Type::Error)
+                );
+                check_expr(ctx, er_expr.payload(db), error_ty)?;
+                let result = convert_type_hint(db, type_hint)?;
+                ctx.store_expr_type(expr, result);
+                return Ok(result);
             }
             Err(ctx.error_cannot_synthesize(expr, "cannot infer type for Er value"))
         }
         ExprFunKind::Data(data_expr) => {
             if let Some(type_hint) = data_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                // Synthesize inner value type (Data can wrap any type).
+                ctx.synthesize_expr(data_expr.value(db))?;
+                let result = convert_type_hint(db, type_hint)?;
+                ctx.store_expr_type(expr, result);
+                return Ok(result);
             }
             synthesize_inline_data(ctx, expr, data_expr)
         }
         ExprFunKind::Err(err_expr) => {
             if let Some(type_hint) = err_expr.type_hint(db) {
-                return convert_type_hint(db, type_hint);
+                // Synthesize inner value type (Error can wrap any type).
+                ctx.synthesize_expr(err_expr.value(db))?;
+                let result = convert_type_hint(db, type_hint)?;
+                ctx.store_expr_type(expr, result);
+                return Ok(result);
             }
             synthesize_inline_err(ctx, expr, err_expr)
         }

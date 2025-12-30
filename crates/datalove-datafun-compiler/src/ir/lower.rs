@@ -1326,9 +1326,43 @@ fn lower_expression<'db>(
             });
             Ok(dest)
         }
-        _ => {
-            // TODO: Handle remaining expression types.
-            Err(LowerError::NotImplemented("expression type".to_string()))
+        ExprFunKind::Err(err_expr) => {
+            let inner_id = lower_expression(ctx, err_expr.value(ctx.db))?;
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
+            ctx.emit(Instruction::ErrorFrom {
+                dest,
+                inner: Operand::Value(inner_id),
+            });
+            Ok(dest)
+        }
+        ExprFunKind::Data(data_expr) => {
+            let inner_id = lower_expression(ctx, data_expr.value(ctx.db))?;
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
+            ctx.emit(Instruction::DataFrom {
+                dest,
+                inner: Operand::Value(inner_id),
+            });
+            Ok(dest)
+        }
+        ExprFunKind::Float(_) => {
+            Err(LowerError::NotImplemented("Float".to_string()))
+        }
+        ExprFunKind::String(_) => {
+            Err(LowerError::NotImplemented("String".to_string()))
+        }
+        ExprFunKind::AnonStruct(_) => {
+            Err(LowerError::NotImplemented("AnonStruct".to_string()))
+        }
+        ExprFunKind::AnonEnum(_) => {
+            Err(LowerError::NotImplemented("AnonEnum".to_string()))
+        }
+        ExprFunKind::Tensor(_) => {
+            Err(LowerError::NotImplemented("Tensor".to_string()))
+        }
+        ExprFunKind::ParseError(_) => {
+            Err(LowerError::NotImplemented("ParseError".to_string()))
         }
     }
 }

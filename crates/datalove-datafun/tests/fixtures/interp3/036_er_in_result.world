@@ -1,0 +1,6 @@
+----------
+scriptunit-expr
+----------
+
+// Wrap Error in Result::Err using type hint syntax.
+: !u32 / er @error @42

@@ -272,6 +272,12 @@ impl fmt::Display for Instruction {
             Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
                 write!(f, "{}, {}, {} = unwrap_result {}", ok_dest, err_dest, is_ok, src)
             }
+            Instruction::ErrorFrom { dest, inner } => {
+                write!(f, "{} = error_from {}", dest, inner)
+            }
+            Instruction::DataFrom { dest, inner } => {
+                write!(f, "{} = data_from {}", dest, inner)
+            }
             Instruction::ListNew { dest, elements } => {
                 write!(f, "{} = list [", dest)?;
                 for (i, elem) in elements.iter().enumerate() {

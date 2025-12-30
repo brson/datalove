@@ -1,0 +1,16 @@
+Ir3Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Error",
+                message: "not implemented: String",
+            ),
+            output: "",
+        ),
+    ],
+)

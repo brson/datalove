@@ -1,0 +1,20 @@
+----------
+module local/test/main
+----------
+
+// Test try operator with Result::Err in module function context.
+fun make_error(): @error
+    ret @error "module error"
+end fun
+
+fun might_fail(): !u32
+    let e: @error = make_error()
+    ret er e
+end fun
+
+fun main(): !u32
+    let result: !u32 = might_fail()
+    let x: u32 = result!
+    // Won't reach here.
+    ret ok x + @1u32
+end fun

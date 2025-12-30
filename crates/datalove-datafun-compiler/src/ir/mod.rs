@@ -512,6 +512,12 @@ pub enum Instruction {
         src: Operand,
     },
 
+    /// Create Error from any value (consumes inner).
+    ErrorFrom { dest: ValueId, inner: Operand },
+
+    /// Create Data from any value (consumes inner).
+    DataFrom { dest: ValueId, inner: Operand },
+
     /// Create a new list.
     ListNew {
         dest: ValueId,

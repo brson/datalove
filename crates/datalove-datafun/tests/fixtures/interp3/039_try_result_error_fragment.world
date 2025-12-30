@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// Try operator in fragment should work.
+let err_result: !u32 = er @error @99
+let x: u32 = err_result!
+// This line won't be reached.
+let y: u32 = x + @1

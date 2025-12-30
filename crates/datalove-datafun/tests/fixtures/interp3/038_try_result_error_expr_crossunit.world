@@ -1,0 +1,6 @@
+----------
+scriptunit-expr
+----------
+
+// Create an error result in an expression.
+: !u32 / er @error @99
