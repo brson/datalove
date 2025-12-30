@@ -12,16 +12,16 @@ With core->runtime calls.
 # in progress
 
 - ir and interp3
-- rename ExprFunKind::Err to Error
 - script/function unification semantics
-- primer / walkthrough / tutorial
-- improve readme
+- human docs
 - improve runtime implementation unsafety
+- miri tests
 
 
 # on deck
 
-- miri tests
+- move semantics
+- rename ExprFunKind::Err to Error
 - move/clone semantics - moves-etc.md
 - argument modes - moves-etc.md
 - destructuring
@@ -40,12 +40,7 @@ With core->runtime calls.
 
 # future
 
-- have exampletest apply test filter
-- repl terminal and web
 - datafun ast roundtrip
 - type declarations
-- name resolution for named types
-- generics
-- move semantics
 - heap genericity and clone method
 - aot
