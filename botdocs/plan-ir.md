@@ -453,8 +453,8 @@ Int comparison tests (061-065):
 - `065_int_compare_all_ops.world` - all comparison operators (Eq, Ne, Lt, Le, Gt, Ge)
 
 **Test counts:**
-- interp3_tests: 53 tests
-- module_interp3_tests: 9 tests
+- interp3_tests: 57 tests
+- module_interp3_tests: 16 tests
 - module_interp_tests: 219 tests
 - All tests pass with `DATALOVE_LEAK_CHECK=panic-backtrace`
 
@@ -464,15 +464,14 @@ TODO:
 
 ### Feature Gap Analysis (vs Old Interpreter)
 
-**Missing Features (HIGH priority):**
-
-1. **If-Bindings** - Option/Result destructuring in if conditions
-   - Old: `if option |value| ... end if` extracts Some payload
-   - IR: Branch only handles bool conditions
-   - Lowering: `UnwrapOption` + `Branch(is_some, then, else)` with binding in then_block
-
 **Completed Features:**
 
+- **If-Bindings** - DONE. Option/Result destructuring in if conditions
+  - `if opt_value |x| ... end if` extracts Some payload via `UnwrapOption`
+  - `if result_value |ok| else |err| ... end if` extracts Ok/Err via `UnwrapResult`
+  - Move semantics: inner value is moved (not cloned) to binding
+  - Binding scoped to branch, dropped at scope exit
+  - Tests 010-016 (module_interp3), 066-069 (interp3)
 - **String Literals** - DONE. `ConstValue::String` works, tests pass
 - **Try Operators (?, !)** - DONE. Tests 032-033 verify early return behavior
 - **Bigint (Int)** - DONE. Arithmetic via runtime calls, proper limbs representation

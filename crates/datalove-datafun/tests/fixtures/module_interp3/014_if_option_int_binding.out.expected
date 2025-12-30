@@ -1,0 +1,15 @@
+ModulesIr3Analysis(
+    typecheck: TypecheckResult(
+        status: "Error",
+        errors: [
+            "CannotSynthesize",
+            "CannotSynthesize",
+            "CannotSynthesize",
+            "CannotSynthesize",
+        ],
+    ),
+    lowering: LoweringResult(
+        status: "Skipped",
+    ),
+    output: "",
+)

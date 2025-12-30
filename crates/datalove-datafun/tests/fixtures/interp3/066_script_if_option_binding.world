@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+let opt: ?u32 = some @42
+var result: u32 = @0
+if opt |val|
+    set result = val
+end if
+
+----------
+scriptunit-expr
+----------
+
+result

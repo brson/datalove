@@ -1,0 +1,12 @@
+ModulesIr3Analysis(
+    typecheck: TypecheckResult(
+        status: "Error",
+        errors: [
+            "TryReturnTypeMismatch { operator: \"AddChecked\", return_type: \"u32\" }",
+        ],
+    ),
+    lowering: LoweringResult(
+        status: "Skipped",
+    ),
+    output: "",
+)

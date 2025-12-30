@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+let res: !u32 = ok @42
+var result: u32 = @0
+if res |val|
+    set result = val
+else |err|
+    set result = @999
+end if
+
+----------
+scriptunit-expr
+----------
+
+result

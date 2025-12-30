@@ -1,0 +1,14 @@
+----------
+module local/test/main
+----------
+
+// Test that if-binding shadows outer variable.
+fun main(): u32
+    let val: u32 = @100
+    let opt: ?u32 = some @42
+    if opt |val|
+        ret val
+    else
+        ret @999
+    end if
+end fun

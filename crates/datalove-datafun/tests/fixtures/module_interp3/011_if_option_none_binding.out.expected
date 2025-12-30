@@ -1,0 +1,10 @@
+ModulesIr3Analysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Error",
+        message: "function not found: test",
+    ),
+    output: "",
+)

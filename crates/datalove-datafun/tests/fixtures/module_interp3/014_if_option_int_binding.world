@@ -1,0 +1,16 @@
+----------
+module local/test/main
+----------
+
+// Test with non-copy type (Int).
+fun test(): ?Int
+    ret some 42
+end fun
+
+fun main(): Int
+    if test() |val|
+        ret val
+    else
+        ret 0
+    end if
+end fun

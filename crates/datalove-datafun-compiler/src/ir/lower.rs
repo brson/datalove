@@ -6,6 +6,7 @@
 use rmx::prelude::*;
 use std::collections::{HashMap, HashSet};
 use salsa::plumbing::AsId;
+use bct::text::InternedText;
 use crate::ast::{self, Statement, ExprFun, ExprFunKind};
 use crate::tycheck::TypecheckResult;
 use crate::Db;
@@ -924,11 +925,66 @@ fn lower_statement<'db>(
 }
 
 /// Lower an if statement.
+///
+/// Handles three cases based on condition type:
+/// - Bool: regular if/else
+/// - Option with then_binding: destructure Some value
+/// - Result with then_binding and else_binding: destructure Ok/Err values
 fn lower_if<'db>(
     ctx: &mut LowerCtx<'db>,
     if_stmt: ast::StmtIf<'db>,
 ) -> Result<(), LowerError> {
-    let cond_id = lower_expression(ctx, if_stmt.condition(ctx.db))?;
+    let condition = if_stmt.condition(ctx.db);
+    let then_binding = if_stmt.then_binding(ctx.db);
+    let else_binding = if_stmt.else_binding(ctx.db);
+    let cond_type = ctx.expr_type(condition);
+
+    match (&cond_type, then_binding) {
+        // Option destructuring: if opt_value |x| ... end if
+        (IrType::Option(inner_type), Some(binding_name)) => {
+            lower_if_option(ctx, if_stmt, condition, inner_type, binding_name)
+        }
+
+        // Result destructuring: if result_value |ok_val| else |err_val| ... end if
+        (IrType::Result(ok_type), Some(binding_name)) => {
+            // Typechecker enforces else_binding for Result (F046).
+            let err_binding = else_binding
+                .ok_or_else(|| LowerError::NotImplemented(
+                    "Result if-binding without else binding".to_string()
+                ))?;
+            lower_if_result(ctx, if_stmt, condition, ok_type, binding_name, err_binding)
+        }
+
+        // Boolean condition (no binding).
+        (IrType::Bool, None) => {
+            lower_if_bool(ctx, if_stmt, condition)
+        }
+
+        // Invalid combinations.
+        (_, Some(_)) => {
+            // Binding on non-Option/non-Result type.
+            Err(LowerError::NotImplemented(format!(
+                "if-binding requires Option or Result type, got {:?}",
+                cond_type
+            )))
+        }
+        (_, None) => {
+            // Non-bool without binding - typechecker should catch this.
+            Err(LowerError::NotImplemented(format!(
+                "if condition must be Bool without binding, got {:?}",
+                cond_type
+            )))
+        }
+    }
+}
+
+/// Lower a boolean if statement (no binding).
+fn lower_if_bool<'db>(
+    ctx: &mut LowerCtx<'db>,
+    if_stmt: ast::StmtIf<'db>,
+    condition: ExprFun<'db>,
+) -> Result<(), LowerError> {
+    let cond_id = lower_expression(ctx, condition)?;
 
     let then_block = ctx.fresh_block();
     let else_block = ctx.fresh_block();
@@ -966,6 +1022,187 @@ fn lower_if<'db>(
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // Continue in merge block.
+    ctx.start_block(merge_block);
+    Ok(())
+}
+
+/// Lower an Option if-binding: `if opt_value |x| ... end if`
+///
+/// Moves the inner value out of Some to the binding. If None, takes else branch.
+fn lower_if_option<'db>(
+    ctx: &mut LowerCtx<'db>,
+    if_stmt: ast::StmtIf<'db>,
+    condition: ExprFun<'db>,
+    inner_type: &IrType,
+    binding_name: InternedText<'db>,
+) -> Result<(), LowerError> {
+    // Lower the Option expression.
+    let opt_id = lower_expression(ctx, condition)?;
+
+    // Emit UnwrapOption instruction.
+    // dest: receives inner value (only valid when is_some=true).
+    // is_some: boolean flag for branching.
+    let inner_dest = ctx.fresh_value(inner_type.clone());
+    let is_some = ctx.fresh_value(IrType::Bool);
+
+    ctx.emit(Instruction::UnwrapOption {
+        dest: inner_dest,
+        is_some,
+        src: Operand::Value(opt_id),
+    });
+
+    let then_block = ctx.fresh_block();
+    let else_block = ctx.fresh_block();
+    let merge_block = ctx.fresh_block();
+
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(is_some),
+        then_block,
+        else_block,
+    });
+
+    // === Then branch: Some case ===
+    ctx.start_block(then_block);
+    ctx.scope_tracker.enter_scope(ScopeKind::IfThen { merge: merge_block });
+
+    // Bind the inner value to the binding name.
+    let binding_str = binding_name.text(ctx.db);
+    let old_binding = ctx.lookup_var(binding_str);
+    ctx.bind_var(binding_str, Operand::Value(inner_dest));
+
+    // Track the binding for drops at scope exit.
+    ctx.scope_tracker.record_binding(Operand::Value(inner_dest), inner_type.clone());
+
+    for stmt in if_stmt.then_body(ctx.db) {
+        lower_statement(ctx, stmt)?;
+    }
+
+    // Restore old binding if we shadowed something.
+    if let Some(old) = old_binding {
+        ctx.bind_var(binding_str, old);
+    } else {
+        ctx.variables.remove(binding_str);
+    }
+
+    let drops = ctx.scope_tracker.exit_scope();
+    ctx.emit_drops(drops);
+    ctx.finish_block(Terminator::Goto(merge_block));
+
+    // === Else branch: None case ===
+    ctx.start_block(else_block);
+    ctx.scope_tracker.enter_scope(ScopeKind::IfElse { merge: merge_block });
+    // No binding in else branch for Option.
+    // inner_dest is NOT valid here - do NOT access or drop it.
+
+    if let Some(else_body) = if_stmt.else_body(ctx.db) {
+        for stmt in else_body {
+            lower_statement(ctx, stmt)?;
+        }
+    }
+
+    let drops = ctx.scope_tracker.exit_scope();
+    ctx.emit_drops(drops);
+    ctx.finish_block(Terminator::Goto(merge_block));
+
+    ctx.start_block(merge_block);
+    Ok(())
+}
+
+/// Lower a Result if-binding: `if result_value |ok_val| else |err_val| ... end if`
+///
+/// Moves the Ok payload to then_binding, or Error to else_binding.
+fn lower_if_result<'db>(
+    ctx: &mut LowerCtx<'db>,
+    if_stmt: ast::StmtIf<'db>,
+    condition: ExprFun<'db>,
+    ok_type: &IrType,
+    ok_binding: InternedText<'db>,
+    err_binding: InternedText<'db>,
+) -> Result<(), LowerError> {
+    // Lower the Result expression.
+    let result_id = lower_expression(ctx, condition)?;
+
+    // Emit UnwrapResult instruction.
+    // ok_dest: receives Ok payload (only valid when is_ok=true).
+    // err_dest: receives Error (only valid when is_ok=false).
+    // is_ok: boolean flag for branching.
+    let ok_dest = ctx.fresh_value(ok_type.clone());
+    let err_dest = ctx.fresh_value(IrType::Error);
+    let is_ok = ctx.fresh_value(IrType::Bool);
+
+    ctx.emit(Instruction::UnwrapResult {
+        ok_dest,
+        err_dest,
+        is_ok,
+        src: Operand::Value(result_id),
+    });
+
+    let then_block = ctx.fresh_block();
+    let else_block = ctx.fresh_block();
+    let merge_block = ctx.fresh_block();
+
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(is_ok),
+        then_block,
+        else_block,
+    });
+
+    // === Then branch: Ok case ===
+    ctx.start_block(then_block);
+    ctx.scope_tracker.enter_scope(ScopeKind::IfThen { merge: merge_block });
+
+    // Bind ok_dest to the ok_binding name.
+    let ok_binding_str = ok_binding.text(ctx.db);
+    let old_ok_binding = ctx.lookup_var(ok_binding_str);
+    ctx.bind_var(ok_binding_str, Operand::Value(ok_dest));
+
+    // Track for drops.
+    ctx.scope_tracker.record_binding(Operand::Value(ok_dest), ok_type.clone());
+
+    for stmt in if_stmt.then_body(ctx.db) {
+        lower_statement(ctx, stmt)?;
+    }
+
+    // Restore old binding.
+    if let Some(old) = old_ok_binding {
+        ctx.bind_var(ok_binding_str, old);
+    } else {
+        ctx.variables.remove(ok_binding_str);
+    }
+
+    let drops = ctx.scope_tracker.exit_scope();
+    ctx.emit_drops(drops);
+    ctx.finish_block(Terminator::Goto(merge_block));
+
+    // === Else branch: Error case ===
+    ctx.start_block(else_block);
+    ctx.scope_tracker.enter_scope(ScopeKind::IfElse { merge: merge_block });
+
+    // Bind err_dest to the err_binding name.
+    let err_binding_str = err_binding.text(ctx.db);
+    let old_err_binding = ctx.lookup_var(err_binding_str);
+    ctx.bind_var(err_binding_str, Operand::Value(err_dest));
+
+    // Track for drops (Error type is always non-copy).
+    ctx.scope_tracker.record_binding(Operand::Value(err_dest), IrType::Error);
+
+    if let Some(else_body) = if_stmt.else_body(ctx.db) {
+        for stmt in else_body {
+            lower_statement(ctx, stmt)?;
+        }
+    }
+
+    // Restore old binding.
+    if let Some(old) = old_err_binding {
+        ctx.bind_var(err_binding_str, old);
+    } else {
+        ctx.variables.remove(err_binding_str);
+    }
+
+    let drops = ctx.scope_tracker.exit_scope();
+    ctx.emit_drops(drops);
+    ctx.finish_block(Terminator::Goto(merge_block));
+
     ctx.start_block(merge_block);
     Ok(())
 }
