@@ -9,6 +9,7 @@ test-slow:
     cargo test -p datalove-rt --features slow_tests
     cargo test -p datalove-rt-tests --features slow_tests
     cargo test -p datalove-datafun-compiler --features slow_tests
+    just check-wasm
 
 # Time all tests, showing only tests that take over 1 second.
 test-time:
@@ -101,6 +102,10 @@ test-miri-rt-one TEST:
 
 check:
     cargo check --all
+
+# Check that the main datalove crate compiles for wasm.
+check-wasm:
+    cargo check -p datalove --target wasm32-unknown-unknown
 
 build-wasm-repl:
     cd crates/datalove-repl-worker && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk build --release
