@@ -4,6 +4,9 @@
 //! only module sections (no script/scriptunit/expr sections). Tests execute
 //! a nullary `main` function from the `local/test/main` module using the
 //! new IR-based interpreter.
+//!
+//! Functions defined in any module can call other functions from the same or
+//! other modules via the `ScriptEnvironment`.
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
@@ -12,6 +15,9 @@ use rmx::std::collections::BTreeMap;
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
+use datalove_datafun_compiler::tycheck::typecheck_module_graph;
+use datalove_datafun_compiler::module_graph::ModuleGraphBuilder;
+use ir::interp::ScriptEnvironment;
 
 /// Result of analyzing a module-only worldfile with IR interpreter.
 #[derive(Debug, Serialize, Deserialize)]
@@ -52,10 +58,10 @@ pub enum LoweringResult {
 ///
 /// This function:
 /// 1. Validates that there are no script/scriptunit/expr sections
-/// 2. Loads all module sections into a PackageWorld
-/// 3. Typechecks the modules
-/// 4. Lowers the `main` function to IR
-/// 5. Executes the IR function
+/// 2. Builds a module graph from all module sections
+/// 3. Typechecks all modules together (handles inter-module imports)
+/// 4. Lowers all functions from all modules to IR
+/// 5. Executes the `main` function (with access to all other functions)
 /// 6. Returns the output value
 pub fn analyze_modules_worldfile_ir3(
     db: &dyn salsa::Database,
@@ -74,33 +80,35 @@ pub fn analyze_modules_worldfile_ir3(
         }
     }
 
-    // Extract modules to build PackageWorld.
-    let mut pkglib_system = BTreeMap::new();
-    let mut pkglib_local = BTreeMap::new();
+    // Extract modules to build PackageWorld (for validation) and module specs (for typechecking).
+    let mut pkglib_local = BTreeMap::<String, Package>::new();
+    let mut module_specs = Vec::new();
 
     for section in &parsed.sections {
         if let WorldfileSection::Module { library, package, module, source } = section {
-            let library_map = match library.as_str() {
-                "sys" => &mut pkglib_system,
-                "local" => &mut pkglib_local,
-                other => bail!("unknown library '{other}' (must be 'sys' or 'local')"),
-            };
+            // Build module path.
+            let module_path = format!("{}/{}/{}", library, package, module);
 
-            let pkg = library_map.entry(package.C())
-                .or_insert_with(|| Package {
-                    name: package.C(),
-                    modules: BTreeMap::new(),
-                });
+            // Create source for module graph.
+            let src = bct::input::Source::new(db, source.to_string());
+            module_specs.push((module_path.clone(), src));
 
-            let module_path_str = format!("{}/{}/{}", library, package, module);
+            // Also track in package structure for validation.
+            if library == "local" {
+                let pkg = pkglib_local.entry(package.C())
+                    .or_insert_with(|| Package {
+                        name: package.C(),
+                        modules: BTreeMap::new(),
+                    });
 
-            let pkg_module = PackageModule {
-                name: module.C(),
-                path: module_path_str.C().into(),
-                text: source.C(),
-            };
+                let pkg_module = PackageModule {
+                    name: module.C(),
+                    path: module_path.C().into(),
+                    text: source.C(),
+                };
 
-            pkg.modules.insert(module.C(), pkg_module);
+                pkg.modules.insert(module.C(), pkg_module);
+            }
         }
     }
 
@@ -111,76 +119,109 @@ pub fn analyze_modules_worldfile_ir3(
         bail!("missing local/test/main module");
     }
 
-    // Get the main module's source for parsing.
-    let main_source = local_lib.modules.get("main").unwrap().text.clone();
+    // Build ModuleGraph for typechecking.
+    let mut builder = ModuleGraphBuilder::new(db);
+    for (path, source) in &module_specs {
+        builder.add_module(path.clone(), *source);
+    }
+    let module_graph = builder.build();
 
-    // Parse the module source to get AST.
-    let source = bct::input::Source::new(db, main_source);
-    let parse_result = datalove_datafun_compiler::parser::parse(db, source);
-    let script_ast = parse_result.script(db);
-
-    // Typecheck the script to get expression types.
-    let tycheck_result = datalove_datafun_compiler::tycheck::type_check(db, source, script_ast);
+    // Typecheck all modules together (handles inter-module imports).
+    let graph_typecheck = typecheck_module_graph(db, module_graph.clone());
+    let combined_expr_types = graph_typecheck.expr_types(db);
 
     // Check for typecheck errors.
-    let tycheck_errors: Vec<_> = tycheck_result.errors(db).into_iter()
-        .map(|e| format!("{:?}", e.error(db)))
-        .collect();
-    if !tycheck_errors.is_empty() {
+    let module_errors = graph_typecheck.module_errors(db);
+    let mut all_errors = Vec::new();
+    for (module_id, errors) in module_errors {
+        for e in errors {
+            all_errors.push(format!("{}: {:?}", module_id.path(db), e));
+        }
+    }
+    if !all_errors.is_empty() {
         return Ok(ModulesIr3Analysis {
-            typecheck: TypecheckResult::Error { errors: tycheck_errors },
+            typecheck: TypecheckResult::Error { errors: all_errors },
             lowering: LoweringResult::Skipped,
             output: String::new(),
         });
     }
 
-    // Find the main function in the AST.
-    let main_func = script_ast.statements(db)
-        .iter()
-        .filter_map(|stmt| {
-            if let datalove_datafun_compiler::ast::Statement::Fun(func) = stmt {
-                if func.name(db).text(db) == "main" {
-                    return Some(*func);
+    // First pass: collect all function names from all modules.
+    let mut all_module_functions: Vec<String> = Vec::new();
+    for module in module_graph.iter_modules(db) {
+        let module_source = module.source(db);
+        let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
+        let script = parse_result.script(db);
+        for statement in script.statements(db) {
+            if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
+                all_module_functions.push(func.name(db).text(db).to_string());
+            }
+        }
+    }
+
+    // Second pass: lower all functions and build the execution environment.
+    let mut env = ScriptEnvironment::new();
+    let mut main_ir: Option<ir::IrFunction> = None;
+    let mut ir_dumps = Vec::new();
+    let mut lowering_errors = Vec::new();
+
+    for module in module_graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let module_path = module_id.path(db).clone();
+        let module_source = module.source(db);
+        let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
+        let script = parse_result.script(db);
+
+        for statement in script.statements(db) {
+            if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
+                let func_name = func.name(db).text(db).to_string();
+
+                match ir::lower::lower_function_for_module(
+                    db, combined_expr_types, &all_module_functions, *func
+                ) {
+                    Ok(ir_func) => {
+                        ir_dumps.push(format!("{}", ir_func));
+
+                        // Track main function separately.
+                        if module_path == "local/test/main" && func_name == "main" {
+                            main_ir = Some(ir_func.clone());
+                        }
+
+                        // Add to environment for cross-function calls.
+                        env.add_module_function(func_name, ir_func);
+                    }
+                    Err(e) => {
+                        lowering_errors.push(format!("Error lowering {}/{}: {}", module_path, func_name, e));
+                    }
                 }
             }
-            None
-        })
-        .next()
-        .ok_or_else(|| anyhow!("main function not found in local/test/main module"))?;
+        }
+    }
+
+    if !lowering_errors.is_empty() {
+        return Ok(ModulesIr3Analysis {
+            typecheck: TypecheckResult::Success,
+            lowering: LoweringResult::Error { message: lowering_errors.join("\n") },
+            output: String::new(),
+        });
+    }
+
+    let main_func = main_ir.ok_or_else(|| anyhow!("main function not found in local/test/main module"))?;
 
     // Verify main is nullary.
-    if !main_func.params(db).is_empty() {
+    if !main_func.params.is_empty() {
         bail!("main function must have no parameters");
     }
 
-    // Lower the main function to IR.
-    let ir_func = match ir::lower::lower_function(db, tycheck_result, main_func) {
-        Ok(f) => f,
-        Err(e) => {
-            return Ok(ModulesIr3Analysis {
-                typecheck: TypecheckResult::Success,
-                lowering: LoweringResult::Error { message: format!("{}", e) },
-                output: String::new(),
-            });
-        }
-    };
+    // Capture IR dump (all functions).
+    let ir_dump = ir_dumps.join("\n");
 
-    // Capture IR dump.
-    let ir_dump = format!("{}", ir_func);
-
-    // Get return type from AST.
-    let ret_type_hint = main_func.return_type(db);
-    if ret_type_hint.is_none() {
-        bail!("main function must have a return type");
-    }
-
-    // Create IR interpreter and execute.
+    // Create IR interpreter and execute main.
     let mut interp = ir::interp::IrInterpreter::new();
     let mut tydesc_table = ir::interp::IrTyDescTable::new();
 
-    // Convert return type from AST TypeHint to IrType.
-    let ret_ir_type = ir::IrType::from_type_hint(db, &ret_type_hint.unwrap());
-
+    // Infer return type from the IR function.
+    let ret_ir_type = main_func.infer_return_type();
     let ret_tydesc = tydesc_table.get_or_create(&ret_ir_type);
     let ret_size = unsafe { (*ret_tydesc).size };
 
@@ -191,22 +232,25 @@ pub fn analyze_modules_worldfile_ir3(
         tydesc: ret_tydesc,
     };
 
-    // Execute the function.
-    let output = match interp.call(&ir_func, Vec::new(), ret_dest) {
+    // Execute main with the environment (so it can call other functions).
+    let output = match interp.call_with_env(&main_func, Vec::new(), ret_dest, &env) {
         Ok(()) => {
-            // Pretty-print the return value using the runtime pretty printer.
+            // Pretty-print the return value.
             let value = ir::interp::Value {
                 ptr: ret_buffer.as_mut_ptr(),
                 tydesc: ret_tydesc,
             };
             let output_str = interp.pretty_print_value(&value)
                 .unwrap_or_else(|e| format!("Error: {:?}", e));
-            // Destroy the value to free any allocations (e.g., bigint limbs).
+            // Destroy the value to free any allocations.
             let _ = interp.destroy_value(&value);
             output_str
         }
         Err(e) => format!("Error: {:?}", e),
     };
+
+    // Cleanup: destroy all values in frames to prevent memory leaks.
+    env.destroy_all(interp.runtime_handle());
 
     Ok(ModulesIr3Analysis {
         typecheck: TypecheckResult::Success,

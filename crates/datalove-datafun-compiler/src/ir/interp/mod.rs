@@ -157,6 +157,24 @@ impl IrInterpreter {
         self.call_in_context(func, args, ret_dest, &ctx, &registry, &mut frames)
     }
 
+    /// Execute a function with arguments using a script environment.
+    ///
+    /// This allows the function to call other functions registered in the environment.
+    pub fn call_with_env(
+        &mut self,
+        func: &IrFunction,
+        args: Vec<Value>,
+        ret_dest: Destination,
+        env: &ScriptEnvironment,
+    ) -> Result<(), InterpError> {
+        // Create an empty context (module functions are resolved via registry, not local context).
+        let ctx = ExecutionContext::new(&[]);
+        // Use the environment's registry but create fresh frames (function execution
+        // doesn't persist frames like script units do).
+        let mut frames = FrameStore::new();
+        self.call_in_context(func, args, ret_dest, &ctx, &env.registry, &mut frames)
+    }
+
     /// Execute a function with arguments in a context with available functions.
     pub fn call_in_context(
         &mut self,

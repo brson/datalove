@@ -609,6 +609,24 @@ impl IrFunction {
     pub fn entry_block(&self) -> &IrBlock {
         &self.blocks[0]
     }
+
+    /// Infer the return type from the IR.
+    ///
+    /// Finds the first Return terminator and gets the type of its value.
+    /// Returns `IrType::Unit` if no value is returned.
+    pub fn infer_return_type(&self) -> IrType {
+        for block in &self.blocks {
+            if let Terminator::Return { value: Some(op) } = &block.terminator {
+                return match op {
+                    Operand::Value(id) => self.value_types[id.0 as usize].clone(),
+                    Operand::Slot(id) => self.slot_types[id.0 as usize].clone(),
+                    // External operands not expected in function returns.
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => IrType::Unit,
+                };
+            }
+        }
+        IrType::Unit
+    }
 }
 
 /// Result of lowering a module to IR.

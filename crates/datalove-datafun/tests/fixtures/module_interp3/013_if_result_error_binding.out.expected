@@ -4,7 +4,7 @@ ModulesIr3Analysis(
     ),
     lowering: LoweringResult(
         status: "Error",
-        message: "function not found: test",
+        message: "Error lowering local/test/main/test: not implemented: String",
     ),
     output: "",
 )

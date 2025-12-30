@@ -1,0 +1,10 @@
+ModulesIr3Analysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Success",
+        ir: "fn helper():\nblock0:\n    v0 = const 42u32\n    return v0\n\nfn main():\nblock0:\n    v0 = call module.helper()\n    return v0\n",
+    ),
+    output: "@42",
+)

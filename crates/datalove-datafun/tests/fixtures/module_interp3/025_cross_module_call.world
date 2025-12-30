@@ -1,0 +1,18 @@
+----------
+module local/test/utils
+----------
+
+fun helper(): u32
+    ret @42
+end fun
+
+----------
+module local/test/main
+----------
+
+require module local/test/utils
+import utils.helper
+
+fun main(): u32
+    ret helper()
+end fun
