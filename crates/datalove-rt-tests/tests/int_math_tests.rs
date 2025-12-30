@@ -1215,3 +1215,153 @@ mod proptests {
         }
     }
 }
+
+// ============================================================================
+// Knuth Algorithm D corner case tests
+// ============================================================================
+
+#[test]
+fn test_int_div_knuth_refinement_three_limb_check() -> AnyResult<()> {
+    // Triggers the refinement loop via three-limb comparison.
+    // Dividend: 2^95 - 1 = 39614081257132168796771975167
+    // Divisor: 2^63 + 2^32 - 1 = 9223372041149743103
+    // This makes q_hat start at 0xFFFFFFFF, then refinement decrements to 0xFFFFFFFE.
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @39614081257132168796771975167",
+            ": @int / @9223372041149743103",
+            ": @int / @4294967294",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_knuth_refinement_overflow_check() -> AnyResult<()> {
+    // Triggers refinement via large quotient estimate.
+    // Dividend: 2^95 = 39614081257132168796771975168
+    // Divisor: 2^63 - 1 = 9223372036854775807
+    // This produces a quotient slightly larger than 2^32.
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @39614081257132168796771975168",
+            ": @int / @9223372036854775807",
+            ": @int / @4294967296",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_knuth_add_back() -> AnyResult<()> {
+    // Attempt to trigger the add-back correction path.
+    // This is the rarest path in Knuth's Algorithm D (probability ~2^-31).
+    // Dividend: 0x7FFFFFFF_FFFFFFFF_00000000 = 39614081257132168792477007872
+    // Divisor: 0x80000000_FFFFFFFF = 9223372041149743103
+    // After refinement, q_hat may still be 1 too high, requiring add-back.
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @39614081257132168792477007872",
+            ": @int / @9223372041149743103",
+            ": @int / @4294967294",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_knuth_multiple_refinements() -> AnyResult<()> {
+    // Test case that may require multiple refinement iterations.
+    // Dividend: 2^96 - 1 = 79228162514264337593543950335
+    // Divisor: 2^63 + 2^62 = 13835058055282163712
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @79228162514264337593543950335",
+            ": @int / @13835058055282163712",
+            ": @int / @5726623061",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_knuth_borrow_propagation() -> AnyResult<()> {
+    // Test borrow propagation in multiply-subtract step.
+    // Large dividend and divisor with specific bit patterns.
+    // Dividend: 2^127 - 1
+    // Divisor: 2^63 + 2^32
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @170141183460469231731687303715884105727",
+            ": @int / @9223372041149743104",
+            ": @int / @18446744065119617027",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_div_knuth_refinement_break() -> AnyResult<()> {
+    // Triggers the 'break' in refinement loop when r_hat overflows after incrementing.
+    // Constructed so:
+    // - q_hat * v[n-2] > (r_hat << 32) | u[j+n-2] (refinement triggers)
+    // - After q_hat -= 1, r_hat += v[n-1] causes r_hat >= 2^32 (break)
+    // Dividend: 0x80000000_FFFFFFFE_00000000 = 39614081275578912861891592192
+    // Divisor: 0x80000001_FFFFFFFF = 9223372045444710399
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": @int / @39614081275578912861891592192",
+            ": @int / @9223372045444710399",
+            ": @int / @4294967294",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
