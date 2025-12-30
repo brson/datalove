@@ -1067,11 +1067,15 @@ impl<'db> Parser<'db> {
                                 "true" | "false" | "tuple" | "struct" | "enum" |
                                 "option" | "result" | "error" | "map" | "set" | "none" | "data" |
                                 "tensor" => {
+                                    // Capture span before parsing for diagnostic reporting.
+                                    let (text, start_span) = self.peek_text_span(tokens);
                                     let expr_kind = self.parse_lit_expr(tokens, datalit::ast::Heap::Omitted, None);
-                                    ast::ExprFun::new(self.db, expr_kind)
+                                    self.create_expr(expr_kind, text, start_span)
                                 }
                                 // some/ok/er are always keywords - they require a payload expression.
                                 "some" | "ok" | "er" => {
+                                    // Capture span before parsing for diagnostic reporting.
+                                    let (text, start_span) = self.peek_text_span(tokens);
                                     tokens.next(); // consume the keyword
                                     let payload = self.parse_expr_primary(tokens);
                                     let heap = datalit::ast::Heap::Omitted;
@@ -1081,11 +1085,13 @@ impl<'db> Parser<'db> {
                                         "er" => ast::ExprFunKind::Er(ast::ExprEr::new(self.db, heap, None, payload)),
                                         _ => unreachable!(),
                                     };
-                                    ast::ExprFun::new(self.db, expr_kind)
+                                    self.create_expr(expr_kind, text, start_span)
                                 }
                                 num if num.chars().all(|c| char::is_ascii_digit(&c)) => {
+                                    // Capture span before parsing for diagnostic reporting.
+                                    let (text, start_span) = self.peek_text_span(tokens);
                                     let expr_kind = self.parse_lit_expr(tokens, datalit::ast::Heap::Omitted, None);
-                                    ast::ExprFun::new(self.db, expr_kind)
+                                    self.create_expr(expr_kind, text, start_span)
                                 }
                                 _ => {
                                     // It's a datafun name or function call.
@@ -1165,8 +1171,10 @@ impl<'db> Parser<'db> {
                 if matches!(sigil, Sigil::ParenOpen) {
                     self.parse_datafun_tuple(tokens)
                 } else {
+                    // Capture span before parsing for diagnostic reporting.
+                    let (text, start_span) = self.peek_text_span(tokens);
                     let expr_kind = self.parse_lit_expr(tokens, datalit::ast::Heap::Omitted, None);
-                    ast::ExprFun::new(self.db, expr_kind)
+                    self.create_expr(expr_kind, text, start_span)
                 }
             }
             None => {
@@ -1188,6 +1196,9 @@ impl<'db> Parser<'db> {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) -> ast::ExprFun<'db> {
+        // Capture span before parsing for diagnostic reporting.
+        let (text, start_span) = self.peek_text_span(tokens);
+
         // Check for `: type / expr` pattern.
         if self.peek_sigil(tokens, Sigil::Colon) {
             self.eat_sigil(tokens, Sigil::Colon);
@@ -1204,12 +1215,12 @@ impl<'db> Parser<'db> {
                 );
             }
             let (_heap, expr_kind) = self.parse_lit_expr_and_heap(tokens, Some(type_hint));
-            // The type_hint is already captured in the expr_kind, just return.
-            return ast::ExprFun::new(self.db, expr_kind);
+            // The type_hint is already captured in the expr_kind.
+            return self.create_expr(expr_kind, text, start_span);
         }
 
         let (_heap, expr_kind) = self.parse_lit_expr_and_heap(tokens, None);
-        ast::ExprFun::new(self.db, expr_kind)
+        self.create_expr(expr_kind, text, start_span)
     }
 
     // Parse heap sigil and expression.
