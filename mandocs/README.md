@@ -40,7 +40,6 @@ existential runtime-typed data and error types.
 File extension: `.dlt`
 
 ```datalove
-// Personal info
 {
   name = "Ada",
   born = 1815,
