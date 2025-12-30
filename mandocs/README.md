@@ -19,6 +19,9 @@ Python's weak typing and inconsistent
 facilities for expressing simple data structures.
 Datalove is most usefully compared to Python, JavaScript, and Julia.
 
+> Datalove is in active development.
+> There is currently no recommended way to install or test.
+
 
 
 
