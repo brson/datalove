@@ -525,10 +525,13 @@ impl IrInterpreter {
             Instruction::SlotLoad { dest, slot } => {
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest)?;
-                // Clone value from slot (non-destructive).
-                // TODO: Revisit operator semantics - this clones non-copy types.
-                unsafe { self.clone_value(&slot_val, dest_slot)?; }
+                // Move value from slot (consuming). Used for contexts where the
+                // slot value is being consumed (function args, return, etc.).
+                // For borrowing contexts (binop/unaryop), use Operand::Slot directly.
+                unsafe { self.move_value(&slot_val, dest_slot)?; }
                 frame.mark_value_initialized(*dest);
+                // Mark slot as dropped since we moved the value out.
+                frame.mark_slot_dropped(*slot);
             }
             Instruction::Pack { dest, ty: _, fields } => {
                 let field_vals: Vec<Value> = fields.iter()
@@ -838,51 +841,6 @@ impl IrInterpreter {
         unsafe {
             // Move is always a shallow copy - ownership transfers to dest.
             // The source should be marked as dropped so it won't be destroyed.
-            let size = (*src.tydesc).size as usize;
-            std::ptr::copy_nonoverlapping(src.ptr, dest.ptr, size);
-        }
-        Ok(())
-    }
-
-    /// Clone a value (deep copy for non-copy types).
-    ///
-    /// TODO: Revisit when addressing operator semantics.
-    unsafe fn clone_value(&mut self, src: &Value, dest: Destination) -> Result<(), InterpError> {
-        unsafe {
-            let tag = (*src.tydesc).type_tag;
-
-            // Int requires deep clone (allocate new limbs).
-            if tag == rtdt::TyTag::Int {
-                let src_int = &*(src.ptr as *const rtdt::Int);
-                let dest_int = dest.ptr as *mut rtdt::Int;
-
-                if src_int.data.is_null() || src_int.size_and_sign == 0 {
-                    (*dest_int).data = std::ptr::null();
-                    (*dest_int).size_and_sign = 0;
-                    (*dest_int).capacity = 0;
-                } else {
-                    let num_limbs = src_int.size_and_sign.unsigned_abs();
-                    let rt_handle = self.runtime.handle();
-                    let new_limbs = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-                        rt_handle,
-                        4, 4, num_limbs,
-                    ) as *mut u32;
-                    if new_limbs.is_null() {
-                        return Err(InterpError::RuntimeError(
-                            "Failed to allocate Int limbs for clone".to_string()
-                        ));
-                    }
-                    std::ptr::copy_nonoverlapping(
-                        src_int.data, new_limbs, num_limbs as usize,
-                    );
-                    (*dest_int).data = new_limbs as *const u32;
-                    (*dest_int).size_and_sign = src_int.size_and_sign;
-                    (*dest_int).capacity = num_limbs;
-                }
-                return Ok(());
-            }
-
-            // Other types: shallow copy.
             let size = (*src.tydesc).size as usize;
             std::ptr::copy_nonoverlapping(src.ptr, dest.ptr, size);
         }

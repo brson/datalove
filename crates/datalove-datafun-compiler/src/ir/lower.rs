@@ -910,6 +910,34 @@ fn lower_loop<'db>(
     Ok(())
 }
 
+/// Lower an operand for borrowing contexts (binop, unaryop).
+///
+/// Returns an Operand directly:
+/// - For Names bound to slots: returns Operand::Slot (no load, just borrow)
+/// - For Names bound to values: returns Operand::Value
+/// - For compound expressions: evaluates and returns Operand::Value(result)
+fn lower_operand<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Result<Operand, LowerError> {
+    match expr.expr(ctx.db) {
+        ExprFunKind::Name(name) => {
+            let name_str = name.text(ctx.db);
+            if let Some(operand) = ctx.lookup_var(name_str) {
+                // Return the operand directly - no load needed for borrowing.
+                Ok(operand)
+            } else {
+                Err(LowerError::VariableNotFound(name_str.to_string()))
+            }
+        }
+        _ => {
+            // Compound expression: lower to a value.
+            let value_id = lower_expression(ctx, expr)?;
+            Ok(Operand::Value(value_id))
+        }
+    }
+}
+
 /// Lower an expression, returning the ValueId holding the result.
 fn lower_expression<'db>(
     ctx: &mut LowerCtx<'db>,
@@ -990,8 +1018,10 @@ fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::BinOp(binop) => {
-            let lhs_id = lower_expression(ctx, binop.lhs(ctx.db))?;
-            let rhs_id = lower_expression(ctx, binop.rhs(ctx.db))?;
+            // Use lower_operand for borrowing semantics - operands are read by
+            // reference, not consumed.
+            let lhs = lower_operand(ctx, binop.lhs(ctx.db))?;
+            let rhs = lower_operand(ctx, binop.rhs(ctx.db))?;
 
             let ast_op = binop.op(ctx.db);
             let result_type = ctx.expr_type(expr);
@@ -1015,8 +1045,8 @@ fn lower_expression<'db>(
                         dest,
                         overflow,
                         op: BinOp::Add,
-                        lhs: Operand::Value(lhs_id),
-                        rhs: Operand::Value(rhs_id),
+                        lhs,
+                        rhs,
                     });
                     return Ok(dest);
                 }
@@ -1026,8 +1056,8 @@ fn lower_expression<'db>(
                         dest,
                         overflow,
                         op: BinOp::Sub,
-                        lhs: Operand::Value(lhs_id),
-                        rhs: Operand::Value(rhs_id),
+                        lhs,
+                        rhs,
                     });
                     return Ok(dest);
                 }
@@ -1037,8 +1067,8 @@ fn lower_expression<'db>(
                         dest,
                         overflow,
                         op: BinOp::Mul,
-                        lhs: Operand::Value(lhs_id),
-                        rhs: Operand::Value(rhs_id),
+                        lhs,
+                        rhs,
                     });
                     return Ok(dest);
                 }
@@ -1048,8 +1078,8 @@ fn lower_expression<'db>(
                         dest,
                         overflow,
                         op: BinOp::Div,
-                        lhs: Operand::Value(lhs_id),
-                        rhs: Operand::Value(rhs_id),
+                        lhs,
+                        rhs,
                     });
                     return Ok(dest);
                 }
@@ -1058,13 +1088,14 @@ fn lower_expression<'db>(
             ctx.emit(Instruction::BinOp {
                 dest,
                 op,
-                lhs: Operand::Value(lhs_id),
-                rhs: Operand::Value(rhs_id),
+                lhs,
+                rhs,
             });
             Ok(dest)
         }
         ExprFunKind::UnaryOp(unary) => {
-            let operand_id = lower_expression(ctx, unary.operand(ctx.db))?;
+            // Use lower_operand for borrowing semantics.
+            let operand = lower_operand(ctx, unary.operand(ctx.db))?;
 
             let op = match unary.op(ctx.db) {
                 ast::UnaryOp::Neg => UnaryOp::Neg,
@@ -1074,12 +1105,12 @@ fn lower_expression<'db>(
                 }
             };
 
-            // TODO: Get actual operand type. For now assume I64 for arithmetic.
-            let dest = ctx.fresh_value(IrType::I64);
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::UnaryOp {
                 dest,
                 op,
-                operand: Operand::Value(operand_id),
+                operand,
             });
             Ok(dest)
         }
