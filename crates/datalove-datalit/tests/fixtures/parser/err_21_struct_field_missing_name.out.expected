@@ -1,0 +1,44 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "<error>",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "ParseError": {
+                      "message": "expected field name in struct expression"
+                    }
+                  },
+                  "heap": "Omitted"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D018",
+      "labels": [
+        {
+          "message": "expected field name",
+          "span": [
+            3,
+            4
+          ],
+          "text": "="
+        }
+      ],
+      "message": "expected field name in struct expression"
+    }
+  ]
+}

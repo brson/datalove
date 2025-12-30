@@ -1,0 +1,29 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "unexpected minus sign"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D013",
+      "labels": [
+        {
+          "message": "unexpected '-' not followed by number",
+          "span": [
+            2,
+            5
+          ],
+          "text": "foo"
+        }
+      ],
+      "message": "unexpected minus sign"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "expected variant name after enum keyword"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D016",
+      "labels": [
+        {
+          "message": "expected enum variant name",
+          "span": [
+            1,
+            5
+          ],
+          "text": "enum"
+        }
+      ],
+      "message": "expected variant name after enum keyword"
+    }
+  ]
+}

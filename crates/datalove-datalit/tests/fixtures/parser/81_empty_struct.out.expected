@@ -1,0 +1,14 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonStruct": {
+          "fields": []
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
+}

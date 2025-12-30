@@ -1,0 +1,37 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonEnum": {
+          "payload": null,
+          "variant_name": "Foo"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "ParseError": {
+          "message": "expected {} after enum keyword"
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D003",
+      "labels": [
+        {
+          "message": "expected '{' after 'enum'",
+          "span": [
+            3,
+            7
+          ],
+          "text": "enum"
+        }
+      ],
+      "message": "expected {} after enum keyword"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "x",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "x",
+              "type_hint": {
+                "heap": "Local",
+                "type_hint": "U32"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "diagnostics": []
+}

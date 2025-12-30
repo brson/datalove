@@ -1,0 +1,44 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "x",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "ParseError": {
+                      "message": "expected '=' after field name in struct expression"
+                    }
+                  },
+                  "heap": "Omitted"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D018",
+      "labels": [
+        {
+          "message": "expected '=' after field name",
+          "span": [
+            5,
+            6
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "expected '=' after field name in struct expression"
+    }
+  ]
+}

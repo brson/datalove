@@ -1,0 +1,36 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonStruct": {
+          "fields": []
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "ParseError": {
+          "message": "expected {} after struct keyword"
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D002",
+      "labels": [
+        {
+          "message": "expected '{' after 'struct'",
+          "span": [
+            3,
+            9
+          ],
+          "text": "struct"
+        }
+      ],
+      "message": "expected {} after struct keyword"
+    }
+  ]
+}

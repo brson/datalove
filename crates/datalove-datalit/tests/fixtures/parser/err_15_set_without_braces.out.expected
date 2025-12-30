@@ -1,0 +1,29 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "expected {} after set keyword"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D017",
+      "labels": [
+        {
+          "message": "expected '{' after 'set'",
+          "span": [
+            1,
+            4
+          ],
+          "text": "set"
+        }
+      ],
+      "message": "expected {} after set keyword"
+    }
+  ]
+}

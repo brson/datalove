@@ -1,0 +1,54 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Map": {
+          "entries": [
+            {
+              "key": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              },
+              "value": {
+                "expr": {
+                  "expr": {
+                    "ParseError": {
+                      "message": "expected '=' between map key and value"
+                    }
+                  },
+                  "heap": "Omitted"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D017",
+      "labels": [
+        {
+          "message": "expected '=' after key",
+          "span": [
+            10,
+            11
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "expected '=' between map key and value"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Map": {
+          "entries": []
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "ParseError": {
+          "message": "expected comma between map key and value types"
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D005",
+      "labels": [
+        {
+          "message": "expected ',' between key and value types",
+          "span": [
+            13,
+            14
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "expected comma between map key and value types"
+    }
+  ]
+}

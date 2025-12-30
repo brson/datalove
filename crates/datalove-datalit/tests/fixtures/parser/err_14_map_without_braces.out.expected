@@ -1,0 +1,29 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "expected {} after map keyword"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D016",
+      "labels": [
+        {
+          "message": "expected '{' after 'map'",
+          "span": [
+            1,
+            4
+          ],
+          "text": "map"
+        }
+      ],
+      "message": "expected {} after map keyword"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "expected shape [...] after tensor keyword"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D010",
+      "labels": [
+        {
+          "message": "expected '[' for tensor shape",
+          "span": [
+            0,
+            0
+          ],
+          "text": ""
+        }
+      ],
+      "message": "expected shape [...] after tensor keyword"
+    }
+  ]
+}

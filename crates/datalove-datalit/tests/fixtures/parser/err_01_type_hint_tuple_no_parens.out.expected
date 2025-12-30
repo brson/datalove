@@ -1,0 +1,36 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonTuple": {
+          "elements": []
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "ParseError": {
+          "message": "expected () after tuple keyword"
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D001",
+      "labels": [
+        {
+          "message": "expected '(' after 'tuple'",
+          "span": [
+            3,
+            8
+          ],
+          "text": "tuple"
+        }
+      ],
+      "message": "expected () after tuple keyword"
+    }
+  ]
+}

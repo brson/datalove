@@ -1,0 +1,36 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Set": {
+          "elements": []
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "ParseError": {
+          "message": "expected <> after set keyword"
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D006",
+      "labels": [
+        {
+          "message": "expected '<' after 'set'",
+          "span": [
+            3,
+            6
+          ],
+          "text": "set"
+        }
+      ],
+      "message": "expected <> after set keyword"
+    }
+  ]
+}

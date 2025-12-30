@@ -1,0 +1,29 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "unexpected identifier 'foobar'"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D019",
+      "labels": [
+        {
+          "message": "unexpected identifier",
+          "span": [
+            1,
+            7
+          ],
+          "text": "foobar"
+        }
+      ],
+      "message": "unexpected identifier 'foobar'"
+    }
+  ]
+}

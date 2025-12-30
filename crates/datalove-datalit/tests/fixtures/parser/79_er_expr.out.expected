@@ -1,0 +1,24 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Er": {
+          "payload": {
+            "expr": {
+              "expr": {
+                "String": {
+                  "value": "\"error message\""
+                }
+              },
+              "heap": "Local"
+            },
+            "type_hint": null
+          }
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
+}

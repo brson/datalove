@@ -1,0 +1,51 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Tensor": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "1"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            }
+          ],
+          "shape": [
+            1
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "ParseError": {
+          "message": "expected <> after tensor keyword"
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D009",
+      "labels": [
+        {
+          "message": "expected '<' after 'tensor'",
+          "span": [
+            3,
+            9
+          ],
+          "text": "tensor"
+        }
+      ],
+      "message": "expected <> after tensor keyword"
+    }
+  ]
+}

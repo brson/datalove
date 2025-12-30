@@ -1,0 +1,32 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "expected '/' after type hint"
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "U32"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D012",
+      "labels": [
+        {
+          "message": "expected '/' separator between type hint and expression",
+          "span": [
+            7,
+            8
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "expected '/' after type hint"
+    }
+  ]
+}

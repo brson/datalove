@@ -1,0 +1,50 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "expected '/' after type hint"
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "ParseError": {
+          "message": "unknown type 'Int', did you mean 'int'?"
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D008",
+      "labels": [
+        {
+          "message": "unexpected token in type hint",
+          "span": [
+            3,
+            6
+          ],
+          "text": "Int"
+        }
+      ],
+      "message": "unknown type 'Int', did you mean 'int'?"
+    },
+    {
+      "code": "D012",
+      "labels": [
+        {
+          "message": "expected '/' separator between type hint and expression",
+          "span": [
+            3,
+            6
+          ],
+          "text": "Int"
+        }
+      ],
+      "message": "expected '/' after type hint"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Map": {
+          "entries": []
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "ParseError": {
+          "message": "expected <> after map keyword"
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D005",
+      "labels": [
+        {
+          "message": "expected '<' after 'map'",
+          "span": [
+            3,
+            6
+          ],
+          "text": "map"
+        }
+      ],
+      "message": "expected <> after map keyword"
+    }
+  ]
+}
