@@ -1848,20 +1848,26 @@ fn test_crossunit_external_value() {
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
 
-    // Execute unit 0 (no result).
-    let unit_tydesc = interp.tydesc_table.get_or_create(&IrType::Unit);
-    let mut dummy = [0u8; 0];
-    let dummy_dest = Destination { ptr: dummy.as_mut_ptr(), tydesc: unit_tydesc };
-    interp.execute_script_unit_in_env(&unit0, &mut env, dummy_dest).unwrap();
+    // Create ret_dest for early returns (Result<(), Error>).
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    // Execute unit 0 (fragment, no result).
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns x).
     let mut result: i64 = 0;
-    let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
-    let ret_dest = Destination {
+    let expr_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+    let expr_dest = Destination {
         ptr: &mut result as *mut i64 as *mut u8,
-        tydesc: ret_tydesc,
+        tydesc: expr_tydesc,
     };
-    interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 42);
 }
@@ -1925,20 +1931,26 @@ fn test_crossunit_external_slot() {
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
 
-    // Execute unit 0.
-    let unit_tydesc = interp.tydesc_table.get_or_create(&IrType::Unit);
-    let mut dummy = [0u8; 0];
-    let dummy_dest = Destination { ptr: dummy.as_mut_ptr(), tydesc: unit_tydesc };
-    interp.execute_script_unit_in_env(&unit0, &mut env, dummy_dest).unwrap();
+    // Create ret_dest for early returns (Result<(), Error>).
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    // Execute unit 1.
+    // Execute unit 0 (fragment).
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    // Execute unit 1 (returns y).
     let mut result: i64 = 0;
-    let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
-    let ret_dest = Destination {
+    let expr_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+    let expr_dest = Destination {
         ptr: &mut result as *mut i64 as *mut u8,
-        tydesc: ret_tydesc,
+        tydesc: expr_tydesc,
     };
-    interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 10);
 }
@@ -2023,20 +2035,26 @@ fn test_crossunit_external_function() {
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
 
-    // Execute unit 0.
-    let unit_tydesc = interp.tydesc_table.get_or_create(&IrType::Unit);
-    let mut dummy = [0u8; 0];
-    let dummy_dest = Destination { ptr: dummy.as_mut_ptr(), tydesc: unit_tydesc };
-    interp.execute_script_unit_in_env(&unit0, &mut env, dummy_dest).unwrap();
+    // Create ret_dest for early returns (Result<(), Error>).
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    // Execute unit 1.
+    // Execute unit 0 (fragment with function).
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    // Execute unit 1 (returns double(7)).
     let mut result: i64 = 0;
-    let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
-    let ret_dest = Destination {
+    let expr_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+    let expr_dest = Destination {
         ptr: &mut result as *mut i64 as *mut u8,
-        tydesc: ret_tydesc,
+        tydesc: expr_tydesc,
     };
-    interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 14);  // 7 + 7 = 14
 }
@@ -2131,20 +2149,28 @@ fn test_crossunit_chain() {
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
 
-    let unit_tydesc = interp.tydesc_table.get_or_create(&IrType::Unit);
-    let mut dummy = [0u8; 0];
-    let dummy_dest = Destination { ptr: dummy.as_mut_ptr(), tydesc: unit_tydesc };
+    // Create ret_dest for early returns (Result<(), Error>).
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    interp.execute_script_unit_in_env(&unit0, &mut env, dummy_dest).unwrap();
-    interp.execute_script_unit_in_env(&unit1, &mut env, dummy_dest).unwrap();
+    // Execute unit 0 and unit 1 (fragments).
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
 
+    // Execute unit 2 (returns a + b).
     let mut result: i64 = 0;
-    let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
-    let ret_dest = Destination {
+    let expr_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+    let expr_dest = Destination {
         ptr: &mut result as *mut i64 as *mut u8,
-        tydesc: ret_tydesc,
+        tydesc: expr_tydesc,
     };
-    interp.execute_script_unit_in_env(&unit2, &mut env, ret_dest).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit2, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 8);  // 5 + 3 = 8
 }

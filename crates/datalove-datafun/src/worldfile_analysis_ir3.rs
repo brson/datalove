@@ -18,7 +18,7 @@ use datalove_datafun_compiler::tycheck::{
     ScriptUnitInput, ScriptUnitKind, ScriptUnitBatch, type_check_script_units,
     UnitTypecheckResultTracked, ModuleInfo,
 };
-use ir::interp::ScriptEnvironment;
+use ir::interp::{ScriptEnvironment, UnitCompletion};
 
 /// Result of analyzing a worldfile with IR interpreter.
 #[derive(Debug, Serialize, Deserialize)]
@@ -310,16 +310,31 @@ fn process_fragment<'db>(
     let ir_dump = format!("{}", ir_unit);
 
     // Execute the fragment with shared environment.
+    // ret_dest is sized for Result<(), Error> in case of early return.
     let mut tydesc_table = ir::interp::IrTyDescTable::new();
-    let unit_tydesc = tydesc_table.get_or_create(&ir::IrType::Unit);
-    let mut dummy_buffer = [0u8; 0];
+    let ret_type = ir::IrType::Result(Box::new(ir::IrType::Unit));
+    let ret_tydesc = tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = ir::interp::Destination {
-        ptr: dummy_buffer.as_mut_ptr(),
-        tydesc: unit_tydesc,
+        ptr: ret_buffer.as_mut_ptr(),
+        tydesc: ret_tydesc,
     };
 
-    let output = match interp.execute_script_unit_in_env(&ir_unit, env, ret_dest) {
-        Ok(()) => "(fragment executed)".to_string(),
+    // Fragments have no expression result, so expr_dest is None.
+    let output = match interp.execute_script_unit_in_env(&ir_unit, env, ret_dest, None) {
+        Ok(UnitCompletion::Normal) => "(fragment executed)".to_string(),
+        Ok(UnitCompletion::EarlyReturn) => {
+            // Early return - pretty print the Result<(), Error> value.
+            let value = ir::interp::Value {
+                ptr: ret_buffer.as_mut_ptr(),
+                tydesc: ret_tydesc,
+            };
+            let output_str = interp.pretty_print_value(&value)
+                .unwrap_or_else(|e| format!("Error: {:?}", e));
+            let _ = interp.destroy_value(&value);
+            output_str
+        }
         Err(e) => format!("Error: {:?}", e),
     };
 
@@ -388,30 +403,50 @@ fn process_expr<'db>(
 
     // Execute the script unit if it has a result.
     let output = if let Some(result_id) = ir_unit.result {
-        // Get result type from the unit's value_types.
-        let result_type = &ir_unit.value_types[result_id.0 as usize];
-
-        // Create tydesc table and get result tydesc.
+        // Create tydesc table for both destinations.
         let mut tydesc_table = ir::interp::IrTyDescTable::new();
-        let ret_tydesc = tydesc_table.get_or_create(result_type);
-        let ret_size = unsafe { (*ret_tydesc).size };
 
-        // Allocate return buffer.
+        // ret_dest is for early returns: always Result<(), Error>.
+        let ret_type = ir::IrType::Result(Box::new(ir::IrType::Unit));
+        let ret_tydesc = tydesc_table.get_or_create(&ret_type);
+        let ret_size = unsafe { (*ret_tydesc).size };
         let mut ret_buffer = vec![0u8; ret_size as usize];
         let ret_dest = ir::interp::Destination {
             ptr: ret_buffer.as_mut_ptr(),
             tydesc: ret_tydesc,
         };
 
+        // expr_dest is for the expression result.
+        let expr_type = &ir_unit.value_types[result_id.0 as usize];
+        let expr_tydesc = tydesc_table.get_or_create(expr_type);
+        let expr_size = unsafe { (*expr_tydesc).size };
+        let mut expr_buffer = vec![0u8; expr_size as usize];
+        let expr_dest = ir::interp::Destination {
+            ptr: expr_buffer.as_mut_ptr(),
+            tydesc: expr_tydesc,
+        };
+
         // Execute the script unit with shared environment.
-        match interp.execute_script_unit_in_env(&ir_unit, env, ret_dest) {
-            Ok(()) => {
+        match interp.execute_script_unit_in_env(&ir_unit, env, ret_dest, Some(expr_dest)) {
+            Ok(UnitCompletion::Normal) => {
+                // Normal completion - pretty print the expression result.
+                let value = ir::interp::Value {
+                    ptr: expr_buffer.as_mut_ptr(),
+                    tydesc: expr_tydesc,
+                };
+                let output_str = interp.pretty_print_value(&value)
+                    .unwrap_or_else(|e| format!("Error: {:?}", e));
+                let _ = interp.destroy_value(&value);
+                output_str
+            }
+            Ok(UnitCompletion::EarlyReturn) => {
+                // Early return - pretty print the Result<(), Error> value.
                 let value = ir::interp::Value {
                     ptr: ret_buffer.as_mut_ptr(),
                     tydesc: ret_tydesc,
                 };
-                let output_str = interp.pretty_print_value(&value).unwrap_or_else(|e| format!("Error: {:?}", e));
-                // Destroy the value to free any allocations (e.g., bigint limbs).
+                let output_str = interp.pretty_print_value(&value)
+                    .unwrap_or_else(|e| format!("Error: {:?}", e));
                 let _ = interp.destroy_value(&value);
                 output_str
             }

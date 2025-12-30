@@ -28,6 +28,15 @@ use super::{
     ValueId, BlockId, Operand, SlotDest, ConstValue, BinOp, UnaryOp,
 };
 
+/// Result of executing a script unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnitCompletion {
+    /// Normal completion (fragment: no value; expr: value in expr_dest).
+    Normal,
+    /// Early return via `!` or `?` operator (Result<(), Error> written to ret_dest).
+    EarlyReturn,
+}
+
 /// IR function interpreter.
 pub struct IrInterpreter {
     runtime: datalove_rt::rust::Runtime,
@@ -182,25 +191,29 @@ impl IrInterpreter {
         }
 
         // Execute blocks, writing return value directly to ret_dest.
-        let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx, registry, frames);
+        // Functions use ret_dest for Return/TryReturn, not expr_dest.
+        let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames);
 
         // Destroy frame values before returning.
         frame.destroy_all(self.runtime.handle());
 
-        result
+        // Convert UnitCompletion to () - functions always complete normally.
+        result.map(|_| ())
     }
 
     /// Execute a script unit, optionally returning the result value.
     ///
-    /// For expression units, the result is written to ret_dest.
-    /// For fragment units, nothing is written.
+    /// For expression units, the result is written to expr_dest.
+    /// For fragment units, nothing is written to expr_dest.
+    /// Early returns (from `!` or `?`) write Result<(), Error> to ret_dest.
     ///
     /// Use this for standalone script units that don't reference previous units.
     pub fn execute_script_unit(
         &mut self,
         unit: &IrScriptUnit,
         ret_dest: Destination,
-    ) -> Result<(), InterpError> {
+        expr_dest: Option<Destination>,
+    ) -> Result<UnitCompletion, InterpError> {
         // Compute layout.
         let layout = IrLayout::compute(
             &unit.value_types,
@@ -217,7 +230,7 @@ impl IrInterpreter {
         // Execute blocks with empty registry/frames (no external references).
         let registry = FunctionRegistry::new();
         let mut frames = FrameStore::new();
-        let result = self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, &registry, &mut frames);
+        let result = self.execute_blocks(&unit.blocks, &mut frame, ret_dest, expr_dest, &ctx, &registry, &mut frames);
 
         // Destroy frame values before returning.
         frame.destroy_all(self.runtime.handle());
@@ -229,12 +242,19 @@ impl IrInterpreter {
     ///
     /// After execution, the unit's frame and functions are added to the environment
     /// for subsequent units to reference.
+    ///
+    /// Returns `UnitCompletion::Normal` for regular completion, or
+    /// `UnitCompletion::EarlyReturn` if `!` or `?` triggered early return.
+    ///
+    /// - `ret_dest`: Destination for early return (always `Result<(), Error>` type)
+    /// - `expr_dest`: Destination for expression result (for expr units, `None` for fragments)
     pub fn execute_script_unit_in_env(
         &mut self,
         unit: &IrScriptUnit,
         env: &mut ScriptEnvironment,
         ret_dest: Destination,
-    ) -> Result<(), InterpError> {
+        expr_dest: Option<Destination>,
+    ) -> Result<UnitCompletion, InterpError> {
         // Compute layout.
         let layout = IrLayout::compute(
             &unit.value_types,
@@ -253,6 +273,7 @@ impl IrInterpreter {
             &unit.blocks,
             &mut frame,
             ret_dest,
+            expr_dest,
             &ctx,
             &env.registry,
             &mut env.frames,
@@ -267,7 +288,7 @@ impl IrInterpreter {
         // Add this unit's frame and functions to the environment for future units.
         env.add_unit(frame, unit.functions.clone());
 
-        Ok(())
+        result
     }
 
     fn execute_blocks(
@@ -275,10 +296,11 @@ impl IrInterpreter {
         blocks: &[IrBlock],
         frame: &mut Frame,
         ret_dest: Destination,
+        expr_dest: Option<Destination>,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
-    ) -> Result<(), InterpError> {
+    ) -> Result<UnitCompletion, InterpError> {
         let mut current_block = BlockId(0);
         let mut prev_block: Option<BlockId> = None;
 
@@ -330,7 +352,7 @@ impl IrInterpreter {
                             }
                         }
                     }
-                    return Ok(());
+                    return Ok(UnitCompletion::Normal);
                 }
                 Terminator::TryReturn { value } => {
                     if let Some(op) = value {
@@ -349,14 +371,14 @@ impl IrInterpreter {
                             }
                         }
                     }
-                    return Ok(());
+                    return Ok(UnitCompletion::Normal);
                 }
                 Terminator::UnitEnd { result } => {
                     if let Some(op) = result {
                         let val = self.read_operand(op, frame, frames)?;
-                        // Use move_value (shallow copy) since the frame is kept
-                        // in env.frames. Marking as dropped prevents double-destroy.
-                        unsafe { self.move_value(&val, ret_dest)?; }
+                        // Write to expr_dest (not ret_dest) for expression results.
+                        let dest = expr_dest.expect("UnitEnd with result requires expr_dest");
+                        unsafe { self.move_value(&val, dest)?; }
                         match op {
                             Operand::Value(id) => frame.mark_value_dropped(*id),
                             Operand::Slot(id) => frame.mark_slot_dropped(*id),
@@ -368,12 +390,11 @@ impl IrInterpreter {
                             }
                         }
                     }
-                    return Ok(());
+                    return Ok(UnitCompletion::Normal);
                 }
                 Terminator::UnitEarlyReturn { value } => {
                     let val = self.read_operand(value, frame, frames)?;
-                    // Use move_value (shallow copy) since the frame is kept
-                    // in env.frames. Marking as dropped prevents double-destroy.
+                    // Write to ret_dest (Result<(), Error> type).
                     unsafe { self.move_value(&val, ret_dest)?; }
                     match value {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
@@ -385,7 +406,7 @@ impl IrInterpreter {
                             frames.mark_external_slot_dropped(*unit, *slot);
                         }
                     }
-                    return Ok(());
+                    return Ok(UnitCompletion::EarlyReturn);
                 }
             }
         }
@@ -626,6 +647,17 @@ impl IrInterpreter {
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot)?;
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*is_some);
+                // Mark source as consumed - Option is destructured.
+                match src {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::ExternalValue { unit, value } => {
+                        frames.mark_external_value_dropped(*unit, *value);
+                    }
+                    Operand::ExternalSlot { unit, slot } => {
+                        frames.mark_external_slot_dropped(*unit, *slot);
+                    }
+                }
             }
             Instruction::WrapOk { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
@@ -660,6 +692,17 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*ok_dest);
                 frame.mark_value_initialized(*err_dest);
                 frame.mark_value_initialized(*is_ok);
+                // Mark source as consumed - Result is destructured.
+                match src {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::ExternalValue { unit, value } => {
+                        frames.mark_external_value_dropped(*unit, *value);
+                    }
+                    Operand::ExternalSlot { unit, slot } => {
+                        frames.mark_external_slot_dropped(*unit, *slot);
+                    }
+                }
             }
             Instruction::ErrorFrom { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;

@@ -22,7 +22,7 @@ Ir3Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = call unit0.f0()\n    v1, v2, v3 = unwrap_result v0\n    branch v3, block2, block1\nblock1:\n    v4 = err v2\n    unit_early_return v4\nblock2:\n    unit_end v1\n",
             ),
-            output: "@2",
+            output: "@error @1",
         ),
     ],
 )
