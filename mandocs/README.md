@@ -39,8 +39,6 @@ existential runtime-typed data and error types.
 
 File extension: `.dlt`
 
-Datalit is a serialization format:
-
 ```datalove
 // Personal info
 {
@@ -60,8 +58,6 @@ Datalit is a serialization format:
 }
 ```
 
-If you understand Datalit you understand 80% of Datalove.
-
 
 
 
@@ -73,8 +69,6 @@ on the datalit type system.
 File extensions: `.dfs` (scripts), `.dfm` (modules)
 
 TODO continue address-book example
-
-If you understand Datafun you understand 90% of Datalove.
 
 
 
@@ -88,9 +82,6 @@ and stack unwinding.
 File extensions: `.dls` (scripts), `.dlm` (module)
 
 TODO
-
-If you understand Datalove then objective achieved.
-It is a simple language.
 
 
 
