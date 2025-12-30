@@ -3,6 +3,24 @@ use std::path::Path;
 use rmx::serde_json::json;
 use std::collections::BTreeMap;
 
+fn diagnostic_to_json(db: &dyn datalove_datafun::Db, diag: &datalove_diagnostic::Diagnostic) -> rmx::serde_json::Value {
+    let code = diag.code.map(|c| c.as_str(db).to_string());
+    let labels: Vec<_> = diag.labels.iter().map(|label| {
+        let source_text = label.text.text(db);
+        let text_slice = source_text.get(label.span.clone()).unwrap_or("");
+        json!({
+            "span": [label.span.start, label.span.end],
+            "text": text_slice,
+            "message": label.message.map(|m| m.as_str(db).to_string())
+        })
+    }).collect();
+    json!({
+        "code": code,
+        "message": diag.message.as_str(db),
+        "labels": labels
+    })
+}
+
 fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_json::Value {
     use datalove_datafun::tycheck::TypeError;
 
@@ -184,6 +202,13 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let module_graph = datalove_datafun::to_module_graph(&db, package_world, pkg_graph);
     let typecheck_result = datalove_datafun::tycheck::typecheck_module_graph(&db, module_graph);
 
+    // Collect accumulated type diagnostics with spans.
+    let type_diagnostics = datalove_datafun::tycheck::typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, module_graph);
+    let diagnostics: Vec<_> = type_diagnostics
+        .iter()
+        .map(|d| diagnostic_to_json(&db, &d.to_diagnostic(&db)))
+        .collect();
+
     // Collect module information.
     let mut modules_output = BTreeMap::new();
 
@@ -230,7 +255,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     }
 
     let output = json!({
-        "modules": modules_output
+        "modules": modules_output,
+        "diagnostics": diagnostics
     });
 
     Ok(rmx::serde_json::to_string_pretty(&output).X())
