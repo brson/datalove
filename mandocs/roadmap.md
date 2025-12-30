@@ -17,6 +17,7 @@ With core->runtime calls.
 - script/function unification semantics
 - primer / walkthrough / tutorial
 - improve readme
+- improve runtime implementation unsafety
 
 
 # on deck
