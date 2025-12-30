@@ -226,6 +226,20 @@ impl FrameStore {
         Ok(())
     }
 
+    /// Mark an external value as dropped (moved out).
+    pub fn mark_external_value_dropped(&mut self, unit: u32, value: ValueId) {
+        if let Some(frame) = self.frames.get_mut(unit as usize) {
+            frame.mark_value_dropped(value);
+        }
+    }
+
+    /// Mark an external slot as dropped (moved out).
+    pub fn mark_external_slot_dropped(&mut self, unit: u32, slot: SlotId) {
+        if let Some(frame) = self.frames.get_mut(unit as usize) {
+            frame.mark_slot_dropped(slot);
+        }
+    }
+
     /// Destroy all values in all frames.
     pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
         for frame in &mut self.frames {

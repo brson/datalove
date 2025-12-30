@@ -933,10 +933,14 @@ fn lower_expression<'db>(
                     }
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                         // External operands from previous script units.
-                        // Copy into a local value.
+                        // Copy types use Copy, non-copy types use Move.
                         let ext_type = ctx.expr_type(expr);
-                        let dest = ctx.fresh_value(ext_type);
-                        ctx.emit(Instruction::Copy { dest, src: operand });
+                        let dest = ctx.fresh_value(ext_type.clone());
+                        if ext_type.is_copy() {
+                            ctx.emit(Instruction::Copy { dest, src: operand });
+                        } else {
+                            ctx.emit(Instruction::Move { dest, src: operand });
+                        }
                         Ok(dest)
                     }
                 }

@@ -261,6 +261,31 @@ impl IrType {
             }
         }
     }
+
+    /// Check if this type is Copy (no heap allocations).
+    ///
+    /// Copy types can be duplicated with a shallow bitwise copy.
+    /// Non-copy types require move semantics.
+    pub fn is_copy(&self) -> bool {
+        match self {
+            // Primitives are always copy.
+            IrType::Unit | IrType::Bool => true,
+            IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 => true,
+            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 => true,
+            IrType::F32 => true,
+
+            // Heap-allocated types are never copy.
+            IrType::Int | IrType::String | IrType::Data | IrType::Error => false,
+            IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) => false,
+
+            // Composite types are copy if all fields are copy.
+            IrType::Tuple(fields) => fields.iter().all(|f| f.is_copy()),
+            IrType::Struct(fields) => fields.iter().all(|(_, f)| f.is_copy()),
+
+            // Option/Result are copy if inner is copy.
+            IrType::Option(inner) | IrType::Result(inner) => inner.is_copy(),
+        }
+    }
 }
 
 /// Metadata about a function definition.

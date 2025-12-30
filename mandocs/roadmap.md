@@ -12,10 +12,10 @@ With core->runtime calls.
 # in progress
 
 - ir and interp3
-  - fix pretty printer in worldfile_analysis_modules_ir3
+  - investigate copy_value/clone_value shenanigans
+  - operator reference semantics
   - fix function resolution
   - implement error and add missing ! tests
-  - investigate copy_value shenanigans
 - script/function unification semantics
 - move/clone semantics - moves-etc.md
 - argument modes - moves-etc.md

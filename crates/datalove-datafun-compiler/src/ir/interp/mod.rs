@@ -168,13 +168,14 @@ impl IrInterpreter {
         // Create frame.
         let mut frame = Frame::new(layout);
 
-        // Copy arguments into parameter slots.
+        // Move arguments into parameter slots.
+        // In linear type system, args are consumed by the call.
         for (i, &param_id) in func.params.iter().enumerate() {
             if i < args.len() {
                 let dest = frame.value_dest(param_id)?;
                 let src = &args[i];
                 unsafe {
-                    self.copy_value(src, dest)?;
+                    self.move_value(src, dest)?;
                 }
                 frame.mark_value_initialized(param_id);
             }
@@ -318,8 +319,15 @@ impl IrInterpreter {
                         // ownership to avoid double-free.
                         unsafe { self.move_value(&val, ret_dest)?; }
                         // Mark source as dropped to prevent destroy in frame.destroy_all().
-                        if let Operand::Value(id) = op {
-                            frame.mark_value_dropped(*id);
+                        match op {
+                            Operand::Value(id) => frame.mark_value_dropped(*id),
+                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::ExternalValue { unit, value } => {
+                                frames.mark_external_value_dropped(*unit, *value);
+                            }
+                            Operand::ExternalSlot { unit, slot } => {
+                                frames.mark_external_slot_dropped(*unit, *slot);
+                            }
                         }
                     }
                     return Ok(());
@@ -330,8 +338,15 @@ impl IrInterpreter {
                         // Use move_value (shallow copy).
                         unsafe { self.move_value(&val, ret_dest)?; }
                         // Mark source as dropped.
-                        if let Operand::Value(id) = op {
-                            frame.mark_value_dropped(*id);
+                        match op {
+                            Operand::Value(id) => frame.mark_value_dropped(*id),
+                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::ExternalValue { unit, value } => {
+                                frames.mark_external_value_dropped(*unit, *value);
+                            }
+                            Operand::ExternalSlot { unit, slot } => {
+                                frames.mark_external_slot_dropped(*unit, *slot);
+                            }
                         }
                     }
                     return Ok(());
@@ -342,8 +357,15 @@ impl IrInterpreter {
                         // Use move_value (shallow copy) since the frame is kept
                         // in env.frames. Marking as dropped prevents double-destroy.
                         unsafe { self.move_value(&val, ret_dest)?; }
-                        if let Operand::Value(id) = op {
-                            frame.mark_value_dropped(*id);
+                        match op {
+                            Operand::Value(id) => frame.mark_value_dropped(*id),
+                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::ExternalValue { unit, value } => {
+                                frames.mark_external_value_dropped(*unit, *value);
+                            }
+                            Operand::ExternalSlot { unit, slot } => {
+                                frames.mark_external_slot_dropped(*unit, *slot);
+                            }
                         }
                     }
                     return Ok(());
@@ -353,8 +375,15 @@ impl IrInterpreter {
                     // Use move_value (shallow copy) since the frame is kept
                     // in env.frames. Marking as dropped prevents double-destroy.
                     unsafe { self.move_value(&val, ret_dest)?; }
-                    if let Operand::Value(id) = value {
-                        frame.mark_value_dropped(*id);
+                    match value {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { unit, value } => {
+                            frames.mark_external_value_dropped(*unit, *value);
+                        }
+                        Operand::ExternalSlot { unit, slot } => {
+                            frames.mark_external_slot_dropped(*unit, *slot);
+                        }
                     }
                     return Ok(());
                 }
@@ -368,7 +397,7 @@ impl IrInterpreter {
         incoming: &[(BlockId, Operand)],
         pred: BlockId,
         frame: &mut Frame,
-        frames: &FrameStore,
+        frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         // Find the operand corresponding to the predecessor block.
         let operand = incoming.iter()
@@ -382,8 +411,21 @@ impl IrInterpreter {
 
         let src_val = self.read_operand(operand, frame, frames)?;
         let dest_slot = frame.value_dest(dest)?;
-        unsafe { self.copy_value(&src_val, dest_slot)?; }
+        // Phi uses move semantics - the value from the taken edge is consumed.
+        unsafe { self.move_value(&src_val, dest_slot)?; }
         frame.mark_value_initialized(dest);
+
+        // Mark source as dropped.
+        match operand {
+            Operand::Value(id) => frame.mark_value_dropped(*id),
+            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+            Operand::ExternalValue { unit, value } => {
+                frames.mark_external_value_dropped(*unit, *value);
+            }
+            Operand::ExternalSlot { unit, slot } => {
+                frames.mark_external_slot_dropped(*unit, *slot);
+            }
+        }
         Ok(())
     }
 
@@ -417,8 +459,11 @@ impl IrInterpreter {
                 match src {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
                     Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
-                        // External values/slots are in other frames - handled separately.
+                    Operand::ExternalValue { unit, value } => {
+                        frames.mark_external_value_dropped(*unit, *value);
+                    }
+                    Operand::ExternalSlot { unit, slot } => {
+                        frames.mark_external_slot_dropped(*unit, *slot);
                     }
                 }
             }
@@ -451,8 +496,15 @@ impl IrInterpreter {
                             }
                         }
                         let dest_slot = frame.slot_dest(*slot_id)?;
-                        unsafe { self.copy_value(&src_val, dest_slot)?; }
+                        // Move value into slot (consumes source).
+                        unsafe { self.move_value(&src_val, dest_slot)?; }
                         frame.mark_slot_initialized(*slot_id);
+                        // Mark source as dropped.
+                        match value {
+                            Operand::Value(id) => frame.mark_value_dropped(*id),
+                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                        }
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
@@ -461,13 +513,21 @@ impl IrInterpreter {
                             *slot,
                             &src_val,
                         )?;
+                        // Mark source as dropped for external store too.
+                        match value {
+                            Operand::Value(id) => frame.mark_value_dropped(*id),
+                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                        }
                     }
                 }
             }
             Instruction::SlotLoad { dest, slot } => {
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest)?;
-                unsafe { self.copy_value(&slot_val, dest_slot)?; }
+                // Clone value from slot (non-destructive).
+                // TODO: Revisit operator semantics - this clones non-copy types.
+                unsafe { self.clone_value(&slot_val, dest_slot)?; }
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Pack { dest, ty: _, fields } => {
@@ -592,6 +652,16 @@ impl IrInterpreter {
                 // Get destination for return value.
                 let dest_slot = frame.value_dest(*dest)?;
 
+                // Mark arg sources as dropped BEFORE call - they're moved immediately.
+                // Must do this before call_in_context because callee destroys them.
+                for arg in args {
+                    match arg {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                    }
+                }
+
                 // Call the function, writing result directly to destination.
                 self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
                 frame.mark_value_initialized(*dest);
@@ -617,7 +687,19 @@ impl IrInterpreter {
                 unreachable!("Phi instructions are handled separately in execute_blocks")
             }
             Instruction::Drop { operand } => {
-                let val = self.read_operand(operand, frame, frames)?;
+                // Skip drop if already dropped (can happen with move semantics).
+                let val = match self.read_operand(operand, frame, frames) {
+                    Ok(v) => v,
+                    Err(InterpError::UninitializedValue(_)) => {
+                        // Already dropped, skip.
+                        return Ok(());
+                    }
+                    Err(InterpError::UninitializedSlot(_)) => {
+                        // Already dropped, skip.
+                        return Ok(());
+                    }
+                    Err(e) => return Err(e),
+                };
                 self.execute_drop(&val)?;
                 // Mark as dropped to prevent double-destroy in destroy_all.
                 match operand {
@@ -723,49 +805,29 @@ impl IrInterpreter {
         Ok(())
     }
 
-    unsafe fn copy_value(&mut self, src: &Value, dest: Destination) -> Result<(), InterpError> {
+    unsafe fn copy_value(&self, src: &Value, dest: Destination) -> Result<(), InterpError> {
         unsafe {
             let tag = (*src.tydesc).type_tag;
 
-            // Int requires deep clone (allocate new limbs).
-            if tag == rtdt::TyTag::Int {
-                let src_int = &*(src.ptr as *const rtdt::Int);
-                let dest_int = dest.ptr as *mut rtdt::Int;
+            // Assert this is a copy type - not a heap-allocated type.
+            // In our linear type system, non-copy types must use move_value.
+            assert!(
+                !matches!(
+                    tag,
+                    rtdt::TyTag::Int
+                        | rtdt::TyTag::String
+                        | rtdt::TyTag::Data
+                        | rtdt::TyTag::Error
+                        | rtdt::TyTag::List
+                        | rtdt::TyTag::Set
+                        | rtdt::TyTag::Map
+                        | rtdt::TyTag::Tensor
+                ),
+                "copy_value called on non-copy type: {:?}",
+                tag
+            );
 
-                if src_int.data.is_null() || src_int.size_and_sign == 0 {
-                    // Zero value - no allocation needed.
-                    (*dest_int).data = std::ptr::null();
-                    (*dest_int).size_and_sign = 0;
-                    (*dest_int).capacity = 0;
-                } else {
-                    // Clone the limbs.
-                    // Must use size=4, count=num_limbs to match the destroy code.
-                    let num_limbs = src_int.size_and_sign.unsigned_abs();
-                    let rt_handle = self.runtime.handle();
-                    let new_limbs = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-                        rt_handle,
-                        4,          // size of one limb
-                        4,          // align
-                        num_limbs,  // count
-                    ) as *mut u32;
-                    if new_limbs.is_null() {
-                        return Err(InterpError::RuntimeError(
-                            "Failed to allocate Int limbs for copy".to_string()
-                        ));
-                    }
-                    std::ptr::copy_nonoverlapping(
-                        src_int.data,
-                        new_limbs,
-                        num_limbs as usize,
-                    );
-                    (*dest_int).data = new_limbs as *const u32;
-                    (*dest_int).size_and_sign = src_int.size_and_sign;
-                    (*dest_int).capacity = num_limbs;
-                }
-                return Ok(());
-            }
-
-            // Other types: shallow copy is fine.
+            // Shallow copy for copyable types.
             let size = (*src.tydesc).size as usize;
             std::ptr::copy_nonoverlapping(src.ptr, dest.ptr, size);
         }
@@ -776,6 +838,51 @@ impl IrInterpreter {
         unsafe {
             // Move is always a shallow copy - ownership transfers to dest.
             // The source should be marked as dropped so it won't be destroyed.
+            let size = (*src.tydesc).size as usize;
+            std::ptr::copy_nonoverlapping(src.ptr, dest.ptr, size);
+        }
+        Ok(())
+    }
+
+    /// Clone a value (deep copy for non-copy types).
+    ///
+    /// TODO: Revisit when addressing operator semantics.
+    unsafe fn clone_value(&mut self, src: &Value, dest: Destination) -> Result<(), InterpError> {
+        unsafe {
+            let tag = (*src.tydesc).type_tag;
+
+            // Int requires deep clone (allocate new limbs).
+            if tag == rtdt::TyTag::Int {
+                let src_int = &*(src.ptr as *const rtdt::Int);
+                let dest_int = dest.ptr as *mut rtdt::Int;
+
+                if src_int.data.is_null() || src_int.size_and_sign == 0 {
+                    (*dest_int).data = std::ptr::null();
+                    (*dest_int).size_and_sign = 0;
+                    (*dest_int).capacity = 0;
+                } else {
+                    let num_limbs = src_int.size_and_sign.unsigned_abs();
+                    let rt_handle = self.runtime.handle();
+                    let new_limbs = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                        rt_handle,
+                        4, 4, num_limbs,
+                    ) as *mut u32;
+                    if new_limbs.is_null() {
+                        return Err(InterpError::RuntimeError(
+                            "Failed to allocate Int limbs for clone".to_string()
+                        ));
+                    }
+                    std::ptr::copy_nonoverlapping(
+                        src_int.data, new_limbs, num_limbs as usize,
+                    );
+                    (*dest_int).data = new_limbs as *const u32;
+                    (*dest_int).size_and_sign = src_int.size_and_sign;
+                    (*dest_int).capacity = num_limbs;
+                }
+                return Ok(());
+            }
+
+            // Other types: shallow copy.
             let size = (*src.tydesc).size as usize;
             std::ptr::copy_nonoverlapping(src.ptr, dest.ptr, size);
         }
