@@ -13,6 +13,7 @@
       "type_hint": "I32"
     }
   },
+  "diagnostics": [],
   "errors": [
     {
       "kind": "IntOutOfRange"

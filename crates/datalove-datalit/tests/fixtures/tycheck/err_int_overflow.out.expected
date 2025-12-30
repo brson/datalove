@@ -10,6 +10,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T001",
+      "labels": [
+        {
+          "message": "value too large for u32",
+          "span": [
+            0,
+            1
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "integer literal out of range"
+    }
+  ],
   "errors": [
     {
       "kind": "IntOutOfRange"

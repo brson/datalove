@@ -13,6 +13,22 @@
       "type_hint": "U32"
     }
   },
+  "diagnostics": [
+    {
+      "code": "T037",
+      "labels": [
+        {
+          "message": "expected @, found #",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "heap allocation mismatch"
+    }
+  ],
   "errors": [
     {
       "actual_heap": "#",

@@ -199,6 +199,28 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let resolved = datalove_datalit::resolve::resolve_names(&db, source, ast);
     let typechecked = datalove_datalit::tycheck::type_check(&db, ast, resolved);
 
+    // Collect accumulated type diagnostics with spans.
+    let type_diagnostics = datalove_datalit::tycheck::type_check::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, ast, resolved);
+    let diagnostics: Vec<_> = type_diagnostics
+        .iter()
+        .map(|d| {
+            let diag = d.to_diagnostic(&db);
+            let code = diag.code.map(|c| c.as_str(&db).to_string());
+            let labels: Vec<_> = diag.labels.iter().map(|label| {
+                json!({
+                    "span": [label.span.start, label.span.end],
+                    "text": source_text[label.span.clone()].to_string(),
+                    "message": label.message.map(|m| m.as_str(&db).to_string())
+                })
+            }).collect();
+            json!({
+                "code": code,
+                "message": diag.message.as_str(&db),
+                "labels": labels
+            })
+        })
+        .collect();
+
     // Convert AST to serde format.
     let serde_ast = datalove_datalit::ast_serde::ExprFull::from_ast(&db, ast);
 
@@ -221,7 +243,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let output = json!({
         "ast": serde_ast,
         "root_type": root_type_json,
-        "errors": errors
+        "errors": errors,
+        "diagnostics": diagnostics
     });
 
     Ok(rmx::serde_json::to_string_pretty(&output).X())

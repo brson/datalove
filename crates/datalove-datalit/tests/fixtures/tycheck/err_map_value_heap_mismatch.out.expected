@@ -59,6 +59,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T036",
+      "labels": [
+        {
+          "message": "expected @, found #",
+          "span": [
+            23,
+            24
+          ],
+          "text": "#"
+        }
+      ],
+      "message": "heap allocation mismatch in map values"
+    }
+  ],
   "errors": [
     {
       "actual_heap": "#",

@@ -44,6 +44,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T018",
+      "labels": [
+        {
+          "message": "expected `u32`, found `string`",
+          "span": [
+            10,
+            11
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "mismatched types in list"
+    }
+  ],
   "errors": [
     {
       "actual": "string",

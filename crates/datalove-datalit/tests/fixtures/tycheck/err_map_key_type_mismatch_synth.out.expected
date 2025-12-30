@@ -59,6 +59,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T020",
+      "labels": [
+        {
+          "message": "expected `u32`, found `string`",
+          "span": [
+            18,
+            19
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "mismatched key types in map"
+    }
+  ],
   "errors": [
     {
       "actual": "string",

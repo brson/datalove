@@ -9,6 +9,7 @@
       "type_hint": "Bool"
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": "bool"
 }

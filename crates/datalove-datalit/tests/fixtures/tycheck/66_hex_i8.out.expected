@@ -13,6 +13,22 @@
       "type_hint": "I8"
     }
   },
+  "diagnostics": [
+    {
+      "code": "T032",
+      "labels": [
+        {
+          "message": "expected `i8`, found `u32`",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
   "errors": [
     {
       "actual": "u32",

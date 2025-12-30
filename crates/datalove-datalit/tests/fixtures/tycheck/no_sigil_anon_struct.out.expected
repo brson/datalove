@@ -61,6 +61,7 @@
       }
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": {
     "fields": [

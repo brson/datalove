@@ -54,6 +54,7 @@
       }
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": {
     "element_type": "@u32",

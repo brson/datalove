@@ -83,6 +83,7 @@
     },
     "type_hint": null
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": {
     "heap": "@",

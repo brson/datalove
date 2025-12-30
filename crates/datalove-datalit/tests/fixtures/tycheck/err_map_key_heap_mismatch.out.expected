@@ -59,6 +59,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T035",
+      "labels": [
+        {
+          "message": "expected @, found #",
+          "span": [
+            18,
+            19
+          ],
+          "text": "#"
+        }
+      ],
+      "message": "heap allocation mismatch in map keys"
+    }
+  ],
   "errors": [
     {
       "actual_heap": "#",

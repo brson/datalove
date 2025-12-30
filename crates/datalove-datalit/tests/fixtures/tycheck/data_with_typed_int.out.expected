@@ -26,6 +26,7 @@
       "type_hint": "Data"
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": "@data"
 }

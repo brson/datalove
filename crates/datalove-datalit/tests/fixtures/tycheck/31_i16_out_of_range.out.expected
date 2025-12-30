@@ -13,6 +13,7 @@
       "type_hint": "I16"
     }
   },
+  "diagnostics": [],
   "errors": [
     {
       "kind": "IntOutOfRange"

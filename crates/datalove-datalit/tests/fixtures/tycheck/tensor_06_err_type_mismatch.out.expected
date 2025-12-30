@@ -70,6 +70,22 @@
       }
     }
   },
+  "diagnostics": [
+    {
+      "code": "T032",
+      "labels": [
+        {
+          "message": "expected `u32`, found `f32`",
+          "span": [
+            42,
+            43
+          ],
+          "text": "4"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
   "errors": [
     {
       "actual": "f32",

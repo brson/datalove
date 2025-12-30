@@ -44,6 +44,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T034",
+      "labels": [
+        {
+          "message": "expected @, found #",
+          "span": [
+            11,
+            12
+          ],
+          "text": "#"
+        }
+      ],
+      "message": "heap allocation mismatch in set"
+    }
+  ],
   "errors": [
     {
       "actual_heap": "#",

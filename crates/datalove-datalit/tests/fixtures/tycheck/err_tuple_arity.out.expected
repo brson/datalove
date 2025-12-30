@@ -60,6 +60,22 @@
       }
     }
   },
+  "diagnostics": [
+    {
+      "code": "T038",
+      "labels": [
+        {
+          "message": "expected 2 element(s), found 3",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "tuple has wrong number of elements"
+    }
+  ],
   "errors": [
     {
       "actual": 3,

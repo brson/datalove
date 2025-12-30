@@ -59,6 +59,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T052",
+      "labels": [
+        {
+          "message": "expected `u32`, found `string`",
+          "span": [
+            21,
+            28
+          ],
+          "text": "\"three\""
+        }
+      ],
+      "message": "mismatched types in tensor"
+    }
+  ],
   "errors": [
     {
       "actual": "string",

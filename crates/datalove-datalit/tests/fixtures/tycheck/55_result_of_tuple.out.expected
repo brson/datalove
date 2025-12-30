@@ -66,6 +66,7 @@
       }
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": {
     "heap": "@",

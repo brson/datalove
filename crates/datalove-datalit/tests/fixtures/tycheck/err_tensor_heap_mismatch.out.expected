@@ -59,6 +59,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T053",
+      "labels": [
+        {
+          "message": "expected @, found #",
+          "span": [
+            23,
+            24
+          ],
+          "text": "#"
+        }
+      ],
+      "message": "heap allocation mismatch in tensor"
+    }
+  ],
   "errors": [
     {
       "actual_heap": "#",

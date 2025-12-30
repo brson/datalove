@@ -13,6 +13,22 @@
       "type_hint": "F32"
     }
   },
+  "diagnostics": [
+    {
+      "code": "T013",
+      "labels": [
+        {
+          "message": "value out of range",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "hex literal out of range for f32 bit pattern"
+    }
+  ],
   "errors": [
     {
       "kind": "IntOutOfRange"

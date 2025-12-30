@@ -13,6 +13,7 @@
       "type_hint": "String"
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": "string"
 }

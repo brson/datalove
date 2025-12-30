@@ -567,13 +567,28 @@ fn synthesize<'db>(
             let elements = t.elements(db);
 
             if elements.is_empty() {
-                // Cannot synthesize type for empty tensor.
+                // T050: Cannot synthesize type for empty tensor.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "cannot infer type for empty tensor")
+                        .code("T050")
+                        .primary_label(text, span, "type annotation required")
+                        .note("provide a type hint to specify the element type")
+                        .emit_type();
+                }
                 return Err(TypeError::CannotSynthesize);
             }
 
             // Calculate expected element count from shape.
             let expected_count = shape.iter().map(|&d| d as usize).product::<usize>();
             if elements.len() != expected_count {
+                // T051: Tensor element count mismatch (synthesis mode).
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "tensor has wrong number of elements")
+                        .code("T051")
+                        .primary_label(text, span, &format!("expected {} element(s), found {}",
+                            expected_count, elements.len()))
+                        .emit_type();
+                }
                 return Err(TypeError::ArityMismatch {
                     expected: expected_count,
                     actual: elements.len(),
@@ -587,12 +602,32 @@ fn synthesize<'db>(
             for elem in &elements[1..] {
                 let elem_type = synthesize(ctx, *elem)?;
                 if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
+                    // T052: Tensor element type mismatch.
+                    if let Some((text, span)) = ctx.get_span(*elem) {
+                        DiagnosticBuilder::error(db, "mismatched types in tensor")
+                            .code("T052")
+                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                                type_to_string(db, first_type.ty(db)),
+                                type_to_string(db, elem_type.ty(db))))
+                            .note("all elements in a tensor must have the same type")
+                            .emit_type();
+                    }
                     return Err(TypeError::TypeMismatch {
                         expected: type_to_string(db, first_type.ty(db)),
                         actual: type_to_string(db, elem_type.ty(db)),
                     });
                 }
                 if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
+                    // T053: Tensor element heap mismatch.
+                    if let Some((text, span)) = ctx.get_span(*elem) {
+                        DiagnosticBuilder::error(db, "heap allocation mismatch in tensor")
+                            .code("T053")
+                            .primary_label(text, span, &format!("expected {}, found {}",
+                                heap_to_string(first_type.heap(db)),
+                                heap_to_string(elem_type.heap(db))))
+                            .note("all elements in a tensor must have compatible heap allocations")
+                            .emit_type();
+                    }
                     return Err(TypeError::HeapMismatch {
                         expected_heap: heap_to_string(first_type.heap(db)),
                         actual_heap: heap_to_string(elem_type.heap(db)),
@@ -1199,6 +1234,14 @@ fn check<'db>(
             // Verify rank matches.
             let rank = shape.len() as u32;
             if rank != expected_tensor.rank(db) {
+                // T048: Tensor rank mismatch.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "tensor has wrong rank")
+                        .code("T048")
+                        .primary_label(text, span, &format!("expected rank {}, found rank {}",
+                            expected_tensor.rank(db), rank))
+                        .emit_type();
+                }
                 return Err(TypeError::ArityMismatch {
                     expected: expected_tensor.rank(db) as usize,
                     actual: rank as usize,
@@ -1208,6 +1251,14 @@ fn check<'db>(
             // Calculate expected element count from shape.
             let expected_count = shape.iter().map(|&d| d as usize).product::<usize>();
             if elements.len() != expected_count {
+                // T049: Tensor element count mismatch.
+                if let Some((text, span)) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "tensor has wrong number of elements")
+                        .code("T049")
+                        .primary_label(text, span, &format!("expected {} element(s), found {}",
+                            expected_count, elements.len()))
+                        .emit_type();
+                }
                 return Err(TypeError::ArityMismatch {
                     expected: expected_count,
                     actual: elements.len(),

@@ -10,6 +10,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T014",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            0,
+            1
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "cannot infer type for empty set"
+    }
+  ],
   "errors": [
     {
       "kind": "CannotSynthesize"

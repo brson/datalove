@@ -13,6 +13,7 @@
       "type_hint": "I64"
     }
   },
+  "diagnostics": [],
   "errors": [
     {
       "kind": "IntOutOfRange"

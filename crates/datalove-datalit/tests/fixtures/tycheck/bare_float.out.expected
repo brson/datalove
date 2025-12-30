@@ -10,6 +10,7 @@
     },
     "type_hint": null
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": "@f32"
 }

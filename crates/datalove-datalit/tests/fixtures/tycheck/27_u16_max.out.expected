@@ -13,6 +13,7 @@
       "type_hint": "U16"
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": "@u16"
 }

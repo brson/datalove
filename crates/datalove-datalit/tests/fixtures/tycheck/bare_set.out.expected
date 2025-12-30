@@ -25,6 +25,7 @@
     },
     "type_hint": null
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": {
     "element_type": "@bool",

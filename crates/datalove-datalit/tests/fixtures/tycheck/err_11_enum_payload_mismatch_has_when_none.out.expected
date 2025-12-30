@@ -17,6 +17,7 @@
       }
     }
   },
+  "diagnostics": [],
   "errors": [
     {
       "kind": "CannotSynthesize"

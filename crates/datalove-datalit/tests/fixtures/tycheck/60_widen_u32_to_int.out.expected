@@ -35,6 +35,7 @@
       }
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": {
     "element_type": "@int",

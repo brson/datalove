@@ -61,6 +61,22 @@
       }
     }
   },
+  "diagnostics": [
+    {
+      "code": "T042",
+      "labels": [
+        {
+          "message": "expected field `x`, found `y`",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "struct fields in wrong order"
+    }
+  ],
   "errors": [
     {
       "kind": "FieldOrderMismatch"

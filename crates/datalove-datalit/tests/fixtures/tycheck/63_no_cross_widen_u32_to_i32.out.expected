@@ -35,6 +35,22 @@
       }
     }
   },
+  "diagnostics": [
+    {
+      "code": "T040",
+      "labels": [
+        {
+          "message": "expected `i32`, found `u32`",
+          "span": [
+            12,
+            13
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
   "errors": [
     {
       "actual": "u32",

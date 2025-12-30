@@ -907,7 +907,10 @@ impl<'db> DynParser<'db> {
                                 source_text: self.source_text,
                                 expr_spans: Vec::new(),
                             };
-                            sub_parser.parse_comma_separated(|p| p.parse_expr_full())
+                            let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                            // Merge spans from sub-parser.
+                            self.expr_spans.extend(sub_parser.expr_spans);
+                            elements
                         } else {
                             // 2D+ tensor: comma-separated rows, space-separated elements [1 2 3, 4 5 6].
                             let row_size = *shape.last().unwrap() as usize;
@@ -936,6 +939,9 @@ impl<'db> DynParser<'db> {
                                 while row_parser.pos < row_parser.tokens.len() {
                                     row_elements.push(row_parser.parse_expr_full());
                                 }
+
+                                // Merge spans from row sub-parser.
+                                self.expr_spans.extend(row_parser.expr_spans);
 
                                 // Validate row size matches the last dimension.
                                 if row_elements.len() != row_size {
@@ -998,7 +1004,10 @@ impl<'db> DynParser<'db> {
                         source_text: self.source_text,
                         expr_spans: Vec::new(),
                     };
-                    Some(sub_parser.parse_expr_full())
+                    let payload_expr = sub_parser.parse_expr_full();
+                    // Merge spans from sub-parser.
+                    self.expr_spans.extend(sub_parser.expr_spans);
+                    Some(payload_expr)
                 } else {
                     None
                 };
@@ -1043,6 +1052,8 @@ impl<'db> DynParser<'db> {
                             let value = p.parse_expr_full();
                             ast::ExprMapEntry::new(p.db, key, value)
                         });
+                        // Merge spans from sub-parser.
+                        self.expr_spans.extend(sub_parser.expr_spans);
                         return ast::Expr::Map(ast::ExprMap::new(self.db, entries));
                     }
                     _ => {
@@ -1071,6 +1082,8 @@ impl<'db> DynParser<'db> {
                             expr_spans: Vec::new(),
                         };
                         let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                        // Merge spans from sub-parser.
+                        self.expr_spans.extend(sub_parser.expr_spans);
                         return ast::Expr::Set(ast::ExprSet::new(self.db, elements));
                     }
                     _ => {
@@ -1168,6 +1181,8 @@ impl<'db> DynParser<'db> {
                     expr_spans: Vec::new(),
                 };
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                // Merge spans from sub-parser.
+                self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements))
             }
             Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
@@ -1182,6 +1197,8 @@ impl<'db> DynParser<'db> {
                     expr_spans: Vec::new(),
                 };
                 let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
+                // Merge spans from sub-parser.
+                self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::AnonStruct(ast::ExprAnonStruct::new(self.db, fields))
             }
             Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
@@ -1196,6 +1213,8 @@ impl<'db> DynParser<'db> {
                     expr_spans: Vec::new(),
                 };
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                // Merge spans from sub-parser.
+                self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::List(ast::ExprList::new(self.db, elements))
             }
             _ => {

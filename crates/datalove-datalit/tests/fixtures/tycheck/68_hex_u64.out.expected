@@ -13,6 +13,7 @@
       "type_hint": "U64"
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": "@u64"
 }

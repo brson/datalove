@@ -10,6 +10,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T017",
+      "labels": [
+        {
+          "message": "parse error occurred here",
+          "span": [
+            0,
+            1
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "cannot type-check expression with parse errors"
+    }
+  ],
   "errors": [
     {
       "kind": "CannotSynthesize"

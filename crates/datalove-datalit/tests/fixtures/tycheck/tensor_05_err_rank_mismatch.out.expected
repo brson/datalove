@@ -92,6 +92,22 @@
       }
     }
   },
+  "diagnostics": [
+    {
+      "code": "T048",
+      "labels": [
+        {
+          "message": "expected rank 3, found rank 2",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "tensor has wrong rank"
+    }
+  ],
   "errors": [
     {
       "actual": 2,

@@ -59,6 +59,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T021",
+      "labels": [
+        {
+          "message": "expected `string`, found `u32`",
+          "span": [
+            23,
+            24
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "mismatched value types in map"
+    }
+  ],
   "errors": [
     {
       "actual": "u32",

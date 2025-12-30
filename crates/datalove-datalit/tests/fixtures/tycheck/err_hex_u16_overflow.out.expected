@@ -13,6 +13,22 @@
       "type_hint": "U16"
     }
   },
+  "diagnostics": [
+    {
+      "code": "T007",
+      "labels": [
+        {
+          "message": "value out of range",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "hex literal out of range for type u16"
+    }
+  ],
   "errors": [
     {
       "kind": "IntOutOfRange"

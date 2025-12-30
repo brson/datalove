@@ -30,6 +30,22 @@
       }
     }
   },
+  "diagnostics": [
+    {
+      "code": "T040",
+      "labels": [
+        {
+          "message": "expected error expression",
+          "span": [
+            15,
+            16
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "er payload must be an error expression"
+    }
+  ],
   "errors": [
     {
       "actual": "non-error",

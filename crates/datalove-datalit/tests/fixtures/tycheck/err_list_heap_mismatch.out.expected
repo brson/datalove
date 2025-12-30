@@ -44,6 +44,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T033",
+      "labels": [
+        {
+          "message": "expected @, found #",
+          "span": [
+            6,
+            7
+          ],
+          "text": "#"
+        }
+      ],
+      "message": "heap allocation mismatch in list"
+    }
+  ],
   "errors": [
     {
       "actual_heap": "#",

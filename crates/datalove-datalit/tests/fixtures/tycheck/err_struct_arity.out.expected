@@ -75,6 +75,22 @@
       }
     }
   },
+  "diagnostics": [
+    {
+      "code": "T039",
+      "labels": [
+        {
+          "message": "expected 2 field(s), found 3",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "struct has wrong number of fields"
+    }
+  ],
   "errors": [
     {
       "actual": 3,

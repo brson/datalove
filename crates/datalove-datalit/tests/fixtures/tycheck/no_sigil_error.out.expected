@@ -23,6 +23,7 @@
       "type_hint": "Error"
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": "error"
 }

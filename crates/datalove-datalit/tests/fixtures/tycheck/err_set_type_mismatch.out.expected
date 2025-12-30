@@ -44,6 +44,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T019",
+      "labels": [
+        {
+          "message": "expected `u32`, found `string`",
+          "span": [
+            15,
+            16
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "mismatched types in set"
+    }
+  ],
   "errors": [
     {
       "actual": "string",

@@ -49,6 +49,22 @@
       }
     }
   },
+  "diagnostics": [
+    {
+      "code": "T022",
+      "labels": [
+        {
+          "message": "expected `u32`, found `string`",
+          "span": [
+            32,
+            33
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
   "errors": [
     {
       "actual": "string",

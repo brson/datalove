@@ -13,6 +13,7 @@
       "type_hint": "U32"
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": "#u32"
 }

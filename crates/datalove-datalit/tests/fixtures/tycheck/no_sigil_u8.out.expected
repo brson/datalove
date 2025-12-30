@@ -13,6 +13,7 @@
       "type_hint": "U8"
     }
   },
+  "diagnostics": [],
   "errors": [],
   "root_type": "u8"
 }

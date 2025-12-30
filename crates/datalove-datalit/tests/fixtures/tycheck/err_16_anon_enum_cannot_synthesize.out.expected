@@ -11,6 +11,22 @@
     },
     "type_hint": null
   },
+  "diagnostics": [
+    {
+      "code": "T016",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            0,
+            1
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "cannot infer type for anonymous enum"
+    }
+  ],
   "errors": [
     {
       "kind": "CannotSynthesize"
