@@ -169,7 +169,7 @@ mod unix_impl {
                         match self.leak_check_mode {
                             LeakCheckMode::Warn => eprintln!("WARNING: {}", msg),
                             LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => panic!("{}", msg),
-                            LeakCheckMode::Ignore => {}
+                            LeakCheckMode::Ignore => unreachable!(),
                         }
                     }
                 }
@@ -179,7 +179,7 @@ mod unix_impl {
                 match self.leak_check_mode {
                     LeakCheckMode::Warn => eprintln!("WARNING: {}", msg),
                     LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => panic!("{}", msg),
-                    LeakCheckMode::Ignore => {}
+                    LeakCheckMode::Ignore => unreachable!(),
                 }
             }
 
@@ -381,7 +381,7 @@ mod unix_impl {
                     LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => {
                         panic!("{}", full_report);
                     }
-                    LeakCheckMode::Ignore => {}
+                    LeakCheckMode::Ignore => unreachable!()
                 }
             }
         }
@@ -534,7 +534,7 @@ mod wasm_impl {
                     LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => {
                         panic!("{}", full_report);
                     }
-                    LeakCheckMode::Ignore => {}
+                    LeakCheckMode::Ignore => unreachable!()
                 }
             }
         }
@@ -1121,6 +1121,130 @@ mod tests {
                 let msg = e.downcast_ref::<String>().unwrap();
                 assert!(msg.contains("DATALOVE RUNTIME LEAK DETECTED"));
                 assert!(msg.contains("Backtrace:"));
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "free() parameter mismatch")]
+    fn test_free_size_mismatch_panic() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let ptr = rt.alloc(128, 8, 1);
+            // Free with wrong size.
+            rt.free(64, 8, 1, ptr);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "free() parameter mismatch")]
+    fn test_free_align_mismatch_panic() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let ptr = rt.alloc(128, 8, 1);
+            // Free with wrong alignment.
+            rt.free(128, 16, 1, ptr);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "free() parameter mismatch")]
+    fn test_free_count_mismatch_panic() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let ptr = rt.alloc(128, 8, 1);
+            // Free with wrong count.
+            rt.free(128, 8, 2, ptr);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "free() called on untracked pointer")]
+    fn test_free_untracked_pointer_panic() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            // Allocate and free properly.
+            let ptr = rt.alloc(128, 8, 1);
+            rt.free(128, 8, 1, ptr);
+            // Double free - pointer no longer tracked.
+            rt.free(128, 8, 1, ptr);
+        }
+    }
+
+    #[test]
+    fn test_free_mismatch_warn_mode_does_not_panic() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Warn);
+        unsafe {
+            let ptr = rt.alloc(128, 8, 1);
+            // Free with wrong size - should warn but not panic.
+            rt.free(64, 8, 1, ptr);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_free_untracked_warn_mode_does_not_panic() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Warn);
+        unsafe {
+            let ptr = rt.alloc(128, 8, 1);
+            rt.free(128, 8, 1, ptr);
+            // Double free - should warn but not panic.
+            rt.free(128, 8, 1, ptr);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_leak_warn_mode_does_not_panic() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Warn);
+        unsafe {
+            let _leak = rt.alloc(128, 8, 1);
+            // Should print warning but not panic.
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_free_mismatch_ignore_mode_silent() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Ignore);
+        unsafe {
+            let ptr = rt.alloc(128, 8, 1);
+            // Free with wrong size - should be silently ignored.
+            rt.free(64, 8, 1, ptr);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_free_untracked_ignore_mode_silent() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Ignore);
+        unsafe {
+            let ptr = rt.alloc(128, 8, 1);
+            rt.free(128, 8, 1, ptr);
+            // Double free - should be silently ignored.
+            rt.free(128, 8, 1, ptr);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_leak_many_allocations_truncates_output() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            // Create 15 leaks - output should be truncated to 10 plus "... and N more".
+            for _ in 0..15 {
+                let _leak = rt.alloc(32, 8, 1);
+            }
+
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                rt.shutdown();
+            }));
+
+            assert!(result.is_err());
+            if let Err(e) = result {
+                let msg = e.downcast_ref::<String>().unwrap();
+                assert!(msg.contains("Leaked allocations: 15"));
+                assert!(msg.contains("... and 5 more"));
             }
         }
     }
