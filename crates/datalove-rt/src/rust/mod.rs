@@ -2,6 +2,10 @@
 //!
 //! This module provides an idiomatic Rust interface around the C-ABI functions.
 
+mod aligned_buffer;
+
+pub use aligned_buffer::AlignedBuffer;
+
 use crate::c::{LocalRtHandle, RtStatus};
 
 /// Safe wrapper around a Datalove runtime instance.

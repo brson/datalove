@@ -1530,7 +1530,7 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
     // Try to get a key from empty map.
     let key = 42u32;
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
@@ -1546,7 +1546,7 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check that we got None.
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::None as u8);
 
     let status = unsafe {
@@ -1608,7 +1608,7 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
 
     // Get the key.
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
@@ -1624,7 +1624,7 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check that we got Some.
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     // Check the value.
@@ -1696,7 +1696,7 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
     // Try to get a key that doesn't exist.
     let key = 42u32;
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
@@ -1712,7 +1712,7 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check that we got None.
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::None as u8);
 
     let status = unsafe {
@@ -1779,7 +1779,7 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
     // Get each key and verify value.
     for i in 0u32..5 {
         let key = i * 10;
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
@@ -1794,7 +1794,7 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-        let tag = option_buffer[0];
+        let tag = unsafe { *option_buffer.as_ptr() };
         assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
         let value_ptr = unsafe {
@@ -1864,7 +1864,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     // Get and verify initial value.
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
@@ -1878,7 +1878,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     let value_ptr = unsafe {
@@ -1903,7 +1903,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Get and verify updated value.
-    let mut option_buffer2 = vec![0u8; option_layout.size as usize];
+    let mut option_buffer2 = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
@@ -1917,7 +1917,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag2 = option_buffer2[0];
+    let tag2 = unsafe { *option_buffer2.as_ptr() };
     assert_eq!(tag2, rtdt::OptionTag::Some as u8);
 
     let value_ptr2 = unsafe {
@@ -1990,7 +1990,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
     // Get each key and verify value.
     for i in 0u32..50 {
         let key = i;
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
@@ -2005,7 +2005,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-        let tag = option_buffer[0];
+        let tag = unsafe { *option_buffer.as_ptr() };
         assert_eq!(tag, rtdt::OptionTag::Some as u8, "Key {} should exist", i);
 
         let value_ptr = unsafe {
@@ -2018,7 +2018,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
     // Try to get non-existent keys.
     for i in 50u32..55 {
         let key = i;
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
@@ -2033,7 +2033,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-        let tag = option_buffer[0];
+        let tag = unsafe { *option_buffer.as_ptr() };
         assert_eq!(tag, rtdt::OptionTag::None as u8, "Key {} should not exist", i);
     }
 
@@ -2551,7 +2551,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
         if i % 3 != 0 {
             // Key should exist.
             let key = i;
-            let mut option_result = vec![0u8; option_layout.size as usize];
+            let mut option_result = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
             let status = unsafe {
                 datalove_rt::c::dtlv_rti_btreemap_get_local(
@@ -2567,7 +2567,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Check that the option tag is Some.
-            assert_eq!(option_result[0], rtdt::OptionTag::Some as u8);
+            assert_eq!(unsafe { *option_result.as_ptr() }, rtdt::OptionTag::Some as u8);
 
             // Verify the value is correct.
             unsafe {
@@ -2680,7 +2680,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
 
     for i in 0u32..200 {
         let key = i;
-        let mut option_result = vec![0u8; option_layout.size as usize];
+        let mut option_result = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
@@ -2694,12 +2694,12 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-        assert_eq!(option_result[0], rtdt::OptionTag::Some as u8);
+        assert_eq!(unsafe { *option_result.as_ptr() }, rtdt::OptionTag::Some as u8);
     }
 
     for i in 300u32..500 {
         let key = i;
-        let mut option_result = vec![0u8; option_layout.size as usize];
+        let mut option_result = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
@@ -2713,7 +2713,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-        assert_eq!(option_result[0], rtdt::OptionTag::Some as u8);
+        assert_eq!(unsafe { *option_result.as_ptr() }, rtdt::OptionTag::Some as u8);
     }
 
     // Clean up.
@@ -3052,7 +3052,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
     // Verify we can retrieve the value.
     let (option_tydesc, _inner) = create_option_u32_tydesc(&arena);
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let key = rtdt::U32(42);
     let status = unsafe {
@@ -3068,7 +3068,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     let value_ptr = unsafe {
@@ -3139,7 +3139,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     for (k, v) in &[(10, 100), (20, 200), (30, 300), (40, 400), (50, 500)] {
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
         let key = rtdt::U32(*k);
         let status = unsafe {
@@ -3155,7 +3155,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-        let tag = option_buffer[0];
+        let tag = unsafe { *option_buffer.as_ptr() };
         assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
         let value_ptr = unsafe {
@@ -3224,7 +3224,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
     // Verify key 10 has the updated value.
     let (option_tydesc, _inner) = create_option_u32_tydesc(&arena);
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let key = rtdt::U32(10);
     let status = unsafe {
@@ -3240,7 +3240,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     let value_ptr = unsafe {

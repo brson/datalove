@@ -28,7 +28,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Clone the map.
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -91,7 +91,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Clone the map.
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -156,7 +156,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Clone the map.
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -221,7 +221,7 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Clone the map.
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -284,7 +284,7 @@ fn test_clone_empty_set() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Clone the set.
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -347,7 +347,7 @@ fn test_clone_set_single_element() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Clone the set.
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -412,7 +412,7 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Clone the set.
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -477,7 +477,7 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Clone the set.
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -542,7 +542,7 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
     let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
 
     // Clone the set.
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -636,7 +636,7 @@ proptest! {
 
         // Clone the value into a buffer.
         let tydesc = inst.tydesc.as_ref();
-        let mut clone_buffer = vec![0u8; tydesc.size as usize];
+        let mut clone_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
@@ -697,7 +697,7 @@ proptest! {
         let buffer_size = tydesc.size as usize;
 
         // Clone once.
-        let mut clone1_buffer = vec![0u8; buffer_size];
+        let mut clone1_buffer = datalove_rt::rust::AlignedBuffer::new(buffer_size);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
@@ -710,7 +710,7 @@ proptest! {
         prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         // Clone twice.
-        let mut clone2_buffer = vec![0u8; buffer_size];
+        let mut clone2_buffer = datalove_rt::rust::AlignedBuffer::new(buffer_size);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
@@ -780,7 +780,7 @@ proptest! {
 
         // Clone the moderate-sized container.
         let tydesc = inst.tydesc.as_ref();
-        let mut clone_buffer = vec![0u8; tydesc.size as usize];
+        let mut clone_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
@@ -840,7 +840,7 @@ proptest! {
 
         // Clone the moderate-sized container.
         let tydesc = inst.tydesc.as_ref();
-        let mut clone_buffer = vec![0u8; tydesc.size as usize];
+        let mut clone_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),
@@ -924,7 +924,7 @@ fn test_clone_leak_regression_seed_980509222901775213() {
 
     // Clone the moderate-sized container.
     let tydesc = inst.tydesc.as_ref();
-    let mut clone_buffer = vec![0u8; tydesc.size as usize];
+    let mut clone_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc.size as usize);
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
             rt.handle(),

@@ -1062,7 +1062,7 @@ proptest! {
             let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc));
 
             for (key, expected_value) in &expected_values {
-                let mut option_buffer = vec![0u8; option_layout.size as usize];
+                let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
@@ -1076,7 +1076,7 @@ proptest! {
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
                 // Check we got Some.
-                let tag = option_buffer[0];
+                let tag = unsafe { *option_buffer.as_ptr() };
                 prop_assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
                 // Check the value matches.
@@ -1137,7 +1137,7 @@ proptest! {
             let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(&*option_tydesc as *const rtdt::TyDesc));
 
             for key in &query_keys {
-                let mut option_buffer = vec![0u8; option_layout.size as usize];
+                let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
@@ -1150,7 +1150,7 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-                let tag = option_buffer[0];
+                let tag = unsafe { *option_buffer.as_ptr() };
 
                 if inserted_set.contains(key) {
                     // Key exists, should get Some.
@@ -1209,7 +1209,7 @@ proptest! {
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
                 // After each update, verify we get the current value.
-                let mut option_buffer = vec![0u8; option_layout.size as usize];
+                let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
                 let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
@@ -1222,7 +1222,7 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-                let tag = option_buffer[0];
+                let tag = unsafe { *option_buffer.as_ptr() };
                 prop_assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
                 let value_ptr = option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32;
@@ -1281,7 +1281,7 @@ proptest! {
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
                 } else {
                     // Get operation.
-                    let mut option_buffer = vec![0u8; option_layout.size as usize];
+                    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
                     let status = datalove_rt::c::dtlv_rti_btreemap_get_local(
                         rt,
@@ -1294,7 +1294,7 @@ proptest! {
                     );
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-                    let tag = option_buffer[0];
+                    let tag = unsafe { *option_buffer.as_ptr() };
 
                     if let Some(expected_value) = expected_values.get(&key) {
                         // Key should exist.

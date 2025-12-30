@@ -643,7 +643,7 @@ proptest! {
 
         // Clone the value.
         let tydesc_ref = inst.tydesc.as_ref();
-        let mut clone_buffer = vec![0u8; tydesc_ref.size as usize];
+        let mut clone_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc_ref.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_clone_local(
                 rt.handle(),

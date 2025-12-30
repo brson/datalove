@@ -2731,7 +2731,7 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
 
     // Allocate result buffer.
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut result_buffer = vec![0u8; result_size];
+    let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
@@ -2839,7 +2839,7 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
 
     let (result_tydesc, _tensor_tydesc_for_result, _) = create_result_tensor_u32_tydesc(&arena, 2);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut result_buffer = vec![0u8; result_size];
+    let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
@@ -2935,7 +2935,7 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
 
     let (result_tydesc, _tensor_tydesc_for_result, _) = create_result_tensor_u32_tydesc(&arena, 2);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut result_buffer = vec![0u8; result_size];
+    let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
@@ -3029,7 +3029,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
 
     let (result_tydesc, _tensor_tydesc_for_result, _) = create_result_tensor_u32_tydesc(&arena, 2);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut result_buffer = vec![0u8; result_size];
+    let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
@@ -3125,7 +3125,7 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
 
     let (result_tydesc, _tensor_tydesc_for_result, _) = create_result_tensor_u32_tydesc(&arena, 2);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut result_buffer = vec![0u8; result_size];
+    let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
@@ -3215,7 +3215,7 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
 
     let (result_tydesc, _tensor_tydesc_for_result, _) = create_result_tensor_u32_tydesc(&arena, 3);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut result_buffer = vec![0u8; result_size];
+    let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
@@ -3318,7 +3318,7 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
     // Create Result type descriptor.
     let (result_tydesc, _tensor_tydesc_for_result, _) = create_result_tensor_u32_tydesc(&arena, 3);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut result_buffer = vec![0u8; result_size];
+    let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
@@ -3423,7 +3423,7 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
 
     let (result_tydesc, _tensor_tydesc_for_result, _) = create_result_tensor_u32_tydesc(&arena, 2);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut result_buffer = vec![0u8; result_size];
+    let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
@@ -3519,7 +3519,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
 
     let (slice_result_tydesc, _tensor_tydesc_for_result, _) = create_result_tensor_u32_tydesc(&arena, 2);
     let slice_result_size = unsafe { (*slice_result_tydesc).size } as usize;
-    let mut slice_result_buffer = vec![0u8; slice_result_size];
+    let mut slice_result_buffer = datalove_rt::rust::AlignedBuffer::new(slice_result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
@@ -3551,7 +3551,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
 
     let (reshape_result_tydesc, _tensor_tydesc_for_result2, _) = create_result_tensor_u32_tydesc(&arena, 1);
     let reshape_result_size = unsafe { (*reshape_result_tydesc).size } as usize;
-    let mut reshape_result_buffer = vec![0u8; reshape_result_size];
+    let mut reshape_result_buffer = datalove_rt::rust::AlignedBuffer::new(reshape_result_size);
 
     // Copy sliced tensor to mutable location.
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
@@ -3701,7 +3701,7 @@ fn test_tensor_reshape_empty_new_shape() -> AnyResult<()> {
     let tensor_align = std::mem::align_of::<rtdt::Tensor>() as u32;
     let (result_tydesc, _result_tensor_tydesc, _result_elem_tydesc) = create_result_tensor_u32_tydesc(&arena, 2);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut reshape_result_buffer = vec![0u8; result_size];
+    let mut reshape_result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
@@ -3792,7 +3792,7 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
     let tensor_align = std::mem::align_of::<rtdt::Tensor>() as u32;
     let (result_tydesc, _rt2, _re2) = create_result_tensor_u32_tydesc(&arena, 2);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut slice_result_buffer = vec![0u8; result_size];
+    let mut slice_result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
@@ -3829,7 +3829,7 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
     // Need a 1D tensor tydesc for the reshape target.
     let (result_1d_tydesc, _rt1, _re1) = create_result_tensor_u32_tydesc(&arena, 1);
     let result_1d_size = unsafe { (*result_1d_tydesc).size } as usize;
-    let mut reshape_result_buffer = vec![0u8; result_1d_size];
+    let mut reshape_result_buffer = datalove_rt::rust::AlignedBuffer::new(result_1d_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
@@ -3956,7 +3956,7 @@ fn test_tensor_slice_rank_zero_tydesc() -> AnyResult<()> {
     let tensor_align = std::mem::align_of::<rtdt::Tensor>() as u32;
     let (result_tydesc, _rt0, _re0) = create_result_tensor_u32_tydesc(&arena, 0);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut slice_result_buffer = vec![0u8; result_size];
+    let mut slice_result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_slice_local(
@@ -4046,7 +4046,7 @@ fn test_tensor_reshape_rank_zero_tensor_tydesc() -> AnyResult<()> {
     let tensor_align = std::mem::align_of::<rtdt::Tensor>() as u32;
     let (result_tydesc, _rt00, _re00) = create_result_tensor_u32_tydesc(&arena, 0);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut reshape_result_buffer = vec![0u8; result_size];
+    let mut reshape_result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
@@ -4221,7 +4221,7 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
     let tensor_align = std::mem::align_of::<rtdt::Tensor>() as u32;
     let (result_tydesc, _rt22, _re22) = create_result_tensor_u32_tydesc(&arena, 2);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut reshape_result_buffer = vec![0u8; result_size];
+    let mut reshape_result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_reshape_local(
@@ -4366,7 +4366,7 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
 
     let (result_tydesc, _rt1d, _re1d) = create_result_tensor_u32_tydesc(&arena, 1);
     let result_size = unsafe { (*result_tydesc).size } as usize;
-    let mut result_buffer = vec![0u8; result_size];
+    let mut result_buffer = datalove_rt::rust::AlignedBuffer::new(result_size);
 
     // Use the original tensor_tydesc (rank 3) for the input.
     let status = unsafe {

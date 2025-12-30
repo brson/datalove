@@ -409,7 +409,7 @@ fn test_list_pop_empty() -> AnyResult<()> {
 
     // Try to pop from empty list.
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_pop_local(
@@ -423,7 +423,7 @@ fn test_list_pop_empty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check that we got None.
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::None as u8);
 
     // Clean up.
@@ -484,7 +484,7 @@ fn test_list_push_pop() -> AnyResult<()> {
 
     // Pop.
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_pop_local(
@@ -498,7 +498,7 @@ fn test_list_push_pop() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check that we got Some(42).
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     let value_ptr = unsafe {
@@ -558,7 +558,7 @@ fn test_list_get_empty() -> AnyResult<()> {
 
     // Try to get element at index 0.
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
@@ -573,7 +573,7 @@ fn test_list_get_empty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check that we got None.
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::None as u8);
 
     // Clean up.
@@ -635,7 +635,7 @@ fn test_list_get_valid() -> AnyResult<()> {
 
     // Get element at index 1.
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
@@ -650,7 +650,7 @@ fn test_list_get_valid() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check that we got Some(10).
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     let value_ptr = unsafe {
@@ -718,7 +718,7 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
 
     // Try to get element at index 5.
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
@@ -733,7 +733,7 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check that we got None.
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::None as u8);
 
     // Clean up.
@@ -1022,7 +1022,7 @@ fn test_list_insert_at_start() -> AnyResult<()> {
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     for (idx, expected) in [(0, 5), (1, 10), (2, 20), (3, 30)] {
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
@@ -1035,7 +1035,7 @@ fn test_list_insert_at_start() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-        let tag = option_buffer[0];
+        let tag = unsafe { *option_buffer.as_ptr() };
         assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
         let value_ptr = unsafe {
@@ -1104,7 +1104,7 @@ fn test_list_remove_middle() -> AnyResult<()> {
 
     // Remove element at index 2 (value 20).
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_remove_local(
@@ -1119,7 +1119,7 @@ fn test_list_remove_middle() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check removed value.
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     let value_ptr = unsafe {
@@ -1521,7 +1521,7 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_pop_local(
@@ -1534,7 +1534,7 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::None as u8);
 
     let status = unsafe {
@@ -1593,7 +1593,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
     assert_eq!(list.size, 1);
 
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_pop_local(
@@ -1606,7 +1606,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     assert_eq!(list.size, 0);
@@ -1663,7 +1663,7 @@ fn test_list_get_empty_string() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
@@ -1677,7 +1677,7 @@ fn test_list_get_empty_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::None as u8);
 
     let status = unsafe {
@@ -1738,7 +1738,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
     }
 
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
@@ -1752,7 +1752,7 @@ fn test_list_get_valid_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     // Clean up the cloned option value.
@@ -1822,7 +1822,7 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
     }
 
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_get_local(
@@ -1836,7 +1836,7 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::None as u8);
 
     let status = unsafe {
@@ -2105,7 +2105,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
     }
 
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_remove_local(
@@ -2119,7 +2119,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     assert_eq!(list.size, 4);
@@ -2212,7 +2212,7 @@ fn test_list_set_valid() -> AnyResult<()> {
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     for (idx, expected) in [(0, 10), (1, 999), (2, 30)] {
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
@@ -2225,7 +2225,7 @@ fn test_list_set_valid() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-        let tag = option_buffer[0];
+        let tag = unsafe { *option_buffer.as_ptr() };
         assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
         let value_ptr = unsafe {
@@ -2478,7 +2478,7 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     for (idx, expected) in slice.iter().enumerate() {
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
@@ -2491,7 +2491,7 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-        let tag = option_buffer[0];
+        let tag = unsafe { *option_buffer.as_ptr() };
         assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
         let value_ptr = unsafe {
@@ -2566,7 +2566,7 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     for (idx, expected) in slice.iter().enumerate() {
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
@@ -2665,7 +2665,7 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
     let expected: [u32; 5] = [1, 2, 3, 4, 5];
 
     for (idx, exp) in expected.iter().enumerate() {
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
@@ -2908,7 +2908,7 @@ fn test_list_insert_at_end() -> AnyResult<()> {
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     for (idx, expected) in [(0, 10), (1, 20), (2, 30)] {
-        let mut option_buffer = vec![0u8; option_layout.size as usize];
+        let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,
@@ -3058,7 +3058,7 @@ fn test_list_remove_last() -> AnyResult<()> {
 
     // Remove last element (index 2).
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
-    let mut option_buffer = vec![0u8; option_layout.size as usize];
+    let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_remove_local(
@@ -3072,7 +3072,7 @@ fn test_list_remove_last() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let tag = option_buffer[0];
+    let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
     let value_ptr = unsafe {
@@ -3085,7 +3085,7 @@ fn test_list_remove_last() -> AnyResult<()> {
 
     // Verify remaining elements [10, 20].
     for (idx, expected) in [(0, 10), (1, 20)] {
-        let mut opt_buf = vec![0u8; option_layout.size as usize];
+        let mut opt_buf = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
         let status = unsafe {
             datalove_rt::c::dtlv_rti_list_get_local(
                 rt,

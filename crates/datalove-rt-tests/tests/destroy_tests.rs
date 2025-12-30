@@ -32,7 +32,7 @@ fn test_destroy_int_small() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Int>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Int>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -85,7 +85,7 @@ fn test_destroy_int_large() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Int>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Int>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -137,7 +137,7 @@ fn test_destroy_list_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::List>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::List>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -190,7 +190,7 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::List>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::List>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -243,7 +243,7 @@ fn test_destroy_list_strings() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::List>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::List>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -296,7 +296,7 @@ fn test_destroy_list_nested() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::List>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::List>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -351,7 +351,7 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
     assert!(!rt.is_null());
 
     let tydesc_size = inst.tydesc.size() as usize;
-    let mut cloned_buffer = vec![0u8; tydesc_size];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -400,7 +400,7 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
     assert!(!rt.is_null());
 
     let tydesc_size = inst.tydesc.size() as usize;
-    let mut cloned_buffer = vec![0u8; tydesc_size];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -449,7 +449,7 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
     assert!(!rt.is_null());
 
     let tydesc_size = inst.tydesc.size() as usize;
-    let mut cloned_buffer = vec![0u8; tydesc_size];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -498,7 +498,7 @@ fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
     assert!(!rt.is_null());
 
     let tydesc_size = inst.tydesc.size() as usize;
-    let mut cloned_buffer = vec![0u8; tydesc_size];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -546,7 +546,7 @@ fn test_destroy_set_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -601,7 +601,7 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -656,7 +656,7 @@ fn test_destroy_set_strings() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -711,7 +711,7 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -767,7 +767,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Set>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Set>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -821,7 +821,7 @@ fn test_destroy_option_none() -> AnyResult<()> {
     assert!(!rt.is_null());
 
     let tydesc_size = inst.tydesc.size() as usize;
-    let mut cloned_buffer = vec![0u8; tydesc_size];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -870,7 +870,7 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
     assert!(!rt.is_null());
 
     let tydesc_size = inst.tydesc.size() as usize;
-    let mut cloned_buffer = vec![0u8; tydesc_size];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -919,7 +919,7 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
     assert!(!rt.is_null());
 
     let tydesc_size = inst.tydesc.size() as usize;
-    let mut cloned_buffer = vec![0u8; tydesc_size];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(tydesc_size);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -967,7 +967,7 @@ fn test_destroy_map_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -1016,7 +1016,7 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -1065,7 +1065,7 @@ fn test_destroy_map_strings() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -1114,7 +1114,7 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -1163,7 +1163,7 @@ fn test_destroy_map_nested() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
@@ -1221,7 +1221,7 @@ fn test_destroy_map_large() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
     assert!(!rt.is_null());
 
-    let mut cloned_buffer = vec![0u8; std::mem::size_of::<datalove_rt::rtdt::Map>()];
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rt::rtdt::Map>());
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_clone_local(
