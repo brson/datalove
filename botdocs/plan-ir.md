@@ -316,6 +316,7 @@ Implemented:
   - `Operand::ExternalSlot` - read var bindings from prior units
   - `SlotDest::External` - write to var bindings from prior units
   - `FuncRef::External` - call functions from prior units
+  - External function calls use callee's `ExecutionContext` for local function lookups
 - Loop/break/continue:
   - `loop_stack` in LowerCtx tracks (continue_target, break_target) for nested loops
   - `break` lowers to `Goto(loop_exit)`
@@ -381,7 +382,7 @@ Files created:
 - `crates/datalove-datafun/tests/module_interp3_tests.rs` - test harness
 - `crates/datalove-datafun/tests/interp3_tests.rs` - test harness
 - `crates/datalove-datafun/tests/fixtures/module_interp3/` - 5 worldfiles
-- `crates/datalove-datafun/tests/fixtures/interp3/` - 25 worldfiles (cross-unit + loop + collection tests)
+- `crates/datalove-datafun/tests/fixtures/interp3/` - 48 worldfiles (cross-unit + loop + collection + error tests)
 
 Working:
 - Module-only execution: parse -> typecheck -> lower -> IR interpret -> pretty print
@@ -390,6 +391,7 @@ Working:
 - Cross-unit typechecking: bindings from prior units visible in later units
 - Cross-unit lowering: ExternalValue/ExternalSlot/FuncRef::External references
 - Cross-unit execution: ScriptEnvironment tracks frames/functions across units
+- Module error reporting: typecheck errors reported per module, lowering skipped for errored modules
 
 Cross-unit test coverage (tests 010-018):
 - `010_crossunit_value.world` - let binding across units
@@ -421,13 +423,27 @@ Collection in function/module tests (026-031):
 - `030_set_in_module.world` - set in module function
 - `031_map_in_module.world` - map in module function
 
-Try operator tests (032-033):
+Try operator tests (032-041):
 - `032_try_option_fails_in_script.world` - `?` operator early return in script
 - `033_try_result_works_in_script.world` - `!` operator in script
+- `034-041` - Error type and Result er variant tests
+
+Cross-unit function dispatch tests (050-060):
+- `050_module_to_module_import.world` - module B requires A, imports and calls A's function
+- `051_module_multiple_local_functions.world` - module with add_one, add_two, add_four
+- `052_script_multiple_local_functions.world` - script unit with multiple local functions
+- `053_script_to_prior_script_call.world` - unit 2 calls function from unit 1
+- `054_import_inheritance_across_units.world` - import from unit 1 used in unit 2
+- `055_module_to_module_chain.world` - base→mid→top chain
+- `056_script_missing_require.world` - error case: import without require
+- `057_script_missing_import.world` - error case: call without import
+- `058_module_typecheck_error.world` - module typecheck error reporting
+- `059_module_undefined_import.world` - module import error without require
+- `060_script_u32_function.world` - simple script function with int type
 
 **Test counts:**
-- interp3_tests: 29 tests (was 25)
-- module_interp3_tests: 8 tests (was 5)
+- interp3_tests: 48 tests
+- module_interp3_tests: 9 tests
 - module_interp_tests: 219 tests
 - All tests pass with `DATALOVE_LEAK_CHECK=panic-backtrace`
 
