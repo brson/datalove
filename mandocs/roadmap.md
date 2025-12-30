@@ -11,7 +11,10 @@ With core->runtime calls.
 
 # in progress
 
-- use a fully-cfgd ir
+- ir and interp3
+  - fix pretty printer in worldfile_analysis_modules_ir3
+  - fix function resolution
+  - implement error and add missing ! tests
 - script/function unification semantics
 - move/clone semantics - moves-etc.md
 - argument modes - moves-etc.md
