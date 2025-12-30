@@ -12,8 +12,6 @@ With core->runtime calls.
 # in progress
 
 - ir and interp3
-  - investigate copy_value/clone_value shenanigans
-  - operator reference semantics
   - fix function resolution
   - implement error and add missing ! tests
 - script/function unification semantics
