@@ -441,6 +441,9 @@ pub struct LowerCtx<'db> {
     return_type: Option<IrType>,
     /// Whether we're in a script unit (vs function).
     is_script_unit: bool,
+    /// Temporary values to drop after the current expression is evaluated.
+    /// These are created during operand lowering for compound expressions.
+    expr_temps: Vec<(ValueId, IrType)>,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -467,6 +470,7 @@ impl<'db> LowerCtx<'db> {
             scope_tracker: ScopeTracker::new(),
             return_type: None,
             is_script_unit: false,
+            expr_temps: Vec::new(),
         }
     }
 
@@ -504,6 +508,7 @@ impl<'db> LowerCtx<'db> {
             scope_tracker: ScopeTracker::new(),
             return_type: None,
             is_script_unit: false,
+            expr_temps: Vec::new(),
         }
     }
 
@@ -582,6 +587,7 @@ impl<'db> LowerCtx<'db> {
             // Script units have Result<()> return type for ! operator.
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
+            expr_temps: Vec::new(),
         }
     }
 
@@ -656,6 +662,21 @@ impl<'db> LowerCtx<'db> {
     fn emit_drops(&mut self, operands: Vec<Operand>) {
         for operand in operands {
             self.emit(Instruction::Drop { operand });
+        }
+    }
+
+    /// Record an expression temporary that needs dropping after the operation.
+    fn record_expr_temp(&mut self, value: ValueId, ty: IrType) {
+        if !is_copy_type(&ty) {
+            self.expr_temps.push((value, ty));
+        }
+    }
+
+    /// Emit Drop instructions for all expression temporaries and clear the list.
+    fn emit_expr_temp_drops(&mut self) {
+        let temps = std::mem::take(&mut self.expr_temps);
+        for (value, _ty) in temps {
+            self.emit(Instruction::Drop { operand: Operand::Value(value) });
         }
     }
 
@@ -1012,7 +1033,10 @@ fn lower_operand<'db>(
         }
         _ => {
             // Compound expression: lower to a value.
+            let expr_type = ctx.expr_type(expr);
             let value_id = lower_expression(ctx, expr)?;
+            // Record as temp for dropping after the borrowing operation completes.
+            ctx.record_expr_temp(value_id, expr_type);
             Ok(Operand::Value(value_id))
         }
     }
@@ -1128,6 +1152,7 @@ fn lower_expression<'db>(
                         lhs,
                         rhs,
                     });
+                    ctx.emit_expr_temp_drops();
                     return Ok(dest);
                 }
                 ast::BinOp::SubChecked | ast::BinOp::SubOptional => {
@@ -1139,6 +1164,7 @@ fn lower_expression<'db>(
                         lhs,
                         rhs,
                     });
+                    ctx.emit_expr_temp_drops();
                     return Ok(dest);
                 }
                 ast::BinOp::MulChecked | ast::BinOp::MulOptional => {
@@ -1150,6 +1176,7 @@ fn lower_expression<'db>(
                         lhs,
                         rhs,
                     });
+                    ctx.emit_expr_temp_drops();
                     return Ok(dest);
                 }
                 ast::BinOp::DivChecked | ast::BinOp::DivOptional => {
@@ -1161,6 +1188,7 @@ fn lower_expression<'db>(
                         lhs,
                         rhs,
                     });
+                    ctx.emit_expr_temp_drops();
                     return Ok(dest);
                 }
             };
@@ -1171,6 +1199,8 @@ fn lower_expression<'db>(
                 lhs,
                 rhs,
             });
+            // Drop expression temporaries after borrowing operation completes.
+            ctx.emit_expr_temp_drops();
             Ok(dest)
         }
         ExprFunKind::UnaryOp(unary) => {
@@ -1192,6 +1222,8 @@ fn lower_expression<'db>(
                 op,
                 operand,
             });
+            // Drop expression temporaries after borrowing operation completes.
+            ctx.emit_expr_temp_drops();
             Ok(dest)
         }
         ExprFunKind::FunctionCall(call) => {

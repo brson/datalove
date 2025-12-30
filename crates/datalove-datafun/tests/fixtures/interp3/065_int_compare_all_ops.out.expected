@@ -8,7 +8,7 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn add_one(v0):\nblock0:\n    v1 = const 1int\n    v2 = add v0, v1\n    drop v1\n    drop v0\n    return v2\nfn add_two(v0):\nblock0:\n    v1 = call f0(v0)\n    v2 = call f0(v1)\n    drop v0\n    return v2\nfn add_four(v0):\nblock0:\n    v1 = call f1(v0)\n    v2 = call f1(v1)\n    drop v0\n    return v2\nexports:\n    add_one = f0\n    add_two = f1\n    add_four = f2\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 200u32\n    v2 = eq v0, v0\n    v3 = ne v0, v1\n    v4 = ge v1, v0\n    unit_end\nexports:\n    a = v0\n    b = v1\n    eq = v2\n    ne = v3\n    lt = v0\n    ge = v4\n",
             ),
             output: "(fragment executed)",
         ),
@@ -20,9 +20,9 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 3int\n    v1 = call unit0.f2(v0)\n    unit_end v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = copy unit0.v2\n    unit_end v0\n",
             ),
-            output: "@7",
+            output: "@true",
         ),
     ],
 )

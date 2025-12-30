@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+let a = @100
+let b = @200
+
+let eq = a == a
+let ne = a != b
+let lt = a < b
+let le = a <= a
+let gt = b > a
+let ge = b >= a
+
+----------
+scriptunit-expr
+----------
+
+// All should be true.
+eq and ne and lt and le and gt and ge

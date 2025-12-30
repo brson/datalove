@@ -618,3 +618,59 @@ pub(crate) unsafe fn int_div_checked_impl(
     }
 }
 
+/// Compare two bigints.
+///
+/// Returns -1 if a < b, 0 if a == b, 1 if a > b.
+pub(crate) unsafe fn int_cmp_impl(
+    a_in: *const u8,
+    b_in: *const u8,
+) -> i32 {
+    unsafe {
+        let a = &*(a_in as *const rtdt::Int);
+        let b = &*(b_in as *const rtdt::Int);
+
+        let a_size = a.size_and_sign;
+        let b_size = b.size_and_sign;
+
+        // Handle zero cases.
+        if a_size == 0 && b_size == 0 {
+            return 0;
+        }
+        if a_size == 0 {
+            // a is zero, b is non-zero.
+            return if b_size > 0 { -1 } else { 1 };
+        }
+        if b_size == 0 {
+            // b is zero, a is non-zero.
+            return if a_size > 0 { 1 } else { -1 };
+        }
+
+        // Both non-zero. Compare signs first.
+        let a_is_neg = a_size < 0;
+        let b_is_neg = b_size < 0;
+
+        if a_is_neg && !b_is_neg {
+            return -1; // negative < positive
+        }
+        if !a_is_neg && b_is_neg {
+            return 1; // positive > negative
+        }
+
+        // Same sign. Compare magnitudes.
+        let a_abs_size = a_size.abs() as usize;
+        let b_abs_size = b_size.abs() as usize;
+
+        let a_limbs = std::slice::from_raw_parts(a.data, a_abs_size);
+        let b_limbs = std::slice::from_raw_parts(b.data, b_abs_size);
+
+        let mag_cmp = compare_magnitude(a_limbs, b_limbs);
+
+        // For negative numbers, larger magnitude means smaller value.
+        if a_is_neg {
+            -mag_cmp
+        } else {
+            mag_cmp
+        }
+    }
+}
+

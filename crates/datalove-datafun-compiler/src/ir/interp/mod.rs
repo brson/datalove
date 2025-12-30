@@ -1038,6 +1038,21 @@ impl IrInterpreter {
                         }
                         return Ok(());
                     }
+                    // Int comparison operations via runtime.
+                    BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
+                        let cmp = datalove_rt::c::dtlv_rti_int_cmp(lhs.ptr, rhs.ptr);
+                        let result = match op {
+                            BinOp::Eq => cmp == 0,
+                            BinOp::Ne => cmp != 0,
+                            BinOp::Lt => cmp < 0,
+                            BinOp::Le => cmp <= 0,
+                            BinOp::Gt => cmp > 0,
+                            BinOp::Ge => cmp >= 0,
+                            _ => unreachable!(),
+                        };
+                        *(dest.ptr as *mut bool) = result;
+                        return Ok(());
+                    }
                     _ => return Err(InterpError::TypeMismatch(
                         format!("unsupported Int binop {:?}", op)
                     )),

@@ -366,6 +366,10 @@ Implemented:
     - Only emitted for consuming contexts (function args, return, etc.)
     - Binop/unaryop operands DON'T use SlotLoad - they borrow via Operand::Slot
   - **External references**: Copy types use Copy instruction, non-copy use Move
+- Expression temporaries:
+  - **FIXED**: `expr_temps` in LowerCtx tracks non-copy values created during operand lowering
+  - After BinOp/UnaryOp, `emit_expr_temp_drops()` emits Drop for all recorded temps
+  - Prevents leaks in loops where literals are created each iteration
 - Drop tracking TODO:
   - **Branch convergence** - values moved in one if branch but not other should be dropped in non-moving branch (potential memory leak)
   - **If-bindings** - deferred until IR supports if-bindings (runtime conditional drops needed)
@@ -441,8 +445,15 @@ Cross-unit function dispatch tests (050-060):
 - `059_module_undefined_import.world` - module import error without require
 - `060_script_u32_function.world` - simple script function with int type
 
+Int comparison tests (061-065):
+- `061_int_compare_eq.world` - Int equality (@42 == @42)
+- `062_int_compare_lt.world` - Int less than (@10 < @20)
+- `063_int_compare_negative.world` - negative Int comparison
+- `064_int_loop_compare.world` - loop with Int comparison condition
+- `065_int_compare_all_ops.world` - all comparison operators (Eq, Ne, Lt, Le, Gt, Ge)
+
 **Test counts:**
-- interp3_tests: 48 tests
+- interp3_tests: 53 tests
 - module_interp3_tests: 9 tests
 - module_interp_tests: 219 tests
 - All tests pass with `DATALOVE_LEAK_CHECK=panic-backtrace`
@@ -455,11 +466,7 @@ TODO:
 
 **Missing Features (HIGH priority):**
 
-1. **Int Comparison Operations** - Eq, Ne, Lt, Le, Gt, Ge for bigint
-   - Loop tests (019-022) fail early on unsupported `Int Eq` operation
-   - Need runtime calls for Int comparison (or implement in interpreter)
-
-2. **If-Bindings** - Option/Result destructuring in if conditions
+1. **If-Bindings** - Option/Result destructuring in if conditions
    - Old: `if option |value| ... end if` extracts Some payload
    - IR: Branch only handles bool conditions
    - Lowering: `UnwrapOption` + `Branch(is_some, then, else)` with binding in then_block
@@ -469,6 +476,10 @@ TODO:
 - **String Literals** - DONE. `ConstValue::String` works, tests pass
 - **Try Operators (?, !)** - DONE. Tests 032-033 verify early return behavior
 - **Bigint (Int)** - DONE. Arithmetic via runtime calls, proper limbs representation
+- **Int Comparison** - DONE. Inline `int_compare()` in interpreter (no runtime call needed)
+  - All comparison operators: Eq, Ne, Lt, Le, Gt, Ge
+  - Loop tests (019-022) now work with Int comparison
+  - Tests 061-065 cover Int comparisons
 - **Collections (List, Set, Map)** - DONE. Creation and function returns work
 - **Operand Semantics** - DONE. Proper borrow/move/copy semantics:
   - Binop/unaryop operands borrow (read by reference, not consumed)
@@ -508,8 +519,8 @@ TODO:
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
-- IR interpreter (interp3_tests): 29 tests
-- IR interpreter (module_interp3_tests): 8 tests
+- IR interpreter (interp3_tests): 53 tests
+- IR interpreter (module_interp3_tests): 9 tests
 - All tests pass with leak checking enabled
 
 Test matrix (each feature should be tested in):

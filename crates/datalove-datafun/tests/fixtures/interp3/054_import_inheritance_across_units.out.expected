@@ -8,7 +8,7 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_one(v0):\nblock0:\n    v1 = const 1int\n    v2 = add v0, v1\n    drop v0\n    return v2\n",
+                ir: "fn add_one(v0):\nblock0:\n    v1 = const 1int\n    v2 = add v0, v1\n    drop v1\n    drop v0\n    return v2\n",
             ),
             output: "",
         ),

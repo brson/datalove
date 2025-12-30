@@ -361,6 +361,24 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_div_checked(
     }
 }
 
+/// Compare two bigints.
+///
+/// Returns -1 if a < b, 0 if a == b, 1 if a > b.
+/// Does not require runtime handle since no allocation is performed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_int_cmp(
+    a_in: *const u8,
+    b_in: *const u8,
+) -> i32 {
+    if a_in.is_null() || b_in.is_null() {
+        return 0; // Treat null as zero for comparison.
+    }
+
+    unsafe {
+        crate::impls::int_math::int_cmp_impl(a_in, b_in)
+    }
+}
+
 /// Destroys any type of value, freeing allocations recursively.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_any_destroy_local(
