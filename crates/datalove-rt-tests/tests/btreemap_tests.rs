@@ -2,11 +2,64 @@
 
 use rmx::prelude::*;
 use datalove_rt::rtdt;
+use std::cell::RefCell;
 use std::ptr;
 
+// ============================================================================
+// Type Descriptor Arena
+// ============================================================================
+
+/// Arena for allocating type descriptors in tests.
+struct TyDescArena {
+    ptrs: RefCell<Vec<*mut rtdt::TyDesc>>,
+    tuple_fields: RefCell<Vec<*mut [rtdt::TyInfoTupleField; 2]>>,
+}
+
+impl TyDescArena {
+    fn new() -> Self {
+        Self {
+            ptrs: RefCell::new(Vec::new()),
+            tuple_fields: RefCell::new(Vec::new()),
+        }
+    }
+
+    fn alloc(&self, td: rtdt::TyDesc) -> *const rtdt::TyDesc {
+        let ptr = Box::into_raw(Box::new(td));
+        self.ptrs.borrow_mut().push(ptr);
+        ptr
+    }
+
+    fn alloc_mut(&self, td: rtdt::TyDesc) -> *mut rtdt::TyDesc {
+        let ptr = Box::into_raw(Box::new(td));
+        self.ptrs.borrow_mut().push(ptr);
+        ptr
+    }
+
+    fn alloc_tuple_fields(&self, fields: [rtdt::TyInfoTupleField; 2]) -> *const rtdt::TyInfoTupleField {
+        let ptr = Box::into_raw(Box::new(fields));
+        self.tuple_fields.borrow_mut().push(ptr);
+        ptr as *const rtdt::TyInfoTupleField
+    }
+}
+
+impl Drop for TyDescArena {
+    fn drop(&mut self) {
+        for &ptr in self.ptrs.borrow().iter() {
+            unsafe { drop(Box::from_raw(ptr)); }
+        }
+        for &ptr in self.tuple_fields.borrow().iter() {
+            unsafe { drop(Box::from_raw(ptr)); }
+        }
+    }
+}
+
+// ============================================================================
+// Test Helper Functions
+// ============================================================================
+
 /// Create a u32 type descriptor.
-fn create_u32_tydesc() -> Box<rtdt::TyDesc> {
-    Box::new(rtdt::TyDesc {
+fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
+    arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
         size: 4,
         align: 4,
@@ -17,44 +70,48 @@ fn create_u32_tydesc() -> Box<rtdt::TyDesc> {
 }
 
 /// Create an Option<u32> type descriptor.
-fn create_option_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
-    let inner_tydesc = create_u32_tydesc();
+fn create_option_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rtdt::TyDesc) {
+    let inner_tydesc = create_u32_tydesc(arena);
 
     // Create the option tydesc first with placeholder size/align.
-    let mut option_tydesc = Box::new(rtdt::TyDesc {
+    let option_tydesc = arena.alloc_mut(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Option,
         size: 0,
         align: 0,
         type_info: rtdt::TyInfo {
             option: rtdt::TyInfoOption {
-                inner_tydesc: &*inner_tydesc as *const rtdt::TyDesc,
+                inner_tydesc,
             },
         },
     });
 
     // Now compute the layout.
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let option_layout = unsafe {
+        rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ptr(option_tydesc))
+    };
 
     // Update size and align.
-    option_tydesc.size = option_layout.size;
-    option_tydesc.align = option_layout.align;
+    unsafe {
+        (*option_tydesc).size = option_layout.size;
+        (*option_tydesc).align = option_layout.align;
+    }
 
     (option_tydesc, inner_tydesc)
 }
 
 /// Create a Map<u32, u32> type descriptor.
-fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
-    let key_tydesc = create_u32_tydesc();
-    let value_tydesc = create_u32_tydesc();
+fn create_map_u32_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rtdt::TyDesc, *const rtdt::TyDesc) {
+    let key_tydesc = create_u32_tydesc(arena);
+    let value_tydesc = create_u32_tydesc(arena);
 
-    let map_tydesc = Box::new(rtdt::TyDesc {
+    let map_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Map,
         size: std::mem::size_of::<rtdt::Map>() as u32,
         align: std::mem::align_of::<rtdt::Map>() as u32,
         type_info: rtdt::TyInfo {
             map: rtdt::TyInfoMap {
-                key_tydesc: &*key_tydesc as *const rtdt::TyDesc,
-                value_tydesc: &*value_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
+                value_tydesc,
             },
         },
     });
@@ -66,9 +123,10 @@ fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtd
 #[test]
 fn test_btreemap_create_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     // Allocate space for the map
     let mut map = rtdt::Map {
@@ -82,7 +140,7 @@ fn test_btreemap_create_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -96,7 +154,7 @@ fn test_btreemap_create_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -111,9 +169,10 @@ fn test_btreemap_create_empty() -> AnyResult<()> {
 #[test]
 fn test_btreemap_destroy_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -126,7 +185,7 @@ fn test_btreemap_destroy_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -135,7 +194,7 @@ fn test_btreemap_destroy_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -154,9 +213,10 @@ fn test_btreemap_destroy_empty() -> AnyResult<()> {
 #[test]
 fn test_btreemap_clear_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -169,7 +229,7 @@ fn test_btreemap_clear_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -179,7 +239,7 @@ fn test_btreemap_clear_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_clear_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -193,7 +253,7 @@ fn test_btreemap_clear_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -208,9 +268,10 @@ fn test_btreemap_clear_empty() -> AnyResult<()> {
 #[test]
 fn test_btreemap_create_null_checks() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -233,7 +294,7 @@ fn test_btreemap_create_null_checks() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             ptr::null_mut(),
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -248,9 +309,10 @@ fn test_btreemap_create_null_checks() -> AnyResult<()> {
 #[test]
 fn test_btreemap_destroy_null_checks() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -273,7 +335,7 @@ fn test_btreemap_destroy_null_checks() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             ptr::null_mut(),
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -288,9 +350,10 @@ fn test_btreemap_destroy_null_checks() -> AnyResult<()> {
 #[test]
 fn test_btreemap_clear_null_checks() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -313,7 +376,7 @@ fn test_btreemap_clear_null_checks() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_clear_local(
             rt,
             ptr::null_mut(),
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
@@ -328,9 +391,10 @@ fn test_btreemap_clear_null_checks() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_single() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -343,7 +407,7 @@ fn test_btreemap_insert_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -356,11 +420,11 @@ fn test_btreemap_insert_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key as *mut u32 as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value as *mut u32 as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -374,7 +438,7 @@ fn test_btreemap_insert_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -389,9 +453,10 @@ fn test_btreemap_insert_single() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_multiple() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -403,7 +468,7 @@ fn test_btreemap_insert_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -417,11 +482,11 @@ fn test_btreemap_insert_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -435,7 +500,7 @@ fn test_btreemap_insert_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -450,9 +515,10 @@ fn test_btreemap_insert_multiple() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_update() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -464,7 +530,7 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -477,11 +543,11 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key as *mut u32 as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value as *mut u32 as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -495,11 +561,11 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key2 as *mut u32 as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value2 as *mut u32 as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -511,7 +577,7 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -526,9 +592,10 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_with_split() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -540,7 +607,7 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -554,11 +621,11 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -572,7 +639,7 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -587,9 +654,10 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -601,7 +669,7 @@ fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -615,11 +683,11 @@ fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok, "Failed to insert key {}", i * 10);
@@ -633,7 +701,7 @@ fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -648,9 +716,10 @@ fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -662,7 +731,7 @@ fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -676,11 +745,11 @@ fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok, "Failed to insert key {}", i);
@@ -694,7 +763,7 @@ fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -709,9 +778,10 @@ fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -723,7 +793,7 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -737,11 +807,11 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok, "Failed to insert key {}", i);
@@ -755,7 +825,7 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -769,8 +839,8 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
 // ==================== String type helpers ====================
 
 /// Create a String type descriptor.
-fn create_string_tydesc() -> Box<rtdt::TyDesc> {
-    Box::new(rtdt::TyDesc {
+fn create_string_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
+    arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::String,
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
@@ -781,18 +851,18 @@ fn create_string_tydesc() -> Box<rtdt::TyDesc> {
 }
 
 /// Create a Map<String, String> type descriptor.
-fn create_map_string_string_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
-    let key_tydesc = create_string_tydesc();
-    let value_tydesc = create_string_tydesc();
+fn create_map_string_string_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rtdt::TyDesc, *const rtdt::TyDesc) {
+    let key_tydesc = create_string_tydesc(arena);
+    let value_tydesc = create_string_tydesc(arena);
 
-    let map_tydesc = Box::new(rtdt::TyDesc {
+    let map_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Map,
         size: std::mem::size_of::<rtdt::Map>() as u32,
         align: std::mem::align_of::<rtdt::Map>() as u32,
         type_info: rtdt::TyInfo {
             map: rtdt::TyInfoMap {
-                key_tydesc: &*key_tydesc as *const rtdt::TyDesc,
-                value_tydesc: &*value_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
+                value_tydesc,
             },
         },
     });
@@ -835,9 +905,10 @@ unsafe fn create_runtime_string(
 #[test]
 fn test_btreemap_create_empty_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -849,7 +920,7 @@ fn test_btreemap_create_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -861,7 +932,7 @@ fn test_btreemap_create_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -876,9 +947,10 @@ fn test_btreemap_create_empty_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_destroy_empty_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -890,7 +962,7 @@ fn test_btreemap_destroy_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -899,7 +971,7 @@ fn test_btreemap_destroy_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -917,9 +989,10 @@ fn test_btreemap_destroy_empty_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_clear_empty_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -931,7 +1004,7 @@ fn test_btreemap_clear_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -940,7 +1013,7 @@ fn test_btreemap_clear_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_clear_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -952,7 +1025,7 @@ fn test_btreemap_clear_empty_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -967,9 +1040,10 @@ fn test_btreemap_clear_empty_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_single_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -981,7 +1055,7 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -993,11 +1067,11 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
         let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key_str as *mut rtdt::String as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value_str as *mut rtdt::String as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -1012,7 +1086,7 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1027,9 +1101,10 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1041,7 +1116,7 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1057,11 +1132,11 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -1076,7 +1151,7 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1091,9 +1166,10 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_update_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1105,7 +1181,7 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1117,11 +1193,11 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
         let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key_str as *mut rtdt::String as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value_str as *mut rtdt::String as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         assert_eq!(map.len, 1);
@@ -1135,11 +1211,11 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
         let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key_str2 as *mut rtdt::String as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value_str2 as *mut rtdt::String as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         assert_eq!(map.len, 1);
@@ -1153,7 +1229,7 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1168,9 +1244,10 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1182,7 +1259,7 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1198,11 +1275,11 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
@@ -1217,7 +1294,7 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1232,9 +1309,10 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1246,7 +1324,7 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1262,11 +1340,11 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok, "Failed to insert key {}", key);
 
@@ -1281,7 +1359,7 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1296,9 +1374,10 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1310,7 +1389,7 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1326,11 +1405,11 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok, "Failed to insert key {}", key);
 
@@ -1345,7 +1424,7 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1360,9 +1439,10 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1374,7 +1454,7 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1390,11 +1470,11 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
             let status = datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key_str as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value_str as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             );
             assert_eq!(status, datalove_rt::c::RtStatus::Ok, "Failed to insert key {}", key);
 
@@ -1409,7 +1489,7 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1426,10 +1506,11 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_get_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
-    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1441,25 +1522,25 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Try to get a key from empty map.
     let key = 42u32;
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const u32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             option_buffer.as_mut_ptr(),
-            &*option_tydesc as *const rtdt::TyDesc,
+            option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1472,7 +1553,7 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1487,10 +1568,11 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
 #[test]
 fn test_btreemap_get_existing_key() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
-    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1502,7 +1584,7 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1515,28 +1597,28 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key as *mut u32 as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value as *mut u32 as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Get the key.
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const u32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             option_buffer.as_mut_ptr(),
-            &*option_tydesc as *const rtdt::TyDesc,
+            option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1556,7 +1638,7 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1571,10 +1653,11 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
 #[test]
 fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
-    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1586,7 +1669,7 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1600,11 +1683,11 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1612,18 +1695,18 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
 
     // Try to get a key that doesn't exist.
     let key = 42u32;
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const u32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             option_buffer.as_mut_ptr(),
-            &*option_tydesc as *const rtdt::TyDesc,
+            option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1636,7 +1719,7 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1651,10 +1734,11 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
 #[test]
 fn test_btreemap_get_multiple() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
-    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1666,7 +1750,7 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1680,17 +1764,17 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     // Get each key and verify value.
     for i in 0u32..5 {
@@ -1701,11 +1785,11 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 option_buffer.as_mut_ptr(),
-                &*option_tydesc as *const rtdt::TyDesc,
+                option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1724,7 +1808,7 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1739,10 +1823,11 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
 #[test]
 fn test_btreemap_get_after_update() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
-    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1754,7 +1839,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1767,16 +1852,16 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key as *mut u32 as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value as *mut u32 as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     // Get and verify initial value.
     let mut option_buffer = vec![0u8; option_layout.size as usize];
@@ -1784,11 +1869,11 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const u32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             option_buffer.as_mut_ptr(),
-            &*option_tydesc as *const rtdt::TyDesc,
+            option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1808,11 +1893,11 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key as *mut u32 as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value2 as *mut u32 as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1823,11 +1908,11 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const u32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             option_buffer2.as_mut_ptr(),
-            &*option_tydesc as *const rtdt::TyDesc,
+            option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1845,7 +1930,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1860,10 +1945,11 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
 #[test]
 fn test_btreemap_get_with_splits() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
-    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1875,7 +1961,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1889,17 +1975,17 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     // Get each key and verify value.
     for i in 0u32..50 {
@@ -1910,11 +1996,11 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 option_buffer.as_mut_ptr(),
-                &*option_tydesc as *const rtdt::TyDesc,
+                option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1938,11 +2024,11 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 option_buffer.as_mut_ptr(),
-                &*option_tydesc as *const rtdt::TyDesc,
+                option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1955,7 +2041,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1972,9 +2058,10 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -1986,7 +2073,7 @@ fn test_btreemap_remove_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1997,9 +2084,9 @@ fn test_btreemap_remove_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_remove_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const u32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2009,7 +2096,7 @@ fn test_btreemap_remove_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2024,9 +2111,10 @@ fn test_btreemap_remove_empty() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_single() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2038,7 +2126,7 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2051,11 +2139,11 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_insert_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &mut key as *mut u32 as *mut u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             &mut value as *mut u32 as *mut u8,
-            &*value_tydesc as *const rtdt::TyDesc,
+            value_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2066,9 +2154,9 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_remove_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const u32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2078,7 +2166,7 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2093,9 +2181,10 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2107,7 +2196,7 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2121,11 +2210,11 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2138,9 +2227,9 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_remove_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const u32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2150,7 +2239,7 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2165,9 +2254,10 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_multiple() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2179,7 +2269,7 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2193,11 +2283,11 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2211,9 +2301,9 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2224,7 +2314,7 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2239,9 +2329,10 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_all() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2253,7 +2344,7 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2267,11 +2358,11 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2285,9 +2376,9 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2299,7 +2390,7 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2314,9 +2405,10 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_with_splits() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2328,7 +2420,7 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2342,11 +2434,11 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2360,9 +2452,9 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2373,7 +2465,7 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2390,9 +2482,10 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2404,7 +2497,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2419,11 +2512,11 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2438,9 +2531,9 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2451,8 +2544,8 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
     assert_eq!(map.len, expected_remaining);
 
     // Verify we can still get values for non-removed keys.
-    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     for i in 0u32..100 {
         if i % 3 != 0 {
@@ -2464,11 +2557,11 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
                 datalove_rt::c::dtlv_rti_btreemap_get_local(
                     rt,
                     map_ptr as *const u8,
-                    &*map_tydesc as *const rtdt::TyDesc,
+                    map_tydesc,
                     &key as *const u32 as *const u8,
-                    &*key_tydesc as *const rtdt::TyDesc,
+                    key_tydesc,
                     option_result.as_mut_ptr(),
-                    &*option_tydesc as *const rtdt::TyDesc,
+                    option_tydesc,
                 )
             };
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2492,9 +2585,9 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2509,7 +2602,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2525,9 +2618,10 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2539,7 +2633,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2553,11 +2647,11 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut u32 as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut u32 as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2571,9 +2665,9 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2581,8 +2675,8 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
     assert_eq!(map.len, 400);
 
     // Verify remaining keys are still accessible.
-    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc();
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     for i in 0u32..200 {
         let key = i;
@@ -2592,11 +2686,11 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
                 map_ptr as *const u8,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 option_result.as_mut_ptr(),
-                &*option_tydesc as *const rtdt::TyDesc,
+                option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2611,11 +2705,11 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
                 map_ptr as *const u8,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const u32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 option_result.as_mut_ptr(),
-                &*option_tydesc as *const rtdt::TyDesc,
+                option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2627,7 +2721,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2643,9 +2737,10 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_string() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2657,7 +2752,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2668,21 +2763,21 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
         let value_str = format!("value_{:03}", i);
 
         let mut key = unsafe {
-            create_runtime_string(rt, &key_str, &*key_tydesc as *const rtdt::TyDesc)
+            create_runtime_string(rt, &key_str, key_tydesc)
         };
         let mut value = unsafe {
-            create_runtime_string(rt, &value_str, &*value_tydesc as *const rtdt::TyDesc)
+            create_runtime_string(rt, &value_str, value_tydesc)
         };
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2693,16 +2788,16 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
     for i in (0..20).step_by(2) {
         let key_str = format!("key_{:03}", i);
         let key = unsafe {
-            create_runtime_string(rt, &key_str, &*key_tydesc as *const rtdt::TyDesc)
+            create_runtime_string(rt, &key_str, key_tydesc)
         };
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const rtdt::String as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2712,7 +2807,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt,
                 &key as *const rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2724,7 +2819,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2740,9 +2835,10 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
 #[test]
 fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_string_string_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2754,7 +2850,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_create_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2765,21 +2861,21 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
         let value_str = format!("value_{:03}", i);
 
         let mut key = unsafe {
-            create_runtime_string(rt, &key_str, &*key_tydesc as *const rtdt::TyDesc)
+            create_runtime_string(rt, &key_str, key_tydesc)
         };
         let mut value = unsafe {
-            create_runtime_string(rt, &value_str, &*value_tydesc as *const rtdt::TyDesc)
+            create_runtime_string(rt, &value_str, value_tydesc)
         };
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_insert_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &mut key as *mut rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 &mut value as *mut rtdt::String as *mut u8,
-                &*value_tydesc as *const rtdt::TyDesc,
+                value_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2790,16 +2886,16 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
     for i in (0..50).step_by(3) {
         let key_str = format!("key_{:03}", i);
         let key = unsafe {
-            create_runtime_string(rt, &key_str, &*key_tydesc as *const rtdt::TyDesc)
+            create_runtime_string(rt, &key_str, key_tydesc)
         };
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreemap_remove_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const rtdt::String as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2809,7 +2905,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt,
                 &key as *const rtdt::String as *mut u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2823,7 +2919,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2837,31 +2933,31 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
 // ==================== clone_from_slice tests ====================
 
 /// Helper to create a (u32, u32) tuple type descriptor.
-fn create_tuple_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<[rtdt::TyInfoTupleField; 2]>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
-    let key_tydesc = create_u32_tydesc();
-    let value_tydesc = create_u32_tydesc();
+fn create_tuple_u32_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rtdt::TyInfoTupleField, *const rtdt::TyDesc, *const rtdt::TyDesc) {
+    let key_tydesc = create_u32_tydesc(arena);
+    let value_tydesc = create_u32_tydesc(arena);
 
     // Create tuple fields with proper alignment.
     // (u32, u32) layout: first field at offset 0, second at offset 4.
-    let fields = Box::new([
+    let fields = arena.alloc_tuple_fields([
         rtdt::TyInfoTupleField {
             offset: 0,
-            tydesc: &*key_tydesc as *const rtdt::TyDesc,
+            tydesc: key_tydesc,
         },
         rtdt::TyInfoTupleField {
             offset: 4,
-            tydesc: &*value_tydesc as *const rtdt::TyDesc,
+            tydesc: value_tydesc,
         },
     ]);
 
-    let tuple_tydesc = Box::new(rtdt::TyDesc {
+    let tuple_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tuple,
         size: 8,
         align: 4,
         type_info: rtdt::TyInfo {
             tuple: rtdt::TyInfoTuple {
                 num_fields: 2,
-                fields: fields.as_ptr(),
+                fields,
             },
         },
     });
@@ -2872,10 +2968,11 @@ fn create_tuple_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<[rtdt::TyInfoTupleFi
 #[test]
 fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
-    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc();
+    let (map_tydesc, _key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2889,9 +2986,9 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
             rt,
             ptr::null(),
             0,
-            &*tuple_tydesc as *const rtdt::TyDesc,
+            tuple_tydesc,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2902,7 +2999,7 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2916,10 +3013,11 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
 #[test]
 fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
-    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -2943,17 +3041,17 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
-            &*tuple_tydesc as *const rtdt::TyDesc,
+            tuple_tydesc,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(map.len, 1);
 
     // Verify we can retrieve the value.
-    let (option_tydesc, _inner) = create_option_u32_tydesc();
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let (option_tydesc, _inner) = create_option_u32_tydesc(&arena);
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let key = rtdt::U32(42);
@@ -2961,11 +3059,11 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const rtdt::U32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             option_buffer.as_mut_ptr(),
-            &*option_tydesc as *const rtdt::TyDesc,
+            option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2983,7 +3081,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2997,10 +3095,11 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
 #[test]
 fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
-    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -3027,17 +3126,17 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
-            &*tuple_tydesc as *const rtdt::TyDesc,
+            tuple_tydesc,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(map.len, 5);
 
     // Verify all values are retrievable.
-    let (option_tydesc, _inner) = create_option_u32_tydesc();
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let (option_tydesc, _inner) = create_option_u32_tydesc(&arena);
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
 
     for (k, v) in &[(10, 100), (20, 200), (30, 300), (40, 400), (50, 500)] {
         let mut option_buffer = vec![0u8; option_layout.size as usize];
@@ -3047,11 +3146,11 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreemap_get_local(
                 rt,
                 map_ptr,
-                &*map_tydesc as *const rtdt::TyDesc,
+                map_tydesc,
                 &key as *const rtdt::U32 as *const u8,
-                &*key_tydesc as *const rtdt::TyDesc,
+                key_tydesc,
                 option_buffer.as_mut_ptr(),
-                &*option_tydesc as *const rtdt::TyDesc,
+                option_tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3070,7 +3169,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3084,10 +3183,11 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
 #[test]
 fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc();
-    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc();
+    let (map_tydesc, key_tydesc, _value_tydesc) = create_map_u32_u32_tydesc(&arena);
+    let (tuple_tydesc, _fields, _k_td, _v_td) = create_tuple_u32_u32_tydesc(&arena);
 
     let mut map = rtdt::Map {
         root: ptr::null(),
@@ -3113,17 +3213,17 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
             rt,
             slice_data.as_ptr() as *const u8,
             slice_data.len() as u32,
-            &*tuple_tydesc as *const rtdt::TyDesc,
+            tuple_tydesc,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(map.len, 2, "Map should have 2 unique keys");
 
     // Verify key 10 has the updated value.
-    let (option_tydesc, _inner) = create_option_u32_tydesc();
-    let option_layout = rtdt::layout::compute_option_layout(rtdt::TyDescRef::from_ref(&option_tydesc));
+    let (option_tydesc, _inner) = create_option_u32_tydesc(&arena);
+    let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
     let mut option_buffer = vec![0u8; option_layout.size as usize];
 
     let key = rtdt::U32(10);
@@ -3131,11 +3231,11 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_get_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
             &key as *const rtdt::U32 as *const u8,
-            &*key_tydesc as *const rtdt::TyDesc,
+            key_tydesc,
             option_buffer.as_mut_ptr(),
-            &*option_tydesc as *const rtdt::TyDesc,
+            option_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3153,7 +3253,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
             rt,
             map_ptr,
-            &*map_tydesc as *const rtdt::TyDesc,
+            map_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);

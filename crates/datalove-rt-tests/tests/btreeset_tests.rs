@@ -2,11 +2,56 @@
 
 use rmx::prelude::*;
 use datalove_rt::rtdt;
+use std::cell::RefCell;
 use std::ptr;
 
-/// Create a u32 type descriptor.
-fn create_u32_tydesc() -> Box<rtdt::TyDesc> {
-    Box::new(rtdt::TyDesc {
+// ============================================================================
+// Type Descriptor Arena
+// ============================================================================
+
+struct TyDescArena {
+    ptrs: RefCell<Vec<*mut rtdt::TyDesc>>,
+    tuple_fields: RefCell<Vec<*mut [rtdt::TyInfoTupleField; 2]>>,
+}
+
+impl TyDescArena {
+    fn new() -> Self {
+        Self {
+            ptrs: RefCell::new(Vec::new()),
+            tuple_fields: RefCell::new(Vec::new()),
+        }
+    }
+
+    fn alloc(&self, td: rtdt::TyDesc) -> *const rtdt::TyDesc {
+        let ptr = Box::into_raw(Box::new(td));
+        self.ptrs.borrow_mut().push(ptr);
+        ptr
+    }
+
+    fn alloc_tuple_fields(&self, fields: [rtdt::TyInfoTupleField; 2]) -> *const rtdt::TyInfoTupleField {
+        let ptr = Box::into_raw(Box::new(fields));
+        self.tuple_fields.borrow_mut().push(ptr);
+        ptr as *const rtdt::TyInfoTupleField
+    }
+}
+
+impl Drop for TyDescArena {
+    fn drop(&mut self) {
+        for &ptr in self.ptrs.borrow().iter() {
+            unsafe { drop(Box::from_raw(ptr)); }
+        }
+        for &ptr in self.tuple_fields.borrow().iter() {
+            unsafe { drop(Box::from_raw(ptr)); }
+        }
+    }
+}
+
+// ============================================================================
+// Type Descriptor Helpers
+// ============================================================================
+
+fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
+    arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
         size: 4,
         align: 4,
@@ -16,17 +61,16 @@ fn create_u32_tydesc() -> Box<rtdt::TyDesc> {
     })
 }
 
-/// Create a Set<u32> type descriptor.
-fn create_set_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
-    let element_tydesc = create_u32_tydesc();
+fn create_set_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rtdt::TyDesc) {
+    let element_tydesc = create_u32_tydesc(arena);
 
-    let set_tydesc = Box::new(rtdt::TyDesc {
+    let set_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Set,
         size: std::mem::size_of::<rtdt::Set>() as u32,
         align: std::mem::align_of::<rtdt::Set>() as u32,
         type_info: rtdt::TyInfo {
             set: rtdt::TyInfoSet {
-                element_tydesc: &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc,
             },
         },
     });
@@ -34,9 +78,8 @@ fn create_set_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
     (set_tydesc, element_tydesc)
 }
 
-/// Create a String type descriptor.
-fn create_string_tydesc() -> Box<rtdt::TyDesc> {
-    Box::new(rtdt::TyDesc {
+fn create_string_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
+    arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::String,
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
@@ -46,17 +89,16 @@ fn create_string_tydesc() -> Box<rtdt::TyDesc> {
     })
 }
 
-/// Create a Set<String> type descriptor.
-fn create_set_string_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
-    let element_tydesc = create_string_tydesc();
+fn create_set_string_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rtdt::TyDesc) {
+    let element_tydesc = create_string_tydesc(arena);
 
-    let set_tydesc = Box::new(rtdt::TyDesc {
+    let set_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Set,
         size: std::mem::size_of::<rtdt::Set>() as u32,
         align: std::mem::align_of::<rtdt::Set>() as u32,
         type_info: rtdt::TyInfo {
             set: rtdt::TyInfoSet {
-                element_tydesc: &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc,
             },
         },
     });
@@ -99,9 +141,10 @@ unsafe fn create_runtime_string(
 #[test]
 fn test_btreeset_create_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, _element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, _element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -113,7 +156,7 @@ fn test_btreeset_create_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -125,7 +168,7 @@ fn test_btreeset_create_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -140,9 +183,10 @@ fn test_btreeset_create_empty() -> AnyResult<()> {
 #[test]
 fn test_btreeset_destroy_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, _element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, _element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -154,7 +198,7 @@ fn test_btreeset_destroy_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -163,7 +207,7 @@ fn test_btreeset_destroy_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -181,9 +225,10 @@ fn test_btreeset_destroy_empty() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clear_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, _element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, _element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -195,7 +240,7 @@ fn test_btreeset_clear_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -204,7 +249,7 @@ fn test_btreeset_clear_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clear_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -216,7 +261,7 @@ fn test_btreeset_clear_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -231,9 +276,10 @@ fn test_btreeset_clear_empty() -> AnyResult<()> {
 #[test]
 fn test_btreeset_insert_single() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -245,7 +291,7 @@ fn test_btreeset_insert_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -257,9 +303,9 @@ fn test_btreeset_insert_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut u32 as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
@@ -271,7 +317,7 @@ fn test_btreeset_insert_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -286,9 +332,10 @@ fn test_btreeset_insert_single() -> AnyResult<()> {
 #[test]
 fn test_btreeset_insert_multiple() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -300,7 +347,7 @@ fn test_btreeset_insert_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -313,9 +360,9 @@ fn test_btreeset_insert_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -329,7 +376,7 @@ fn test_btreeset_insert_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -344,9 +391,10 @@ fn test_btreeset_insert_multiple() -> AnyResult<()> {
 #[test]
 fn test_btreeset_insert_duplicate() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -358,7 +406,7 @@ fn test_btreeset_insert_duplicate() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -370,9 +418,9 @@ fn test_btreeset_insert_duplicate() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut u32 as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
@@ -388,9 +436,9 @@ fn test_btreeset_insert_duplicate() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element2 as *mut u32 as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted2,
         )
     };
@@ -402,7 +450,7 @@ fn test_btreeset_insert_duplicate() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -417,9 +465,10 @@ fn test_btreeset_insert_duplicate() -> AnyResult<()> {
 #[test]
 fn test_btreeset_contains_existing() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -431,7 +480,7 @@ fn test_btreeset_contains_existing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -443,9 +492,9 @@ fn test_btreeset_contains_existing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut u32 as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
@@ -459,9 +508,9 @@ fn test_btreeset_contains_existing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_contains_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &search_element as *const u32 as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut contains,
         )
     };
@@ -472,7 +521,7 @@ fn test_btreeset_contains_existing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -487,9 +536,10 @@ fn test_btreeset_contains_existing() -> AnyResult<()> {
 #[test]
 fn test_btreeset_contains_nonexistent() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -501,7 +551,7 @@ fn test_btreeset_contains_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -513,9 +563,9 @@ fn test_btreeset_contains_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut u32 as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
@@ -528,9 +578,9 @@ fn test_btreeset_contains_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_contains_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &search_element as *const u32 as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut contains,
         )
     };
@@ -541,7 +591,7 @@ fn test_btreeset_contains_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -556,9 +606,10 @@ fn test_btreeset_contains_nonexistent() -> AnyResult<()> {
 #[test]
 fn test_btreeset_remove_existing() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -570,7 +621,7 @@ fn test_btreeset_remove_existing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -582,9 +633,9 @@ fn test_btreeset_remove_existing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut u32 as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
@@ -598,9 +649,9 @@ fn test_btreeset_remove_existing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_remove_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &remove_element as *const u32 as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_removed,
         )
     };
@@ -612,7 +663,7 @@ fn test_btreeset_remove_existing() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -627,9 +678,10 @@ fn test_btreeset_remove_existing() -> AnyResult<()> {
 #[test]
 fn test_btreeset_remove_nonexistent() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -641,7 +693,7 @@ fn test_btreeset_remove_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -653,9 +705,9 @@ fn test_btreeset_remove_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut u32 as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
@@ -668,9 +720,9 @@ fn test_btreeset_remove_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_remove_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &remove_element as *const u32 as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_removed,
         )
     };
@@ -682,7 +734,7 @@ fn test_btreeset_remove_nonexistent() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -697,9 +749,10 @@ fn test_btreeset_remove_nonexistent() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clear_nonempty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -711,7 +764,7 @@ fn test_btreeset_clear_nonempty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -724,9 +777,9 @@ fn test_btreeset_clear_nonempty() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -739,7 +792,7 @@ fn test_btreeset_clear_nonempty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clear_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -751,7 +804,7 @@ fn test_btreeset_clear_nonempty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -766,9 +819,10 @@ fn test_btreeset_clear_nonempty() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clone_from_slice_single() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -783,9 +837,9 @@ fn test_btreeset_clone_from_slice_single() -> AnyResult<()> {
             rt,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -795,7 +849,7 @@ fn test_btreeset_clone_from_slice_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -812,9 +866,10 @@ fn test_btreeset_clone_from_slice_single() -> AnyResult<()> {
 #[test]
 fn test_btreeset_insert_1000_elements() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -826,7 +881,7 @@ fn test_btreeset_insert_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -839,9 +894,9 @@ fn test_btreeset_insert_1000_elements() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -855,7 +910,7 @@ fn test_btreeset_insert_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -870,9 +925,10 @@ fn test_btreeset_insert_1000_elements() -> AnyResult<()> {
 #[test]
 fn test_btreeset_insert_1000_reverse() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -884,7 +940,7 @@ fn test_btreeset_insert_1000_reverse() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -897,9 +953,9 @@ fn test_btreeset_insert_1000_reverse() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -913,7 +969,7 @@ fn test_btreeset_insert_1000_reverse() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -928,9 +984,10 @@ fn test_btreeset_insert_1000_reverse() -> AnyResult<()> {
 #[test]
 fn test_btreeset_insert_1000_random() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -942,7 +999,7 @@ fn test_btreeset_insert_1000_random() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -956,9 +1013,9 @@ fn test_btreeset_insert_1000_random() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -974,7 +1031,7 @@ fn test_btreeset_insert_1000_random() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -989,9 +1046,10 @@ fn test_btreeset_insert_1000_random() -> AnyResult<()> {
 #[test]
 fn test_btreeset_contains_1000_elements() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1003,7 +1061,7 @@ fn test_btreeset_contains_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1016,9 +1074,9 @@ fn test_btreeset_contains_1000_elements() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -1033,9 +1091,9 @@ fn test_btreeset_contains_1000_elements() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_contains_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &search_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut contains,
             )
         };
@@ -1049,9 +1107,9 @@ fn test_btreeset_contains_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_contains_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &search_element as *const u32 as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut contains,
         )
     };
@@ -1062,7 +1120,7 @@ fn test_btreeset_contains_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1077,9 +1135,10 @@ fn test_btreeset_contains_1000_elements() -> AnyResult<()> {
 #[test]
 fn test_btreeset_remove_1000_elements() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1091,7 +1150,7 @@ fn test_btreeset_remove_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1104,9 +1163,9 @@ fn test_btreeset_remove_1000_elements() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -1123,9 +1182,9 @@ fn test_btreeset_remove_1000_elements() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_remove_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &remove_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_removed,
             )
         };
@@ -1139,7 +1198,7 @@ fn test_btreeset_remove_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1154,9 +1213,10 @@ fn test_btreeset_remove_1000_elements() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clone_from_slice_1000() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1171,9 +1231,9 @@ fn test_btreeset_clone_from_slice_1000() -> AnyResult<()> {
             rt,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1187,9 +1247,9 @@ fn test_btreeset_clone_from_slice_1000() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_contains_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &search_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut contains,
             )
         };
@@ -1201,7 +1261,7 @@ fn test_btreeset_clone_from_slice_1000() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1216,9 +1276,10 @@ fn test_btreeset_clone_from_slice_1000() -> AnyResult<()> {
 #[test]
 fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1230,7 +1291,7 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1243,9 +1304,9 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -1262,9 +1323,9 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_remove_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &remove_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_removed,
             )
         };
@@ -1281,9 +1342,9 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -1296,7 +1357,7 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1311,9 +1372,10 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1325,7 +1387,7 @@ fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1338,9 +1400,9 @@ fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -1353,7 +1415,7 @@ fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clear_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1365,7 +1427,7 @@ fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1382,9 +1444,10 @@ fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clone_from_slice_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1399,9 +1462,9 @@ fn test_btreeset_clone_from_slice_empty() -> AnyResult<()> {
             rt,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1412,7 +1475,7 @@ fn test_btreeset_clone_from_slice_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1427,9 +1490,10 @@ fn test_btreeset_clone_from_slice_empty() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1444,9 +1508,9 @@ fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
             rt,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1460,9 +1524,9 @@ fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_contains_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &search_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut contains,
             )
         };
@@ -1474,7 +1538,7 @@ fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1489,9 +1553,10 @@ fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1506,9 +1571,9 @@ fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
             rt,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1523,9 +1588,9 @@ fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_contains_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &search_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut contains,
             )
         };
@@ -1537,7 +1602,7 @@ fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1552,9 +1617,10 @@ fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1565,7 +1631,7 @@ fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
     let strings = vec!["apple", "banana", "cherry"];
     let mut runtime_strings: Vec<rtdt::String> = strings
         .iter()
-        .map(|s| unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) })
+        .map(|s| unsafe { create_runtime_string(rt, s, element_tydesc as *const rtdt::TyDesc) })
         .collect();
 
     let status = unsafe {
@@ -1573,9 +1639,9 @@ fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
             rt,
             runtime_strings.as_ptr() as *const u8,
             runtime_strings.len() as u32,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1586,7 +1652,7 @@ fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt,
                 runtime_str as *mut rtdt::String as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1596,7 +1662,7 @@ fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1611,9 +1677,10 @@ fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
 #[test]
 fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1628,9 +1695,9 @@ fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
             rt,
             slice.as_ptr() as *const u8,
             slice.len() as u32,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1644,9 +1711,9 @@ fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_contains_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &search_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut contains,
             )
         };
@@ -1658,7 +1725,7 @@ fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1675,9 +1742,10 @@ fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_insert_single() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1689,21 +1757,21 @@ fn test_btreeset_string_insert_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let mut element = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut element = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut was_inserted = 0u8;
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut rtdt::String as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
@@ -1715,7 +1783,7 @@ fn test_btreeset_string_insert_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1730,9 +1798,10 @@ fn test_btreeset_string_insert_single() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_insert_multiple() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1744,7 +1813,7 @@ fn test_btreeset_string_insert_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1752,16 +1821,16 @@ fn test_btreeset_string_insert_multiple() -> AnyResult<()> {
     let strings = vec!["apple", "banana", "cherry", "date", "elderberry"];
 
     for s in &strings {
-        let mut element = unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut element = unsafe { create_runtime_string(rt, s, element_tydesc as *const rtdt::TyDesc) };
         let mut was_inserted = 0u8;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut rtdt::String as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -1775,7 +1844,7 @@ fn test_btreeset_string_insert_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1790,9 +1859,10 @@ fn test_btreeset_string_insert_multiple() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_contains() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1804,36 +1874,36 @@ fn test_btreeset_string_contains() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let mut element = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut element = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut was_inserted = 0u8;
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut rtdt::String as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let search = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let search = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut contains = 0u8;
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_contains_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &search as *const rtdt::String as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut contains,
         )
     };
@@ -1844,7 +1914,7 @@ fn test_btreeset_string_contains() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
             &search as *const rtdt::String as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1853,7 +1923,7 @@ fn test_btreeset_string_contains() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1868,9 +1938,10 @@ fn test_btreeset_string_contains() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_remove() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1882,37 +1953,37 @@ fn test_btreeset_string_remove() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let mut element = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut element = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut was_inserted = 0u8;
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut rtdt::String as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(set.len, 1);
 
-    let search = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let search = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut was_removed = 0u8;
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_remove_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &search as *const rtdt::String as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_removed,
         )
     };
@@ -1924,7 +1995,7 @@ fn test_btreeset_string_remove() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
             &search as *const rtdt::String as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1933,7 +2004,7 @@ fn test_btreeset_string_remove() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1948,9 +2019,10 @@ fn test_btreeset_string_remove() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_clear() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -1962,7 +2034,7 @@ fn test_btreeset_string_clear() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1970,16 +2042,16 @@ fn test_btreeset_string_clear() -> AnyResult<()> {
     let strings = vec!["apple", "banana", "cherry"];
 
     for s in &strings {
-        let mut element = unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut element = unsafe { create_runtime_string(rt, s, element_tydesc as *const rtdt::TyDesc) };
         let mut was_inserted = 0u8;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut rtdt::String as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -1992,7 +2064,7 @@ fn test_btreeset_string_clear() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clear_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2004,7 +2076,7 @@ fn test_btreeset_string_clear() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2019,9 +2091,10 @@ fn test_btreeset_string_clear() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_insert_100() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2033,23 +2106,23 @@ fn test_btreeset_string_insert_100() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     for i in 0..100 {
         let key = format!("key_{:03}", i);
-        let mut element = unsafe { create_runtime_string(rt, &key, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut element = unsafe { create_runtime_string(rt, &key, element_tydesc as *const rtdt::TyDesc) };
         let mut was_inserted = 0u8;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut rtdt::String as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2063,7 +2136,7 @@ fn test_btreeset_string_insert_100() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2078,9 +2151,10 @@ fn test_btreeset_string_insert_100() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_ordering() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2092,7 +2166,7 @@ fn test_btreeset_string_ordering() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2100,16 +2174,16 @@ fn test_btreeset_string_ordering() -> AnyResult<()> {
     let strings = vec!["zebra", "apple", "mango", "banana"];
 
     for s in &strings {
-        let mut element = unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut element = unsafe { create_runtime_string(rt, s, element_tydesc as *const rtdt::TyDesc) };
         let mut was_inserted = 0u8;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut rtdt::String as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2122,7 +2196,7 @@ fn test_btreeset_string_ordering() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2137,9 +2211,10 @@ fn test_btreeset_string_ordering() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2151,21 +2226,21 @@ fn test_btreeset_string_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let mut element = unsafe { create_runtime_string(rt, "", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut element = unsafe { create_runtime_string(rt, "", element_tydesc as *const rtdt::TyDesc) };
     let mut was_inserted = 0u8;
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element as *mut rtdt::String as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted,
         )
     };
@@ -2177,7 +2252,7 @@ fn test_btreeset_string_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2192,9 +2267,10 @@ fn test_btreeset_string_empty() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_unicode() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2206,7 +2282,7 @@ fn test_btreeset_string_unicode() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2214,16 +2290,16 @@ fn test_btreeset_string_unicode() -> AnyResult<()> {
     let strings = vec!["hello", "world", "rust"];
 
     for s in &strings {
-        let mut element = unsafe { create_runtime_string(rt, s, &*element_tydesc as *const rtdt::TyDesc) };
+        let mut element = unsafe { create_runtime_string(rt, s, element_tydesc as *const rtdt::TyDesc) };
         let mut was_inserted = 0u8;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut rtdt::String as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2237,7 +2313,7 @@ fn test_btreeset_string_unicode() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2252,9 +2328,10 @@ fn test_btreeset_string_unicode() -> AnyResult<()> {
 #[test]
 fn test_btreeset_string_duplicates() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_string_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_string_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2266,21 +2343,21 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let mut element1 = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut element1 = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut was_inserted1 = 0u8;
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element1 as *mut rtdt::String as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted1,
         )
     };
@@ -2288,16 +2365,16 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
     assert_eq!(was_inserted1, 1);
     assert_eq!(set.len, 1);
 
-    let mut element2 = unsafe { create_runtime_string(rt, "hello", &*element_tydesc as *const rtdt::TyDesc) };
+    let mut element2 = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut was_inserted2 = 0u8;
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut element2 as *mut rtdt::String as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted2,
         )
     };
@@ -2309,7 +2386,7 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
             &element2 as *const rtdt::String as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2318,7 +2395,7 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2335,9 +2412,10 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
 #[test]
 fn test_btreeset_small_inserts_sequential() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2349,7 +2427,7 @@ fn test_btreeset_small_inserts_sequential() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2362,9 +2440,9 @@ fn test_btreeset_small_inserts_sequential() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2378,7 +2456,7 @@ fn test_btreeset_small_inserts_sequential() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2393,9 +2471,10 @@ fn test_btreeset_small_inserts_sequential() -> AnyResult<()> {
 #[test]
 fn test_btreeset_small_inserts_reverse() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2407,7 +2486,7 @@ fn test_btreeset_small_inserts_reverse() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2420,9 +2499,9 @@ fn test_btreeset_small_inserts_reverse() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2436,7 +2515,7 @@ fn test_btreeset_small_inserts_reverse() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2451,9 +2530,10 @@ fn test_btreeset_small_inserts_reverse() -> AnyResult<()> {
 #[test]
 fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2465,7 +2545,7 @@ fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2479,9 +2559,9 @@ fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
                 datalove_rt::c::dtlv_rti_btreeset_insert_local(
                     rt,
                     set_ptr,
-                    &*set_tydesc as *const rtdt::TyDesc,
+                    set_tydesc as *const rtdt::TyDesc,
                     &mut element as *mut u32 as *mut u8,
-                    &*element_tydesc as *const rtdt::TyDesc,
+                    element_tydesc as *const rtdt::TyDesc,
                     &mut was_inserted,
                 )
             };
@@ -2494,7 +2574,7 @@ fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_clear_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2505,7 +2585,7 @@ fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2520,9 +2600,10 @@ fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
 #[test]
 fn test_btreeset_interleaved_ops() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2534,7 +2615,7 @@ fn test_btreeset_interleaved_ops() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2547,9 +2628,9 @@ fn test_btreeset_interleaved_ops() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2563,9 +2644,9 @@ fn test_btreeset_interleaved_ops() -> AnyResult<()> {
                 datalove_rt::c::dtlv_rti_btreeset_contains_local(
                     rt,
                     set_ptr,
-                    &*set_tydesc as *const rtdt::TyDesc,
+                    set_tydesc as *const rtdt::TyDesc,
                     &search_element as *const u32 as *const u8,
-                    &*element_tydesc as *const rtdt::TyDesc,
+                    element_tydesc as *const rtdt::TyDesc,
                     &mut contains,
                 )
             };
@@ -2579,7 +2660,7 @@ fn test_btreeset_interleaved_ops() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2594,9 +2675,10 @@ fn test_btreeset_interleaved_ops() -> AnyResult<()> {
 #[test]
 fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2608,7 +2690,7 @@ fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2621,9 +2703,9 @@ fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2640,9 +2722,9 @@ fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_remove_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &remove_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_removed,
             )
         };
@@ -2656,7 +2738,7 @@ fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2671,9 +2753,10 @@ fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
 #[test]
 fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2685,7 +2768,7 @@ fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2698,9 +2781,9 @@ fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2718,9 +2801,9 @@ fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_remove_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &remove_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_removed,
             )
         };
@@ -2736,7 +2819,7 @@ fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2751,9 +2834,10 @@ fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
 #[test]
 fn test_btreeset_boundary_values() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2765,7 +2849,7 @@ fn test_btreeset_boundary_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2780,9 +2864,9 @@ fn test_btreeset_boundary_values() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2800,9 +2884,9 @@ fn test_btreeset_boundary_values() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_contains_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &search_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut contains,
             )
         };
@@ -2814,7 +2898,7 @@ fn test_btreeset_boundary_values() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2829,9 +2913,10 @@ fn test_btreeset_boundary_values() -> AnyResult<()> {
 #[test]
 fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2843,7 +2928,7 @@ fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2856,9 +2941,9 @@ fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -2875,9 +2960,9 @@ fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_remove_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &remove_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_removed,
             )
         };
@@ -2891,7 +2976,7 @@ fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2907,9 +2992,10 @@ fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
 #[test]
 fn test_btreeset_contains_empty_set() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2921,7 +3007,7 @@ fn test_btreeset_contains_empty_set() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2933,9 +3019,9 @@ fn test_btreeset_contains_empty_set() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_contains_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &search_element as *const u32 as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut contains,
         )
     };
@@ -2946,7 +3032,7 @@ fn test_btreeset_contains_empty_set() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2961,9 +3047,10 @@ fn test_btreeset_contains_empty_set() -> AnyResult<()> {
 #[test]
 fn test_btreeset_remove_from_empty() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -2975,7 +3062,7 @@ fn test_btreeset_remove_from_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -2987,9 +3074,9 @@ fn test_btreeset_remove_from_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_remove_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &remove_element as *const u32 as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_removed,
         )
     };
@@ -3001,7 +3088,7 @@ fn test_btreeset_remove_from_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3016,9 +3103,10 @@ fn test_btreeset_remove_from_empty() -> AnyResult<()> {
 #[test]
 fn test_btreeset_multiple_clears() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -3030,7 +3118,7 @@ fn test_btreeset_multiple_clears() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3043,9 +3131,9 @@ fn test_btreeset_multiple_clears() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -3057,7 +3145,7 @@ fn test_btreeset_multiple_clears() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_clear_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3068,7 +3156,7 @@ fn test_btreeset_multiple_clears() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3083,9 +3171,10 @@ fn test_btreeset_multiple_clears() -> AnyResult<()> {
 #[test]
 fn test_btreeset_insert_after_clear() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -3097,7 +3186,7 @@ fn test_btreeset_insert_after_clear() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3110,9 +3199,9 @@ fn test_btreeset_insert_after_clear() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -3123,7 +3212,7 @@ fn test_btreeset_insert_after_clear() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clear_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3136,9 +3225,9 @@ fn test_btreeset_insert_after_clear() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -3152,7 +3241,7 @@ fn test_btreeset_insert_after_clear() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3167,9 +3256,10 @@ fn test_btreeset_insert_after_clear() -> AnyResult<()> {
 #[test]
 fn test_btreeset_duplicate_inserts_many() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -3181,7 +3271,7 @@ fn test_btreeset_duplicate_inserts_many() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3194,9 +3284,9 @@ fn test_btreeset_duplicate_inserts_many() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -3209,7 +3299,7 @@ fn test_btreeset_duplicate_inserts_many() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3224,9 +3314,10 @@ fn test_btreeset_duplicate_inserts_many() -> AnyResult<()> {
 #[test]
 fn test_btreeset_alternating_insert_remove_same() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc) = create_set_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -3238,7 +3329,7 @@ fn test_btreeset_alternating_insert_remove_same() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3251,9 +3342,9 @@ fn test_btreeset_alternating_insert_remove_same() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_insert_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &mut element as *mut u32 as *mut u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_inserted,
             )
         };
@@ -3266,9 +3357,9 @@ fn test_btreeset_alternating_insert_remove_same() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_btreeset_remove_local(
                 rt,
                 set_ptr,
-                &*set_tydesc as *const rtdt::TyDesc,
+                set_tydesc as *const rtdt::TyDesc,
                 &remove_element as *const u32 as *const u8,
-                &*element_tydesc as *const rtdt::TyDesc,
+                element_tydesc as *const rtdt::TyDesc,
                 &mut was_removed,
             )
         };
@@ -3280,7 +3371,7 @@ fn test_btreeset_alternating_insert_remove_same() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3294,61 +3385,60 @@ fn test_btreeset_alternating_insert_remove_same() -> AnyResult<()> {
 // ==================== Tuple Element Tests ====================
 
 /// Create a (u32, u32) tuple type descriptor.
-fn create_tuple_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<[rtdt::TyInfoTupleField; 2]>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
-    let field0_tydesc = create_u32_tydesc();
-    let field1_tydesc = create_u32_tydesc();
+fn create_tuple_u32_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
+    let field0_tydesc = create_u32_tydesc(arena);
+    let field1_tydesc = create_u32_tydesc(arena);
 
-    let fields = Box::new([
+    let fields = arena.alloc_tuple_fields([
         rtdt::TyInfoTupleField {
             offset: 0,
-            tydesc: &*field0_tydesc as *const rtdt::TyDesc,
+            tydesc: field0_tydesc,
         },
         rtdt::TyInfoTupleField {
             offset: 4,
-            tydesc: &*field1_tydesc as *const rtdt::TyDesc,
+            tydesc: field1_tydesc,
         },
     ]);
 
-    let tuple_tydesc = Box::new(rtdt::TyDesc {
+    arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tuple,
         size: 8,
         align: 4,
         type_info: rtdt::TyInfo {
             tuple: rtdt::TyInfoTuple {
                 num_fields: 2,
-                fields: fields.as_ptr(),
+                fields,
             },
         },
-    });
-
-    (tuple_tydesc, fields, field0_tydesc, field1_tydesc)
+    })
 }
 
 /// Create a Set<(u32, u32)> type descriptor.
-fn create_set_tuple_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<[rtdt::TyInfoTupleField; 2]>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
-    let (tuple_tydesc, fields, field0_tydesc, field1_tydesc) = create_tuple_u32_u32_tydesc();
+fn create_set_tuple_u32_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rtdt::TyDesc) {
+    let tuple_tydesc = create_tuple_u32_u32_tydesc(arena);
 
-    let set_tydesc = Box::new(rtdt::TyDesc {
+    let set_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Set,
         size: std::mem::size_of::<rtdt::Set>() as u32,
         align: std::mem::align_of::<rtdt::Set>() as u32,
         type_info: rtdt::TyInfo {
             set: rtdt::TyInfoSet {
-                element_tydesc: &*tuple_tydesc as *const rtdt::TyDesc,
+                element_tydesc: tuple_tydesc,
             },
         },
     });
 
-    (set_tydesc, tuple_tydesc, fields, field0_tydesc, field1_tydesc)
+    (set_tydesc, tuple_tydesc)
 }
 
 /// Test set with tuple elements.
 #[test]
 fn test_btreeset_tuples() -> AnyResult<()> {
     let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
     assert!(!rt.is_null());
 
-    let (set_tydesc, element_tydesc, _fields, _field0_tydesc, _field1_tydesc) = create_set_tuple_u32_u32_tydesc();
+    let (set_tydesc, element_tydesc) = create_set_tuple_u32_u32_tydesc(&arena);
 
     let mut set = rtdt::Set {
         root: ptr::null(),
@@ -3360,7 +3450,7 @@ fn test_btreeset_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_create_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -3378,9 +3468,9 @@ fn test_btreeset_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut tuple1 as *mut Tuple2U32 as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted1,
         )
     };
@@ -3395,9 +3485,9 @@ fn test_btreeset_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_insert_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &mut tuple2 as *mut Tuple2U32 as *mut u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_inserted2,
         )
     };
@@ -3412,9 +3502,9 @@ fn test_btreeset_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_contains_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &search_tuple as *const Tuple2U32 as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut contains,
         )
     };
@@ -3428,9 +3518,9 @@ fn test_btreeset_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_remove_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
             &remove_tuple as *const Tuple2U32 as *const u8,
-            &*element_tydesc as *const rtdt::TyDesc,
+            element_tydesc as *const rtdt::TyDesc,
             &mut was_removed,
         )
     };
@@ -3442,7 +3532,7 @@ fn test_btreeset_tuples() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
             rt,
             set_ptr,
-            &*set_tydesc as *const rtdt::TyDesc,
+            set_tydesc as *const rtdt::TyDesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
