@@ -15,17 +15,16 @@ With core->runtime calls.
   - fix function resolution
   - implement error and add missing ! tests
 - script/function unification semantics
-- move/clone semantics - moves-etc.md
-- argument modes - moves-etc.md
 - primer / walkthrough / tutorial
-- destructuring
-- runtime calls
-- std modules
 - improve readme
 
 
 # on deck
 
+- move/clone semantics - moves-etc.md
+- argument modes - moves-etc.md
+- destructuring
+- runtime calls
 - boolean ops - and or xor implies not
 - anonymous enums with payloads
 - named types
