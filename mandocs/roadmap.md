@@ -12,7 +12,6 @@ With core->runtime calls.
 # in progress
 
 - ir and interp3
-  - fix function resolution
 - rename ExprFunKind::Err to Error
 - script/function unification semantics
 - primer / walkthrough / tutorial
