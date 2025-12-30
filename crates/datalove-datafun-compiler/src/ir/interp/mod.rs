@@ -142,21 +142,6 @@ impl IrInterpreter {
         }
     }
 
-    /// Execute a function with arguments, writing result to destination.
-    pub fn call(
-        &mut self,
-        func: &IrFunction,
-        args: Vec<Value>,
-        ret_dest: Destination,
-    ) -> Result<(), InterpError> {
-        // For single function execution, create a context with just this function.
-        let functions = [func.clone()];
-        let ctx = ExecutionContext::new(&functions);
-        let registry = FunctionRegistry::new();
-        let mut frames = FrameStore::new();
-        self.call_in_context(func, args, ret_dest, &ctx, &registry, &mut frames)
-    }
-
     /// Execute a function with arguments using a script environment.
     ///
     /// This allows the function to call other functions registered in the environment.
@@ -217,43 +202,6 @@ impl IrInterpreter {
 
         // Convert UnitCompletion to () - functions always complete normally.
         result.map(|_| ())
-    }
-
-    /// Execute a script unit, optionally returning the result value.
-    ///
-    /// For expression units, the result is written to expr_dest.
-    /// For fragment units, nothing is written to expr_dest.
-    /// Early returns (from `!` or `?`) write Result<(), Error> to ret_dest.
-    ///
-    /// Use this for standalone script units that don't reference previous units.
-    pub fn execute_script_unit(
-        &mut self,
-        unit: &IrScriptUnit,
-        ret_dest: Destination,
-        expr_dest: Option<Destination>,
-    ) -> Result<UnitCompletion, InterpError> {
-        // Compute layout.
-        let layout = IrLayout::compute(
-            &unit.value_types,
-            &unit.slot_types,
-            &mut self.tydesc_table,
-        );
-
-        // Create frame.
-        let mut frame = Frame::new(layout);
-
-        // Create execution context with functions defined in this unit.
-        let ctx = ExecutionContext::new(&unit.functions);
-
-        // Execute blocks with empty registry/frames (no external references).
-        let registry = FunctionRegistry::new();
-        let mut frames = FrameStore::new();
-        let result = self.execute_blocks(&unit.blocks, &mut frame, ret_dest, expr_dest, &ctx, &registry, &mut frames);
-
-        // Destroy frame values before returning.
-        frame.destroy_all(self.runtime.handle());
-
-        result
     }
 
     /// Execute a script unit with access to previous units' values.

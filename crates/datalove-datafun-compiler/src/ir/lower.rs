@@ -45,11 +45,11 @@ enum ScopeKind {
     /// Script unit top-level scope (values are exported, not dropped at unit end).
     ScriptUnit,
     /// Loop body scope.
-    Loop { header: BlockId, exit: BlockId },
+    Loop,
     /// If-then branch scope.
-    IfThen { merge: BlockId },
+    IfThen,
     /// If-else branch scope.
-    IfElse { merge: BlockId },
+    IfElse,
 }
 
 /// A binding tracked for drop purposes.
@@ -157,7 +157,7 @@ impl ScopeTracker {
                 }
             }
             // Stop when we hit a loop scope.
-            if matches!(scope.kind, ScopeKind::Loop { .. }) {
+            if matches!(scope.kind, ScopeKind::Loop) {
                 break;
             }
         }
@@ -175,16 +175,11 @@ impl ScopeTracker {
                 }
             }
             // Stop when we hit a loop scope (include it, then stop).
-            if matches!(scope.kind, ScopeKind::Loop { .. }) {
+            if matches!(scope.kind, ScopeKind::Loop) {
                 break;
             }
         }
         drops
-    }
-
-    /// Check if we're inside a function scope.
-    fn in_function(&self) -> bool {
-        self.scopes.iter().any(|s| matches!(s.kind, ScopeKind::Function))
     }
 
     /// Get all bindings to drop for a function return.
@@ -425,8 +420,6 @@ pub struct LowerCtx<'db> {
     current_instructions: Vec<Instruction>,
     /// Mapping from variable names to their operands.
     variables: HashMap<String, Operand>,
-    /// Script context for external lookups (None for functions).
-    script_ctx: Option<ScriptLowerContext>,
     /// Exports from this unit (only used for script units).
     exports: Vec<(String, ExportBinding)>,
     /// Functions defined in this script unit.
@@ -435,8 +428,6 @@ pub struct LowerCtx<'db> {
     symbols: SymbolTable,
     /// Available functions: name -> FuncRef (for resolving calls).
     func_scope: HashMap<String, FuncRef>,
-    /// Current unit index (for script units).
-    current_unit: u32,
     /// Type for each ValueId.
     value_types: Vec<IrType>,
     /// Type for each SlotId.
@@ -466,12 +457,10 @@ impl<'db> LowerCtx<'db> {
             current_block: BlockId(0),
             current_instructions: Vec::new(),
             variables: HashMap::new(),
-            script_ctx: None,
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
-            current_unit: 0,
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -504,12 +493,10 @@ impl<'db> LowerCtx<'db> {
             current_block: BlockId(0),
             current_instructions: Vec::new(),
             variables: HashMap::new(),
-            script_ctx: None,
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope,
-            current_unit: 0,
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -570,8 +557,6 @@ impl<'db> LowerCtx<'db> {
             }
         }
 
-        let current_unit = script_ctx.current_unit;
-
         Self {
             db,
             expr_types,
@@ -582,12 +567,10 @@ impl<'db> LowerCtx<'db> {
             current_block: BlockId(0),
             current_instructions: Vec::new(),
             variables,
-            script_ctx: Some(script_ctx),
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope,
-            current_unit,
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -686,11 +669,6 @@ impl<'db> LowerCtx<'db> {
         for (value, _ty) in temps {
             self.emit(Instruction::Drop { operand: Operand::Value(value) });
         }
-    }
-
-    /// Get the type for a value ID.
-    fn value_type(&self, id: ValueId) -> Option<&IrType> {
-        self.value_types.get(id.0 as usize)
     }
 
     /// Get the type for a slot ID.
@@ -1006,7 +984,7 @@ fn lower_if_bool<'db>(
 
     // Lower then branch.
     ctx.start_block(then_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfThen { merge: merge_block });
+    ctx.scope_tracker.enter_scope(ScopeKind::IfThen);
     for stmt in if_stmt.then_body(ctx.db) {
         lower_statement(ctx, stmt)?;
     }
@@ -1017,7 +995,7 @@ fn lower_if_bool<'db>(
 
     // Lower else branch.
     ctx.start_block(else_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfElse { merge: merge_block });
+    ctx.scope_tracker.enter_scope(ScopeKind::IfElse);
     if let Some(else_body) = if_stmt.else_body(ctx.db) {
         for stmt in else_body {
             lower_statement(ctx, stmt)?;
@@ -1070,7 +1048,7 @@ fn lower_if_option<'db>(
 
     // === Then branch: Some case ===
     ctx.start_block(then_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfThen { merge: merge_block });
+    ctx.scope_tracker.enter_scope(ScopeKind::IfThen);
 
     // Bind the inner value to the binding name.
     let binding_str = binding_name.text(ctx.db);
@@ -1097,7 +1075,7 @@ fn lower_if_option<'db>(
 
     // === Else branch: None case ===
     ctx.start_block(else_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfElse { merge: merge_block });
+    ctx.scope_tracker.enter_scope(ScopeKind::IfElse);
     // No binding in else branch for Option.
     // inner_dest is NOT valid here - do NOT access or drop it.
 
@@ -1156,7 +1134,7 @@ fn lower_if_result<'db>(
 
     // === Then branch: Ok case ===
     ctx.start_block(then_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfThen { merge: merge_block });
+    ctx.scope_tracker.enter_scope(ScopeKind::IfThen);
 
     // Bind ok_dest to the ok_binding name.
     let ok_binding_str = ok_binding.text(ctx.db);
@@ -1183,7 +1161,7 @@ fn lower_if_result<'db>(
 
     // === Else branch: Error case ===
     ctx.start_block(else_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfElse { merge: merge_block });
+    ctx.scope_tracker.enter_scope(ScopeKind::IfElse);
 
     // Bind err_dest to the err_binding name.
     let err_binding_str = err_binding.text(ctx.db);
@@ -1229,10 +1207,7 @@ fn lower_loop<'db>(
     ctx.loop_stack.push((loop_header, loop_exit));
 
     // Enter loop scope for drop tracking.
-    ctx.scope_tracker.enter_scope(ScopeKind::Loop {
-        header: loop_header,
-        exit: loop_exit,
-    });
+    ctx.scope_tracker.enter_scope(ScopeKind::Loop);
 
     // Lower loop body.
     ctx.start_block(loop_header);
