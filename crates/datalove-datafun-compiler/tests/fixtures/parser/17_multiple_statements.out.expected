@@ -1,49 +1,52 @@
 {
-  "statements": [
-    {
-      "kind": "Require",
-      "variant": "Module",
-      "import_space": "sys",
-      "package_alias": "std",
-      "module_alias": "bool"
-    },
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Int",
-          "heap": "Local",
-          "type_hint": null,
-          "value": "42"
+  "ast": {
+    "statements": [
+      {
+        "import_space": "sys",
+        "kind": "Require",
+        "module_alias": "bool",
+        "package_alias": "std",
+        "variant": "Module"
+      },
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "42"
+          }
         }
-      }
-    },
-    {
-      "kind": "Let",
-      "name": "y",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "BinOp",
-          "op": "AddChecked",
-          "lhs": {
-            "expr": {
-              "kind": "Name",
-              "name": "x"
-            }
-          },
-          "rhs": {
-            "expr": {
-              "kind": "Int",
-              "heap": "Local",
-              "type_hint": null,
-              "value": "1"
+      },
+      {
+        "kind": "Let",
+        "name": "y",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "kind": "Name",
+                "name": "x"
+              }
+            },
+            "op": "AddChecked",
+            "rhs": {
+              "expr": {
+                "heap": "Local",
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
             }
           }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

@@ -1,54 +1,57 @@
 {
-  "statements": [
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Map",
-          "heap": "Local",
-          "type_hint": null,
-          "entries": [
-            {
-              "key": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "1"
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "entries": [
+              {
+                "key": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                },
+                "value": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "10"
+                  }
                 }
               },
-              "value": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "10"
+              {
+                "key": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "2"
+                  }
+                },
+                "value": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "20"
+                  }
                 }
               }
-            },
-            {
-              "key": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "2"
-                }
-              },
-              "value": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "20"
-                }
-              }
-            }
-          ]
+            ],
+            "heap": "Local",
+            "kind": "Map",
+            "type_hint": null
+          }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

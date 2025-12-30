@@ -1,52 +1,70 @@
 {
-  "statements": [
-    {
-      "kind": "Fun",
-      "name": "process",
-      "params": [
-        {
-          "name": "x",
-          "mode": "In",
-          "type_hint": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          }
-        },
-        {
-          "name": "y",
-          "mode": "In",
-          "type_hint": {
-            "heap": "Omitted",
-            "type_hint": "String"
-          }
-        }
-      ],
-      "return_type": {
-        "heap": "Omitted",
-        "type_hint": "Bool"
-      },
-      "body": [
-        {
-          "kind": "Let",
-          "name": "z",
-          "type_hint": {
-            "heap": "Omitted",
-            "type_hint": "U64"
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Let",
+            "name": "z",
+            "type_hint": {
+              "heap": "Omitted",
+              "type_hint": "U64"
+            },
+            "value": {
+              "expr": {
+                "heap": "Local",
+                "kind": "Int",
+                "type_hint": null,
+                "value": "100"
+              }
+            }
           },
-          "value": {
-            "expr": {
-              "kind": "Int",
-              "heap": "Local",
-              "type_hint": null,
-              "value": "100"
+          {
+            "kind": "ParseError",
+            "message": "unexpected statement"
+          }
+        ],
+        "kind": "Fun",
+        "name": "process",
+        "params": [
+          {
+            "mode": "In",
+            "name": "x",
+            "type_hint": {
+              "heap": "Omitted",
+              "type_hint": "U32"
+            }
+          },
+          {
+            "mode": "In",
+            "name": "y",
+            "type_hint": {
+              "heap": "Omitted",
+              "type_hint": "String"
             }
           }
-        },
-        {
-          "kind": "ParseError",
-          "message": "unexpected statement"
+        ],
+        "return_type": {
+          "heap": "Omitted",
+          "type_hint": "Bool"
         }
-      ]
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P001",
+      "labels": [
+        {
+          "message": "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'",
+          "span": [
+            63,
+            64
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "unexpected statement"
     }
   ]
 }

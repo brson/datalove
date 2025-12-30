@@ -1,54 +1,57 @@
 {
-  "statements": [
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Int",
-          "heap": "Local",
-          "type_hint": null,
-          "value": "42"
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "42"
+          }
         }
-      }
-    },
-    {
-      "kind": "Let",
-      "name": "y",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Int",
-          "heap": "Local",
-          "type_hint": null,
-          "value": "99"
+      },
+      {
+        "kind": "Let",
+        "name": "y",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "99"
+          }
         }
-      }
-    },
-    {
-      "kind": "Let",
-      "name": "output",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Tuple",
-          "elements": [
-            {
-              "expr": {
-                "kind": "Name",
-                "name": "x"
+      },
+      {
+        "kind": "Let",
+        "name": "output",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Name",
+                  "name": "x"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Name",
+                  "name": "y"
+                }
               }
-            },
-            {
-              "expr": {
-                "kind": "Name",
-                "name": "y"
-              }
-            }
-          ]
+            ],
+            "kind": "Tuple"
+          }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

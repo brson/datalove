@@ -1,30 +1,33 @@
 {
-  "statements": [
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Int",
-          "heap": "Local",
-          "type_hint": null,
-          "value": "1"
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "1"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "y",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "2"
+          }
         }
       }
-    },
-    {
-      "kind": "Let",
-      "name": "y",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Int",
-          "heap": "Local",
-          "type_hint": null,
-          "value": "2"
-        }
-      }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

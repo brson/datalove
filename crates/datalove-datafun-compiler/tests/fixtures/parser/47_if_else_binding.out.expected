@@ -1,41 +1,44 @@
 {
-  "statements": [
-    {
-      "kind": "If",
-      "condition": {
-        "expr": {
-          "kind": "Name",
-          "name": "cond"
-        }
-      },
-      "then_body": [
-        {
-          "kind": "Let",
-          "name": "x",
-          "type_hint": null,
-          "value": {
-            "expr": {
-              "kind": "Int",
-              "heap": "Local",
-              "type_hint": null,
-              "value": "1"
+  "ast": {
+    "statements": [
+      {
+        "condition": {
+          "expr": {
+            "kind": "Name",
+            "name": "cond"
+          }
+        },
+        "else_body": [
+          {
+            "kind": "Let",
+            "name": "x",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "kind": "Name",
+                "name": "val"
+              }
             }
           }
-        }
-      ],
-      "else_body": [
-        {
-          "kind": "Let",
-          "name": "x",
-          "type_hint": null,
-          "value": {
-            "expr": {
-              "kind": "Name",
-              "name": "val"
+        ],
+        "kind": "If",
+        "then_body": [
+          {
+            "kind": "Let",
+            "name": "x",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "heap": "Local",
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
             }
           }
-        }
-      ]
-    }
-  ]
+        ]
+      }
+    ]
+  },
+  "diagnostics": []
 }

@@ -1,88 +1,91 @@
 {
-  "statements": [
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Map",
-          "heap": "Local",
-          "type_hint": null,
-          "entries": [
-            {
-              "key": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "1"
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "entries": [
+              {
+                "key": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                },
+                "value": {
+                  "expr": {
+                    "elements": [
+                      {
+                        "expr": {
+                          "heap": "Omitted",
+                          "kind": "Int",
+                          "type_hint": null,
+                          "value": "10"
+                        }
+                      },
+                      {
+                        "expr": {
+                          "heap": "Omitted",
+                          "kind": "Int",
+                          "type_hint": null,
+                          "value": "20"
+                        }
+                      }
+                    ],
+                    "heap": "Local",
+                    "kind": "List",
+                    "type_hint": null
+                  }
                 }
               },
-              "value": {
-                "expr": {
-                  "kind": "List",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "elements": [
-                    {
-                      "expr": {
-                        "kind": "Int",
-                        "heap": "Omitted",
-                        "type_hint": null,
-                        "value": "10"
+              {
+                "key": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "2"
+                  }
+                },
+                "value": {
+                  "expr": {
+                    "elements": [
+                      {
+                        "expr": {
+                          "heap": "Omitted",
+                          "kind": "Int",
+                          "type_hint": null,
+                          "value": "30"
+                        }
+                      },
+                      {
+                        "expr": {
+                          "heap": "Omitted",
+                          "kind": "Int",
+                          "type_hint": null,
+                          "value": "40"
+                        }
                       }
-                    },
-                    {
-                      "expr": {
-                        "kind": "Int",
-                        "heap": "Omitted",
-                        "type_hint": null,
-                        "value": "20"
-                      }
-                    }
-                  ]
+                    ],
+                    "heap": "Local",
+                    "kind": "List",
+                    "type_hint": null
+                  }
                 }
               }
-            },
-            {
-              "key": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "2"
-                }
-              },
-              "value": {
-                "expr": {
-                  "kind": "List",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "elements": [
-                    {
-                      "expr": {
-                        "kind": "Int",
-                        "heap": "Omitted",
-                        "type_hint": null,
-                        "value": "30"
-                      }
-                    },
-                    {
-                      "expr": {
-                        "kind": "Int",
-                        "heap": "Omitted",
-                        "type_hint": null,
-                        "value": "40"
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          ]
+            ],
+            "heap": "Local",
+            "kind": "Map",
+            "type_hint": null
+          }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

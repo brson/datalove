@@ -1,19 +1,37 @@
 {
-  "statements": [
-    {
-      "kind": "Fun",
-      "name": "get_value",
-      "params": [],
-      "return_type": {
-        "heap": "Omitted",
-        "type_hint": "U32"
-      },
-      "body": [
-        {
-          "kind": "ParseError",
-          "message": "unexpected statement"
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "ParseError",
+            "message": "unexpected statement"
+          }
+        ],
+        "kind": "Fun",
+        "name": "get_value",
+        "params": [],
+        "return_type": {
+          "heap": "Omitted",
+          "type_hint": "U32"
         }
-      ]
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P001",
+      "labels": [
+        {
+          "message": "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'",
+          "span": [
+            25,
+            26
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "unexpected statement"
     }
   ]
 }

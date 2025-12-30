@@ -1,27 +1,30 @@
 {
-  "statements": [
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "BinOp",
-          "op": "Le",
-          "lhs": {
-            "expr": {
-              "kind": "Name",
-              "name": "a"
-            }
-          },
-          "rhs": {
-            "expr": {
-              "kind": "Name",
-              "name": "b"
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "kind": "Name",
+                "name": "a"
+              }
+            },
+            "op": "Le",
+            "rhs": {
+              "expr": {
+                "kind": "Name",
+                "name": "b"
+              }
             }
           }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

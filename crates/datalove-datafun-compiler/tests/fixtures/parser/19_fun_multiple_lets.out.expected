@@ -1,114 +1,117 @@
 {
-  "statements": [
-    {
-      "kind": "Fun",
-      "name": "compute",
-      "params": [
-        {
-          "name": "a",
-          "mode": "In",
-          "type_hint": {
-            "heap": "Local",
-            "type_hint": "U32"
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Let",
+            "name": "x",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "a"
+                  }
+                },
+                "op": "Add",
+                "rhs": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "b"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "y",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "x"
+                  }
+                },
+                "op": "Mul",
+                "rhs": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "2"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "z",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "y"
+                  }
+                },
+                "op": "Sub",
+                "rhs": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Name",
+                "name": "z"
+              }
+            }
           }
-        },
-        {
-          "name": "b",
-          "mode": "In",
-          "type_hint": {
-            "heap": "Local",
-            "type_hint": "U32"
+        ],
+        "kind": "Fun",
+        "name": "compute",
+        "params": [
+          {
+            "mode": "In",
+            "name": "a",
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "U32"
+            }
+          },
+          {
+            "mode": "In",
+            "name": "b",
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "U32"
+            }
           }
+        ],
+        "return_type": {
+          "heap": "Local",
+          "type_hint": "U32"
         }
-      ],
-      "return_type": {
-        "heap": "Local",
-        "type_hint": "U32"
-      },
-      "body": [
-        {
-          "kind": "Let",
-          "name": "x",
-          "type_hint": null,
-          "value": {
-            "expr": {
-              "kind": "BinOp",
-              "op": "Add",
-              "lhs": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "a"
-                }
-              },
-              "rhs": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "b"
-                }
-              }
-            }
-          }
-        },
-        {
-          "kind": "Let",
-          "name": "y",
-          "type_hint": null,
-          "value": {
-            "expr": {
-              "kind": "BinOp",
-              "op": "Mul",
-              "lhs": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "x"
-                }
-              },
-              "rhs": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "2"
-                }
-              }
-            }
-          }
-        },
-        {
-          "kind": "Let",
-          "name": "z",
-          "type_hint": null,
-          "value": {
-            "expr": {
-              "kind": "BinOp",
-              "op": "Sub",
-              "lhs": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "y"
-                }
-              },
-              "rhs": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "1"
-                }
-              }
-            }
-          }
-        },
-        {
-          "kind": "Ret",
-          "value": {
-            "expr": {
-              "kind": "Name",
-              "name": "z"
-            }
-          }
-        }
-      ]
-    }
-  ]
+      }
+    ]
+  },
+  "diagnostics": []
 }

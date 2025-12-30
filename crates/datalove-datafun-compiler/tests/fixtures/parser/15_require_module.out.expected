@@ -1,11 +1,14 @@
 {
-  "statements": [
-    {
-      "kind": "Require",
-      "variant": "Module",
-      "import_space": "sys",
-      "package_alias": "std",
-      "module_alias": "bool"
-    }
-  ]
+  "ast": {
+    "statements": [
+      {
+        "import_space": "sys",
+        "kind": "Require",
+        "module_alias": "bool",
+        "package_alias": "std",
+        "variant": "Module"
+      }
+    ]
+  },
+  "diagnostics": []
 }

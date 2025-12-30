@@ -1,107 +1,110 @@
 {
-  "statements": [
-    {
-      "kind": "Fun",
-      "name": "process",
-      "params": [
-        {
-          "name": "n",
-          "mode": "In",
-          "type_hint": {
-            "heap": "Local",
-            "type_hint": "U32"
-          }
-        }
-      ],
-      "return_type": {
-        "heap": "Local",
-        "type_hint": "U32"
-      },
-      "body": [
-        {
-          "kind": "If",
-          "condition": {
-            "expr": {
-              "kind": "BinOp",
-              "op": "Gt",
-              "lhs": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "n"
-                }
-              },
-              "rhs": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "0"
-                }
-              }
-            }
-          },
-          "then_body": [
-            {
-              "kind": "Let",
-              "name": "doubled",
-              "type_hint": null,
-              "value": {
-                "expr": {
-                  "kind": "BinOp",
-                  "op": "Mul",
-                  "lhs": {
-                    "expr": {
-                      "kind": "Name",
-                      "name": "n"
-                    }
-                  },
-                  "rhs": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "2"
-                    }
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "condition": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "n"
+                  }
+                },
+                "op": "Gt",
+                "rhs": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "0"
                   }
                 }
               }
             },
-            {
-              "kind": "Ret",
-              "value": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "doubled"
+            "else_body": [
+              {
+                "kind": "Let",
+                "name": "zero",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "0"
+                  }
+                }
+              },
+              {
+                "kind": "Ret",
+                "value": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "zero"
+                  }
                 }
               }
+            ],
+            "kind": "If",
+            "then_body": [
+              {
+                "kind": "Let",
+                "name": "doubled",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "kind": "BinOp",
+                    "lhs": {
+                      "expr": {
+                        "kind": "Name",
+                        "name": "n"
+                      }
+                    },
+                    "op": "Mul",
+                    "rhs": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "2"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "Ret",
+                "value": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "doubled"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "kind": "Fun",
+        "name": "process",
+        "params": [
+          {
+            "mode": "In",
+            "name": "n",
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "U32"
             }
-          ],
-          "else_body": [
-            {
-              "kind": "Let",
-              "name": "zero",
-              "type_hint": null,
-              "value": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "0"
-                }
-              }
-            },
-            {
-              "kind": "Ret",
-              "value": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "zero"
-                }
-              }
-            }
-          ]
+          }
+        ],
+        "return_type": {
+          "heap": "Local",
+          "type_hint": "U32"
         }
-      ]
-    }
-  ]
+      }
+    ]
+  },
+  "diagnostics": []
 }

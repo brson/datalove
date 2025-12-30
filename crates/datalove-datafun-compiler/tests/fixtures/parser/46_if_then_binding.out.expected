@@ -1,27 +1,30 @@
 {
-  "statements": [
-    {
-      "kind": "If",
-      "condition": {
-        "expr": {
-          "kind": "Name",
-          "name": "cond"
-        }
-      },
-      "then_body": [
-        {
-          "kind": "Let",
-          "name": "x",
-          "type_hint": null,
-          "value": {
-            "expr": {
-              "kind": "Name",
-              "name": "val"
+  "ast": {
+    "statements": [
+      {
+        "condition": {
+          "expr": {
+            "kind": "Name",
+            "name": "cond"
+          }
+        },
+        "else_body": null,
+        "kind": "If",
+        "then_body": [
+          {
+            "kind": "Let",
+            "name": "x",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "kind": "Name",
+                "name": "val"
+              }
             }
           }
-        }
-      ],
-      "else_body": null
-    }
-  ]
+        ]
+      }
+    ]
+  },
+  "diagnostics": []
 }

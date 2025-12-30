@@ -1,17 +1,20 @@
 {
-  "statements": [
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "String",
-          "heap": "Local",
-          "type_hint": null,
-          "value": "\"hello\""
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "String",
+            "type_hint": null,
+            "value": "\"hello\""
+          }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

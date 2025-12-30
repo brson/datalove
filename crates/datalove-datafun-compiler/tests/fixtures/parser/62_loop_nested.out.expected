@@ -1,104 +1,107 @@
 {
-  "statements": [
-    {
-      "kind": "Fun",
-      "name": "nested_loops",
-      "params": [],
-      "return_type": {
-        "heap": "Local",
-        "type_hint": "U32"
-      },
-      "body": [
-        {
-          "kind": "Let",
-          "name": "total",
-          "type_hint": null,
-          "value": {
-            "expr": {
-              "kind": "Int",
-              "heap": "Local",
-              "type_hint": null,
-              "value": "0"
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Let",
+            "name": "total",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "heap": "Local",
+                "kind": "Int",
+                "type_hint": null,
+                "value": "0"
+              }
             }
-          }
-        },
-        {
-          "kind": "Loop",
-          "body": [
-            {
-              "kind": "Loop",
-              "body": [
-                {
-                  "kind": "Let",
-                  "name": "total",
-                  "type_hint": null,
-                  "value": {
-                    "expr": {
-                      "kind": "BinOp",
-                      "op": "Add",
-                      "lhs": {
-                        "expr": {
-                          "kind": "Name",
-                          "name": "total"
+          },
+          {
+            "body": [
+              {
+                "body": [
+                  {
+                    "kind": "Let",
+                    "name": "total",
+                    "type_hint": null,
+                    "value": {
+                      "expr": {
+                        "kind": "BinOp",
+                        "lhs": {
+                          "expr": {
+                            "kind": "Name",
+                            "name": "total"
+                          }
+                        },
+                        "op": "Add",
+                        "rhs": {
+                          "expr": {
+                            "heap": "Local",
+                            "kind": "Int",
+                            "type_hint": null,
+                            "value": "1"
+                          }
                         }
-                      },
-                      "rhs": {
-                        "expr": {
-                          "kind": "Int",
-                          "heap": "Local",
-                          "type_hint": null,
-                          "value": "1"
-                        }
+                      }
+                    }
+                  },
+                  {
+                    "kind": "Break"
+                  }
+                ],
+                "kind": "Loop"
+              },
+              {
+                "condition": {
+                  "expr": {
+                    "kind": "BinOp",
+                    "lhs": {
+                      "expr": {
+                        "kind": "Name",
+                        "name": "total"
+                      }
+                    },
+                    "op": "Ge",
+                    "rhs": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "3"
                       }
                     }
                   }
                 },
-                {
-                  "kind": "Break"
-                }
-              ]
-            },
-            {
-              "kind": "If",
-              "condition": {
-                "expr": {
-                  "kind": "BinOp",
-                  "op": "Ge",
-                  "lhs": {
-                    "expr": {
-                      "kind": "Name",
-                      "name": "total"
-                    }
-                  },
-                  "rhs": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "3"
-                    }
+                "else_body": null,
+                "kind": "If",
+                "then_body": [
+                  {
+                    "kind": "Break"
                   }
-                }
-              },
-              "then_body": [
-                {
-                  "kind": "Break"
-                }
-              ],
-              "else_body": null
-            }
-          ]
-        },
-        {
-          "kind": "Ret",
-          "value": {
-            "expr": {
-              "kind": "Name",
-              "name": "total"
+                ]
+              }
+            ],
+            "kind": "Loop"
+          },
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Name",
+                "name": "total"
+              }
             }
           }
+        ],
+        "kind": "Fun",
+        "name": "nested_loops",
+        "params": [],
+        "return_type": {
+          "heap": "Local",
+          "type_hint": "U32"
         }
-      ]
-    }
-  ]
+      }
+    ]
+  },
+  "diagnostics": []
 }

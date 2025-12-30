@@ -1,20 +1,23 @@
 {
-  "statements": [
-    {
-      "kind": "Let",
-      "name": "msg",
-      "type_hint": {
-        "heap": "Local",
-        "type_hint": "String"
-      },
-      "value": {
-        "expr": {
-          "kind": "String",
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "msg",
+        "type_hint": {
           "heap": "Local",
-          "type_hint": null,
-          "value": "\"hello world\""
+          "type_hint": "String"
+        },
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "String",
+            "type_hint": null,
+            "value": "\"hello world\""
+          }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

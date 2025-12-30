@@ -1,111 +1,114 @@
 {
-  "statements": [
-    {
-      "kind": "Fun",
-      "name": "classify",
-      "params": [
-        {
-          "name": "n",
-          "mode": "In",
-          "type_hint": {
-            "heap": "Local",
-            "type_hint": "U32"
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "condition": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "n"
+                  }
+                },
+                "op": "Lt",
+                "rhs": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "10"
+                  }
+                }
+              }
+            },
+            "else_body": [
+              {
+                "kind": "Ret",
+                "value": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "3"
+                  }
+                }
+              }
+            ],
+            "kind": "If",
+            "then_body": [
+              {
+                "condition": {
+                  "expr": {
+                    "kind": "BinOp",
+                    "lhs": {
+                      "expr": {
+                        "kind": "Name",
+                        "name": "n"
+                      }
+                    },
+                    "op": "Lt",
+                    "rhs": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "5"
+                      }
+                    }
+                  }
+                },
+                "else_body": [
+                  {
+                    "kind": "Ret",
+                    "value": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "2"
+                      }
+                    }
+                  }
+                ],
+                "kind": "If",
+                "then_body": [
+                  {
+                    "kind": "Ret",
+                    "value": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "1"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
           }
+        ],
+        "kind": "Fun",
+        "name": "classify",
+        "params": [
+          {
+            "mode": "In",
+            "name": "n",
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "U32"
+            }
+          }
+        ],
+        "return_type": {
+          "heap": "Local",
+          "type_hint": "U32"
         }
-      ],
-      "return_type": {
-        "heap": "Local",
-        "type_hint": "U32"
-      },
-      "body": [
-        {
-          "kind": "If",
-          "condition": {
-            "expr": {
-              "kind": "BinOp",
-              "op": "Lt",
-              "lhs": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "n"
-                }
-              },
-              "rhs": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "10"
-                }
-              }
-            }
-          },
-          "then_body": [
-            {
-              "kind": "If",
-              "condition": {
-                "expr": {
-                  "kind": "BinOp",
-                  "op": "Lt",
-                  "lhs": {
-                    "expr": {
-                      "kind": "Name",
-                      "name": "n"
-                    }
-                  },
-                  "rhs": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "5"
-                    }
-                  }
-                }
-              },
-              "then_body": [
-                {
-                  "kind": "Ret",
-                  "value": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "1"
-                    }
-                  }
-                }
-              ],
-              "else_body": [
-                {
-                  "kind": "Ret",
-                  "value": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "2"
-                    }
-                  }
-                }
-              ]
-            }
-          ],
-          "else_body": [
-            {
-              "kind": "Ret",
-              "value": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "3"
-                }
-              }
-            }
-          ]
-        }
-      ]
-    }
-  ]
+      }
+    ]
+  },
+  "diagnostics": []
 }

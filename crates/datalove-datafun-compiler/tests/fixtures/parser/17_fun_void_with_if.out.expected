@@ -1,60 +1,63 @@
 {
-  "statements": [
-    {
-      "kind": "Fun",
-      "name": "check",
-      "params": [
-        {
-          "name": "n",
-          "mode": "In",
-          "type_hint": {
-            "heap": "Local",
-            "type_hint": "U32"
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "condition": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "n"
+                  }
+                },
+                "op": "Lt",
+                "rhs": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "10"
+                  }
+                }
+              }
+            },
+            "else_body": null,
+            "kind": "If",
+            "then_body": [
+              {
+                "kind": "Let",
+                "name": "small",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            ]
           }
-        }
-      ],
-      "return_type": null,
-      "body": [
-        {
-          "kind": "If",
-          "condition": {
-            "expr": {
-              "kind": "BinOp",
-              "op": "Lt",
-              "lhs": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "n"
-                }
-              },
-              "rhs": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "10"
-                }
-              }
+        ],
+        "kind": "Fun",
+        "name": "check",
+        "params": [
+          {
+            "mode": "In",
+            "name": "n",
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "U32"
             }
-          },
-          "then_body": [
-            {
-              "kind": "Let",
-              "name": "small",
-              "type_hint": null,
-              "value": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "1"
-                }
-              }
-            }
-          ],
-          "else_body": null
-        }
-      ]
-    }
-  ]
+          }
+        ],
+        "return_type": null
+      }
+    ]
+  },
+  "diagnostics": []
 }

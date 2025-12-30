@@ -1,42 +1,45 @@
 {
-  "statements": [
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "AnonTuple",
-          "heap": "Local",
-          "type_hint": null,
-          "elements": [
-            {
-              "expr": {
-                "kind": "Int",
-                "heap": "Omitted",
-                "type_hint": null,
-                "value": "1"
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "heap": "Omitted",
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "heap": "Omitted",
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              },
+              {
+                "expr": {
+                  "heap": "Omitted",
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "3"
+                }
               }
-            },
-            {
-              "expr": {
-                "kind": "Int",
-                "heap": "Omitted",
-                "type_hint": null,
-                "value": "2"
-              }
-            },
-            {
-              "expr": {
-                "kind": "Int",
-                "heap": "Omitted",
-                "type_hint": null,
-                "value": "3"
-              }
-            }
-          ]
+            ],
+            "heap": "Local",
+            "kind": "AnonTuple",
+            "type_hint": null
+          }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

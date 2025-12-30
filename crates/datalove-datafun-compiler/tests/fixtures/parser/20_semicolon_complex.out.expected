@@ -1,66 +1,69 @@
 {
-  "statements": [
-    {
-      "kind": "Require",
-      "variant": "Module",
-      "import_space": "sys",
-      "package_alias": "std",
-      "module_alias": "bool"
-    },
-    {
-      "kind": "Require",
-      "variant": "Data",
-      "name": "values",
-      "type_hint": null
-    },
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Int",
-          "heap": "Local",
-          "type_hint": null,
-          "value": "42"
+  "ast": {
+    "statements": [
+      {
+        "import_space": "sys",
+        "kind": "Require",
+        "module_alias": "bool",
+        "package_alias": "std",
+        "variant": "Module"
+      },
+      {
+        "kind": "Require",
+        "name": "values",
+        "type_hint": null,
+        "variant": "Data"
+      },
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "42"
+          }
         }
-      }
-    },
-    {
-      "kind": "Let",
-      "name": "y",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "Int",
-          "heap": "Local",
-          "type_hint": null,
-          "value": "100"
+      },
+      {
+        "kind": "Let",
+        "name": "y",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "100"
+          }
         }
-      }
-    },
-    {
-      "kind": "Let",
-      "name": "sum",
-      "type_hint": null,
-      "value": {
-        "expr": {
-          "kind": "BinOp",
-          "op": "AddChecked",
-          "lhs": {
-            "expr": {
-              "kind": "Name",
-              "name": "x"
-            }
-          },
-          "rhs": {
-            "expr": {
-              "kind": "Name",
-              "name": "y"
+      },
+      {
+        "kind": "Let",
+        "name": "sum",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "kind": "Name",
+                "name": "x"
+              }
+            },
+            "op": "AddChecked",
+            "rhs": {
+              "expr": {
+                "kind": "Name",
+                "name": "y"
+              }
             }
           }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

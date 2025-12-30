@@ -1,149 +1,152 @@
 {
-  "statements": [
-    {
-      "kind": "Fun",
-      "name": "grade",
-      "params": [
-        {
-          "name": "score",
-          "mode": "In",
-          "type_hint": {
-            "heap": "Local",
-            "type_hint": "U32"
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "condition": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "score"
+                  }
+                },
+                "op": "Ge",
+                "rhs": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "90"
+                  }
+                }
+              }
+            },
+            "else_body": [
+              {
+                "condition": {
+                  "expr": {
+                    "kind": "BinOp",
+                    "lhs": {
+                      "expr": {
+                        "kind": "Name",
+                        "name": "score"
+                      }
+                    },
+                    "op": "Ge",
+                    "rhs": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "80"
+                      }
+                    }
+                  }
+                },
+                "else_body": [
+                  {
+                    "condition": {
+                      "expr": {
+                        "kind": "BinOp",
+                        "lhs": {
+                          "expr": {
+                            "kind": "Name",
+                            "name": "score"
+                          }
+                        },
+                        "op": "Ge",
+                        "rhs": {
+                          "expr": {
+                            "heap": "Local",
+                            "kind": "Int",
+                            "type_hint": null,
+                            "value": "70"
+                          }
+                        }
+                      }
+                    },
+                    "else_body": [
+                      {
+                        "kind": "Ret",
+                        "value": {
+                          "expr": {
+                            "heap": "Local",
+                            "kind": "Int",
+                            "type_hint": null,
+                            "value": "1"
+                          }
+                        }
+                      }
+                    ],
+                    "kind": "If",
+                    "then_body": [
+                      {
+                        "kind": "Ret",
+                        "value": {
+                          "expr": {
+                            "heap": "Local",
+                            "kind": "Int",
+                            "type_hint": null,
+                            "value": "2"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "kind": "If",
+                "then_body": [
+                  {
+                    "kind": "Ret",
+                    "value": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "3"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "kind": "If",
+            "then_body": [
+              {
+                "kind": "Ret",
+                "value": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "4"
+                  }
+                }
+              }
+            ]
           }
+        ],
+        "kind": "Fun",
+        "name": "grade",
+        "params": [
+          {
+            "mode": "In",
+            "name": "score",
+            "type_hint": {
+              "heap": "Local",
+              "type_hint": "U32"
+            }
+          }
+        ],
+        "return_type": {
+          "heap": "Local",
+          "type_hint": "U32"
         }
-      ],
-      "return_type": {
-        "heap": "Local",
-        "type_hint": "U32"
-      },
-      "body": [
-        {
-          "kind": "If",
-          "condition": {
-            "expr": {
-              "kind": "BinOp",
-              "op": "Ge",
-              "lhs": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "score"
-                }
-              },
-              "rhs": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "90"
-                }
-              }
-            }
-          },
-          "then_body": [
-            {
-              "kind": "Ret",
-              "value": {
-                "expr": {
-                  "kind": "Int",
-                  "heap": "Local",
-                  "type_hint": null,
-                  "value": "4"
-                }
-              }
-            }
-          ],
-          "else_body": [
-            {
-              "kind": "If",
-              "condition": {
-                "expr": {
-                  "kind": "BinOp",
-                  "op": "Ge",
-                  "lhs": {
-                    "expr": {
-                      "kind": "Name",
-                      "name": "score"
-                    }
-                  },
-                  "rhs": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "80"
-                    }
-                  }
-                }
-              },
-              "then_body": [
-                {
-                  "kind": "Ret",
-                  "value": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "3"
-                    }
-                  }
-                }
-              ],
-              "else_body": [
-                {
-                  "kind": "If",
-                  "condition": {
-                    "expr": {
-                      "kind": "BinOp",
-                      "op": "Ge",
-                      "lhs": {
-                        "expr": {
-                          "kind": "Name",
-                          "name": "score"
-                        }
-                      },
-                      "rhs": {
-                        "expr": {
-                          "kind": "Int",
-                          "heap": "Local",
-                          "type_hint": null,
-                          "value": "70"
-                        }
-                      }
-                    }
-                  },
-                  "then_body": [
-                    {
-                      "kind": "Ret",
-                      "value": {
-                        "expr": {
-                          "kind": "Int",
-                          "heap": "Local",
-                          "type_hint": null,
-                          "value": "2"
-                        }
-                      }
-                    }
-                  ],
-                  "else_body": [
-                    {
-                      "kind": "Ret",
-                      "value": {
-                        "expr": {
-                          "kind": "Int",
-                          "heap": "Local",
-                          "type_hint": null,
-                          "value": "1"
-                        }
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
+      }
+    ]
+  },
+  "diagnostics": []
 }

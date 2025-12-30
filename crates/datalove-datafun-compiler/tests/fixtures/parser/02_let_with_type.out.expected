@@ -1,20 +1,23 @@
 {
-  "statements": [
-    {
-      "kind": "Let",
-      "name": "x",
-      "type_hint": {
-        "heap": "Local",
-        "type_hint": "U32"
-      },
-      "value": {
-        "expr": {
-          "kind": "Int",
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": {
           "heap": "Local",
-          "type_hint": null,
-          "value": "42"
+          "type_hint": "U32"
+        },
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "42"
+          }
         }
       }
-    }
-  ]
+    ]
+  },
+  "diagnostics": []
 }

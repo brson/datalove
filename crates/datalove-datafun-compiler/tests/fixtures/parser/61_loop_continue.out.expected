@@ -1,178 +1,181 @@
 {
-  "statements": [
-    {
-      "kind": "Fun",
-      "name": "skip_evens",
-      "params": [],
-      "return_type": {
-        "heap": "Local",
-        "type_hint": "U32"
-      },
-      "body": [
-        {
-          "kind": "Let",
-          "name": "count",
-          "type_hint": null,
-          "value": {
-            "expr": {
-              "kind": "Int",
-              "heap": "Local",
-              "type_hint": null,
-              "value": "0"
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Let",
+            "name": "count",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "heap": "Local",
+                "kind": "Int",
+                "type_hint": null,
+                "value": "0"
+              }
             }
-          }
-        },
-        {
-          "kind": "Let",
-          "name": "i",
-          "type_hint": null,
-          "value": {
-            "expr": {
-              "kind": "Int",
-              "heap": "Local",
-              "type_hint": null,
-              "value": "0"
+          },
+          {
+            "kind": "Let",
+            "name": "i",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "heap": "Local",
+                "kind": "Int",
+                "type_hint": null,
+                "value": "0"
+              }
             }
-          }
-        },
-        {
-          "kind": "Loop",
-          "body": [
-            {
-              "kind": "Let",
-              "name": "i",
-              "type_hint": null,
-              "value": {
-                "expr": {
-                  "kind": "BinOp",
-                  "op": "Add",
-                  "lhs": {
-                    "expr": {
-                      "kind": "Name",
-                      "name": "i"
+          },
+          {
+            "body": [
+              {
+                "kind": "Let",
+                "name": "i",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "kind": "BinOp",
+                    "lhs": {
+                      "expr": {
+                        "kind": "Name",
+                        "name": "i"
+                      }
+                    },
+                    "op": "Add",
+                    "rhs": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "1"
+                      }
                     }
-                  },
-                  "rhs": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "1"
+                  }
+                }
+              },
+              {
+                "condition": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "i"
+                  }
+                },
+                "else_body": null,
+                "kind": "If",
+                "then_body": [
+                  {
+                    "kind": "Break"
+                  }
+                ]
+              },
+              {
+                "condition": {
+                  "expr": {
+                    "kind": "BinOp",
+                    "lhs": {
+                      "expr": {
+                        "kind": "Name",
+                        "name": "i"
+                      }
+                    },
+                    "op": "Eq",
+                    "rhs": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "2"
+                      }
+                    }
+                  }
+                },
+                "else_body": null,
+                "kind": "If",
+                "then_body": [
+                  {
+                    "kind": "Continue"
+                  }
+                ]
+              },
+              {
+                "condition": {
+                  "expr": {
+                    "kind": "BinOp",
+                    "lhs": {
+                      "expr": {
+                        "kind": "Name",
+                        "name": "i"
+                      }
+                    },
+                    "op": "Eq",
+                    "rhs": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "4"
+                      }
+                    }
+                  }
+                },
+                "else_body": null,
+                "kind": "If",
+                "then_body": [
+                  {
+                    "kind": "Continue"
+                  }
+                ]
+              },
+              {
+                "kind": "Let",
+                "name": "count",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "kind": "BinOp",
+                    "lhs": {
+                      "expr": {
+                        "kind": "Name",
+                        "name": "count"
+                      }
+                    },
+                    "op": "Add",
+                    "rhs": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "1"
+                      }
                     }
                   }
                 }
               }
-            },
-            {
-              "kind": "If",
-              "condition": {
-                "expr": {
-                  "kind": "Name",
-                  "name": "i"
-                }
-              },
-              "then_body": [
-                {
-                  "kind": "Break"
-                }
-              ],
-              "else_body": null
-            },
-            {
-              "kind": "If",
-              "condition": {
-                "expr": {
-                  "kind": "BinOp",
-                  "op": "Eq",
-                  "lhs": {
-                    "expr": {
-                      "kind": "Name",
-                      "name": "i"
-                    }
-                  },
-                  "rhs": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "2"
-                    }
-                  }
-                }
-              },
-              "then_body": [
-                {
-                  "kind": "Continue"
-                }
-              ],
-              "else_body": null
-            },
-            {
-              "kind": "If",
-              "condition": {
-                "expr": {
-                  "kind": "BinOp",
-                  "op": "Eq",
-                  "lhs": {
-                    "expr": {
-                      "kind": "Name",
-                      "name": "i"
-                    }
-                  },
-                  "rhs": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "4"
-                    }
-                  }
-                }
-              },
-              "then_body": [
-                {
-                  "kind": "Continue"
-                }
-              ],
-              "else_body": null
-            },
-            {
-              "kind": "Let",
-              "name": "count",
-              "type_hint": null,
-              "value": {
-                "expr": {
-                  "kind": "BinOp",
-                  "op": "Add",
-                  "lhs": {
-                    "expr": {
-                      "kind": "Name",
-                      "name": "count"
-                    }
-                  },
-                  "rhs": {
-                    "expr": {
-                      "kind": "Int",
-                      "heap": "Local",
-                      "type_hint": null,
-                      "value": "1"
-                    }
-                  }
-                }
+            ],
+            "kind": "Loop"
+          },
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Name",
+                "name": "count"
               }
             }
-          ]
-        },
-        {
-          "kind": "Ret",
-          "value": {
-            "expr": {
-              "kind": "Name",
-              "name": "count"
-            }
           }
+        ],
+        "kind": "Fun",
+        "name": "skip_evens",
+        "params": [],
+        "return_type": {
+          "heap": "Local",
+          "type_hint": "U32"
         }
-      ]
-    }
-  ]
+      }
+    ]
+  },
+  "diagnostics": []
 }
