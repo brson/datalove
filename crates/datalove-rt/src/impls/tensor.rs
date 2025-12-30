@@ -283,9 +283,11 @@ pub unsafe fn tensor_get_impl(
         let shape_ptr = (*tensor_ptr).shape as *const u32;
         let strides_ptr = (*tensor_ptr).strides as *const u32;
 
-        if ptr_base.is_null() || shape_ptr.is_null() || strides_ptr.is_null() || rank == 0 {
-            return RtStatus::Error;
-        }
+        // These are programming errors (use-after-destroy, use-after-move).
+        assert!(!ptr_base.is_null(), "tensor_get: ptr_base is null");
+        assert!(!shape_ptr.is_null(), "tensor_get: shape is null");
+        assert!(!strides_ptr.is_null(), "tensor_get: strides is null");
+        assert!(rank > 0, "tensor_get: rank is 0");
 
         // Validate indices and compute linear offset.
         let indices_slice = std::slice::from_raw_parts(indices_ptr, rank as usize);
@@ -347,9 +349,11 @@ pub unsafe fn tensor_set_impl(
         let shape_ptr = (*tensor_ptr).shape as *const u32;
         let strides_ptr = (*tensor_ptr).strides as *const u32;
 
-        if ptr_base.is_null() || shape_ptr.is_null() || strides_ptr.is_null() || rank == 0 {
-            return RtStatus::Error;
-        }
+        // These are programming errors (use-after-destroy, use-after-move).
+        assert!(!ptr_base.is_null(), "tensor_set: ptr_base is null");
+        assert!(!shape_ptr.is_null(), "tensor_set: shape is null");
+        assert!(!strides_ptr.is_null(), "tensor_set: strides is null");
+        assert!(rank > 0, "tensor_set: rank is 0");
 
         // Validate indices and compute linear offset.
         let indices_slice = std::slice::from_raw_parts(indices_ptr, rank as usize);
@@ -430,9 +434,10 @@ pub unsafe fn tensor_transpose_impl(
         let strides_in_ptr = (*tensor_in_ptr).strides;
         let layout_in = (*tensor_in_ptr).layout;
 
-        if ptr_base.is_null() || shape_in_ptr.is_null() || strides_in_ptr.is_null() {
-            return RtStatus::Error;
-        }
+        // These are programming errors (use-after-destroy, use-after-move).
+        assert!(!ptr_base.is_null(), "tensor_transpose: ptr_base is null");
+        assert!(!shape_in_ptr.is_null(), "tensor_transpose: shape is null");
+        assert!(!strides_in_ptr.is_null(), "tensor_transpose: strides is null");
 
         // Validate permutation.
         let perm_slice = std::slice::from_raw_parts(perm_ptr, rank as usize);

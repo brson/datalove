@@ -4196,3 +4196,571 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
 
     Ok(())
 }
+
+/// Test reshape on 3D transposed tensor hits contiguity check.
+///
+/// A 3D tensor with permutation [1, 2, 0] has strides that are neither
+/// row-major nor col-major contiguous, so reshape should fail.
+#[test]
+fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(3);
+    let (list_tydesc, list_element_tydesc) = create_list_u32_tydesc();
+
+    // Create a 2x3x4 row-major tensor.
+    let slice_data: Vec<u32> = (1..=24).collect();
+    let mut shape_list = unsafe {
+        create_runtime_u32_list(rt, &[2, 3, 4], &*list_tydesc, &*list_element_tydesc)
+    };
+
+    let mut tensor = rtdt::Tensor {
+        ptr_base: ptr::null_mut(),
+        offset_elems: 0,
+        capacity_elems: 0,
+        shape: ptr::null(),
+        strides: ptr::null(),
+        layout: rtdt::TensorLayout::RowMajor,
+    };
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
+            rt,
+            slice_data.as_ptr() as *const u8,
+            slice_data.len() as u32,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut shape_list as *mut rtdt::List as *mut u8,
+            &*list_tydesc as *const rtdt::TyDesc,
+            rtdt::TensorLayout::RowMajor as u8,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Verify original strides: [12, 4, 1] (row-major for [2, 3, 4]).
+    let strides_before = unsafe { std::slice::from_raw_parts(tensor.strides, 3) };
+    assert_eq!(strides_before, &[12, 4, 1]);
+
+    // Transpose with perm [1, 2, 0] -> shape becomes [3, 4, 2].
+    // Strides become [4, 1, 12] (permuted from [12, 4, 1]).
+    let perm = [1u32, 2, 0];
+    let mut transposed = rtdt::Tensor {
+        ptr_base: ptr::null_mut(),
+        offset_elems: 0,
+        capacity_elems: 0,
+        shape: ptr::null(),
+        strides: ptr::null(),
+        layout: rtdt::TensorLayout::RowMajor,
+    };
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_tensor_transpose_local(
+            rt,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+            perm.as_ptr(),
+            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Verify transposed shape is [3, 4, 2].
+    let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 3) };
+    assert_eq!(shape, &[3, 4, 2]);
+
+    // Verify transposed strides: [4, 1, 12].
+    // Row-major for [3, 4, 2] would be [8, 2, 1].
+    // Col-major for [3, 4, 2] would be [1, 3, 12].
+    // [4, 1, 12] is neither!
+    let strides_after = unsafe { std::slice::from_raw_parts(transposed.strides, 3) };
+    assert_eq!(strides_after, &[4, 1, 12]);
+
+    // Verify offset_elems is still 0.
+    assert_eq!(transposed.offset_elems, 0);
+
+    // Now try to reshape to [24] - this should fail the contiguity check.
+    let mut new_shape_list = unsafe {
+        create_runtime_u32_list(rt, &[24], &*list_tydesc, &*list_element_tydesc)
+    };
+
+    let (result_tydesc, _rt1d, _re1d) = create_result_tensor_u32_tydesc(1);
+    let result_size = result_tydesc.size as usize;
+    let mut result_buffer = vec![0u8; result_size];
+
+    // Use the original tensor_tydesc (rank 3) for the input.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_tensor_reshape_local(
+            rt,
+            &mut transposed as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+            &mut new_shape_list as *mut rtdt::List as *mut u8,
+            &*list_tydesc as *const rtdt::TyDesc,
+            result_buffer.as_mut_ptr(),
+            &*result_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Result should be Err (non-contiguous tensor cannot be reshaped).
+    let result_ptr = result_buffer.as_ptr() as *const rtdt::Result;
+    let tag = unsafe { (*result_ptr).tag };
+    assert_eq!(tag, rtdt::ResultTag::Err, "Expected Err for non-contiguous tensor reshape");
+
+    // Extract the error payload (contains the original tensor).
+    let tensor_align = std::mem::align_of::<rtdt::Tensor>() as u32;
+    let payload_offset = rtdt::layout::result_payload_offset(tensor_align);
+    let error_tensor_ptr = unsafe {
+        result_buffer.as_ptr().add(payload_offset as usize) as *const rtdt::Tensor
+    };
+    let mut error_tensor = unsafe { ptr::read(error_tensor_ptr) };
+
+    // Clean up the tensor from the error payload.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
+            rt,
+            &mut error_tensor as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+// ============================================================================
+// Transposed Layout Tests
+// ============================================================================
+
+/// Test creating a tensor with RowMajorTransposed layout.
+#[test]
+fn test_tensor_create_row_major_transposed() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
+    let (list_tydesc, list_element_tydesc) = create_list_u32_tydesc();
+
+    // Create 2x3 tensor with RowMajorTransposed layout.
+    // RowMajorTransposed uses col-major strides (like a transposed row-major).
+    let slice_data: Vec<u32> = (1..=6).collect();
+    let mut shape_list = unsafe {
+        create_runtime_u32_list(rt, &[2, 3], &*list_tydesc, &*list_element_tydesc)
+    };
+
+    let mut tensor = rtdt::Tensor {
+        ptr_base: ptr::null_mut(),
+        offset_elems: 0,
+        capacity_elems: 0,
+        shape: ptr::null(),
+        strides: ptr::null(),
+        layout: rtdt::TensorLayout::RowMajorTransposed,
+    };
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
+            rt,
+            slice_data.as_ptr() as *const u8,
+            slice_data.len() as u32,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut shape_list as *mut rtdt::List as *mut u8,
+            &*list_tydesc as *const rtdt::TyDesc,
+            rtdt::TensorLayout::RowMajorTransposed as u8,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Verify tensor fields.
+    assert!(!tensor.ptr_base.is_null());
+    assert_eq!(tensor.layout, rtdt::TensorLayout::RowMajorTransposed);
+
+    // Verify shape.
+    let shape = unsafe { std::slice::from_raw_parts(tensor.shape, 2) };
+    assert_eq!(shape, &[2, 3]);
+
+    // RowMajorTransposed uses col-major strides: [1, 2].
+    let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
+    assert_eq!(strides[0], 1);
+    assert_eq!(strides[1], 2);
+
+    // Clean up.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
+            rt,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test creating a tensor with ColMajorTransposed layout.
+#[test]
+fn test_tensor_create_col_major_transposed() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
+    let (list_tydesc, list_element_tydesc) = create_list_u32_tydesc();
+
+    // Create 2x3 tensor with ColMajorTransposed layout.
+    // ColMajorTransposed uses row-major strides (like a transposed col-major).
+    let slice_data: Vec<u32> = (1..=6).collect();
+    let mut shape_list = unsafe {
+        create_runtime_u32_list(rt, &[2, 3], &*list_tydesc, &*list_element_tydesc)
+    };
+
+    let mut tensor = rtdt::Tensor {
+        ptr_base: ptr::null_mut(),
+        offset_elems: 0,
+        capacity_elems: 0,
+        shape: ptr::null(),
+        strides: ptr::null(),
+        layout: rtdt::TensorLayout::ColMajorTransposed,
+    };
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
+            rt,
+            slice_data.as_ptr() as *const u8,
+            slice_data.len() as u32,
+            &*element_tydesc as *const rtdt::TyDesc,
+            &mut shape_list as *mut rtdt::List as *mut u8,
+            &*list_tydesc as *const rtdt::TyDesc,
+            rtdt::TensorLayout::ColMajorTransposed as u8,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Verify tensor fields.
+    assert!(!tensor.ptr_base.is_null());
+    assert_eq!(tensor.layout, rtdt::TensorLayout::ColMajorTransposed);
+
+    // Verify shape.
+    let shape = unsafe { std::slice::from_raw_parts(tensor.shape, 2) };
+    assert_eq!(shape, &[2, 3]);
+
+    // ColMajorTransposed uses row-major strides: [3, 1].
+    let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
+    assert_eq!(strides[0], 3);
+    assert_eq!(strides[1], 1);
+
+    // Clean up.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_tensor_destroy_local(
+            rt,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
+            &*tensor_tydesc as *const rtdt::TyDesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
+/// Test transpose cycles through all layout transformations.
+///
+/// Tests that:
+/// - RowMajor -> ColMajorTransposed
+/// - ColMajorTransposed -> RowMajor
+/// - ColMajor -> RowMajorTransposed
+/// - RowMajorTransposed -> ColMajor
+#[test]
+fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt.is_null());
+
+    let (tensor_tydesc, element_tydesc) = create_tensor_u32_tydesc(2);
+    let (list_tydesc, list_element_tydesc) = create_list_u32_tydesc();
+
+    // Test 1: RowMajor -> ColMajorTransposed.
+    {
+        let slice_data: Vec<u32> = (1..=6).collect();
+        let mut shape_list = unsafe {
+            create_runtime_u32_list(rt, &[2, 3], &*list_tydesc, &*list_element_tydesc)
+        };
+
+        let mut tensor = rtdt::Tensor {
+            ptr_base: ptr::null_mut(),
+            offset_elems: 0,
+            capacity_elems: 0,
+            shape: ptr::null(),
+            strides: ptr::null(),
+            layout: rtdt::TensorLayout::RowMajor,
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
+                rt,
+                slice_data.as_ptr() as *const u8,
+                slice_data.len() as u32,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut shape_list as *mut rtdt::List as *mut u8,
+                &*list_tydesc as *const rtdt::TyDesc,
+                rtdt::TensorLayout::RowMajor as u8,
+                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        assert_eq!(tensor.layout, rtdt::TensorLayout::RowMajor);
+
+        let perm = [1u32, 0];
+        let mut transposed = rtdt::Tensor {
+            ptr_base: ptr::null_mut(),
+            offset_elems: 0,
+            capacity_elems: 0,
+            shape: ptr::null(),
+            strides: ptr::null(),
+            layout: rtdt::TensorLayout::RowMajor,
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_transpose_local(
+                rt,
+                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+                perm.as_ptr(),
+                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        assert_eq!(transposed.layout, rtdt::TensorLayout::ColMajorTransposed);
+
+        // Verify shape is swapped.
+        let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 2) };
+        assert_eq!(shape, &[3, 2]);
+
+        // Clean up.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_destroy_local(
+                rt,
+                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    // Test 2: ColMajorTransposed -> RowMajor.
+    {
+        let slice_data: Vec<u32> = (1..=6).collect();
+        let mut shape_list = unsafe {
+            create_runtime_u32_list(rt, &[2, 3], &*list_tydesc, &*list_element_tydesc)
+        };
+
+        let mut tensor = rtdt::Tensor {
+            ptr_base: ptr::null_mut(),
+            offset_elems: 0,
+            capacity_elems: 0,
+            shape: ptr::null(),
+            strides: ptr::null(),
+            layout: rtdt::TensorLayout::ColMajorTransposed,
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
+                rt,
+                slice_data.as_ptr() as *const u8,
+                slice_data.len() as u32,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut shape_list as *mut rtdt::List as *mut u8,
+                &*list_tydesc as *const rtdt::TyDesc,
+                rtdt::TensorLayout::ColMajorTransposed as u8,
+                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        assert_eq!(tensor.layout, rtdt::TensorLayout::ColMajorTransposed);
+
+        let perm = [1u32, 0];
+        let mut transposed = rtdt::Tensor {
+            ptr_base: ptr::null_mut(),
+            offset_elems: 0,
+            capacity_elems: 0,
+            shape: ptr::null(),
+            strides: ptr::null(),
+            layout: rtdt::TensorLayout::RowMajor,
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_transpose_local(
+                rt,
+                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+                perm.as_ptr(),
+                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        assert_eq!(transposed.layout, rtdt::TensorLayout::RowMajor);
+
+        // Clean up.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_destroy_local(
+                rt,
+                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    // Test 3: ColMajor -> RowMajorTransposed.
+    {
+        let slice_data: Vec<u32> = (1..=6).collect();
+        let mut shape_list = unsafe {
+            create_runtime_u32_list(rt, &[2, 3], &*list_tydesc, &*list_element_tydesc)
+        };
+
+        let mut tensor = rtdt::Tensor {
+            ptr_base: ptr::null_mut(),
+            offset_elems: 0,
+            capacity_elems: 0,
+            shape: ptr::null(),
+            strides: ptr::null(),
+            layout: rtdt::TensorLayout::ColMajor,
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
+                rt,
+                slice_data.as_ptr() as *const u8,
+                slice_data.len() as u32,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut shape_list as *mut rtdt::List as *mut u8,
+                &*list_tydesc as *const rtdt::TyDesc,
+                rtdt::TensorLayout::ColMajor as u8,
+                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        assert_eq!(tensor.layout, rtdt::TensorLayout::ColMajor);
+
+        let perm = [1u32, 0];
+        let mut transposed = rtdt::Tensor {
+            ptr_base: ptr::null_mut(),
+            offset_elems: 0,
+            capacity_elems: 0,
+            shape: ptr::null(),
+            strides: ptr::null(),
+            layout: rtdt::TensorLayout::RowMajor,
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_transpose_local(
+                rt,
+                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+                perm.as_ptr(),
+                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        assert_eq!(transposed.layout, rtdt::TensorLayout::RowMajorTransposed);
+
+        // Clean up.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_destroy_local(
+                rt,
+                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    // Test 4: RowMajorTransposed -> ColMajor.
+    {
+        let slice_data: Vec<u32> = (1..=6).collect();
+        let mut shape_list = unsafe {
+            create_runtime_u32_list(rt, &[2, 3], &*list_tydesc, &*list_element_tydesc)
+        };
+
+        let mut tensor = rtdt::Tensor {
+            ptr_base: ptr::null_mut(),
+            offset_elems: 0,
+            capacity_elems: 0,
+            shape: ptr::null(),
+            strides: ptr::null(),
+            layout: rtdt::TensorLayout::RowMajorTransposed,
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
+                rt,
+                slice_data.as_ptr() as *const u8,
+                slice_data.len() as u32,
+                &*element_tydesc as *const rtdt::TyDesc,
+                &mut shape_list as *mut rtdt::List as *mut u8,
+                &*list_tydesc as *const rtdt::TyDesc,
+                rtdt::TensorLayout::RowMajorTransposed as u8,
+                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        assert_eq!(tensor.layout, rtdt::TensorLayout::RowMajorTransposed);
+
+        let perm = [1u32, 0];
+        let mut transposed = rtdt::Tensor {
+            ptr_base: ptr::null_mut(),
+            offset_elems: 0,
+            capacity_elems: 0,
+            shape: ptr::null(),
+            strides: ptr::null(),
+            layout: rtdt::TensorLayout::RowMajor,
+        };
+
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_transpose_local(
+                rt,
+                &mut tensor as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+                perm.as_ptr(),
+                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        assert_eq!(transposed.layout, rtdt::TensorLayout::ColMajor);
+
+        // Clean up.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_tensor_destroy_local(
+                rt,
+                &mut transposed as *mut rtdt::Tensor as *mut u8,
+                &*tensor_tydesc as *const rtdt::TyDesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}
+
