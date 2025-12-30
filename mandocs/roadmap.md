@@ -22,6 +22,7 @@ With core->runtime calls.
 
 # on deck
 
+- miri tests
 - move/clone semantics - moves-etc.md
 - argument modes - moves-etc.md
 - destructuring
