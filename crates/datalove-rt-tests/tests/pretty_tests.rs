@@ -240,6 +240,12 @@ fn test_pretty_string_with_spaces() -> AnyResult<()> {
 }
 
 #[test]
+fn test_pretty_string_with_quotes() -> AnyResult<()> {
+    // Source uses \" to represent embedded quotes.
+    test_pretty(r#": @string / "say \"hello\"""#, r#"@"say \"hello\"""#)
+}
+
+#[test]
 fn test_pretty_string_with_newline() -> AnyResult<()> {
     // Source has actual newline character, pretty-printed output escapes it.
     test_pretty(": @string / \"line1\nline2\"", "@\"line1\\nline2\"")
@@ -253,8 +259,8 @@ fn test_pretty_string_with_tab() -> AnyResult<()> {
 
 #[test]
 fn test_pretty_string_with_backslash() -> AnyResult<()> {
-    // Source has literal backslashes, pretty-printed output escapes them.
-    test_pretty(r#": @string / "path\to\file""#, r#"@"path\\to\\file""#)
+    // Source uses \\ to represent literal backslashes, pretty-printed output escapes them.
+    test_pretty(r#": @string / "path\\to\\file""#, r#"@"path\\to\\file""#)
 }
 
 // Tuples

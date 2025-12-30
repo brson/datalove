@@ -516,10 +516,16 @@ fn instantiate_string(
     debug_assert!(!dest_ptr.is_null());
     let value_str_raw = string_expr.value(db).as_str(db);
 
-    let value_str = if value_str_raw.starts_with('"') && value_str_raw.ends_with('"') {
+    let value_str_escaped = if value_str_raw.starts_with('"') && value_str_raw.ends_with('"') {
         &value_str_raw[1..value_str_raw.len()-1]
     } else {
         bail!("String literal missing quotes");
+    };
+
+    // Process escape sequences (e.g., \" -> ", \n -> newline).
+    let value_str = match bct::escapes::process_escape_sequences(value_str_escaped) {
+        Ok(s) => s,
+        Err(e) => bail!("Invalid escape sequence: {:?}", e),
     };
 
     unsafe {
