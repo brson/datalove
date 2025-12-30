@@ -1,0 +1,10 @@
+----------
+module local/test/main
+----------
+
+// Test let shadowing var.
+fun main(): u32
+    var x: u32 = @1
+    let x: u32 = @2
+    ret x
+end fun

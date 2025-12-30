@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// Test var shadowing function argument.
+fun shadow(x: int): int
+    var x = x + :int/@10
+    ret x
+end fun
+
+----------
+scriptunit-expr
+----------
+
+shadow(:int/@5)

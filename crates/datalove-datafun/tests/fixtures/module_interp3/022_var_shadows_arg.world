@@ -1,0 +1,11 @@
+----------
+module local/test/main
+----------
+
+// Test multiple var shadowing in main.
+fun main(): u32
+    var x: u32 = @1
+    var x: u32 = @2
+    set x = @3
+    ret x
+end fun

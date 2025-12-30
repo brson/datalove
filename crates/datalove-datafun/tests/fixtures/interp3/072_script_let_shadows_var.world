@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test let shadowing var in script.
+var x: u32 = @1
+let x: u32 = @2
+
+----------
+scriptunit-expr
+----------
+
+x

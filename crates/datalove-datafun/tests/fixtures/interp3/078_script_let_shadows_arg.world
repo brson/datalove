@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// Test let shadowing function argument.
+fun shadow(x: int): int
+    let x = x + :int/@10
+    ret x
+end fun
+
+----------
+scriptunit-expr
+----------
+
+shadow(:int/@5)

@@ -359,13 +359,20 @@ impl ScriptLowerContext {
     }
 
     /// Add exports from a unit to the context.
+    ///
+    /// When a name is exported, it shadows any previous binding with the same name,
+    /// regardless of whether the previous binding was a value or slot.
     pub fn add_exports(&mut self, unit_index: u32, exports: &[(String, ExportBinding)]) {
         for (name, binding) in exports {
             match binding {
                 ExportBinding::Value(v) => {
+                    // Remove any slot with the same name to properly shadow.
+                    self.slots.remove(name);
                     self.values.insert(name.clone(), (unit_index, *v));
                 }
                 ExportBinding::Slot(s) => {
+                    // Remove any value with the same name to properly shadow.
+                    self.values.remove(name);
                     self.slots.insert(name.clone(), (unit_index, *s));
                 }
                 ExportBinding::Function(func_id) => {
