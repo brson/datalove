@@ -34,7 +34,7 @@ Ir3Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = call module.make_set()\n    unit_end v0\n",
             ),
-            output: "@set {@300, @100, @200}",
+            output: "@set {@100, @200, @300}",
         ),
     ],
 )

@@ -1633,12 +1633,21 @@ impl IrInterpreter {
             .map(|op| self.read_operand(op, frame, frames))
             .collect::<Result<_, _>>()?;
 
-        // Sort elements by byte representation.
+        // Sort elements using runtime comparison.
         elem_values.sort_by(|a, b| {
             unsafe {
-                let a_slice = std::slice::from_raw_parts(a.ptr, element_size);
-                let b_slice = std::slice::from_raw_parts(b.ptr, element_size);
-                a_slice.cmp(b_slice)
+                let result = datalove_rt::c::dtlv_rti_cmp_total_local(
+                    rt_handle,
+                    a.ptr,
+                    element_tydesc,
+                    b.ptr,
+                    element_tydesc,
+                );
+                match result {
+                    datalove_rt::c::RtOrdering::Less => std::cmp::Ordering::Less,
+                    datalove_rt::c::RtOrdering::Greater => std::cmp::Ordering::Greater,
+                    _ => std::cmp::Ordering::Equal,
+                }
             }
         });
 
@@ -1731,12 +1740,21 @@ impl IrInterpreter {
             })
             .collect::<Result<_, InterpError>>()?;
 
-        // Sort by key.
+        // Sort by key using runtime comparison.
         kv_pairs.sort_by(|a, b| {
             unsafe {
-                let a_slice = std::slice::from_raw_parts(a.0.ptr, key_size);
-                let b_slice = std::slice::from_raw_parts(b.0.ptr, key_size);
-                a_slice.cmp(b_slice)
+                let result = datalove_rt::c::dtlv_rti_cmp_total_local(
+                    rt_handle,
+                    a.0.ptr,
+                    key_tydesc,
+                    b.0.ptr,
+                    key_tydesc,
+                );
+                match result {
+                    datalove_rt::c::RtOrdering::Less => std::cmp::Ordering::Less,
+                    datalove_rt::c::RtOrdering::Greater => std::cmp::Ordering::Greater,
+                    _ => std::cmp::Ordering::Equal,
+                }
             }
         });
 
