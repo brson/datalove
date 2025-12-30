@@ -14,6 +14,7 @@ With core->runtime calls.
 - ir and interp3
   - fix function resolution
   - implement error and add missing ! tests
+- rename ExprFunKind::Err to Error
 - script/function unification semantics
 - primer / walkthrough / tutorial
 - improve readme
