@@ -124,7 +124,7 @@ impl LitTycheckCommand {
 
         // Parse the expression.
         let parse_result = datalit::parser::parse(&db, source);
-        let ast = parse_result.expr;
+        let ast = parse_result.expr(&db);
 
         // Resolve names.
         let resolved = datalit::resolve::resolve_names(&db, source, ast);
@@ -160,7 +160,7 @@ impl LitAstCommand {
 
         // Parse the expression.
         let parse_result = datalit::parser::parse(&db, source);
-        let ast = parse_result.expr;
+        let ast = parse_result.expr(&db);
 
         // Convert to serializable AST and print.
         let serde_ast = datalit::ast_serde::ExprFull::from_ast(&db, ast);
@@ -183,7 +183,7 @@ impl LitPrettyCommand {
 
         // Parse the expression.
         let parse_result = datalit::parser::parse(&db, source);
-        let ast = parse_result.expr;
+        let ast = parse_result.expr(&db);
 
         // Pretty print using the pretty printer.
         let pretty_printed = datalit::pretty::pretty_print(&db, ast);
@@ -203,11 +203,11 @@ impl LitOpCommand {
         // Parse both expressions.
         let source1 = Source::new(&db, self.expr1.S());
         let parse_result1 = datalit::parser::parse(&db, source1);
-        let expr1 = parse_result1.expr;
+        let expr1 = parse_result1.expr(&db);
 
         let source2 = Source::new(&db, self.expr2.S());
         let parse_result2 = datalit::parser::parse(&db, source2);
-        let expr2 = parse_result2.expr;
+        let expr2 = parse_result2.expr(&db);
 
         // Resolve and type check.
         let resolved1 = datalit::resolve::resolve_names(&db, source1, expr1);

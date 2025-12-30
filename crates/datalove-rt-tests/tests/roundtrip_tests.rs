@@ -100,7 +100,7 @@ fn compile<'db>(
     source: bct::input::Source,
 ) -> (datalit::ast::ExprFull<'db>, datalit::resolve::ResolvedExpr<'db>, datalit::tycheck::TypecheckResult<'db>) {
     let parse_result = datalit::parser::parse(db, source);
-    let parsed = parse_result.expr;
+    let parsed = parse_result.expr(db);
     let resolved = datalit::resolve::resolve_names(db, source, parsed);
     let typechecked = datalit::tycheck::type_check(db, parsed, resolved);
     (parsed, resolved, typechecked)

@@ -2,26 +2,25 @@ use rmx::prelude::*;
 use bct::text::{InternedText, Text};
 use datalove_diagnostic::ByteSpan;
 
-/// Result of parsing containing the root expression and span side table.
-///
-/// We use Vec for the expr_spans to keep the implementation simple.
-/// For lookup, consumers can iterate through the vec to find the span for a given ExprFull.
-///
-/// This is a regular struct, not a Salsa tracked struct, because Salsa
-/// tracked structs cannot contain lifetime-bound collections.
-#[derive(Clone, PartialEq, Eq)]
-pub struct ParseResult<'db> {
-    pub expr: ExprFull<'db>,
-    pub expr_spans: Vec<(ExprFull<'db>, Text<'db>, ByteSpan)>,
+/// Span entry for a parsed expression, using salsa IDs for storage.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct ParseSpanEntry {
+    pub expr_id: salsa::Id,
+    pub text_id: salsa::Id,
+    pub span: ByteSpan,
 }
 
-impl<'db> ParseResult<'db> {
-    pub fn new(
-        expr: ExprFull<'db>,
-        expr_spans: Vec<(ExprFull<'db>, Text<'db>, ByteSpan)>,
-    ) -> Self {
-        ParseResult { expr, expr_spans }
+impl ParseSpanEntry {
+    pub fn new(expr_id: salsa::Id, text_id: salsa::Id, span: ByteSpan) -> Self {
+        ParseSpanEntry { expr_id, text_id, span }
     }
+}
+
+/// Result of parsing containing the root expression and span side table.
+#[salsa::tracked]
+pub struct ParseResult<'db> {
+    pub expr: ExprFull<'db>,
+    pub expr_spans: Vec<ParseSpanEntry>,
 }
 
 #[salsa::tracked]

@@ -20,9 +20,7 @@ use crate::ast;
 use datalove_diagnostic::DiagnosticBuilder;
 
 /// Parse a Source into a datalit expression with span information.
-///
-/// This function must be called from within a Salsa tracked function context.
-/// For tests, use the test helper modules which provide tracked wrappers.
+#[salsa::tracked]
 pub fn parse<'db>(
     db: &'db dyn crate::Db,
     source: Source,
@@ -94,7 +92,7 @@ fn parse_from_tokens_with_source<'db>(
         expr_spans: Vec::new(),
     };
     let expr = dyn_parser.parse_expr_full();
-    ast::ParseResult::new(expr, dyn_parser.expr_spans)
+    ast::ParseResult::new(db, expr, dyn_parser.expr_spans)
 }
 
 /// Parse a type hint and heap from a vector of tokens.
@@ -121,7 +119,7 @@ struct DynParser<'db> {
     tokens: Vec<TreeToken<'db>>,
     pos: usize,
     source_text: Option<bct::text::Text<'db>>,
-    expr_spans: Vec<(ast::ExprFull<'db>, bct::text::Text<'db>, datalove_diagnostic::ByteSpan)>,
+    expr_spans: Vec<ast::ParseSpanEntry>,
 }
 
 impl<'db> DynParser<'db> {
@@ -647,7 +645,12 @@ impl<'db> DynParser<'db> {
         };
 
         // Record span for this expression.
-        self.expr_spans.push((expr_full, text, span));
+        use salsa::plumbing::AsId;
+        self.expr_spans.push(ast::ParseSpanEntry::new(
+            expr_full.as_id(),
+            text.as_id(),
+            span,
+        ));
 
         expr_full
     }
@@ -1463,7 +1466,7 @@ pub(crate) fn parse_for_test<'db>(
     db: &'db dyn crate::Db,
     source: Source,
 ) -> ast::ExprFull<'db> {
-    parse(db, source).expr
+    parse(db, source).expr(db)
 }
 
 /// Public wrapper for integration tests.
@@ -1473,7 +1476,7 @@ pub fn parse_integration_test<'db>(
     db: &'db dyn crate::Db,
     source: Source,
 ) -> ast::ExprFull<'db> {
-    parse(db, source).expr
+    parse(db, source).expr(db)
 }
 
 #[test]

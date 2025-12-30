@@ -42,15 +42,13 @@ pub fn datalit_spans<'db>(
     source: bct::input::Source,
 ) -> DatalitSpans<'db> {
     let parse_result = crate::parser::parse(db, source);
-    let mut entries = Vec::new();
-
-    for (expr, text, span) in &parse_result.expr_spans {
-        use salsa::plumbing::AsId;
-        entries.push(SpanMapEntry {
-            expr_id: expr.as_id(),
-            entry: SpanEntry::new(text.as_id(), span.clone()),
-        });
-    }
+    let entries = parse_result.expr_spans(db)
+        .iter()
+        .map(|e| SpanMapEntry {
+            expr_id: e.expr_id,
+            entry: SpanEntry::new(e.text_id, e.span.clone()),
+        })
+        .collect();
 
     DatalitSpans::new(db, entries)
 }
