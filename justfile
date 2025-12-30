@@ -82,6 +82,23 @@ test-san-cfi *ARGS='':
         RUSTDOCFLAGS="-Z sanitizer=cfi" \
         cargo +nightly test --all -Zbuild-std --target x86_64-unknown-linux-gnu --release {{ARGS}}
 
+# Miri Testing
+# ============
+# Miri is an interpreter for Rust's MIR that detects undefined behavior.
+# Install with: rustup +nightly component add miri
+
+# Run Miri on the rt crate unit tests.
+# Skips proptests (too slow under Miri's interpreter).
+# Takes ~10 minutes.
+test-miri-rt *ARGS='':
+    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+        cargo +nightly miri test -p datalove-rt --lib -- --skip proptest {{ARGS}}
+
+# Run Miri on a specific test (useful for debugging).
+test-miri-rt-one TEST:
+    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-permissive-provenance" \
+        cargo +nightly miri test -p datalove-rt --lib {{TEST}}
+
 check:
     cargo check --all
 

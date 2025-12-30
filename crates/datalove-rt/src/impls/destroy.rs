@@ -80,6 +80,8 @@ pub unsafe fn any_destroy_local(
                 }
 
                 // Free the list buffer if it exists.
+                // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
+                let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
                 if !list.data.is_null() && list.capacity > 0 {
                     rt_ref.alloc.free(element_ty.size(), element_ty.align(), list.capacity, list.data as *mut u8);
                 }
@@ -119,6 +121,8 @@ pub unsafe fn any_destroy_local(
                 }
 
                 // Free the data buffer if it exists.
+                // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
+                let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
                 if !tensor.ptr_base.is_null() && tensor.capacity_elems > 0 {
                     rt_ref.alloc.free(
                         element_ty.size(),
@@ -265,6 +269,8 @@ pub unsafe fn any_destroy_local(
                             }
 
                             // Free the inner value allocation.
+                            // Re-obtain rt_ref after recursive call to satisfy Stacked Borrows.
+                            let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
                             let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
                             rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
                         }
@@ -302,6 +308,8 @@ pub unsafe fn any_destroy_local(
                             }
 
                             // Free the inner value allocation.
+                            // Re-obtain rt_ref after recursive call to satisfy Stacked Borrows.
+                            let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
                             let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
                             rt_ref.alloc.free(inner_ty.size(), inner_ty.align(), 1, inner_value_ptr as *mut u8);
                         }
