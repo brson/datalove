@@ -1,4 +1,8 @@
-//! Execution environment types for script and function execution.
+//! Execution environment for function resolution.
+//!
+//! - `FunctionRegistry`: Module functions and functions from previous script units.
+//! - `ExecutionContext`: Local functions in the current unit.
+//! - `ScriptEnvironment`: Combines registry with `FrameStore` for script execution.
 
 use rmx::std::collections::HashMap;
 use super::super::{IrFunction, FuncId, FuncRef};

@@ -1,4 +1,6 @@
-//! Value and destination types for the interpreter.
+//! Value and destination types.
+//!
+//! Both are `(ptr, tydesc)` pairs - `Value` for reading, `Destination` for writing.
 
 use datalove_rt::rtdt::TyDesc;
 

@@ -1,9 +1,41 @@
-//! Frame-based IR interpreter.
+//! IR interpreter with frame-based execution.
 //!
-//! Executes IR using the same runtime model as the tree-walking interpreter:
-//! - Frame = flat `Vec<u8>` byte buffer with computed offsets
-//! - Values = `(ptr, tydesc)` pairs pointing into frame memory
-//! - Operations via datalove-rt runtime calls
+//! # Architecture
+//!
+//! The interpreter executes IR instructions using a frame-based memory model:
+//!
+//! - **Frame**: Flat byte buffer (`Vec<u8>`) holding all values and slots for a
+//!   function call or script unit. Layout computed from type information.
+//!
+//! - **Value/Destination**: Pointer + type descriptor pairs. `Value` for reading,
+//!   `Destination` for writing. Type descriptors (`TyDesc`) provide size, alignment,
+//!   and type-specific metadata for runtime operations.
+//!
+//! - **Linear semantics**: Non-copy types (Int, String, List, etc.) use move semantics.
+//!   Moved values are marked dropped to prevent double-free. Copy types use shallow copy.
+//!
+//! # Execution Modes
+//!
+//! **Functions**: Called via `call_with_env()` or `call_in_context()`. Arguments moved
+//! into parameter slots, return value moved to caller-provided destination. Frame
+//! destroyed after return.
+//!
+//! **Script units**: Executed via `execute_script_unit_in_env()`. Frames persist in
+//! `FrameStore` for subsequent units to access via `ExternalValue`/`ExternalSlot`
+//! operands. Supports early return via `!` and `?` operators.
+//!
+//! # Environment
+//!
+//! - `FunctionRegistry`: Stores functions from modules and previous script units.
+//! - `FrameStore`: Stores frames from previous units for external value access.
+//! - `ScriptEnvironment`: Combines registry and frame store for script execution.
+//! - `ExecutionContext`: Local functions available during execution.
+//!
+//! # Runtime Integration
+//!
+//! All memory operations go through `datalove-rt`: allocation, deallocation, deep
+//! copy, comparison, and pretty-printing. Type descriptors are constructed by
+//! `IrTyDescTable` from `IrType` definitions.
 
 mod error;
 mod value;

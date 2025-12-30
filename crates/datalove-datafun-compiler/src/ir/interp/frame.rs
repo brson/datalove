@@ -1,4 +1,7 @@
-//! Execution frame for function calls and script units.
+//! Execution frames and frame storage.
+//!
+//! A `Frame` holds all values and slots for a single function/unit execution.
+//! `FrameStore` accumulates frames from script units for cross-unit value access.
 
 use super::super::{ValueId, SlotId};
 use super::error::InterpError;

@@ -1,4 +1,4 @@
-//! Interpreter error types.
+//! Interpreter errors.
 
 use super::super::{ValueId, SlotId, BlockId, FuncId};
 

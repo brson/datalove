@@ -1,4 +1,7 @@
 //! Frame layout computation.
+//!
+//! Computes byte offsets for values and slots within a frame buffer,
+//! respecting alignment requirements from type descriptors.
 
 use datalove_rt::rtdt::TyDesc;
 use super::super::IrType;

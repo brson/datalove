@@ -1,4 +1,7 @@
-//! Type descriptor table for IR types.
+//! Type descriptor table.
+//!
+//! Converts `IrType` to runtime `TyDesc` pointers. TyDescs provide size, alignment,
+//! and type-specific info (field offsets, element types) for runtime operations.
 
 use datalove_rt::rtdt::{self, TyDesc, TyDescRef};
 use super::super::IrType;
