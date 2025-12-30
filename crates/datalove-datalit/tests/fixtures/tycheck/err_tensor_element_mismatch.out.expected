@@ -1,0 +1,70 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Tensor": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "1"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "2"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "String": {
+                    "value": "\"three\""
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "4"
+                  }
+                },
+                "heap": "Omitted"
+              },
+              "type_hint": null
+            }
+          ],
+          "shape": [
+            2,
+            2
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [
+    {
+      "actual": "string",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

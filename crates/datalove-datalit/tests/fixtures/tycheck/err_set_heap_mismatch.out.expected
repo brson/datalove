@@ -1,0 +1,55 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Set": {
+          "elements": [
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "1"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "2"
+                  }
+                },
+                "heap": "Global"
+              },
+              "type_hint": null
+            },
+            {
+              "expr": {
+                "expr": {
+                  "Int": {
+                    "value": "3"
+                  }
+                },
+                "heap": "Local"
+              },
+              "type_hint": null
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [
+    {
+      "actual_heap": "#",
+      "expected_heap": "@",
+      "kind": "HeapMismatch"
+    }
+  ],
+  "root_type": null
+}

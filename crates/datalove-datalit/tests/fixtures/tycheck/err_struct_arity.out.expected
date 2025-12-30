@@ -1,0 +1,86 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "x",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  },
+                  "heap": "Omitted"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "name": "y",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  },
+                  "heap": "Omitted"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "name": "z",
+              "value": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "3"
+                    }
+                  },
+                  "heap": "Omitted"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "AnonStruct": {
+          "fields": [
+            {
+              "name": "x",
+              "type_hint": {
+                "heap": "Local",
+                "type_hint": "U32"
+              }
+            },
+            {
+              "name": "y",
+              "type_hint": {
+                "heap": "Local",
+                "type_hint": "U32"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "actual": 3,
+      "expected": 2,
+      "kind": "ArityMismatch"
+    }
+  ],
+  "root_type": null
+}

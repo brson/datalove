@@ -1,0 +1,24 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Hex": {
+          "value": "0x8000"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "I16"
+    }
+  },
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "i16",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

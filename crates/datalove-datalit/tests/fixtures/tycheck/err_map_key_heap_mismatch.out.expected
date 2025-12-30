@@ -1,0 +1,70 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Map": {
+          "entries": [
+            {
+              "key": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              },
+              "value": {
+                "expr": {
+                  "expr": {
+                    "String": {
+                      "value": "\"a\""
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            },
+            {
+              "key": {
+                "expr": {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  },
+                  "heap": "Global"
+                },
+                "type_hint": null
+              },
+              "value": {
+                "expr": {
+                  "expr": {
+                    "String": {
+                      "value": "\"b\""
+                    }
+                  },
+                  "heap": "Local"
+                },
+                "type_hint": null
+              }
+            }
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [
+    {
+      "actual_heap": "#",
+      "expected_heap": "@",
+      "kind": "HeapMismatch"
+    }
+  ],
+  "root_type": null
+}

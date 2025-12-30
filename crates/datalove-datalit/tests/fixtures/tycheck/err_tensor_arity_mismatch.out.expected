@@ -1,0 +1,19 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "ParseError": {
+          "message": "expected 2 elements per row but got 1"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

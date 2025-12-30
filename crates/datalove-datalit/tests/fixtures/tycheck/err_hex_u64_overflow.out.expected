@@ -1,0 +1,22 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Hex": {
+          "value": "0x10000000000000000"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "U64"
+    }
+  },
+  "errors": [
+    {
+      "kind": "IntOutOfRange"
+    }
+  ],
+  "root_type": null
+}

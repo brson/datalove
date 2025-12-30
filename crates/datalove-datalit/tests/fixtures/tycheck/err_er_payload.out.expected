@@ -1,0 +1,41 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Er": {
+          "payload": {
+            "expr": {
+              "expr": {
+                "Int": {
+                  "value": "42"
+                }
+              },
+              "heap": "Local"
+            },
+            "type_hint": null
+          }
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": {
+        "Result": {
+          "inner_type": {
+            "heap": "Local",
+            "type_hint": "U32"
+          }
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "actual": "non-error",
+      "expected": "error",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}
